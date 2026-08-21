@@ -52,8 +52,25 @@ jobs:
     # cancellation rather than as a flow's own assertion, which is the failure
     # mode this workflow exists to avoid.
     timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: agent
+          POSTGRES_PASSWORD: agent
+          POSTGRES_DB: agent_server_dev
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U agent -d agent_server_dev"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
     env:
       OPENCODE_GO_API_KEY: ${{ secrets.OPENCODE_GO_API_KEY }}
+      DATABASE_URL: postgresql://agent:agent@127.0.0.1:5432/agent_server_dev
+      POSTGRES_URL: postgresql://agent:agent@127.0.0.1:5432/agent_server_dev
+      POSTGRES_ADMIN_URL: postgresql://agent:agent@127.0.0.1:5432/agent_server_dev
     steps:
       - uses: actions/checkout@v4
         with:
@@ -90,7 +107,7 @@ jobs:
           fi
 
           changed="$(git diff --name-only "origin/${BASE_REF}...HEAD")"
-          if printf '%s\n' "$changed" | grep -qE '^(src/|scripts/dev/|scripts/smoke/|tooling/environment/|config/local-environments\.yaml|config/real-provider-defaults\.env|\.github/workflows/real-runtime\.yml|\.nvmrc|Dockerfile|compose[^/]*\.yaml|package\.json|pnpm-lock\.yaml)'; then
+          if printf '%s\n' "$changed" | grep -qE '^(src/|scripts/dev/|scripts/smoke/|tooling/dev/|tooling/environment/|config/local-environments\.yaml|config/real-provider-defaults\.env|\.github/workflows/real-runtime\.yml|\.nvmrc|Dockerfile|compose[^/]*\.yaml|package\.json|pnpm-lock\.yaml)'; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
             skip "No runtime-relevant paths changed, so a real provider cannot observe this diff."

@@ -22,8 +22,8 @@ flowchart LR
 Prerequisites:
 
 - Node 22–24 and pnpm 11;
-- a locally reachable PostgreSQL server;
-- `createdb` is recommended so setup can create the development database automatically.
+- no PostgreSQL installation is required;
+- `createdb` is optional and lets setup create the real default database automatically.
 
 Install and prepare the development database:
 
@@ -34,13 +34,15 @@ pnpm setup
 pnpm doctor
 ```
 
-By default the harness uses:
+When reachable, the default real database is:
 
 ```text
 postgresql://$USER@127.0.0.1:5432/agent_server_dev
 ```
 
 Set `DATABASE_URL` when the local database uses a different user, password, host, port, or name. `pnpm setup` is idempotent: it creates local working directories, creates the database when possible, and applies durable migrations.
+
+If no explicit `DATABASE_URL`/`POSTGRES_URL` is set and local PostgreSQL is absent, setup starts or reuses a persistent PGlite wire server at `127.0.0.1:55432` under `.local/dev-runtime` and applies the same migrations. Set `PGLITE_PORT` when that port is occupied. Explicit database URLs still require reachable real PostgreSQL.
 
 Start normal core development without Docker or a provider:
 

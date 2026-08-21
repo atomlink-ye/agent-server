@@ -21,8 +21,8 @@ Prerequisites:
 
 - Node 22–24;
 - pnpm 11;
-- PostgreSQL reachable from the sandbox/host;
-- `createdb` recommended.
+- no PostgreSQL installation is required;
+- `createdb` is optional and lets setup create the real default database when available.
 
 ```bash
 pnpm setup
@@ -32,18 +32,24 @@ Setup is idempotent and owns only developer bootstrap responsibilities:
 
 1. read `.env` / `.env.local` values when the same variable is not already exported;
 2. create `.local/` workspace/runtime/skill-registry directories;
-3. resolve the development database URL;
-4. create the database with `createdb` when it is missing and the tool is available;
-5. apply the durable kernel migrations;
+3. resolve the development database URL, preferring reachable local PostgreSQL;
+4. when the default host database is absent, start or reuse a persistent PGlite wire server under `.local/dev-runtime`;
+5. create the real database with `createdb` when it is missing and the tool is available;
+6. apply the durable kernel migrations;
 6. print the next canonical command.
 
-Default database:
+Default real database:
 
 ```text
 postgresql://$USER@127.0.0.1:5432/agent_server_dev
 ```
 
 Override with `DATABASE_URL` or `POSTGRES_URL`.
+
+When neither variable is set and the default real database is unavailable, the
+harness uses `postgresql://postgres:postgres@127.0.0.1:55432/postgres` backed by
+`.local/dev-runtime/pglite`. Set `PGLITE_PORT` if that port is occupied. An
+explicit database URL is never replaced with PGlite.
 
 ## Doctor
 

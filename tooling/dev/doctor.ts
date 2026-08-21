@@ -5,6 +5,7 @@ import {
   canConnectTcp,
   commandAvailable,
   defaultHostDatabaseUrl,
+  ensureDevelopmentDatabase,
   isPortFree,
   loadLocalDotEnv,
   redactDatabaseUrl,
@@ -20,7 +21,27 @@ export type DoctorCheck = Readonly<{
 async function postgresChecks(
   environment: NodeJS.ProcessEnv,
 ): Promise<readonly [DoctorCheck, DoctorCheck]> {
-  const connectionString = defaultHostDatabaseUrl(environment);
+  let connectionString: string;
+  try {
+    connectionString = await ensureDevelopmentDatabase(environment);
+  } catch (error) {
+    connectionString = defaultHostDatabaseUrl(environment);
+    const postgres: DoctorCheck = {
+      name: 'postgres',
+      status: 'fail',
+      detail: `${redactDatabaseUrl(connectionString)} (${error instanceof Error ? error.message : 'unreachable'})`,
+      requiredFor: ['core', 'runtime'],
+    };
+    return [
+      postgres,
+      {
+        name: 'migrations',
+        status: 'fail',
+        detail: 'not checked because PostgreSQL is unreachable',
+        requiredFor: ['core', 'runtime'],
+      },
+    ];
+  }
   const pool = new Pool({
     connectionString,
     max: 1,

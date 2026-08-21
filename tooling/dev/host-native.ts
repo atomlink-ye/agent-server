@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { access, mkdir, readFile } from 'node:fs/promises';
+import { access, mkdir, readFile, unlink } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { userInfo } from 'node:os';
 import { dirname, resolve } from 'node:path';
@@ -17,6 +17,25 @@ export const repositoryRoot = resolve(
 
 export const LOCAL_WORKSPACE_ID = '00000000-0000-4000-8000-000000000001';
 export const LOCAL_SERVICE_TOKEN = 'token-local-dev';
+
+const PGLITE_HOST = '127.0.0.1';
+const PGLITE_DEFAULT_PORT = 55_432;
+const PGLITE_DATABASE = 'postgres';
+const PGLITE_STATE_PATH = resolve(
+  repositoryRoot,
+  '.local/dev-runtime/pglite.json',
+);
+const PGLITE_DATA_PATH = resolve(repositoryRoot, '.local/dev-runtime/pglite');
+
+type PGliteState = Readonly<{
+  kind: 'agent-server-pglite';
+  pid: number;
+  host: string;
+  port: number;
+  database: string;
+  url: string;
+  dataPath: string;
+}>;
 
 export function localServiceAccountsJson(): string {
   return JSON.stringify([
@@ -209,42 +228,183 @@ export async function ensureDevelopmentDatabase(
   const initial = await connectablePostgres(connectionString);
   if (initial.ok) return connectionString;
 
-  const errorCode = (initial.error as { code?: unknown })?.code;
-  if (errorCode !== '3D000') {
+  const explicitlyConfigured = Boolean(
+    environment.DATABASE_URL?.trim() || environment.POSTGRES_URL?.trim(),
+  );
+  if (explicitlyConfigured) {
     throw new Error(
       `Postgres is not reachable at ${redactDatabaseUrl(connectionString)}. Start local Postgres or set DATABASE_URL.`,
       { cause: initial.error },
     );
   }
-  if (!(await commandAvailable('createdb'))) {
+
+  const errorCode = (initial.error as { code?: unknown })?.code;
+  if (errorCode === '3D000' && (await commandAvailable('createdb'))) {
+    const url = new URL(connectionString);
+    const databaseName = decodeURIComponent(url.pathname.replace(/^\//, ''));
+    if (!databaseName) throw new Error('DATABASE_URL must include a database name.');
+    const args = [
+      '-h',
+      url.hostname,
+      '-p',
+      url.port || '5432',
+      ...(url.username ? ['-U', decodeURIComponent(url.username)] : []),
+      databaseName,
+    ];
+    const createdbEnv = {
+      ...environment,
+      ...(url.password ? { PGPASSWORD: decodeURIComponent(url.password) } : {}),
+    };
+    try {
+      await runCommand('createdb', args, { environment: createdbEnv });
+      const after = await connectablePostgres(connectionString);
+      if (after.ok) return connectionString;
+    } catch {
+      // The default URL is only a convenience. If local Postgres cannot create
+      // it, continue to the PGlite fallback below.
+    }
+  }
+
+  return ensurePGliteDatabase(environment);
+}
+
+function pglitePort(environment: NodeJS.ProcessEnv): number {
+  const port = Number.parseInt(
+    environment.PGLITE_PORT?.trim() || String(PGLITE_DEFAULT_PORT),
+    10,
+  );
+  if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+    throw new Error(`PGLITE_PORT must be between 1 and 65535 (received ${port})`);
+  }
+  return port;
+}
+
+function pgliteUrl(host: string, port: number): string {
+  return `postgresql://postgres:postgres@${host}:${port}/${PGLITE_DATABASE}`;
+}
+
+function processIsAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code !== 'ESRCH';
+  }
+}
+
+async function clearPGliteState(): Promise<void> {
+  await unlink(PGLITE_STATE_PATH).catch((error: unknown) => {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  });
+}
+
+async function readPGliteState(): Promise<PGliteState | null> {
+  let contents: string;
+  try {
+    contents = await readFile(PGLITE_STATE_PATH, 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw error;
+  }
+  try {
+    const parsed = JSON.parse(contents) as Partial<PGliteState>;
+    if (
+      parsed.kind !== 'agent-server-pglite' ||
+      !Number.isInteger(parsed.pid) ||
+      typeof parsed.host !== 'string' ||
+      !Number.isInteger(parsed.port) ||
+      typeof parsed.database !== 'string' ||
+      typeof parsed.url !== 'string' ||
+      typeof parsed.dataPath !== 'string'
+    ) {
+      throw new Error('invalid shape');
+    }
+    return parsed as PGliteState;
+  } catch (error) {
+    await clearPGliteState();
     throw new Error(
-      `Database is missing at ${redactDatabaseUrl(connectionString)} and createdb is unavailable. Create the database manually.`,
+      `Ignoring malformed PGlite state at ${PGLITE_STATE_PATH}; rerun setup.`,
+      { cause: error },
     );
   }
-  const url = new URL(connectionString);
-  const databaseName = decodeURIComponent(url.pathname.replace(/^\//, ''));
-  if (!databaseName) throw new Error('DATABASE_URL must include a database name.');
-  const args = [
-    '-h',
-    url.hostname,
-    '-p',
-    url.port || '5432',
-    ...(url.username ? ['-U', decodeURIComponent(url.username)] : []),
-    databaseName,
-  ];
-  const createdbEnv = {
-    ...environment,
-    ...(url.password ? { PGPASSWORD: decodeURIComponent(url.password) } : {}),
-  };
-  await runCommand('createdb', args, { environment: createdbEnv });
-  const after = await connectablePostgres(connectionString);
-  if (!after.ok) {
+}
+
+async function waitForPGlite(
+  child: ChildProcess,
+  fallbackUrl: string,
+): Promise<string> {
+  let exited: { code: number | null; signal: NodeJS.Signals | null } | undefined;
+  child.once('exit', (code, signal) => {
+    exited = { code, signal };
+  });
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < 30_000) {
+    if (exited) {
+      throw new Error(
+        `PGlite fallback exited before becoming ready (${exited.code ?? exited.signal ?? 'unknown'}). Check ${resolve(repositoryRoot, '.local/dev-runtime/pglite.log')}.`,
+      );
+    }
+    const state = await readPGliteState();
+    if (state && state.pid === child.pid && (await connectablePostgres(state.url)).ok) {
+      return state.url;
+    }
+    if ((await connectablePostgres(fallbackUrl)).ok) return fallbackUrl;
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 200));
+  }
+  throw new Error(
+    `Timed out starting PGlite at ${fallbackUrl}. Check ${resolve(repositoryRoot, '.local/dev-runtime/pglite.log')}.`,
+  );
+}
+
+async function ensurePGliteDatabase(
+  environment: NodeJS.ProcessEnv,
+): Promise<string> {
+  await ensureLocalDirectories();
+  const port = pglitePort(environment);
+  const fallbackUrl = pgliteUrl(PGLITE_HOST, port);
+  const existing = await readPGliteState();
+  if (existing) {
+    if (!processIsAlive(existing.pid)) {
+      await clearPGliteState();
+    } else if ((await connectablePostgres(existing.url)).ok) {
+      return existing.url;
+    } else {
+      throw new Error(
+        `PGlite state claims live process ${existing.pid}, but ${existing.url} is unreachable. Stop that process or remove ${PGLITE_STATE_PATH} after verifying it is stale.`,
+      );
+    }
+  }
+  if (!(await isPortFree(port))) {
     throw new Error(
-      `createdb completed but ${redactDatabaseUrl(connectionString)} is still unreachable.`,
-      { cause: after.error },
+      `PGlite fallback port ${PGLITE_HOST}:${port} is already in use. Set PGLITE_PORT to a free port; the harness will not take over an unknown process.`,
     );
   }
-  return connectionString;
+
+  const logPath = resolve(repositoryRoot, '.local/dev-runtime/pglite.log');
+  const child = spawn(
+    process.execPath,
+    ['--import', 'tsx', resolve(repositoryRoot, 'tooling/dev/pglite-server.ts')],
+    {
+      cwd: repositoryRoot,
+      detached: true,
+      env: {
+        ...environment,
+        PGLITE_HOST,
+        PGLITE_PORT: String(port),
+        PGLITE_DATABASE,
+        PGLITE_DATA_PATH,
+        PGLITE_STATE_PATH,
+      },
+      stdio: ['ignore', 'ignore', 'pipe'],
+    },
+  );
+  child.stderr?.on('data', (chunk: Buffer) => {
+    void import('node:fs/promises').then(({ appendFile }) =>
+      appendFile(logPath, chunk),
+    );
+  });
+  child.unref();
+  return waitForPGlite(child, fallbackUrl);
 }
 
 export async function prepareHostNativeEnvironment(

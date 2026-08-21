@@ -42,11 +42,12 @@ export async function seedPublishedWorkDefinition(
           query: { type: 'string' as const },
           instruction: { type: 'string' as const },
         },
+        required: [],
         additional_properties: false,
       };
   const inputSchemaYaml = options.inputField
     ? `    properties:\n      ${options.inputField}:\n        type: string\n    required: [${options.inputField}]\n    additional_properties: false`
-    : `    properties:\n      query:\n        type: string\n      instruction:\n        type: string\n    additional_properties: false`;
+    : `    properties:\n      query:\n        type: string\n      instruction:\n        type: string\n    required: []\n    additional_properties: false`;
   const source = {
     kind: 'single_agent' as const,
     agentVersionId: options.agentVersionId,

@@ -49,7 +49,7 @@ Component/repository/adapter boundaries use PGlite when its semantics are suffic
 pnpm test:integration
 ```
 
-PGlite is not treated as proof of PostgreSQL-only locking/concurrency behavior. It is the fast deterministic default for ordinary persistence wiring.
+PGlite is not treated as proof of PostgreSQL-only locking/concurrency behavior or any L3 claim. It is the fast deterministic default for ordinary persistence wiring; only a dedicated real PostgreSQL run can prove L3 semantics.
 
 ## Deterministic product scenarios
 
@@ -107,10 +107,13 @@ TEST_DATABASE_URL=postgresql://$USER@127.0.0.1:5432/agent_server_test pnpm test:
 The runner:
 
 1. does **not** start Docker;
-2. skips cleanly when neither `TEST_DATABASE_URL` nor `INTEGRATION_DATABASE_URL` is set;
-3. refuses database names without `test`;
-4. refuses `prod`, `production`, `main`, or `live` database names;
-5. passes the selected URL to the existing real-PG Vitest suite.
+2. skips cleanly with exit code `0` when neither `TEST_DATABASE_URL` nor `INTEGRATION_DATABASE_URL` is set, and emits exactly one machine-readable status line: `{"lane":"test:pg","status":"skipped","reason":"missing_database_url"}`;
+3. emits `{"lane":"test:pg","status":"running"}` immediately before starting Vitest when a URL is configured; this status does not include the connection URL;
+4. refuses database names without `test`;
+5. refuses `prod`, `production`, `main`, or `live` database names;
+6. passes the selected URL to the existing real-PG Vitest suite.
+
+The runner guard and `tests/harness/postgres.ts`'s `assertRealPostgresTestUrl` are independent protections: the harness guard requires a `test` database name and rejects production-flavored names before creating the real test pool. PGlite cannot substitute for this lane or prove L3 PostgreSQL-only behavior.
 
 `pnpm test:real-pg` is a compatibility alias.
 
@@ -169,7 +172,10 @@ A product canary validates a representative host-native API/Web/runtime journey.
 
 ## Acceptance
 
-Acceptance is milestone/release evidence, not the ordinary coding loop. It may use production-like Compose topology, browser instrumentation, provider transcripts, screenshots, manifests, hashes, and other evidence when the milestone requires them.
+Acceptance is milestone/release evidence, not the ordinary coding loop. It may
+use a production-like deployment environment, browser instrumentation, provider
+transcripts, screenshots, manifests, hashes, and other evidence when the
+milestone requires them.
 
 Do not require an acceptance evidence bundle for every local feature edit.
 
@@ -185,29 +191,22 @@ A product/code assertion should not become an eval merely because an Agent is in
 
 ## Environment ownership
 
-Host-native developer orchestration lives in `tooling/dev/`.
-
-Docker/production-like topology lives in:
-
-```text
-config/local-environments.yaml
-tooling/environment/
-compose*.yaml
-```
-
-Manual Compose environments are explicit compatibility/debugging choices:
-
-```bash
-pnpm dev:docker
-pnpm dev:docker:runtime
-pnpm dev:docker:full
-```
+Host-native developer orchestration lives in `tooling/dev/`. Real PostgreSQL
+tests receive an explicit native database URL. CI may use a PostgreSQL service
+container, but the repository does not own a container lifecycle for local
+development or tests.
 
 ## Fixtures and harness
 
 Prefer typed semantic builders for Workspace/Agent/Environment/Team/Conversation/Work setup. JSON/YAML fixtures are appropriate when the serialized representation itself is the input under test.
 
 If fixture setup repeats in multiple scenarios, move it into `tests/harness/seed/`. If application composition repeats, move it into `tests/harness/agent-server-harness.ts`. Do not solve setup friction with a task-specific shell script.
+
+### Seed promotion rule
+
+A seed enters `tests/harness/seed/` only when at least two scenario files genuinely reuse it. A seed that serves one scenario stays in that scenario file and is named for the business situation it constructs, rather than the entity it inserts.
+
+This keeps the shared layer small. Cumora's `_helpers.ts` exports only eight things and only two broadly reusable seeds; its scenario-specific seeds stay with their tests and use business names such as `seedDirect`, `seedGroupWithTwoAgents`, `seedEmailConvoWithInbound`, and `seedFailedOutbound`. Our current entity-sliced shared directory has nine files, which would otherwise tend toward a god-module.
 
 ## Generated diagnostics
 

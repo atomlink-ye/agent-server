@@ -270,6 +270,19 @@ describe('ExecuteRun', () => {
             },
           },
         })) as never,
+        findVersionByTenant: vi.fn(async () => ({
+          id: 'managed-version-1',
+          status: 'published',
+          package: {
+            spec: {
+              instructions: 'managed instructions',
+              tools: [],
+              skills: [{ ref: 'custom/skill' }],
+              runtime: { modelPolicyRef: 'free-only' },
+              memory: { proposalLimit: 1 },
+            },
+          },
+        })) as never,
       },
       { findPublishedAgentVersionById: vi.fn(async () => null) },
       { resolve: catalogResolve },
@@ -900,7 +913,7 @@ describe('ExecuteRun', () => {
   it('resolves a published managed Agent with durable Task ownership and sends only its instructions', async () => {
     const claim = createClaim();
     const task = createTask('agent', 'managed-version-1');
-    const findVersion = vi.fn(async () => ({
+    const findVersion = vi.fn(async (_owner: unknown, _versionId: string) => ({
       id: 'managed-version-1',
       status: 'published',
       package: {
@@ -911,10 +924,25 @@ describe('ExecuteRun', () => {
           runtime: { modelPolicyRef: 'free-only' },
         },
       },
-    })) as never;
+    })) as unknown as (
+      owner: unknown,
+      versionId: string,
+    ) => Promise<never>;
+    const findVersionByTenant = vi.fn(
+      async (input: { readonly tenantId: string; readonly versionId: string }) =>
+        findVersion(
+          {
+            tenantId: input.tenantId,
+            workspaceId: 'workspace-1',
+            principalType: 'user',
+            principalId: 'user-1',
+          },
+          input.versionId,
+        ),
+    );
     const findLegacy = vi.fn(async () => null);
     const resolver = new ResolveAgentVersion(
-      { findVersion },
+      { findVersion, findVersionByTenant },
       { findPublishedAgentVersionById: findLegacy },
       { resolve: vi.fn(async () => null) },
     );
@@ -980,6 +1008,19 @@ describe('ExecuteRun', () => {
             },
           },
         })) as never,
+        findVersionByTenant: vi.fn(async () => ({
+          id: 'managed-version-1',
+          status: 'published',
+          package: {
+            spec: {
+              instructions: 'managed instructions',
+              tools: [],
+              skills: [],
+              runtime: { modelPolicyRef: 'free-only' },
+              memory: { proposalLimit: 1 },
+            },
+          },
+        })) as never,
       },
       { findPublishedAgentVersionById: vi.fn(async () => null) },
       { resolve: vi.fn(async () => null) },
@@ -1021,7 +1062,16 @@ describe('ExecuteRun', () => {
       instructions: 'legacy must not be consulted by ExecuteRun',
     })) as never;
     const resolver = new ResolveAgentVersion(
-      { findVersion },
+      {
+        findVersion,
+        findVersionByTenant: vi.fn(async () => ({
+          id: 'draft-or-foreign-version',
+          status: 'draft',
+          package: {
+            spec: { instructions: 'not executable', tools: [], skills: [] },
+          },
+        })) as never,
+      },
       { findPublishedAgentVersionById: findLegacy },
       { resolve: vi.fn(async () => null) },
     );
@@ -1053,7 +1103,10 @@ describe('ExecuteRun', () => {
       execute: vi.fn(async ({ run }: { run: Run }) => run),
     } as unknown as CompleteRun;
     const resolver = new ResolveAgentVersion(
-      { findVersion: vi.fn(async () => null) },
+      {
+        findVersion: vi.fn(async () => null),
+        findVersionByTenant: vi.fn(async () => null),
+      },
       {
         findPublishedAgentVersionById: vi.fn(async () => ({
           id: 'legacy-version-1',
@@ -1390,6 +1443,19 @@ describe('ExecuteRun', () => {
             },
           },
         })) as never,
+        findVersionByTenant: vi.fn(async () => ({
+          id: 'managed-version-1',
+          status: 'published',
+          package: {
+            spec: {
+              instructions: 'instructions',
+              tools: [],
+              skills: [],
+              runtime: { modelPolicyRef: 'free-only' },
+              memory: { proposalLimit: 1 },
+            },
+          },
+        })) as never,
       },
       { findPublishedAgentVersionById: vi.fn(async () => null) },
       { resolve: vi.fn(async () => null) },
@@ -1451,6 +1517,19 @@ describe('ExecuteRun', () => {
     const resolver = new ResolveAgentVersion(
       {
         findVersion: vi.fn(async () => ({
+          id: 'managed-version-1',
+          status: 'published',
+          package: {
+            spec: {
+              instructions: 'instructions',
+              tools: [],
+              skills: [],
+              runtime: { modelPolicyRef: 'free-only' },
+              memory: { proposalLimit: 2 },
+            },
+          },
+        })) as never,
+        findVersionByTenant: vi.fn(async () => ({
           id: 'managed-version-1',
           status: 'published',
           package: {
@@ -1550,6 +1629,26 @@ describe('ExecuteRun', () => {
             },
           },
         })) as never,
+        findVersionByTenant: vi.fn(
+          async (input: {
+            readonly tenantId: string;
+            readonly versionId: string;
+          }) => ({
+            id: input.versionId,
+            status: 'published',
+            package: {
+              spec: {
+                instructions: 'instructions',
+                tools: [],
+                skills: [],
+                runtime: { modelPolicyRef: 'free-only' },
+                memory: {
+                  proposalLimit: input.versionId === 'managed-low' ? 1 : 3,
+                },
+              },
+            },
+          }),
+        ) as never,
       },
       { findPublishedAgentVersionById: vi.fn(async () => null) },
       { resolve: vi.fn(async () => null) },
@@ -1616,7 +1715,10 @@ describe('ExecuteRun', () => {
         { log: vi.fn() },
         () => new Date('2026-07-23T00:00:01.000Z'),
         new ResolveAgentVersion(
-          { findVersion: vi.fn(async () => null) } as never,
+          {
+            findVersion: vi.fn(async () => null),
+            findVersionByTenant: vi.fn(async () => null),
+          } as never,
           {} as never,
           { resolve: vi.fn(async () => null) },
         ),

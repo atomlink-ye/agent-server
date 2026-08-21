@@ -15,22 +15,10 @@ const writeInventory: BrowserCommand<
   [json: string, target?: InventoryTarget]
 > = async (_context, json, target = 'chat-surface') => {
   const inventory = JSON.parse(json) as unknown;
-  let outputPath: string;
-
-  switch (target) {
-    case 'chat-surface':
-      outputPath = resolve(
-        repoRoot,
-        'apps/web/__inventory__/chat-surface.json',
-      );
-      break;
-    case 'canary':
-      outputPath = resolve(tmpdir(), 'vitest-browser-canary-inventory.json');
-      break;
-    default:
-      throw new Error(`Unsupported inventory target: ${String(target)}`);
-  }
-
+  const outputPath =
+    target === 'canary'
+      ? resolve(tmpdir(), 'vitest-browser-canary-inventory.json')
+      : resolve(repoRoot, 'apps/web/__inventory__/chat-surface.json');
   const content = `${JSON.stringify(inventory, null, 2)}\n`;
   await mkdir(dirname(outputPath), { recursive: true });
   await writeFile(outputPath, content, 'utf8');
@@ -41,12 +29,8 @@ export default defineConfig({
   resolve: {
     alias: [
       {
-        find: /^server-only$/,
-        replacement: resolve(repoRoot, 'apps/web/lib/server-only-noop.ts'),
-      },
-      {
         find: /^@\//,
-        replacement: `${resolve(repoRoot, 'apps/web')}/`,
+        replacement: `${resolve(repoRoot, 'apps/web/src')}/`,
       },
     ],
   },
@@ -58,10 +42,10 @@ export default defineConfig({
         extends: true,
         test: {
           name: 'web-node',
-          include: ['apps/web/**/*.test.{ts,tsx}'],
+          include: ['apps/web/src/**/*.test.{ts,tsx}'],
           exclude: [
             ...configDefaults.exclude,
-            'apps/web/**/*.browser.test.{ts,tsx}',
+            'apps/web/src/**/*.browser.test.{ts,tsx}',
           ],
           environment: 'node',
         },
@@ -72,15 +56,13 @@ export default defineConfig({
         root: resolve(repoRoot, 'apps/web'),
         test: {
           name: 'web-dom',
-          include: ['**/*.browser.test.{ts,tsx}'],
+          include: ['src/**/*.browser.test.{ts,tsx}'],
           browser: {
             enabled: true,
             headless: true,
             provider: playwright(),
             instances: [{ browser: 'chromium' }],
-            commands: {
-              writeInventory,
-            },
+            commands: { writeInventory },
           },
         },
       },

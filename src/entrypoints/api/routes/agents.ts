@@ -16,7 +16,10 @@ import {
   InvalidAgentListLimitError,
   InvalidIdempotencyKeyError,
 } from '../../../application/agents/errors.js';
-import type { AgentRegistry } from '../../../application/ports/agent-registry.js';
+import type {
+  AgentRegistry,
+  ManagedAgentDefinitionRead,
+} from '../../../application/ports/agent-registry.js';
 import { HttpError } from '../../../contracts/http.js';
 import {
   AgentDefinitionResponseSchema,
@@ -39,7 +42,13 @@ import type { ApiEnvironment } from '../../../platform/http-types.js';
 
 interface AgentRouteDependencies {
   readonly config: AppConfig;
-  readonly agentRegistry: AgentRegistry;
+  readonly agentRegistry: AgentRegistry &
+    Pick<
+      ManagedAgentDefinitionRead,
+      | 'findManagedDefinitionByTenant'
+      | 'findVersionByTenant'
+      | 'listVersionsByTenant'
+    >;
 }
 const validatePath = '/api/v1/agent-packages:validate';
 const importPath = '/api/v1/agents:import';

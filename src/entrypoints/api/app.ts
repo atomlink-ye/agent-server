@@ -95,7 +95,13 @@ export interface AppDependencies {
   readonly rejectLearningProposal?: RejectLearningProposal;
   readonly listMemoryEntries?: Pick<ListMemoryEntries, 'execute'>;
   /** Legacy fixture seam; production supplies resourceModule instead. */
-  readonly agentRegistry?: AgentRegistry;
+  readonly agentRegistry?: AgentRegistry &
+    Pick<
+      ManagedAgentDefinitionRead,
+      | 'findManagedDefinitionByTenant'
+      | 'findVersionByTenant'
+      | 'listVersionsByTenant'
+    >;
   readonly environmentRegistry?: EnvironmentRegistry;
   readonly invokableRepository?: InvokableRepository;
   readonly teamExecutions?: TeamExecutionRepository;

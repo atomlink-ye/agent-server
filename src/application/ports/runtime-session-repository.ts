@@ -7,8 +7,8 @@ import type {
 
 export interface RuntimeSession {
   readonly id: string;
-  /** Canonical runtime identity. Legacy flat fields remain during migration. */
-  readonly scope: RuntimeScope;
+  /** Canonical runtime identity. Optional only while legacy callers migrate. */
+  readonly scope?: RuntimeScope;
   readonly scopeKind: RuntimeScope['kind'];
   readonly scopeId: string;
   readonly productSessionId: string | null;

@@ -242,7 +242,10 @@ export async function startLocalEnvironment(
     args: [
       ...invocation.args,
       'up',
-      ...(profile.compose.transport === 'repository' ? ['--build'] : []),
+      // Acceptance runs in a prebuilt sandbox image. Its dependency stamp is
+      // verified by the container entrypoint, so rebuilding here only turns
+      // environment setup into an unbounded Docker build.
+      ...(profile.compose.transport === 'repository' && options.profile !== 'acceptance' ? ['--build'] : []),
       '-d',
       '--wait',
       ...profile.services,

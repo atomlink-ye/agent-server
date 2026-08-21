@@ -31,6 +31,9 @@ services:
     restart: 'no'
 
   web-vite:
+    # Keep the image tag independent of the Compose project so acceptance can
+    # reuse the sandbox-template web-vite image instead of rebuilding it.
+    image: agent-server-web-vite:latest
     build:
       context: .
       dockerfile: Dockerfile

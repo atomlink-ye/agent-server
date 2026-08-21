@@ -122,6 +122,9 @@ services:
       start_period: 45m
 
   web:
+    # Keep the image tag independent of the Compose project so acceptance can
+    # reuse the sandbox-template web image instead of rebuilding it.
+    image: agent-server-web:latest
     build:
       context: .
       dockerfile: Dockerfile

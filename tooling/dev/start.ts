@@ -68,6 +68,8 @@ export async function startHostDevelopment(
     mode === 'runtime'
       ? hostRuntimeEnvironment(prepared)
       : hostCoreEnvironment(prepared);
+  const apiPort = Number.parseInt(applicationEnvironment.PORT ?? '3000', 10);
+  const apiBaseUrl = `http://127.0.0.1:${apiPort}`;
   const children: ChildProcess[] = [];
   let stopping = false;
   let signalResolve: (() => void) | undefined;
@@ -100,23 +102,30 @@ export async function startHostDevelopment(
     children.push(api);
 
     await Promise.race([
-      waitForHttp('http://127.0.0.1:3000/health/live',
-        mode === 'runtime' ? 60_000 : 30_000),
+      waitForHttp(
+        `${apiBaseUrl}${mode === 'runtime' ? '/health/ready' : '/health/live'}`,
+        mode === 'runtime' ? 60_000 : 30_000,
+      ),
       exitOf(api).then(({ code }) => {
         throw new Error(`Agent Server exited before readiness (${code})`);
       }),
     ]);
 
+    const webBaseEnvironment = hostWebEnvironment({
+      ...applicationEnvironment,
+      AGENT_SERVER_BASE_URL: apiBaseUrl,
+    });
     let generatedWebEnv: NodeJS.ProcessEnv = {};
     if (mode === 'runtime') {
       await runCommand('node', ['scripts/dev/web-bootstrap.mjs'], {
-        environment: hostWebEnvironment(applicationEnvironment),
+        environment: webBaseEnvironment,
       });
       generatedWebEnv = await readGeneratedWebEnv();
     }
     const webEnvironment = hostWebEnvironment({
-      ...applicationEnvironment,
+      ...webBaseEnvironment,
       ...generatedWebEnv,
+      AGENT_SERVER_BASE_URL: apiBaseUrl,
     });
     const web = spawnOwned('pnpm', ['web:dev'], { environment: webEnvironment });
     children.push(web);
@@ -124,7 +133,7 @@ export async function startHostDevelopment(
     process.stdout.write(
       [
         `host-native dev ready: mode=${mode}`,
-        'api=http://127.0.0.1:3000',
+        `api=${apiBaseUrl}`,
         'web=http://127.0.0.1:3001',
         mode === 'runtime'
           ? 'runtime=paseo (host-native helper)'

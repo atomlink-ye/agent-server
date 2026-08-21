@@ -74,11 +74,49 @@ async function paseoCheck(
   }
 }
 
+function providerCheck(environment: NodeJS.ProcessEnv): DoctorCheck {
+  const provider = (environment.PASEO_PROVIDER?.trim() || 'opencode').toLowerCase();
+  const keyByProvider: Readonly<Record<string, string>> = {
+    opencode: 'OPENCODE_GO_API_KEY',
+    claude: 'ANTHROPIC_API_KEY',
+    anthropic: 'ANTHROPIC_API_KEY',
+    codex: 'OPENAI_API_KEY',
+    openai: 'OPENAI_API_KEY',
+  };
+  const keyName = keyByProvider[provider];
+  if (!keyName) {
+    return {
+      name: 'provider',
+      status: 'warn',
+      detail: `${provider}: no canonical credential probe; core development is unaffected`,
+      requiredFor: ['runtime'],
+    };
+  }
+  const configured = Boolean(environment[keyName]?.trim());
+  return {
+    name: 'provider',
+    status: configured ? 'ok' : 'warn',
+    detail: configured
+      ? `${provider}: ${keyName} is configured`
+      : `${provider}: ${keyName} is not exported; pnpm dev still works`,
+    requiredFor: ['runtime'],
+  };
+}
+
 export async function runDoctor(
   environment: NodeJS.ProcessEnv = process.env,
 ): Promise<readonly DoctorCheck[]> {
   const loaded = await loadLocalDotEnv(environment);
   const nodeMajor = Number.parseInt(process.versions.node.split('.')[0] ?? '0', 10);
+  const [pnpmAvailable, psqlAvailable, apiPortFree, webPortFree, postgres, paseo] =
+    await Promise.all([
+      commandAvailable('pnpm'),
+      commandAvailable('psql'),
+      isPortFree(Number(loaded.PORT ?? 3000)),
+      isPortFree(3001),
+      postgresCheck(loaded),
+      paseoCheck(loaded),
+    ]);
   const checks: DoctorCheck[] = [
     {
       name: 'node',
@@ -88,34 +126,35 @@ export async function runDoctor(
     },
     {
       name: 'pnpm',
-      status: (await commandAvailable('pnpm')) ? 'ok' : 'fail',
-      detail: (await commandAvailable('pnpm')) ? 'available' : 'not found',
+      status: pnpmAvailable ? 'ok' : 'fail',
+      detail: pnpmAvailable ? 'available' : 'not found',
       requiredFor: ['core', 'scenario', 'runtime'],
     },
     {
       name: 'psql',
-      status: (await commandAvailable('psql')) ? 'ok' : 'warn',
-      detail: (await commandAvailable('psql'))
+      status: psqlAvailable ? 'ok' : 'warn',
+      detail: psqlAvailable
         ? 'available'
         : 'not found; the Node pg driver can still connect to an existing database',
       requiredFor: ['core'],
     },
-    await postgresCheck(loaded),
+    postgres,
     {
       name: 'api-port',
-      status: (await isPortFree(Number(loaded.PORT ?? 3000))) ? 'ok' : 'warn',
-      detail: (await isPortFree(Number(loaded.PORT ?? 3000)))
+      status: apiPortFree ? 'ok' : 'warn',
+      detail: apiPortFree
         ? `:${loaded.PORT ?? 3000} free`
         : `:${loaded.PORT ?? 3000} already in use`,
       requiredFor: ['core', 'runtime'],
     },
     {
       name: 'web-port',
-      status: (await isPortFree(3001)) ? 'ok' : 'warn',
-      detail: (await isPortFree(3001)) ? ':3001 free' : ':3001 already in use',
+      status: webPortFree ? 'ok' : 'warn',
+      detail: webPortFree ? ':3001 free' : ':3001 already in use',
       requiredFor: ['core', 'runtime'],
     },
-    await paseoCheck(loaded),
+    paseo,
+    providerCheck(loaded),
   ];
 
   const coreReady = !checks.some(
@@ -126,7 +165,8 @@ export async function runDoctor(
   );
   const runtimeReady =
     coreReady &&
-    checks.find((check) => check.name === 'paseo')?.status === 'ok';
+    checks.find((check) => check.name === 'paseo')?.status === 'ok' &&
+    checks.find((check) => check.name === 'provider')?.status === 'ok';
 
   for (const check of checks) {
     const icon = check.status === 'ok' ? '✓' : check.status === 'warn' ? '○' : '✗';

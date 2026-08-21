@@ -28,8 +28,10 @@ export async function seedGoldenPathWorld(
   } = {},
 ) {
   const owner = await seedWorkspace(db, {
-    tenantId: options.tenantId,
-    principalId: options.principalId,
+    ...(options.tenantId !== undefined ? { tenantId: options.tenantId } : {}),
+    ...(options.principalId !== undefined
+      ? { principalId: options.principalId }
+      : {}),
     name: `${options.name ?? 'Golden Path'} Workspace`,
   });
   const environment = await seedEnvironmentVersion(db, owner, {

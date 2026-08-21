@@ -18,6 +18,13 @@ import { createWorkModule } from '../../src/modules/work/work-module.js';
 import { PostgresInvokableRepository } from '../../src/infrastructure/postgres/postgres-invokable-repository.js';
 import { PostgresExecutionFactQuery } from '../../src/infrastructure/postgres/postgres-execution-fact-query.js';
 import { ResolveWorkDefinition } from '../../src/application/work/resolve-work-definition.js';
+import { ChatDeliveryReconciler } from '../../src/application/chat/chat-delivery-reconciler.js';
+import { PostgresConversationRepository } from '../../src/infrastructure/postgres/postgres-conversation-repository.js';
+import { PostgresChatDispatchRepository } from '../../src/infrastructure/postgres/postgres-chat-dispatch-repository.js';
+import { PostgresConversationWorkEntitlementRepository } from '../../src/infrastructure/postgres/postgres-conversation-work-entitlement-repository.js';
+import { PostgresConversationWorkLinkRepository } from '../../src/modules/work/conversation-work-link-repository.js';
+import { LocalRuntimeExtensionBinder } from '../../src/infrastructure/extensions/local-runtime-extension-binder.js';
+import { postConversationMessage } from '../../src/application/chat/post-conversation-message.js';
 
 const servers: RuntimeMcpServer[] = [];
 afterEach(async () =>
@@ -951,6 +958,305 @@ spec:
       );
       expect(runs.rows).toHaveLength(2);
       expect(runs.rows.map((run) => run.work_id)).toEqual([workId, workId]);
+    } finally {
+      await db.close();
+    }
+  });
+
+  it('B4 lets the real ChatDeliveryReconciler bind chat Work tools end to end', async () => {
+    const db = new PGlite();
+    const at = '2026-08-21T00:00:00.000Z';
+    const tenantId = 'tenant-b4';
+    const workspaceId = randomUUID();
+    const principalId = 'principal-b4';
+    const agentDefinitionId = randomUUID();
+    const agentVersionId = randomUUID();
+    const environmentVersionId = randomUUID();
+    const definitionId = randomUUID();
+    const versionId = randomUUID();
+    const owner = {
+      tenantId,
+      workspaceId,
+      principalType: 'service_account' as const,
+      principalId,
+    };
+    const source = {
+      kind: 'single_agent' as const,
+      agentVersionId,
+      environmentVersionId,
+      memoryVersionIds: [],
+      inputSchema: {
+        type: 'object' as const,
+        properties: { query: { type: 'string' as const } },
+        required: ['query'],
+        additional_properties: false,
+      },
+    };
+    const parsed = validateProductWorkDefinition(`apiVersion: agentserver.dev/v1alpha1
+kind: WorkDefinition
+metadata:
+  name: b4-product-work
+  description: B4 Product WorkDefinition
+spec:
+  kind: single_agent
+  agent_version_id: ${agentVersionId}
+  environment_version_id: ${environmentVersionId}
+  input_schema:
+    type: object
+    properties:
+      query:
+        type: string
+    required: [query]
+    additional_properties: false
+`);
+    if (!parsed.valid) throw new Error(JSON.stringify(parsed.diagnostics));
+
+    try {
+      await applyDurableKernelMigrations(db);
+      await db.query(
+        `INSERT INTO workspaces (id,tenant_id,principal_type,principal_id,name,created_at,updated_at) VALUES($1,$2,'service_account',$3,'B4',$4,$4)`,
+        [workspaceId, tenantId, principalId, at],
+      );
+      const conversations = new PostgresConversationRepository(db as any);
+      const dispatches = new PostgresChatDispatchRepository(db as any);
+      const entitlements = new PostgresConversationWorkEntitlementRepository(
+        db as any,
+      );
+      const conversationWorkLinks = new PostgresConversationWorkLinkRepository(
+        db as any,
+      );
+      await conversations.ensureChatRuntime({
+        tenantId,
+        agentDefinitionId,
+        activeAgentVersionId: agentVersionId,
+      });
+      const conversation = await conversations.findOrCreateDirect({
+        tenantId,
+        principalId,
+        principalType: 'service_account',
+        agentDefinitionId,
+      });
+      const message = await postConversationMessage(conversations, {
+        author: {
+          type: 'principal',
+          tenantId,
+          conversationId: conversation.id,
+          principalType: 'service_account',
+          principalId,
+        },
+        body: '请做正式分析 OpenAI',
+      });
+      await entitlements.enable({
+        tenantId,
+        conversationId: conversation.id,
+        workspaceId,
+        principalType: 'service_account',
+        principalId,
+      });
+      await dispatches.enqueue({
+        tenantId,
+        agentDefinitionId,
+        conversationId: conversation.id,
+        throughSequence: message.sequence,
+        dedupeKey: `b4:${message.id}`,
+      });
+      const dispatch = (await dispatches.listPending(10))[0];
+      expect(dispatch).toBeDefined();
+
+      const authoredDefinitions = new PostgresWorkDefinitionSourceRepository(
+        db,
+      );
+      await authoredDefinitions.publish({
+        definitionId,
+        versionId,
+        owner,
+        name: 'B4 Product Work',
+        description: 'B4 Product WorkDefinition',
+        source,
+        fingerprint: fingerprintWorkDefinitionSource(source),
+        authorSource: parsed.document,
+        authorFingerprint: parsed.fingerprint,
+        now: at,
+      });
+      await authoredDefinitions.associateAgentWorkflow({
+        tenantId,
+        workspaceId,
+        agentDefinitionId,
+        definitionId,
+        now: at,
+      });
+
+      const invokables = new PostgresInvokableRepository(db);
+      const resolver = new ResolveWorkDefinition({
+        agents: {
+          async findDefinition() {
+            return null;
+          },
+          async findVersion(_owner, id) {
+            return id === agentVersionId
+              ? ({
+                  id: agentVersionId,
+                  definitionId: randomUUID(),
+                  tenantId,
+                  workspaceId,
+                  principalType: owner.principalType,
+                  principalId,
+                  status: 'published',
+                  displayName: 'B4 Agent',
+                  fingerprint: `sha256:${'a'.repeat(64)}`,
+                } as any)
+              : null;
+          },
+        },
+        agentResolution: {
+          async resolvePublished(id) {
+            return id === agentVersionId
+              ? {
+                  source: 'managed' as const,
+                  id: agentVersionId,
+                  instructions: 'Handle typed Product Work input.',
+                  modelPolicyRef: 'free-only' as const,
+                  proposalLimit: 0,
+                  skills: [],
+                  toolRefs: [],
+                }
+              : null;
+          },
+        },
+        definitions: invokables,
+        authoredDefinitions,
+        environments: {
+          async findVersion(_owner, id) {
+            return id === environmentVersionId
+              ? ({
+                  id: environmentVersionId,
+                  definitionId: randomUUID(),
+                  tenantId,
+                  workspaceId,
+                  principalType: owner.principalType,
+                  principalId,
+                  status: 'published',
+                  displayName: 'B4 Environment',
+                  package: {},
+                  canonicalJson: '{}',
+                  fingerprint: `sha256:${'e'.repeat(64)}`,
+                  createdAt: at,
+                  updatedAt: at,
+                  publishedAt: at,
+                } as any)
+              : null;
+          },
+        },
+      });
+      const executionPlane = new ScriptedExecutionPlane();
+      const workModule = createWorkModule({
+        database: db as any,
+        definitions: invokables,
+        definitionResolution: resolver,
+        execution: {
+          async admitRoot(request: any) {
+            const taskId = randomUUID();
+            await db.query(
+              `INSERT INTO tasks
+               (id,tenant_id,workspace_id,principal_type,principal_id,policy_snapshot_version,
+                root_task_id,depth,status,ingress,invokable_kind,invokable_version_id,
+                input_snapshot_ref,input_fingerprint,created_at,updated_at)
+               VALUES($1,$2,$3,$4,$5,$6,$1,0,'active','api',$7,$8,$9,$10,$11,$11)`,
+              [
+                taskId,
+                request.accessContext.tenantId,
+                request.accessContext.workspaceId,
+                request.accessContext.principalType,
+                request.accessContext.principalId,
+                request.accessContext.policySnapshotVersion,
+                request.invokable.kind,
+                request.invokable.versionId,
+                'b4',
+                'b4',
+                at,
+              ],
+            );
+            return { taskId, reused: false };
+          },
+        } as any,
+        runtimeCapabilities: executionPlane,
+        executionFacts: new PostgresExecutionFactQuery(db as any),
+        conversations: {
+          async appendMessage() {
+            return undefined as any;
+          },
+        } as any,
+      } as any);
+      const mcp = new RuntimeMcpServer(
+        new RuntimeToolRegistry([(context) => workModule.contributeRuntime(context)]),
+      );
+      servers.push(mcp);
+      const binder = new LocalRuntimeExtensionBinder(
+        process.cwd(),
+        process.cwd(),
+        mcp,
+      );
+      const provider = {
+        async runTurn(input: any) {
+          if (!input.extensions) throw new Error('reconciler did not bind extensions');
+          const created = await executionPlane.createSession({
+            runtimeSessionId: `chat-runtime-b4-${conversation.id}`,
+            workspace: { cwd: process.cwd() },
+            systemPrompt: `Agent definition ID: ${input.agentDefinitionId}`,
+            extensions: input.extensions,
+          });
+          await created.session.run({
+            runId: `chat-turn-b4-${message.id}`,
+            prompt: input.messages.at(-1)?.body ?? '',
+          });
+          return { body: '已开始正式分析。', provider: 'scripted' };
+        },
+      };
+      const reconciler = new ChatDeliveryReconciler(
+        conversations,
+        dispatches,
+        provider,
+        {
+          async resolve() {
+            return {
+              instructions: 'B4 test brain',
+              capabilitySummary: {},
+              agentHome: {},
+            } as any;
+          },
+        } as any,
+        conversationWorkLinks,
+        undefined,
+        undefined,
+        entitlements,
+        binder,
+      );
+      await reconciler.reconcileOne(dispatch!);
+
+      const works = await db.query<{ id: string; v: string }>(
+        'SELECT id, current_definition_version_id AS v FROM works WHERE tenant_id=$1',
+        [tenantId],
+      );
+      expect(works.rows).toHaveLength(1);
+      expect(works.rows[0]?.v).toBe(versionId);
+      const runs = await db.query<{ work_id: string }>(
+        'SELECT work_id FROM work_runs WHERE tenant_id=$1',
+        [tenantId],
+      );
+      expect(runs.rows).toHaveLength(1);
+      expect(runs.rows[0]?.work_id).toBe(works.rows[0]?.id);
+      const links = await db.query<{
+        work_id: string;
+        conversation_id: string;
+        trigger_message_id: string;
+      }>(
+        'SELECT work_id, conversation_id, trigger_message_id FROM conversation_work_links WHERE tenant_id=$1',
+        [tenantId],
+      );
+      expect(links.rows).toHaveLength(1);
+      expect(links.rows[0]?.work_id).toBe(works.rows[0]?.id);
+      expect(links.rows[0]?.conversation_id).toBe(conversation.id);
+      expect(links.rows[0]?.trigger_message_id).toBe(message.id);
     } finally {
       await db.close();
     }

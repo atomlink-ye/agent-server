@@ -36,6 +36,7 @@ const paseoEnvironmentNames = [
   'ANTHROPIC_DEFAULT_OPUS_MODEL',
   'ANTHROPIC_SMALL_FAST_MODEL',
   'CLAUDE_CODE_SUBAGENT_MODEL',
+  'IS_SANDBOX',
   'PASEO_BIN',
   'OPENCODE_BIN',
   'CLAUDE_CODE_BIN',
@@ -186,6 +187,7 @@ if (command.length === 0) {
     process.env.ANTHROPIC_BASE_URL = anthropicDefaults.ANTHROPIC_BASE_URL;
     process.env.ANTHROPIC_API_KEY = process.env.OPENCODE_GO_API_KEY.trim();
   }
+  process.env.IS_SANDBOX = '1';
   const startedAt = Date.now();
   const providerBinaries = await prepareProviderToolchain();
   process.stderr.write(

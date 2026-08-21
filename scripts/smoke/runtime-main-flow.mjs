@@ -55,6 +55,14 @@ function usageSummary(usage) {
   return Object.keys(summary).length > 0 ? summary : undefined;
 }
 
+function expectedRuntimeModel(provider, model) {
+  const prefix = 'opencode-go/';
+  const stripsProviderPrefix = provider === 'claude' || provider === 'codex';
+  return stripsProviderPrefix && model.startsWith(prefix)
+    ? model.slice(prefix.length)
+    : model;
+}
+
 function endpoint(path) {
   try {
     return new URL(path, baseUrl);
@@ -211,10 +219,14 @@ async function main() {
     const usage = completed.usage ?? null;
     const resultText = completed.result?.text;
     const markerMatched = resultText === marker;
+    const expectedModel = expectedRuntimeModel(
+      realProviderDefaults.PASEO_PROVIDER,
+      realProviderDefaults.PASEO_MODEL,
+    );
     const accepted =
       completed.status === 'succeeded' &&
       runtime?.provider === realProviderDefaults.PASEO_PROVIDER &&
-      runtime?.model === realProviderDefaults.PASEO_MODEL &&
+      runtime?.model === expectedModel &&
       markerMatched &&
       Number.isFinite(usage?.input_tokens) &&
       usage.input_tokens > 0 &&
@@ -239,7 +251,7 @@ async function main() {
       token,
       workspaceId,
       expectedProvider: realProviderDefaults.PASEO_PROVIDER,
-      expectedModel: realProviderDefaults.PASEO_MODEL,
+      expectedModel,
       timeoutMs: stageTimeouts.run,
       progress,
     });
@@ -250,7 +262,7 @@ async function main() {
       token,
       workspaceId,
       expectedProvider: realProviderDefaults.PASEO_PROVIDER,
-      expectedModel: realProviderDefaults.PASEO_MODEL,
+      expectedModel,
       timeoutMs: stageTimeouts.run,
       progress,
     });

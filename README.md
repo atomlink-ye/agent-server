@@ -31,6 +31,7 @@ Install and prepare the development database:
 corepack enable
 pnpm install --frozen-lockfile
 pnpm setup
+pnpm setup:providers   # optional; required for host-native runtime work
 pnpm doctor
 ```
 
@@ -63,8 +64,13 @@ Core mode uses the deterministic direct-chat mock and leaves Product Work execut
 When the change actually needs the execution plane, load provider credentials and run:
 
 ```bash
+pnpm setup:providers
 pnpm dev:runtime
 ```
+
+The pinned provider toolchain requires Linux and `flock`; use the Linux
+development sandbox for host-native runtime preparation. Core development does
+not require provider installation.
 
 `dev:runtime` starts the same host-native API/Web topology and uses the existing host-native Paseo helper for the runtime process. It also runs the idempotent Web bootstrap after the API becomes ready.
 

@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -17,6 +17,15 @@ import { createApplicationEnvironment } from './with-paseo-environment.mjs';
 const paseoEnvironmentNames = [
   'PASEO_PROVIDER',
   'PASEO_MODEL',
+  'PASEO_CONNECT_TIMEOUT_MS',
+  'PASEO_EXECUTION_TIMEOUT_MS',
+  'PASEO_SESSION_RPC_TIMEOUT_MS',
+  'PASEO_DAEMON_STARTUP_TIMEOUT_MS',
+  'PASEO_OPENCODE_SERVER_STARTUP_TIMEOUT_MS',
+  'PASEO_PROVIDER_REFRESH_TIMEOUT_MS',
+  'PASEO_OPENCODE_APP_AGENTS_TIMEOUT_MS',
+  'PASEO_OPENCODE_PROVIDER_LIST_TIMEOUT_MS',
+  'PASEO_OPENCODE_SESSION_CREATE_TIMEOUT_MS',
   'OPENCODE_GO_API_KEY',
   'OPENCODE_CONFIG_CONTENT',
   'ANTHROPIC_BASE_URL',
@@ -27,6 +36,10 @@ const paseoEnvironmentNames = [
   'ANTHROPIC_DEFAULT_OPUS_MODEL',
   'ANTHROPIC_SMALL_FAST_MODEL',
   'CLAUDE_CODE_SUBAGENT_MODEL',
+  'PASEO_BIN',
+  'OPENCODE_BIN',
+  'CLAUDE_CODE_BIN',
+  'CODEX_BIN',
 ];
 
 const realProviderDefaults = loadRealProviderDefaults();
@@ -49,6 +62,85 @@ const repositoryRoot = resolve(
   dirname(fileURLToPath(import.meta.url)),
   '../..',
 );
+
+function boundedTail(output) {
+  const redacted = Object.entries(process.env).reduce(
+    (result, [name, value]) => {
+      if (
+        !/(?:KEY|TOKEN|SECRET|PASSWORD|AUTH|CREDENTIAL)/iu.test(name) ||
+        !value?.trim()
+      ) {
+        return result;
+      }
+      return result.replaceAll(value.trim(), '[redacted]');
+    },
+    output.trim(),
+  );
+  return redacted.split(/\r?\n/u).slice(-30).join('\n').slice(-4_000);
+}
+
+async function prepareProviderToolchain() {
+  const child = spawn(
+    process.execPath,
+    ['--import', 'tsx', 'tooling/dev/setup-providers.ts', '--json', '--fast'],
+    {
+      cwd: repositoryRoot,
+      env: process.env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
+  );
+  let stdout = '';
+  let stderr = '';
+  child.stdout?.on('data', (chunk) => {
+    stdout += chunk.toString();
+  });
+  child.stderr?.on('data', (chunk) => {
+    stderr += chunk.toString();
+  });
+  await new Promise((resolveChild, rejectChild) => {
+    child.once('error', rejectChild);
+    child.once('close', (code, signal) => {
+      if (code === 0) resolveChild();
+      else
+        rejectChild(
+          new Error(
+            [
+              `provider setup failed (${code ?? signal ?? 'unknown'})`,
+              boundedTail([stdout, stderr].filter(Boolean).join('\n')),
+            ]
+              .filter(Boolean)
+              .join('\n'),
+          ),
+        );
+    });
+  });
+  let result;
+  try {
+    result = JSON.parse(stdout);
+  } catch {
+    throw new Error(
+      [
+        'provider setup returned invalid status',
+        boundedTail([stdout, stderr].filter(Boolean).join('\n')),
+      ]
+        .filter(Boolean)
+        .join('\n'),
+    );
+  }
+  const binaries = result?.binaries;
+  const names = ['paseo', 'opencode', 'claude', 'codex'];
+  if (
+    !binaries ||
+    names.some(
+      (name) =>
+        typeof binaries[name] !== 'string' || !binaries[name].startsWith('/'),
+    )
+  ) {
+    throw new Error('provider setup returned incomplete binary paths');
+  }
+  return binaries;
+}
+
 const separator = process.argv.indexOf('--');
 const command = separator >= 0 ? process.argv.slice(separator + 1) : [];
 if (command.length === 0) {
@@ -57,6 +149,9 @@ if (command.length === 0) {
   );
   process.exitCode = 2;
 } else {
+  for (const [name, value] of Object.entries(realProviderDefaults)) {
+    if (!process.env[name]?.trim()) process.env[name] = value;
+  }
   if (
     realProviderDefaults.PASEO_MODEL.startsWith('opencode-go/') &&
     !process.env.OPENCODE_GO_API_KEY?.trim()
@@ -85,13 +180,40 @@ if (command.length === 0) {
         model: realProviderDefaults.PASEO_MODEL,
       });
     }
-    for (const [name, value] of Object.entries({
-      ...anthropicDefaults,
-      ANTHROPIC_API_KEY: process.env.OPENCODE_GO_API_KEY,
-    })) {
+    for (const [name, value] of Object.entries(anthropicDefaults)) {
       if (!process.env[name]?.trim()) process.env[name] = value;
     }
+    process.env.ANTHROPIC_BASE_URL = anthropicDefaults.ANTHROPIC_BASE_URL;
+    process.env.ANTHROPIC_API_KEY = process.env.OPENCODE_GO_API_KEY.trim();
   }
+  const startedAt = Date.now();
+  const providerBinaries = await prepareProviderToolchain();
+  process.stderr.write(
+    `with-paseo phase=provider-prep elapsed_ms=${Date.now() - startedAt}\n`,
+  );
+  process.env.PASEO_BIN = providerBinaries.paseo;
+  process.env.OPENCODE_BIN = providerBinaries.opencode;
+  process.env.CLAUDE_CODE_BIN = providerBinaries.claude;
+  process.env.CODEX_BIN = providerBinaries.codex;
+  process.env.PATH = [
+    dirname(providerBinaries.paseo),
+    dirname(providerBinaries.opencode),
+    dirname(providerBinaries.claude),
+    dirname(providerBinaries.codex),
+    process.env.PATH ?? '',
+  ]
+    .filter(Boolean)
+    .join(':');
+  const claudeHome = join(runtimeRoot, 'home', '.claude');
+  const claudeSettingsPath = join(claudeHome, 'settings.json');
+  await mkdir(claudeHome, { recursive: true, mode: 0o700 });
+  await chmod(claudeHome, 0o700);
+  await writeFile(
+    claudeSettingsPath,
+    JSON.stringify({ env: { ANTHROPIC_MODEL: openCodeGoModel } }),
+    { mode: 0o600 },
+  );
+  await chmod(claudeSettingsPath, 0o600);
   const codexHome = join(runtimeRoot, 'home', '.codex');
   await mkdir(codexHome, { recursive: true, mode: 0o700 });
   await writeFile(
@@ -115,6 +237,9 @@ if (command.length === 0) {
     listenHost: paseoListenHost,
     environmentVariableNames: paseoEnvironmentNames,
   });
+  process.stderr.write(
+    `with-paseo phase=paseo-start elapsed_ms=${Date.now() - startedAt}\n`,
+  );
 
   const child = spawn(command[0], command.slice(1), {
     cwd: repositoryRoot,
@@ -127,13 +252,24 @@ if (command.length === 0) {
     detached: process.platform !== 'win32',
     stdio: 'inherit',
   });
+  process.stderr.write(
+    `with-paseo phase=api-spawn elapsed_ms=${Date.now() - startedAt}\n`,
+  );
 
-  const stop = async () => {
-    await Promise.all([stopProcessTree(child), stopProcessTree(paseo.child)]);
+  let stopping;
+  const stop = () => {
+    stopping ??= Promise.allSettled([
+      stopProcessTree(child),
+      stopProcessTree(paseo.child),
+    ]);
+    return stopping;
   };
   for (const signal of ['SIGINT', 'SIGTERM']) {
     process.once(signal, () => {
-      void stop();
+      void stop().finally(() => {
+        process.exitCode = signal === 'SIGINT' ? 130 : 143;
+        process.exit();
+      });
     });
   }
 
@@ -141,7 +277,10 @@ if (command.length === 0) {
     child.once('exit', (code, signal) => {
       resolveExit(code ?? (signal ? 1 : 0));
     });
-    child.once('error', () => resolveExit(1));
+    child.once('error', (error) => {
+      process.stderr.write(`${error.message}\n`);
+      resolveExit(1);
+    });
   });
   await stopProcessTree(paseo.child);
   process.exitCode = exitCode;

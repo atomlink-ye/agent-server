@@ -28,6 +28,21 @@ Prerequisites:
 pnpm setup
 ```
 
+Provider binaries are optional for core development. Prepare the pinned
+Paseo/Claude/Codex/OpenCode toolchain before runtime work with:
+
+```bash
+pnpm setup:providers
+```
+
+The command is idempotent and keeps its release under `.local/provider-toolchain`.
+It does not install providers globally or add a provider prerequisite to
+`pnpm setup`.
+
+The pinned provider toolchain is Linux-only and requires the `flock` utility.
+Run it in the Linux development sandbox; macOS/Windows host-native core mode
+remains supported, but cannot prepare this runtime toolchain locally.
+
 Setup is idempotent and owns only developer bootstrap responsibilities:
 
 1. read `.env` / `.env.local` values when the same variable is not already exported;
@@ -88,6 +103,10 @@ This mode is for product/resource/API/UI work that does not need a live executio
 ```bash
 pnpm dev:runtime
 ```
+
+If the provider toolchain is absent, run `pnpm setup:providers` first. Runtime
+startup uses the pinned local release and an isolated runtime HOME for provider
+configuration; core development does not require either.
 
 Runtime mode still uses host processes. It invokes the existing `scripts/dev/with-paseo.mjs` helper around the API process, so Paseo and the provider toolchain remain isolated behind the runtime boundary without requiring Docker. After API readiness, the Web bootstrap creates/publishes the local Agent/Environment/Team/Work fixtures and the Web process starts on port 3001.
 

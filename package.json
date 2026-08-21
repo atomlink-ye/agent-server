@@ -13,6 +13,7 @@
   },
   "scripts": {
     "setup": "node --import tsx tooling/dev/setup.ts",
+    "setup:providers": "node --import tsx tooling/dev/setup-providers.ts",
     "doctor": "node --import tsx tooling/dev/doctor.ts",
     "dev:health-probe": "node --import tsx tooling/dev/health-probe.ts",
     "dev": "node --import tsx tooling/dev/start.ts core",

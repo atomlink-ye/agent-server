@@ -14,6 +14,7 @@
   "scripts": {
     "setup": "node --import tsx tooling/dev/setup.ts",
     "doctor": "node --import tsx tooling/dev/doctor.ts",
+    "dev:health-probe": "node --import tsx tooling/dev/health-probe.ts",
     "dev": "node --import tsx tooling/dev/start.ts core",
     "dev:runtime": "node --import tsx tooling/dev/start.ts runtime",
     "dev:full": "pnpm dev:runtime",

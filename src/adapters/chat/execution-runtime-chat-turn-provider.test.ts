@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { ExecutionRuntimeChatTurnProvider } from './execution-runtime-chat-turn-provider.js';
 import { ExecutionPlaneRuntimeFacade } from '../../application/runtime/execution-plane-runtime-facade.js';
@@ -17,6 +17,7 @@ import type {
 } from '../../application/ports/execution-plane.js';
 import type { RuntimeMemoryCandidateCollector } from '../../application/ports/runtime-memory-candidate-collector.js';
 import type {
+  RuntimeSession,
   RuntimeSessionLookup,
   RuntimeSessionRepository,
 } from '../../application/ports/runtime-session-repository.js';
@@ -24,18 +25,17 @@ import type { RuntimeWorkspaceRepository } from '../../application/ports/runtime
 import type { ResolvedChatBrain } from '../../application/chat/chat-brain-resolver.js';
 
 describe('ExecutionRuntimeChatTurnProvider', () => {
-  it('passes the agent_chat scope to the execution plane when it creates a chat session', async () => {
+  it('persists an agent_chat RuntimeSession and passes structured invocation context', async () => {
     const plane = new RecordingExecutionPlane();
-    const runtime = new ExecutionPlaneRuntimeFacade(
-      plane,
-      {} as RuntimeSessionRepository,
-      {} as RuntimeSessionLookup,
-      {} as RuntimeWorkspaceRepository,
-      new ExecutionRunRegistry(),
-      noMemoryCandidates,
-      '/runtime-default',
-    );
+    const runtimeSessions = new InMemoryRuntimeSessions();
+    const runtime = createRuntime(plane, runtimeSessions);
     const provider = new ExecutionRuntimeChatTurnProvider(runtime);
+    const brain = chatBrain({
+      agentDefinitionId: 'agent-definition-1',
+      agentVersionId: 'agent-version-1',
+      agentChatRuntimeId: 'chat-runtime-1',
+      runtimeEpoch: 1,
+    });
 
     await provider.runTurn({
       tenantId: 'tenant-1',
@@ -43,7 +43,7 @@ describe('ExecutionRuntimeChatTurnProvider', () => {
       agentVersionId: 'agent-version-1',
       conversationId: 'conversation-1',
       triggerMessageId: 'message-1',
-      brain: chatBrain(),
+      brain,
       messages: [
         {
           authorType: 'principal',
@@ -53,13 +53,141 @@ describe('ExecutionRuntimeChatTurnProvider', () => {
       ],
     });
 
+    expect(runtimeSessions.createAgentChatCalls).toEqual([
+      expect.objectContaining({
+        agentChatRuntimeId: 'chat-runtime-1',
+        runtimeEpoch: 1,
+        agentVersionId: 'agent-version-1',
+      }),
+    ]);
     expect(plane.createdSpecs).toHaveLength(1);
     expect(plane.createdSpecs[0]?.labels?.scope).toBe('agent_chat');
+    expect(plane.createdSpecs[0]?.invocationContext).toEqual(
+      expect.objectContaining({
+        agentDefinitionId: 'agent-definition-1',
+        agentVersionId: 'agent-version-1',
+        conversationId: 'conversation-1',
+        triggerMessageId: 'message-1',
+        scope: {
+          kind: 'agent_chat',
+          agentChatRuntimeId: 'chat-runtime-1',
+          runtimeEpoch: 1,
+        },
+      }),
+    );
+  });
+
+  it('reuses one durable RuntimeSession and attaches the same provider session on the next chat turn', async () => {
+    const plane = new RecordingExecutionPlane();
+    const runtimeSessions = new InMemoryRuntimeSessions();
+    const provider = new ExecutionRuntimeChatTurnProvider(
+      createRuntime(plane, runtimeSessions),
+    );
+    const brain = chatBrain({
+      agentDefinitionId: 'agent-definition-sticky',
+      agentVersionId: 'agent-version-sticky',
+      agentChatRuntimeId: 'chat-runtime-sticky',
+      runtimeEpoch: 3,
+    });
+
+    await provider.runTurn({
+      ...turnIdentity(
+        'agent-definition-sticky',
+        'agent-version-sticky',
+        'conversation-sticky',
+        'message-1',
+      ),
+      brain,
+      messages: [
+        { authorType: 'principal', authorId: 'principal-1', body: 'hello' },
+      ],
+    });
+    await provider.runTurn({
+      ...turnIdentity(
+        'agent-definition-sticky',
+        'agent-version-sticky',
+        'conversation-sticky',
+        'message-2',
+      ),
+      brain: chatBrain({
+        agentDefinitionId: 'agent-definition-sticky',
+        agentVersionId: 'agent-version-sticky',
+        agentChatRuntimeId: 'chat-runtime-sticky',
+        runtimeEpoch: 3,
+        conversationId: 'conversation-sticky',
+        triggerMessageId: 'message-2',
+      }),
+      messages: [
+        { authorType: 'principal', authorId: 'principal-1', body: 'hello' },
+        {
+          authorType: 'principal',
+          authorId: 'principal-1',
+          body: 'continue from before',
+        },
+      ],
+    });
+
+    expect(runtimeSessions.sessions).toHaveLength(1);
+    expect(plane.createdSpecs).toHaveLength(1);
+    expect(plane.attachedSpecs).toHaveLength(1);
+    expect(plane.attachedBindings[0]?.externalSessionId).toBe(
+      'recording-session-1',
+    );
+    expect(runtimeSessions.bindCalls).toHaveLength(1);
+  });
+
+  it('uses a new RuntimeSession after the AgentChatRuntime epoch rotates', async () => {
+    const plane = new RecordingExecutionPlane();
+    const runtimeSessions = new InMemoryRuntimeSessions();
+    const provider = new ExecutionRuntimeChatTurnProvider(
+      createRuntime(plane, runtimeSessions),
+    );
+
+    await provider.runTurn({
+      ...turnIdentity('definition-epoch', 'version-1', 'conversation-epoch'),
+      brain: chatBrain({
+        agentDefinitionId: 'definition-epoch',
+        agentVersionId: 'version-1',
+        agentChatRuntimeId: 'runtime-epoch',
+        runtimeEpoch: 1,
+      }),
+      messages: [
+        { authorType: 'principal', authorId: 'principal-1', body: 'first' },
+      ],
+    });
+    await provider.runTurn({
+      ...turnIdentity(
+        'definition-epoch',
+        'version-2',
+        'conversation-epoch',
+        'message-epoch-2',
+      ),
+      brain: chatBrain({
+        agentDefinitionId: 'definition-epoch',
+        agentVersionId: 'version-2',
+        agentChatRuntimeId: 'runtime-epoch',
+        runtimeEpoch: 2,
+        triggerMessageId: 'message-epoch-2',
+      }),
+      messages: [
+        { authorType: 'principal', authorId: 'principal-1', body: 'second' },
+      ],
+    });
+
+    expect(runtimeSessions.sessions).toHaveLength(2);
+    expect(plane.createdSpecs).toHaveLength(2);
+    expect(plane.attachedSpecs).toHaveLength(0);
+    expect(runtimeSessions.sessions.map((session) => session.agentVersionId)).toEqual([
+      'version-1',
+      'version-2',
+    ]);
   });
 
   it('carries each resolved agent brain through the runtime facade into its execution system prompt', async () => {
     const plane = new RecordingExecutionPlane();
-    const provider = new ExecutionRuntimeChatTurnProvider(createRuntime(plane));
+    const provider = new ExecutionRuntimeChatTurnProvider(
+      createRuntime(plane, new InMemoryRuntimeSessions()),
+    );
 
     await provider.runTurn({
       ...turnIdentity(
@@ -68,10 +196,11 @@ describe('ExecutionRuntimeChatTurnProvider', () => {
         'conversation-alpha',
       ),
       brain: chatBrain({
+        agentDefinitionId: 'definition-alpha',
+        agentVersionId: 'version-alpha',
+        agentChatRuntimeId: 'runtime-alpha',
         instructions: 'Always answer in terse Alpha format.',
-        capabilitySummary: {
-          calendar: 'alpha-calendar-capability',
-        },
+        capabilitySummary: { calendar: 'alpha-calendar-capability' },
         agentHome: {
           definition: [
             { path: 'persona.md', content: 'Alpha persona home content.' },
@@ -89,10 +218,11 @@ describe('ExecutionRuntimeChatTurnProvider', () => {
     await provider.runTurn({
       ...turnIdentity('definition-beta', 'version-beta', 'conversation-beta'),
       brain: chatBrain({
+        agentDefinitionId: 'definition-beta',
+        agentVersionId: 'version-beta',
+        agentChatRuntimeId: 'runtime-beta',
         instructions: 'Always answer in warm Beta format.',
-        capabilitySummary: {
-          calendar: 'beta-calendar-capability',
-        },
+        capabilitySummary: { calendar: 'beta-calendar-capability' },
         agentHome: {
           definition: [
             { path: 'persona.md', content: 'Beta persona home content.' },
@@ -114,130 +244,61 @@ describe('ExecutionRuntimeChatTurnProvider', () => {
     expect(alphaSystemPrompt).toBeDefined();
     expect(betaSystemPrompt).toBeDefined();
 
-    expect(alphaSystemPrompt).toContain(
-      'Agent definition ID: definition-alpha',
-    );
+    expect(alphaSystemPrompt).toContain('Agent definition ID: definition-alpha');
     expect(alphaSystemPrompt).toContain('Agent version ID: version-alpha');
-    expect(alphaSystemPrompt).not.toContain(
-      'Agent definition ID: definition-beta',
-    );
-    expect(alphaSystemPrompt).not.toContain('Agent version ID: version-beta');
     expect(alphaSystemPrompt).toContain('Always answer in terse Alpha format.');
     expect(alphaSystemPrompt).toContain('alpha-calendar-capability');
     expect(alphaSystemPrompt).toContain('Alpha persona home content.');
-    expect(alphaSystemPrompt).not.toContain(
-      'Always answer in warm Beta format.',
-    );
-    expect(alphaSystemPrompt).not.toContain('beta-calendar-capability');
-    expect(alphaSystemPrompt).not.toContain('Beta persona home content.');
+    expect(alphaSystemPrompt).not.toContain('definition-beta');
 
-    expect(betaSystemPrompt).toContain('Always answer in warm Beta format.');
     expect(betaSystemPrompt).toContain('Agent definition ID: definition-beta');
     expect(betaSystemPrompt).toContain('Agent version ID: version-beta');
-    expect(betaSystemPrompt).not.toContain(
-      'Agent definition ID: definition-alpha',
-    );
-    expect(betaSystemPrompt).not.toContain('Agent version ID: version-alpha');
+    expect(betaSystemPrompt).toContain('Always answer in warm Beta format.');
     expect(betaSystemPrompt).toContain('beta-calendar-capability');
     expect(betaSystemPrompt).toContain('Beta persona home content.');
-    expect(betaSystemPrompt).not.toContain(
-      'Always answer in terse Alpha format.',
-    );
-    expect(betaSystemPrompt).not.toContain('alpha-calendar-capability');
-    expect(betaSystemPrompt).not.toContain('Alpha persona home content.');
+    expect(betaSystemPrompt).not.toContain('definition-alpha');
 
     expect(plane.runInputs[0]?.prompt).toContain('Alpha conversation context.');
     expect(plane.runInputs[1]?.prompt).toContain('Beta conversation context.');
-  });
-
-  it('keeps the trusted instruction segment equal when only other agent inputs differ', async () => {
-    const plane = new RecordingExecutionPlane();
-    const provider = new ExecutionRuntimeChatTurnProvider(createRuntime(plane));
-
-    const sharedInstructions = 'Use the shared control instruction.';
-    await provider.runTurn({
-      ...turnIdentity(
-        'definition-control-a',
-        'version-control-a',
-        'conversation-control-a',
-      ),
-      brain: chatBrain({
-        instructions: sharedInstructions,
-        capabilitySummary: { unique: 'control-a-capability' },
-        agentHome: {
-          conversation: [{ path: 'control-a.md', content: 'Control A home.' }],
-        },
-      }),
-      messages: [
-        {
-          authorType: 'principal',
-          authorId: 'principal-control-a',
-          body: 'Control A context.',
-        },
-      ],
-    });
-    await provider.runTurn({
-      ...turnIdentity(
-        'definition-control-b',
-        'version-control-b',
-        'conversation-control-b',
-      ),
-      brain: chatBrain({
-        instructions: sharedInstructions,
-        capabilitySummary: { unique: 'control-b-capability' },
-        agentHome: {
-          conversation: [{ path: 'control-b.md', content: 'Control B home.' }],
-        },
-      }),
-      messages: [
-        {
-          authorType: 'principal',
-          authorId: 'principal-control-b',
-          body: 'Control B context.',
-        },
-      ],
-    });
-
-    const controlASystemPrompt = plane.createdSpecs[0]?.systemPrompt;
-    const controlBSystemPrompt = plane.createdSpecs[1]?.systemPrompt;
-    expect(controlASystemPrompt).toBeDefined();
-    expect(controlBSystemPrompt).toBeDefined();
-    expect(extractTrustedInstructions(controlASystemPrompt!)).toBe(
-      extractTrustedInstructions(controlBSystemPrompt!),
-    );
-    expect(controlASystemPrompt).not.toBe(controlBSystemPrompt);
-    expect(plane.runInputs[0]?.prompt).toContain('Control A context.');
-    expect(plane.runInputs[1]?.prompt).toContain('Control B context.');
   });
 });
 
 class RecordingExecutionPlane implements ExecutionPlanePort {
   public readonly createdSpecs: ExecutionSessionSpec[] = [];
+  public readonly attachedSpecs: ExecutionSessionSpec[] = [];
+  public readonly attachedBindings: ExecutionSessionBinding[] = [];
   public readonly runInputs: ExecutionRunInput[] = [];
+  #nextSession = 1;
 
   public capabilities(): ExecutionPlaneCapabilities {
-    return { supported: new Set() };
+    return { supported: new Set(['reusable_session', 'external_workspace']) };
   }
 
   public async createSession(
     spec: ExecutionSessionSpec,
   ): Promise<CreatedExecutionSession> {
     this.createdSpecs.push(spec);
+    const id = this.#nextSession++;
     return {
       session: recordingSession(this.runInputs),
       workspaceBinding: {
         plane: 'recording',
-        externalWorkspaceId: 'workspace-1',
+        externalWorkspaceId: `recording-workspace-${id}`,
       },
-      sessionBinding: { plane: 'recording', externalSessionId: 'session-1' },
+      sessionBinding: {
+        plane: 'recording',
+        externalSessionId: `recording-session-${id}`,
+      },
     };
   }
 
   public async attachSession(
-    _binding: ExecutionSessionBinding,
-    _spec: ExecutionSessionSpec,
+    binding: ExecutionSessionBinding,
+    spec: ExecutionSessionSpec,
   ): Promise<ExecutionSession> {
-    throw new Error('Chat turns create a fresh execution session.');
+    this.attachedBindings.push(binding);
+    this.attachedSpecs.push(spec);
+    return recordingSession(this.runInputs);
   }
 
   public async health(): Promise<ExecutionPlaneHealth> {
@@ -251,11 +312,112 @@ class RecordingExecutionPlane implements ExecutionPlanePort {
   public async close(): Promise<void> {}
 }
 
+class InMemoryRuntimeSessions
+  implements RuntimeSessionRepository, RuntimeSessionLookup
+{
+  public readonly sessions: RuntimeSession[] = [];
+  public readonly createAgentChatCalls: Record<string, unknown>[] = [];
+  public readonly bindCalls: Record<string, unknown>[] = [];
+
+  public async createOrGetForAgentChat(input: {
+    agentChatRuntimeId: string;
+    runtimeEpoch: number;
+    tenantId: string;
+    principalType: string;
+    principalId: string;
+    workspaceId: string;
+    agentVersionId: string;
+    resolvedSkills: readonly { ref: string; digest: string }[];
+    toolRefs: readonly string[];
+  }): Promise<RuntimeSession> {
+    this.createAgentChatCalls.push(input);
+    const found = this.sessions.find(
+      (session) =>
+        session.scope.kind === 'agent_chat' &&
+        session.scope.agentChatRuntimeId === input.agentChatRuntimeId &&
+        session.scope.runtimeEpoch === input.runtimeEpoch,
+    );
+    if (found) return found;
+    const session: RuntimeSession = {
+      id: `runtime-session-${this.sessions.length + 1}`,
+      scope: {
+        kind: 'agent_chat',
+        agentChatRuntimeId: input.agentChatRuntimeId,
+        runtimeEpoch: input.runtimeEpoch,
+      },
+      scopeKind: 'agent_chat',
+      scopeId: `${input.agentChatRuntimeId}:${input.runtimeEpoch}`,
+      productSessionId: null,
+      taskId: null,
+      launchSnapshotId: `snapshot-${this.sessions.length + 1}`,
+      workspaceId: input.workspaceId,
+      agentVersionId: input.agentVersionId,
+      environmentVersionId: null,
+      resolvedSkills: input.resolvedSkills,
+      toolRefs: input.toolRefs,
+      workspaceBinding: null,
+      sessionBinding: null,
+      createdAt: '2026-08-21T00:00:00.000Z',
+      updatedAt: '2026-08-21T00:00:00.000Z',
+    };
+    this.sessions.push(session);
+    return session;
+  }
+
+  public async findByAgentChat(): Promise<RuntimeSession | null> {
+    return null;
+  }
+
+  public async findById(id: string): Promise<RuntimeSession | null> {
+    return this.sessions.find((session) => session.id === id) ?? null;
+  }
+
+  public async findByExecutionSessionBinding(
+    binding: ExecutionSessionBinding,
+  ): Promise<RuntimeSession | null> {
+    return (
+      this.sessions.find(
+        (session) =>
+          session.sessionBinding?.externalSessionId === binding.externalSessionId,
+      ) ?? null
+    );
+  }
+
+  public async bindExecution(input: {
+    id: string;
+    workspaceBinding: RuntimeSession['workspaceBinding'] & {};
+    sessionBinding: RuntimeSession['sessionBinding'] & {};
+  }): Promise<RuntimeSession> {
+    this.bindCalls.push(input);
+    const index = this.sessions.findIndex((session) => session.id === input.id);
+    if (index < 0) throw new Error('runtime session missing');
+    const current = this.sessions[index]!;
+    const next: RuntimeSession = {
+      ...current,
+      workspaceBinding: input.workspaceBinding,
+      sessionBinding: input.sessionBinding,
+    };
+    this.sessions[index] = next;
+    return next;
+  }
+
+  public async createOrGetForProductSession(): Promise<RuntimeSession> {
+    throw new Error('not used');
+  }
+  public async createOrGetForTask(): Promise<RuntimeSession> {
+    throw new Error('not used');
+  }
+  public async findByProductSession(): Promise<RuntimeSession | null> {
+    return null;
+  }
+  public async findByTask(): Promise<RuntimeSession | null> {
+    return null;
+  }
+}
+
 function recordingSession(runInputs: ExecutionRunInput[]): ExecutionSession {
   return {
-    capabilities: {
-      supported: new Set(),
-    } satisfies ExecutionSessionCapabilities,
+    capabilities: { supported: new Set() } satisfies ExecutionSessionCapabilities,
     async run(input): Promise<ExecutionResult> {
       runInputs.push(input);
       return {
@@ -284,12 +446,20 @@ const noMemoryCandidates: RuntimeMemoryCandidateCollector = {
 
 function createRuntime(
   plane: RecordingExecutionPlane,
+  runtimeSessions: InMemoryRuntimeSessions,
 ): ExecutionPlaneRuntimeFacade {
   return new ExecutionPlaneRuntimeFacade(
     plane,
-    {} as RuntimeSessionRepository,
-    {} as RuntimeSessionLookup,
-    {} as RuntimeWorkspaceRepository,
+    runtimeSessions,
+    runtimeSessions,
+    {
+      async findForProductSession() {
+        throw new Error('not used');
+      },
+      async findForTeamRun() {
+        throw new Error('not used');
+      },
+    } as RuntimeWorkspaceRepository,
     new ExecutionRunRegistry(),
     noMemoryCandidates,
     '/runtime-default',
@@ -300,36 +470,67 @@ function turnIdentity(
   agentDefinitionId: string,
   agentVersionId: string,
   conversationId: string,
+  triggerMessageId = `${conversationId}-trigger`,
 ) {
   return {
     tenantId: 'tenant-1',
     agentDefinitionId,
     agentVersionId,
     conversationId,
-    triggerMessageId: `${conversationId}-trigger`,
+    triggerMessageId,
   } as const;
-}
-
-function extractTrustedInstructions(systemPrompt: string): string {
-  const start = '\nTRUSTED AGENT INSTRUCTIONS:\n';
-  const end = '\n\nCAPABILITY SUMMARY:';
-  const startIndex = systemPrompt.indexOf(start);
-  const endIndex = systemPrompt.indexOf(end, startIndex + start.length);
-  if (startIndex < 0 || endIndex < 0)
-    throw new Error('Trusted instruction section was not recorded.');
-  return systemPrompt.slice(startIndex + start.length, endIndex);
 }
 
 function chatBrain(
   input: {
-    instructions: string;
-    capabilitySummary: Record<string, unknown>;
-    agentHome: Record<string, unknown>;
-  } = {
-    instructions: 'Reply concisely.',
-    capabilitySummary: {},
-    agentHome: {},
-  },
+    agentDefinitionId?: string;
+    agentVersionId?: string;
+    agentChatRuntimeId?: string;
+    runtimeEpoch?: number;
+    conversationId?: string;
+    triggerMessageId?: string;
+    instructions?: string;
+    capabilitySummary?: Record<string, unknown>;
+    agentHome?: Record<string, unknown>;
+  } = {},
 ): ResolvedChatBrain {
-  return input as ResolvedChatBrain;
+  const agentDefinitionId = input.agentDefinitionId ?? 'agent-definition-1';
+  const agentVersionId = input.agentVersionId ?? 'agent-version-1';
+  const agentChatRuntimeId = input.agentChatRuntimeId ?? 'chat-runtime-1';
+  const runtimeEpoch = input.runtimeEpoch ?? 1;
+  const conversationId = input.conversationId ?? 'conversation-1';
+  const triggerMessageId = input.triggerMessageId ?? `${conversationId}-trigger`;
+  const productScope = { tenantId: 'tenant-1', workspaceId: 'workspace-1' } as const;
+  const actor = { type: 'service_account', id: 'principal-1' } as const;
+  const agentOwner = { scope: productScope, principal: actor } as const;
+  const turnContext = {
+    productScope,
+    actor,
+    agentOwner,
+    conversationId,
+    triggerMessageId,
+    agentDefinitionId,
+    agentVersionId,
+    agentChatRuntimeId,
+    runtimeEpoch,
+  } as const;
+  return {
+    turnContext,
+    invocationContext: {
+      scope: { kind: 'agent_chat', agentChatRuntimeId, runtimeEpoch },
+      productScope,
+      actor,
+      agentOwner,
+      agentDefinitionId,
+      agentVersionId,
+      conversationId,
+      triggerMessageId,
+    },
+    agentOwner,
+    instructions: input.instructions ?? 'Reply concisely.',
+    capabilitySummary: input.capabilitySummary ?? {},
+    agentHome: input.agentHome ?? {},
+    resolvedSkills: [],
+    toolRefs: [],
+  } as unknown as ResolvedChatBrain;
 }

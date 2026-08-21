@@ -862,7 +862,7 @@ export async function stopOwned(children: readonly ChildProcess[]): Promise<void
           const timeout = setTimeout(() => {
             child.kill('SIGKILL');
             resolveStop();
-          }, 3_000);
+          }, 9_000);
           timeout.unref?.();
           child.once('exit', () => {
             clearTimeout(timeout);

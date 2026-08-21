@@ -8,6 +8,7 @@ export interface AgentHomeAccessContext {
 import type {
   AgentHomeRepository,
   AgentHomeEntryRow,
+  AgentHomeScope,
 } from '../ports/agent-home-repository.js';
 import type { AgentHomeDefinitionSource } from '../ports/agent-home-definition-source.js';
 import {
@@ -28,6 +29,22 @@ function now(): string {
   return new Date().toISOString();
 }
 
+function repositoryScope(input: {
+  readonly accessContext: AgentHomeAccessContext;
+  readonly agentDefinitionId: string;
+  readonly namespace: AgentHomeNamespace;
+  readonly scopeKey: string;
+}): AgentHomeScope {
+  return {
+    tenantId: input.accessContext.tenantId,
+    workspaceId: input.accessContext.workspaceId,
+    principalType: input.accessContext.principalType,
+    agentDefinitionId: input.agentDefinitionId,
+    namespace: input.namespace,
+    scopeKey: input.scopeKey,
+  };
+}
+
 export class ListAgentHomeEntries {
   public constructor(
     private readonly repository: AgentHomeRepository,
@@ -41,7 +58,6 @@ export class ListAgentHomeEntries {
     scopeParams: AgentHomeScopeParams;
   }): Promise<readonly AgentHomeEntryRow[] | null> {
     if (input.namespace === 'definition') {
-      // For definition namespace, delegate to definition source and return synthetic entries
       const entries = await this.definitionSource.readDefinition(
         input.accessContext.tenantId,
         input.agentDefinitionId,
@@ -68,12 +84,12 @@ export class ListAgentHomeEntries {
     );
 
     return this.repository.list({
-      scope: {
-        tenantId: input.accessContext.tenantId,
+      scope: repositoryScope({
+        accessContext: input.accessContext,
         agentDefinitionId: input.agentDefinitionId,
         namespace: input.namespace,
         scopeKey,
-      },
+      }),
     });
   }
 }
@@ -94,7 +110,6 @@ export class ReadAgentHomeEntry {
     const normalizedPath = normalizeAgentHomePath(input.path);
 
     if (input.namespace === 'definition') {
-      // For definition namespace, delegate to definition source and return synthetic entry
       const entries = await this.definitionSource.readDefinition(
         input.accessContext.tenantId,
         input.agentDefinitionId,
@@ -124,12 +139,12 @@ export class ReadAgentHomeEntry {
     );
 
     return this.repository.read({
-      scope: {
-        tenantId: input.accessContext.tenantId,
+      scope: repositoryScope({
+        accessContext: input.accessContext,
         agentDefinitionId: input.agentDefinitionId,
         namespace: input.namespace,
         scopeKey,
-      },
+      }),
       path: normalizedPath,
     });
   }
@@ -148,7 +163,6 @@ export class WriteAgentHomeEntry {
     path: string;
     content: string;
   }): Promise<AgentHomeEntryRow | null> {
-    // Check if write to read-only namespace
     if (input.namespace === 'definition') {
       throw new AgentHomeNamespaceReadOnlyError();
     }
@@ -159,16 +173,16 @@ export class WriteAgentHomeEntry {
       input.namespace,
       input.accessContext,
       input.scopeParams,
-      true, // isWrite
+      true,
     );
 
     return this.repository.write({
-      scope: {
-        tenantId: input.accessContext.tenantId,
+      scope: repositoryScope({
+        accessContext: input.accessContext,
         agentDefinitionId: input.agentDefinitionId,
         namespace: input.namespace,
         scopeKey,
-      },
+      }),
       path: normalizedPath,
       content: validatedContent,
       contentSha256: sha256(validatedContent),

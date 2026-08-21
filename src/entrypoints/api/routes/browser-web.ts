@@ -442,7 +442,6 @@ async function forwardDecoded(
   try {
     upstream = await fetch(upstreamUrl(config, path), {
       ...init,
-      cache: 'no-store',
       headers: {
         accept: 'application/json',
         authorization: `Bearer ${browserServiceToken(config)}`,

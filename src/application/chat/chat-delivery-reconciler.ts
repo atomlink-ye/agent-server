@@ -6,6 +6,7 @@ import type {
 import type { ChatTurnProvider } from '../ports/chat-turn-provider.js';
 import type { ConversationWorkEntitlementRepository } from '../ports/conversation-work-entitlement-repository.js';
 import type { ConversationWorkLinkRepository } from '../../domain/chat/chat-work-origin-ref.js';
+import { principalRef } from '../../domain/tenancy/product-context.js';
 import type { RuntimeExtensionBinder } from '../extensions/runtime-extension-binder.js';
 import {
   AGENT_SERVER_LIST_AGENT_WORKFLOWS_TOOL_REF,
@@ -75,13 +76,9 @@ export class ChatDeliveryReconciler {
       return;
     }
 
-    const brain = await this.brainResolver.resolve({
-      tenantId: dispatch.tenantId,
-      agentDefinitionId: dispatch.agentDefinitionId,
-      conversationId: dispatch.conversationId,
-      runtime,
-    });
-
+    // Resolve actor/work scope before building the Agent brain. The Agent owner
+    // and the principal currently talking to it are deliberately different
+    // concepts; actor-private Agent Home context must follow the latter.
     const entitlement = this.workEntitlements
       ? await this.workEntitlements.resolveForChatTurn({
           tenantId: dispatch.tenantId,
@@ -89,6 +86,32 @@ export class ChatDeliveryReconciler {
           agentDefinitionId: dispatch.agentDefinitionId,
         })
       : null;
+    if (
+      entitlement &&
+      triggerMessage.authorType === 'principal' &&
+      entitlement.principalId !== triggerMessage.authorId
+    )
+      throw new Error('chat_turn_actor_entitlement_mismatch');
+    const actor =
+      entitlement && triggerMessage.authorType === 'principal'
+        ? principalRef({
+            principalType: entitlement.principalType,
+            principalId: entitlement.principalId,
+          })
+        : undefined;
+
+    const brain = await this.brainResolver.resolve({
+      tenantId: dispatch.tenantId,
+      agentDefinitionId: dispatch.agentDefinitionId,
+      conversationId: dispatch.conversationId,
+      triggerMessageId: triggerMessage.id,
+      runtime,
+      ...(actor ? { actor } : {}),
+      ...(entitlement
+        ? { workEntitlementWorkspaceId: entitlement.workspaceId }
+        : {}),
+    });
+
     const extensions =
       entitlement && this.extensions
         ? await this.extensions.bind({
@@ -187,7 +210,6 @@ export class ChatDeliveryReconciler {
     });
   }
 
-  // Retained for the existing focused test seam; leased workers use reconcile.
   public async reconcileOne(dispatch: ChatDispatch): Promise<void> {
     return this.reconcile(dispatch);
   }

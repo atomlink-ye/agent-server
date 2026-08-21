@@ -216,8 +216,6 @@ export function createWorkModule(options: {
     startWorkRunPrimitive,
     projection,
   );
-  // Existing HTTP/MCP handlers still speak the StartWorkRun shape, but their
-  // production composition now goes through the product-level execution facade.
   const startWorkRun = {
     execute(input: StartWorkRunRequest) {
       return execution.startExistingWork(input);
@@ -270,7 +268,6 @@ export function createWorkModule(options: {
         ...context,
         workIdentity,
         startWorkRun,
-        workExecution: execution,
         definitions: definitionSources,
         ...(options.conversations
           ? { conversations: options.conversations }

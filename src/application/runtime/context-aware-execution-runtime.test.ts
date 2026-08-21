@@ -31,7 +31,11 @@ function baseRuntime() {
     ensureReady: vi.fn(async () => true),
     executeTurn,
     cancelRun: vi.fn(async () => undefined),
-    planeHealth: vi.fn(async () => ({ ready: true, checks: [] })),
+    planeHealth: vi.fn(async () => ({
+      ready: true,
+      plane: 'test',
+      checks: [],
+    })),
     close: vi.fn(async () => undefined),
   };
   return { runtime, executeTurn };

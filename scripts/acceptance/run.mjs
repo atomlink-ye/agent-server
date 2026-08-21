@@ -150,7 +150,19 @@ async function main() {
   // ⛔ 不经 shell source 取 token（source 会吃掉双引号，见 credentials.mjs 注释）
   const { token } = await readServiceToken(agentEnvPath);
 
-  const handle = await startAcceptanceEnvironment({ provider, model, runDirectory: evidenceDir });
+  // 🔴 固定 project 名，⛔ 不要用 lifecycle 默认的 `agent-server-test-${Date.now()...}`。
+  // 默认那个每跑一次就是一套【新的命名卷】，而 web / web-vite 的 node_modules 卷是
+  // `nocopy: true`（compose.web-vite.yaml）——新卷【不会】从镜像拷内容进来，是空的，
+  // 反而把镜像里那份完整的 node_modules 挡住。于是每一次运行 web-vite 的 entrypoint
+  // 都得先做一遍冷 pnpm install，装完 Vite 才开始服务。
+  // 固定 project 名让卷跨运行保持热的，冷装只付第一次。
+  // ⚠️ 代价：并发跑两次 acceptance 会互相踩。Phase 0 是串行里程碑，接受这个取舍。
+  const handle = await startAcceptanceEnvironment({
+    provider,
+    model,
+    runDirectory: evidenceDir,
+    projectName: process.env.ACCEPTANCE_PROJECT_NAME ?? 'agent-server-acceptance-phase0',
+  });
   try {
     const apiUrl = new URL(apiProbeUrl(handle));
     const rendered = await renderedComposeConfig(handle);
@@ -160,7 +172,10 @@ async function main() {
 
     // 🔴 在把 URL 交给浏览器之前，先证明它真的在应答。
     const browserBaseUrl = `http://127.0.0.1:${handle.state.ports.webVite ?? 18081}`;
-    const uiReadiness = await waitForHttpReady(browserBaseUrl, 120000);
+    // 预算必须覆盖【第一次】冷卷上的 pnpm install（固定 project 名之后只发生一次）。
+    // ⛔ 这不是"调大阈值让它过"：超时仍然必须红，且等待时长会如实写进 ui-readiness.json，
+    // 所以热卷那一跑如果还等很久，证据会直接暴露出来。
+    const uiReadiness = await waitForHttpReady(browserBaseUrl, 900000);
     await writeFile(path.join(evidenceDir, 'ui-readiness.json'), JSON.stringify(uiReadiness, null, 2));
 
     const driverEnv = {

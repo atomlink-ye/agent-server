@@ -1,7 +1,11 @@
 import type { PrincipalRef, ProductScope, ResourceOwner } from '../tenancy/product-context.js';
 
 export type RuntimeScope =
-  | Readonly<{ kind: 'agent_chat'; agentChatRuntimeId: string }>
+  | Readonly<{
+      kind: 'agent_chat';
+      agentChatRuntimeId: string;
+      runtimeEpoch: number;
+    }>
   | Readonly<{ kind: 'task'; taskId: string }>
   | Readonly<{ kind: 'team_member'; teamMemberRunId: string }>
   | Readonly<{ kind: 'product_session'; productSessionId: string }>;

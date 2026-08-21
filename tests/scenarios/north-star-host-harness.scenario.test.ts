@@ -231,7 +231,7 @@ describe('North Star host-native deterministic harness', () => {
         },
       } as any,
       {
-        async reconcile(dispatch) {
+        async reconcile(dispatch: unknown) {
           reconciled.push(dispatch);
         },
       } as any,

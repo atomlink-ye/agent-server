@@ -132,6 +132,17 @@ function extraComposeFiles(state: LocalEnvironmentState): readonly string[] {
     : [];
 }
 
+export async function composeArgumentsForLocalEnvironment(
+  state: LocalEnvironmentState,
+  environment: NodeJS.ProcessEnv = process.env,
+): Promise<readonly string[]> {
+  const profile = await resolveLocalEnvironment(state.profile, {
+    environment,
+    overrides: state.runtimeOverrides,
+  });
+  return composeInvocation(profile, state.projectName, extraComposeFiles(state)).args;
+}
+
 export async function stopLocalEnvironment(
   state: LocalEnvironmentState,
   options: StopLocalEnvironmentOptions = {},

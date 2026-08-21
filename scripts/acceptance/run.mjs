@@ -15,9 +15,14 @@ export function acceptancePortFacts(handle, composeConfig) {
   };
 }
 
+export function assertComposeLayerParity(profileFiles, invocationFiles) {
+  if (JSON.stringify(profileFiles) !== JSON.stringify(invocationFiles)) throw new Error('rendered Compose layers differ from lifecycle declaration');
+}
+
 async function renderedComposeConfig(handle) {
   const { execFile } = await import('node:child_process');
   const { promisify } = await import('node:util');
+  const { composeArgumentsForLocalEnvironment } = await import('../../tooling/environment/lifecycle.ts');
   const run = promisify(execFile);
   const environment = {
     ...process.env,
@@ -25,7 +30,8 @@ async function renderedComposeConfig(handle) {
     AGENT_SERVER_TEST_API_PORT: String(handle.state.ports.api),
     AGENT_SERVER_TEST_WEB_PORT: String(handle.state.ports.web),
   };
-  const result = await run('docker', ['compose', '-p', handle.state.projectName, '-f', 'compose.yaml', '-f', 'compose.runtime.yaml', '-f', 'compose.external-runtime.yaml', '-f', 'compose.web-vite.yaml', '-f', 'compose.test-ports.yaml', 'config'], { env: environment });
+  const args = await composeArgumentsForLocalEnvironment(handle.state, environment);
+  const result = await run('docker', [...args, 'config'], { env: environment });
   return result.stdout;
 }
 

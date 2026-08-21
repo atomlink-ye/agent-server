@@ -10,7 +10,7 @@ import {
 import { assertGoldenRecord, assertStep8Observation, goldenEight } from './golden-eight.mjs';
 import { acceptanceRuntime } from './lifecycle.mjs';
 import { assertFinalSql, assertPreflight } from './preflight.mjs';
-import { acceptancePortFacts } from './run.mjs';
+import { acceptancePortFacts, assertComposeLayerParity } from './run.mjs';
 
 const expectedPorts = {
   postgres: { hostIp: '127.0.0.1', published: 32873, target: 5432 },
@@ -73,6 +73,8 @@ const renderedFixture = `services:\n  postgres:\n    ports: [{host_ip: 127.0.0.1
 const portFacts = acceptancePortFacts(handleFixture, renderedFixture);
 assertPreflight({ apiUrl: 'http://127.0.0.1:41002', ...portFacts, provider: 'claude' });
 mutation('handle rendered port divergence', () => assertPreflight({ apiUrl: 'http://127.0.0.1:41002', ...acceptancePortFacts(handleFixture, renderedFixture.replace('41002', '41004')), provider: 'claude' }));
+assertComposeLayerParity(['base', 'runtime', 'external', 'test-ports'], ['base', 'runtime', 'external', 'test-ports']);
+mutation('Compose layer parity', () => assertComposeLayerParity(['base', 'runtime', 'external', 'test-ports'], ['base', 'runtime', 'external', 'web-vite', 'test-ports']));
 assertFinalSql({ provider: 'claude', workRef: 'work-1', workRun: 'run-1', workStatus: 'complete' });
 mutation('terminal SQL missing work_ref', () => assertFinalSql({ provider: 'claude', workRun: 'run-1', workStatus: 'complete' }));
 mutation('terminal SQL failed Work', () => assertFinalSql({ provider: 'claude', workRef: 'work-1', workRun: 'run-1', workStatus: 'failed' }));

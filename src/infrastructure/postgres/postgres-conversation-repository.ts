@@ -157,7 +157,6 @@ export class PostgresConversationRepository implements ConversationRepository {
     try {
       await client.query('BEGIN');
 
-      // Upsert conversation
       const conversationResult = await client.query<ConversationRow>(
         `INSERT INTO conversations (id, tenant_id, kind, direct_pair_key, next_sequence, created_at, updated_at)
          VALUES ($1, $2, 'direct', $3, 1, $4, $5)
@@ -174,7 +173,6 @@ export class PostgresConversationRepository implements ConversationRepository {
 
       const actualConversationId = conversation.id;
 
-      // Upsert principal member
       await client.query(
         `INSERT INTO conversation_members (conversation_id, tenant_id, member_type, member_id, member_principal_type, joined_at)
          VALUES ($1, $2, 'principal', $3, $4, $5)
@@ -188,7 +186,6 @@ export class PostgresConversationRepository implements ConversationRepository {
         ],
       );
 
-      // Upsert agent_definition member
       await client.query(
         `INSERT INTO conversation_members (conversation_id, tenant_id, member_type, member_id, joined_at)
          VALUES ($1, $2, 'agent_definition', $3, $4)
@@ -209,7 +206,6 @@ export class PostgresConversationRepository implements ConversationRepository {
       }
 
       await client.query('COMMIT');
-
       return mapConversation(projectedConversation);
     } catch (error) {
       await client.query('ROLLBACK');
@@ -225,7 +221,6 @@ export class PostgresConversationRepository implements ConversationRepository {
     readonly requesterMemberType: 'principal' | 'agent_definition';
     readonly requesterMemberId: string;
   }): Promise<Conversation | null> {
-    // Check membership gate: requester must be a member of the conversation
     const membershipResult = await this.database.query<ConversationMemberRow>(
       `SELECT conversation_id, tenant_id, member_type, member_id,
               member_principal_type, role, joined_at
@@ -239,11 +234,8 @@ export class PostgresConversationRepository implements ConversationRepository {
       ],
     );
 
-    if (!membershipResult.rows?.[0]) {
-      return null;
-    }
+    if (!membershipResult.rows?.[0]) return null;
 
-    // Requester is a member; fetch the conversation
     const conversationResult = await this.database.query<ConversationRow>(
       `SELECT ${conversationSelectColumns}
        FROM conversations c
@@ -273,6 +265,25 @@ export class PostgresConversationRepository implements ConversationRepository {
     );
 
     return (result.rows ?? []).map(mapConversation);
+  }
+
+  async findPrincipalMember(input: {
+    readonly tenantId: string;
+    readonly conversationId: string;
+    readonly principalId: string;
+  }): Promise<ConversationMember | null> {
+    const result = await this.database.query<ConversationMemberRow>(
+      `SELECT conversation_id,tenant_id,member_type,member_id,
+              member_principal_type,role,joined_at
+         FROM conversation_members
+        WHERE tenant_id=$1 AND conversation_id=$2
+          AND member_type='principal' AND member_id=$3
+        LIMIT 2`,
+      [input.tenantId, input.conversationId, input.principalId],
+    );
+    if ((result.rows?.length ?? 0) > 1)
+      throw new Error('Conversation principal membership is ambiguous.');
+    return result.rows?.[0] ? mapConversationMember(result.rows[0]) : null;
   }
 
   async appendMessage(input: {
@@ -307,7 +318,6 @@ export class PostgresConversationRepository implements ConversationRepository {
     try {
       await client.query('BEGIN');
 
-      // Lock the conversation before checking membership and allocating a sequence.
       const conversationLockResult = await client.query<ConversationRow>(
         `SELECT next_sequence FROM conversations
          WHERE id=$1 AND tenant_id=$2
@@ -320,8 +330,6 @@ export class PostgresConversationRepository implements ConversationRepository {
         throw new Error('Conversation not found or access denied.');
       }
 
-      // Membership is part of the write transaction. Do not rely on a prior
-      // getConversation read, which would leave a TOCTOU gap before insertion.
       const memberResult = await client.query<ConversationMemberRow>(
         `SELECT conversation_id, tenant_id, member_type, member_id,
                 member_principal_type, role, joined_at
@@ -359,7 +367,8 @@ export class PostgresConversationRepository implements ConversationRepository {
       const messageId = randomUUID();
       const now = iso();
 
-      const hasDeliveryId = input.deliveryId !== undefined && input.deliveryId !== null;
+      const hasDeliveryId =
+        input.deliveryId !== undefined && input.deliveryId !== null;
       const messageResult = hasDeliveryId
         ? await client.query<ChatMessageRow>(
             `INSERT INTO chat_messages
@@ -424,14 +433,11 @@ export class PostgresConversationRepository implements ConversationRepository {
         throw new Error('Failed to insert chat message.');
       }
 
-      // A delivery-key conflict returns the already durable message and must
-      // not consume another conversation sequence.
       if (!messageResult.rows?.[0]) {
         await client.query('COMMIT');
         return mapChatMessage(message);
       }
 
-      // Increment next_sequence
       await client.query(
         `UPDATE conversations SET next_sequence=next_sequence+1, updated_at=$2
          WHERE id=$1 AND tenant_id=$3`,
@@ -439,7 +445,6 @@ export class PostgresConversationRepository implements ConversationRepository {
       );
 
       await client.query('COMMIT');
-
       return mapChatMessage(message);
     } catch (error) {
       await client.query('ROLLBACK');
@@ -529,7 +534,13 @@ export class PostgresConversationRepository implements ConversationRepository {
        ON CONFLICT (tenant_id, agent_definition_id)
        DO UPDATE SET updated_at = agent_chat_runtimes.updated_at
        RETURNING *`,
-      [input.tenantId, input.agentDefinitionId, input.activeAgentVersionId, now, now],
+      [
+        input.tenantId,
+        input.agentDefinitionId,
+        input.activeAgentVersionId,
+        now,
+        now,
+      ],
     );
 
     const runtime = result.rows?.[0];
@@ -575,7 +586,10 @@ export class PostgresConversationRepository implements ConversationRepository {
   }
 
   private async acquire(): Promise<PostgresClient> {
-    if ('connect' in this.database && typeof this.database.connect === 'function') {
+    if (
+      'connect' in this.database &&
+      typeof this.database.connect === 'function'
+    ) {
       return await (this.database as PostgresConnectable).connect();
     }
     return this.database as PostgresClient;

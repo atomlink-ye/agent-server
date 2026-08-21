@@ -1,3 +1,4 @@
+import type { RuntimeScope } from '../../domain/runtime/runtime-invocation-context.js';
 import type { ResolvedSkillPackage } from '../extensions/skill-catalog.js';
 import type {
   ExecutionSessionBinding,
@@ -6,14 +7,17 @@ import type {
 
 export interface RuntimeSession {
   readonly id: string;
-  readonly scopeKind: 'product_session' | 'task' | 'team_member';
+  /** Canonical runtime identity. Optional only while legacy callers migrate. */
+  readonly scope?: RuntimeScope;
+  readonly scopeKind: RuntimeScope['kind'];
   readonly scopeId: string;
   readonly productSessionId: string | null;
   readonly taskId: string | null;
   readonly launchSnapshotId: string;
   readonly workspaceId: string;
   readonly agentVersionId: string;
-  readonly environmentVersionId: string;
+  /** Chat brains may run without a Product Work environment version. */
+  readonly environmentVersionId: string | null;
   readonly resolvedSkills: readonly Pick<
     ResolvedSkillPackage,
     'ref' | 'digest'
@@ -33,6 +37,25 @@ export interface RuntimeSessionLookup {
 }
 
 export interface RuntimeSessionRepository {
+  createOrGetForAgentChat?(input: {
+    agentChatRuntimeId: string;
+    runtimeEpoch: number;
+    tenantId: string;
+    principalType: string;
+    principalId: string;
+    workspaceId: string;
+    agentVersionId: string;
+    resolvedSkills: readonly Pick<ResolvedSkillPackage, 'ref' | 'digest'>[];
+    toolRefs: readonly string[];
+  }): Promise<RuntimeSession>;
+  findByAgentChat?(input: {
+    agentChatRuntimeId: string;
+    runtimeEpoch: number;
+    tenantId: string;
+    workspaceId: string;
+    principalType: string;
+    principalId: string;
+  }): Promise<RuntimeSession | null>;
   createOrGetForTeamMember?(input: {
     teamMemberRunId: string;
     taskId: string;

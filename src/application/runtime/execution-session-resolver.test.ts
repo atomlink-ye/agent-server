@@ -13,6 +13,10 @@ import { ExecutionSessionResolver } from './execution-session-resolver.js';
 function unboundRuntimeSession(): RuntimeSession {
   return {
     id: 'runtime-session-1',
+    scope: {
+      kind: 'product_session',
+      productSessionId: 'product-session-1',
+    },
     scopeKind: 'product_session',
     scopeId: 'product-session-1',
     productSessionId: 'product-session-1',

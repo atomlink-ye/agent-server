@@ -15,10 +15,6 @@ import {
   type ExecutionSessionSpec,
 } from '../../application/ports/execution-plane.js';
 
-// 🔴 必须与真实执行面（PaseoExecutionPlane，paseo-execution-plane.ts:29-41）声明一致。
-// 先前是空集合：真实 StartWorkRun 会因此拒绝 Work（"unsupported runtime capability:
-// external_workspace"），于是 harness 在一个生产里不存在的能力前提下运行 ——
-// 那样它证明的东西对产品无效。替身可以脚本化【决策】，⛔ 不许改变【契约】。
 const CAPABILITIES: ExecutionPlaneCapabilities = {
   supported: new Set([
     'streaming',
@@ -114,7 +110,7 @@ class ScriptedExecutionSession implements ExecutionSession {
       const client = await connect(requiredMcp(this.spec));
       try {
         const workflows = await call(client, 'list_agent_workflows', {
-          agent_definition_id: agentDefinitionId(this.spec.systemPrompt),
+          agent_definition_id: agentDefinitionId(this.spec),
         });
         const workflow = firstWorkflow(workflows);
         await call(client, 'start_work', {
@@ -164,9 +160,6 @@ async function call(
     readonly type: string;
     readonly text?: string;
   }[];
-  // 🔴 必须把产品返回的错误文本带出来。先前只抛 `tool X failed.`，
-  // 把一个具体的产品拒绝原因压成了一句通用消息 —— 诊断时看不出是 entitlement、
-  // 找不到 workflow、还是 input 契约不符。这与 R3-93 同源：丢掉了唯一能定位根因的那段文本。
   if (result.isError) {
     const detail = content?.find((item) => item.type === 'text')?.text;
     throw new Error(
@@ -186,9 +179,12 @@ function requiredMcp(spec: ExecutionSessionSpec): ExecutionMcpServerConfig {
   return server;
 }
 
-function agentDefinitionId(systemPrompt: string): string {
-  // Coupled to buildSystemPrompt wording: changing that generated label breaks this test plane.
-  const match = /^Agent definition ID: (.+)$/m.exec(systemPrompt);
+function agentDefinitionId(spec: ExecutionSessionSpec): string {
+  // The structured invocation context is authoritative. The prompt fallback is
+  // retained temporarily for focused tests that predate RuntimeInvocationContext.
+  if (spec.invocationContext?.agentDefinitionId)
+    return spec.invocationContext.agentDefinitionId;
+  const match = /^Agent definition ID: (.+)$/m.exec(spec.systemPrompt);
   if (!match?.[1])
     throw new Error(
       'Scripted execution could not read the agent definition ID.',

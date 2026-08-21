@@ -1,8 +1,27 @@
 import type { AgentDefinition } from '../../domain/agents/managed-agent-definition.js';
 import type {
+  AgentHomeNamespace,
+  AgentHomeScopeParams,
+} from '../../domain/agents/agent-home.js';
+import type { AgentChatRuntime } from '../../domain/chat/agent-chat-runtime.js';
+import {
+  principalRef,
+  productScope,
+  resourceOwner,
+  type PrincipalRef,
+  type ResourceOwner,
+} from '../../domain/tenancy/product-context.js';
+import type { RuntimeInvocationContext } from '../../domain/runtime/runtime-invocation-context.js';
+import type {
   AgentHomeAccessContext,
   ListAgentHomeEntries,
 } from '../agents/agent-home.js';
+import {
+  createChatTurnContext,
+  runtimeInvocationContextForChat,
+  type ChatTurnContext,
+} from './chat-turn-context.js';
+import type { ResolvedSkillPackage } from '../extensions/skill-catalog.js';
 import {
   CHAT_AGENT_HOME_NAMESPACE_ALLOWLIST,
   type ChatAgentHomeProjection,
@@ -10,23 +29,30 @@ import {
 } from '../ports/chat-turn-provider.js';
 import type { ManagedAgentDefinitionRead } from '../ports/agent-registry.js';
 import type { AgentResolutionApi } from '../ports/agent-resolution-api.js';
-import type { AgentChatRuntime } from '../../domain/chat/agent-chat-runtime.js';
-import type { AgentHomeNamespace, AgentHomeScopeParams } from '../../domain/agents/agent-home.js';
 
 const resolvedChatBrainBrand: unique symbol = Symbol('resolved_chat_brain');
 
 export type ResolvedChatBrain = Readonly<{
   readonly [resolvedChatBrainBrand]: true;
+  readonly turnContext: ChatTurnContext;
+  readonly invocationContext: RuntimeInvocationContext;
+  readonly agentOwner: ResourceOwner;
   readonly instructions: string;
   readonly capabilitySummary: ChatTurnCapabilitySummary;
   readonly agentHome: ChatAgentHomeProjection;
+  readonly resolvedSkills: readonly Pick<ResolvedSkillPackage, 'ref' | 'digest'>[];
+  readonly toolRefs: readonly string[];
 }>;
 
 export interface ChatBrainResolverInput {
   readonly tenantId: string;
   readonly agentDefinitionId: string;
   readonly conversationId: string;
+  readonly triggerMessageId: string;
   readonly runtime: AgentChatRuntime;
+  /** The principal currently talking to the Agent. This is not the Agent owner. */
+  readonly actor?: PrincipalRef;
+  readonly workEntitlementWorkspaceId?: string;
 }
 
 export class ChatBrainResolver {
@@ -36,10 +62,7 @@ export class ChatBrainResolver {
       'findManagedDefinitionByTenant'
     >,
     private readonly agentResolution: AgentResolutionApi,
-    private readonly listAgentHomeEntries: Pick<
-      ListAgentHomeEntries,
-      'execute'
-    >,
+    private readonly listAgentHomeEntries: Pick<ListAgentHomeEntries, 'execute'>,
   ) {}
 
   public async resolve(
@@ -48,33 +71,43 @@ export class ChatBrainResolver {
     if (input.runtime.status !== 'available')
       throw new Error('chat_brain_runtime_unavailable');
 
-    const definition = await this.managedDefinitions.findManagedDefinitionByTenant(
-      {
+    const definition =
+      await this.managedDefinitions.findManagedDefinitionByTenant({
         tenantId: input.tenantId,
         definitionId: input.agentDefinitionId,
-      },
-    );
+      });
     if (!definition) throw new Error('chat_brain_definition_missing');
     if (definition.tenantId !== input.tenantId)
       throw new Error('chat_brain_definition_tenant_mismatch');
 
+    const agentOwner = resourceOwner(definition);
+    const actor =
+      input.actor ??
+      principalRef({
+        principalType: definition.principalType,
+        principalId: definition.principalId,
+      });
+
     const resolvedVersion = await this.agentResolution.resolvePublished(
       input.runtime.activeAgentVersionId,
       {
-        tenantId: definition.tenantId,
-        workspaceId: definition.workspaceId,
-        principalType: definition.principalType,
-        principalId: definition.principalId,
+        tenantId: agentOwner.scope.tenantId,
+        workspaceId: agentOwner.scope.workspaceId,
+        principalType: agentOwner.principal.type,
+        principalId: agentOwner.principal.id,
       },
     );
     if (!resolvedVersion || resolvedVersion.source !== 'managed')
       throw new Error('chat_brain_managed_version_unavailable');
 
+    // The Agent version is resolved under the Agent owner's identity, while
+    // actor-private context is resolved for the principal who triggered this
+    // conversation turn. Owner and actor are intentionally distinct concepts.
     const accessContext: AgentHomeAccessContext = {
       tenantId: definition.tenantId,
       workspaceId: definition.workspaceId,
-      principalType: definition.principalType,
-      principalId: definition.principalId,
+      principalType: actor.type,
+      principalId: actor.id,
     };
     const agentHome = await this.resolveAgentHome(
       definition,
@@ -82,14 +115,34 @@ export class ChatBrainResolver {
       input.conversationId,
     );
 
+    const turnContext = createChatTurnContext({
+      productScope: productScope(definition),
+      actor,
+      agentOwner,
+      conversationId: input.conversationId,
+      triggerMessageId: input.triggerMessageId,
+      agentDefinitionId: definition.id,
+      runtime: input.runtime,
+      ...(input.workEntitlementWorkspaceId
+        ? { workEntitlementWorkspaceId: input.workEntitlementWorkspaceId }
+        : {}),
+    });
+
     return Object.freeze({
       [resolvedChatBrainBrand]: true as const,
+      turnContext,
+      invocationContext: runtimeInvocationContextForChat(turnContext),
+      agentOwner,
       instructions: resolvedVersion.instructions,
       capabilitySummary: Object.freeze({
         agentDefinitionId: definition.id,
         agentVersionId: input.runtime.activeAgentVersionId,
       }),
       agentHome,
+      resolvedSkills: Object.freeze(
+        resolvedVersion.skills.map(({ ref, digest }) => ({ ref, digest })),
+      ),
+      toolRefs: Object.freeze([...resolvedVersion.toolRefs]),
     });
   }
 
@@ -99,14 +152,21 @@ export class ChatBrainResolver {
     conversationId: string,
   ): Promise<ChatAgentHomeProjection> {
     const projection: Partial<
-      Record<keyof ChatAgentHomeProjection, readonly { path: string; content: string }[]>
+      Record<
+        keyof ChatAgentHomeProjection,
+        readonly { path: string; content: string }[]
+      >
     > = {};
     for (const namespace of CHAT_AGENT_HOME_NAMESPACE_ALLOWLIST) {
       const entries = await this.listAgentHomeEntries.execute({
         accessContext,
         agentDefinitionId: definition.id,
         namespace,
-        scopeParams: scopeParams(namespace, definition.workspaceId, conversationId),
+        scopeParams: scopeParams(
+          namespace,
+          definition.workspaceId,
+          conversationId,
+        ),
       });
       if (entries !== null) {
         projection[namespace] = entries.map(({ path, content }) => ({

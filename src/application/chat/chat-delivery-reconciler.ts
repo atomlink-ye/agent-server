@@ -6,6 +6,7 @@ import type {
 import type { ChatTurnProvider } from '../ports/chat-turn-provider.js';
 import type { ConversationWorkEntitlementRepository } from '../ports/conversation-work-entitlement-repository.js';
 import type { ConversationWorkLinkRepository } from '../../domain/chat/chat-work-origin-ref.js';
+import { principalRef } from '../../domain/tenancy/product-context.js';
 import type { RuntimeExtensionBinder } from '../extensions/runtime-extension-binder.js';
 import {
   AGENT_SERVER_LIST_AGENT_WORKFLOWS_TOOL_REF,
@@ -13,6 +14,7 @@ import {
 } from '../agents/built-in-skills.js';
 import type { Logger } from '../../shared/observability/logger.js';
 import type { ChatBrainResolver } from './chat-brain-resolver.js';
+import type { ConversationActorResolver } from './chat-turn-context.js';
 
 export class ChatDeliveryReconciler {
   public constructor(
@@ -26,6 +28,7 @@ export class ChatDeliveryReconciler {
     private readonly now: () => Date = () => new Date(),
     private readonly workEntitlements?: ConversationWorkEntitlementRepository,
     private readonly extensions?: RuntimeExtensionBinder,
+    private readonly actorResolver?: ConversationActorResolver,
   ) {}
 
   public async reconcilePendingDispatches(limit = 50): Promise<number> {
@@ -75,13 +78,6 @@ export class ChatDeliveryReconciler {
       return;
     }
 
-    const brain = await this.brainResolver.resolve({
-      tenantId: dispatch.tenantId,
-      agentDefinitionId: dispatch.agentDefinitionId,
-      conversationId: dispatch.conversationId,
-      runtime,
-    });
-
     const entitlement = this.workEntitlements
       ? await this.workEntitlements.resolveForChatTurn({
           tenantId: dispatch.tenantId,
@@ -89,6 +85,67 @@ export class ChatDeliveryReconciler {
           agentDefinitionId: dispatch.agentDefinitionId,
         })
       : null;
+
+    const canResolveMembership = Boolean(
+      this.actorResolver || this.conversations.findPrincipalMember,
+    );
+    let membershipActor = null;
+    if (triggerMessage.authorType === 'principal') {
+      if (this.actorResolver) {
+        membershipActor = await this.actorResolver.resolve({
+          tenantId: dispatch.tenantId,
+          conversationId: dispatch.conversationId,
+          principalId: triggerMessage.authorId,
+        });
+      } else if (this.conversations.findPrincipalMember) {
+        const member = await this.conversations.findPrincipalMember({
+          tenantId: dispatch.tenantId,
+          conversationId: dispatch.conversationId,
+          principalId: triggerMessage.authorId,
+        });
+        if (member?.memberPrincipalType) {
+          membershipActor = principalRef({
+            principalType: member.memberPrincipalType,
+            principalId: member.memberId,
+          });
+        }
+      }
+    }
+    if (
+      triggerMessage.authorType === 'principal' &&
+      canResolveMembership &&
+      !membershipActor
+    )
+      throw new Error('chat_turn_actor_membership_missing');
+
+    const entitlementActor =
+      entitlement && triggerMessage.authorType === 'principal'
+        ? principalRef({
+            principalType: entitlement.principalType,
+            principalId: entitlement.principalId,
+          })
+        : null;
+    if (
+      membershipActor &&
+      entitlementActor &&
+      (membershipActor.id !== entitlementActor.id ||
+        membershipActor.type !== entitlementActor.type)
+    )
+      throw new Error('chat_turn_actor_entitlement_mismatch');
+    const actor = membershipActor ?? entitlementActor ?? undefined;
+
+    const brain = await this.brainResolver.resolve({
+      tenantId: dispatch.tenantId,
+      agentDefinitionId: dispatch.agentDefinitionId,
+      conversationId: dispatch.conversationId,
+      triggerMessageId: triggerMessage.id,
+      runtime,
+      ...(actor ? { actor } : {}),
+      ...(entitlement
+        ? { workEntitlementWorkspaceId: entitlement.workspaceId }
+        : {}),
+    });
+
     const extensions =
       entitlement && this.extensions
         ? await this.extensions.bind({
@@ -187,7 +244,6 @@ export class ChatDeliveryReconciler {
     });
   }
 
-  // Retained for the existing focused test seam; leased workers use reconcile.
   public async reconcileOne(dispatch: ChatDispatch): Promise<void> {
     return this.reconcile(dispatch);
   }

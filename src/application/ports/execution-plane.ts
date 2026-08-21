@@ -1,4 +1,5 @@
 import type { RunUsage } from '../../domain/runs/run.js';
+import type { RuntimeInvocationContext } from '../../domain/runtime/runtime-invocation-context.js';
 
 export const AGENT_SERVER_EXECUTION_MCP_SERVER_NAME = 'agent-server';
 
@@ -78,6 +79,8 @@ export interface ExecutionSessionSpec {
   readonly title?: string;
   readonly labels?: Readonly<Record<string, string>>;
   readonly extensions?: ExecutionExtensionBinding;
+  /** Machine-readable product/runtime identity; never recover this from prompt text. */
+  readonly invocationContext?: RuntimeInvocationContext;
 }
 
 export interface CreatedExecutionSession {

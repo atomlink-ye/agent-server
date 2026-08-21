@@ -47,7 +47,8 @@
     "smoke:team-registry-work": "pnpm local-env run runtime -- node scripts/smoke/team-registry-work-actor.mjs",
     "eval:memory": "node --import tsx evals/memory-policy/run.ts",
     "verify": "pnpm check && pnpm test && pnpm test:e2e && pnpm build",
-    "clean": "node scripts/dev/clean.mjs"
+    "clean": "node scripts/dev/clean.mjs",
+    "acceptance:selftest": "node scripts/acceptance/selftest.mjs"
   },
   "dependencies": {
     "@getpaseo/client": "0.1.110",

@@ -3,6 +3,7 @@ import { serve } from '@hono/node-server';
 import { createService } from '../../bootstrap.js';
 import { loadConfig } from '../../shared/config.js';
 import { createLogger } from '../../shared/observability/logger.js';
+import { registerBrowserWebRoutes } from './routes/browser-web.js';
 import { shutdownService } from './shutdown.js';
 
 const config = loadConfig();
@@ -11,6 +12,11 @@ const logger = createLogger({
   minimumLevel: config.logLevel,
 });
 const { app, close } = await createService(config, logger);
+
+// The canonical frontend is now a pure Vite client. Keep browser-facing BFF
+// routes on the Agent Server process so service-account credentials never enter
+// the browser and no second Next.js runtime is required.
+registerBrowserWebRoutes(app, config);
 
 const server = serve(
   {

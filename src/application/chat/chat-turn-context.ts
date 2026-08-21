@@ -6,6 +6,14 @@ import type {
 } from '../../domain/tenancy/product-context.js';
 import type { RuntimeInvocationContext } from '../../domain/runtime/runtime-invocation-context.js';
 
+export interface ConversationActorResolver {
+  resolve(input: {
+    readonly tenantId: string;
+    readonly conversationId: string;
+    readonly principalId: string;
+  }): Promise<PrincipalRef | null>;
+}
+
 export type ChatTurnContext = Readonly<{
   readonly productScope: ProductScope;
   readonly actor: PrincipalRef;

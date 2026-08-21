@@ -37,7 +37,6 @@ const networkStatus = [];
 let browser;
 let context;
 let page;
-let manualRefresh = false;
 let resultCode = 0;
 let failureMessage = null;
 const deadline = Date.now() + maxWaitMs;
@@ -260,7 +259,6 @@ try {
   await writeJson(path.join(outputDirectory, 'network-status.json'), networkStatus);
   await writeJson(path.join(outputDirectory, 'run-result.json'), {
     rc: resultCode,
-    manual_refresh: manualRefresh,
     ...(failureMessage ? { error: failureMessage } : {}),
   });
   if (browser) await browser.close();

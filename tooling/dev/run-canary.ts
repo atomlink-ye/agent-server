@@ -99,7 +99,7 @@ export async function runHostCanary(
       // the host-native API wrapped by the existing Paseo helper, then run one
       // bounded real-provider turn.
       const prepared = await prepareHostNativeEnvironment(loaded);
-      const runtimeEnvironment = {
+      const runtimeEnvironment: NodeJS.ProcessEnv = {
         ...hostRuntimeEnvironment(prepared),
         ...(kind === 'runtime'
           ? {}

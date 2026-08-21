@@ -55,6 +55,14 @@ if (agentServerWorkspaceId !== webWorkspaceId) {
   );
 }
 
+function expectedRuntimeModel(provider, model) {
+  const prefix = 'opencode-go/';
+  const stripsProviderPrefix = provider === 'claude' || provider === 'codex';
+  return stripsProviderPrefix && model.startsWith(prefix)
+    ? model.slice(prefix.length)
+    : model;
+}
+
 function progress(stage, details = {}) {
   process.stdout.write(
     `${JSON.stringify({
@@ -436,7 +444,10 @@ spec:
         usage[field] += value;
     }
   }
-  const expectedRuntime = `${defaults.PASEO_PROVIDER}/${defaults.PASEO_MODEL}`;
+  const expectedRuntime = `${defaults.PASEO_PROVIDER}/${expectedRuntimeModel(
+    defaults.PASEO_PROVIDER,
+    defaults.PASEO_MODEL,
+  )}`;
   if (
     !(usage.input_tokens > 0) ||
     !(usage.output_tokens > 0) ||

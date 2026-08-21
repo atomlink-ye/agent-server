@@ -4,12 +4,19 @@ export type RuntimeWorkspaceScope =
   | { readonly kind: 'product_session'; readonly id: string }
   | { readonly kind: 'team_run'; readonly id: string };
 
-export interface RuntimeWorkspace {
+/**
+ * Provider/runtime-side workspace state. `productWorkspaceId` points back to
+ * the long-lived ProductWorkspace; `binding` is the ExecutionPlane cwd/binding.
+ */
+export interface ExecutionWorkspaceState {
   readonly id: string;
   readonly scope: RuntimeWorkspaceScope;
   readonly productWorkspaceId: string;
   readonly binding: ExecutionWorkspaceBinding | null;
 }
+
+/** @deprecated Prefer ExecutionWorkspaceState. */
+export type RuntimeWorkspace = ExecutionWorkspaceState;
 
 export interface RuntimeWorkspaceRepository {
   findForProductSession(input: {
@@ -18,14 +25,14 @@ export interface RuntimeWorkspaceRepository {
     readonly productWorkspaceId: string;
     readonly principalType: string;
     readonly principalId: string;
-  }): Promise<RuntimeWorkspace>;
+  }): Promise<ExecutionWorkspaceState>;
   findForTeamRun(input: {
     readonly teamRunId: string;
     readonly tenantId: string;
     readonly productWorkspaceId: string;
     readonly principalType: string;
     readonly principalId: string;
-  }): Promise<RuntimeWorkspace>;
+  }): Promise<ExecutionWorkspaceState>;
 }
 
 export function runtimeWorkspaceIdentity(scope: RuntimeWorkspaceScope): string {

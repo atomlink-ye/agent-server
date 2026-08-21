@@ -8,6 +8,7 @@ export interface WorkRunManifestScope {
 }
 
 export interface WorkRunCompositionManifest {
+  readonly workId: string;
   readonly workRunId: string;
   readonly definitionVersionId: string;
   readonly rootTaskId: string;

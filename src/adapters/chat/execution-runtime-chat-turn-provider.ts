@@ -30,7 +30,14 @@ export class ExecutionRuntimeChatTurnProvider implements ChatTurnProvider {
     const result = await this.runtime.executeTurn({
       runId: chatRunId(input.conversationId, input.triggerMessageId),
       ...(durableSession ? { runtimeSessionId: durableSession.id } : {}),
-      invocationContext: input.brain.invocationContext,
+      invocationContext: {
+        ...input.brain.invocationContext,
+        // ChatTurnProvider's top-level origin is the current server-derived
+        // dispatch identity. Keep the machine context aligned with that turn
+        // while older/fake brain fixtures migrate to ChatTurnContext.
+        conversationId: input.conversationId,
+        triggerMessageId: input.triggerMessageId,
+      },
       systemPrompt: buildSystemPrompt(input),
       prompt: buildTurnPrompt(input),
       sessionTitle: `Chat ${input.agentDefinitionId}`,

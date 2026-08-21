@@ -7,6 +7,7 @@ import {
   AGENT_SERVER_PRODUCT_WORK_RUN_START_TOOL_REF,
 } from '../../src/application/agents/built-in-skills.js';
 import { ScriptedExecutionPlane } from '../../src/adapters/runtime/scripted-execution-plane.js';
+import { ExecutionRuntimeChatTurnProvider } from '../../src/adapters/chat/execution-runtime-chat-turn-provider.js';
 import { registerProductWorkMcpTools } from '../../src/entrypoints/mcp/product-work-mcp-tools.js';
 import { RuntimeMcpServer } from '../../src/infrastructure/extensions/runtime-mcp-server.js';
 import { RuntimeToolRegistry } from '../../src/platform/runtime-tool-registry.js';
@@ -1213,22 +1214,32 @@ spec:
         process.cwd(),
         mcp,
       );
-      const provider = {
-        async runTurn(input: any) {
+      const runtime = {
+        async executeTurn(input: any) {
           if (!input.extensions) throw new Error('reconciler did not bind extensions');
           const created = await executionPlane.createSession({
             runtimeSessionId: `chat-runtime-b4-${conversation.id}`,
             workspace: { cwd: process.cwd() },
-            systemPrompt: `Agent definition ID: ${input.agentDefinitionId}`,
+            systemPrompt: input.systemPrompt ?? '',
             extensions: input.extensions,
           });
-          await created.session.run({
-            runId: `chat-turn-b4-${message.id}`,
-            prompt: input.messages.at(-1)?.body ?? '',
+          const result = await created.session.run({
+            runId: input.runId,
+            prompt: input.prompt,
           });
-          return { body: '已开始正式分析。', provider: 'scripted' };
+          if (result.status !== 'completed') {
+            throw new Error(`scripted execution did not complete: ${result.status}`);
+          }
+          return {
+            provider: result.output.provider,
+            model: result.output.model,
+            text: result.output.text,
+            workspaceBinding: created.workspaceBinding,
+            sessionBinding: created.sessionBinding,
+          };
         },
       };
+      const provider = new ExecutionRuntimeChatTurnProvider(runtime);
       const reconciler = new ChatDeliveryReconciler(
         conversations,
         dispatches,

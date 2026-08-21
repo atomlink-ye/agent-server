@@ -1,5 +1,4 @@
-import { randomUUID } from 'node:crypto';
-
+import { postConversationMessage } from '../../../src/application/chat/post-conversation-message.js';
 import { PostgresConversationRepository } from '../../../src/infrastructure/postgres/postgres-conversation-repository.js';
 import type { SeedDatabase } from './types.js';
 import { seedPublishedAgentVersion } from './agent.js';
@@ -49,9 +48,9 @@ export async function seedGoldenPathWorld(
     name: `${options.name ?? 'Golden Path'} Team`,
   });
 
-  // Use the production conversation repository for the canonical Golden Path
-  // fixture so direct-pair identity, memberships, and chat-runtime state match
-  // the product path rather than a hand-written table approximation.
+  // Use production conversation/message paths for the canonical Golden Path
+  // fixture so direct identity, memberships, runtime state and provenance FKs
+  // match the real product path instead of a table-shaped approximation.
   const conversations = new PostgresConversationRepository(db as any);
   await conversations.ensureChatRuntime({
     tenantId: owner.tenantId,
@@ -63,6 +62,16 @@ export async function seedGoldenPathWorld(
     principalId: owner.principalId,
     principalType: owner.principalType,
     agentDefinitionId: agent.definitionId,
+  });
+  const trigger = await postConversationMessage(conversations, {
+    author: {
+      type: 'principal',
+      tenantId: owner.tenantId,
+      conversationId: conversation.id,
+      principalType: owner.principalType,
+      principalId: owner.principalId,
+    },
+    body: 'Golden Path harness trigger',
   });
   const entitlement = await seedWorkEntitlement(db, owner, {
     conversationId: conversation.id,
@@ -83,6 +92,6 @@ export async function seedGoldenPathWorld(
     conversation,
     entitlement,
     workDefinition,
-    triggerMessageId: randomUUID(),
+    triggerMessageId: trigger.id,
   } as const;
 }

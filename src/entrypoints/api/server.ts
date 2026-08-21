@@ -19,7 +19,7 @@ const { app, close } = await createService(config, logger);
 // first enabled account only outside production when no explicit browser token
 // is configured. Production remains fail-closed and requires an explicit token.
 if (!process.env.AGENT_SERVER_SERVICE_TOKEN?.trim() && config.nodeEnv !== 'production') {
-  const localAccount = config.serviceAccounts.find((account) => !account.disabled);
+  const localAccount = config.serviceAccounts?.find((account) => !account.disabled);
   if (localAccount) process.env.AGENT_SERVER_SERVICE_TOKEN = localAccount.token;
 }
 registerBrowserWebRoutes(app, config);

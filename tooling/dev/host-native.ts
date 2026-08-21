@@ -862,7 +862,8 @@ export async function stopOwned(children: readonly ChildProcess[]): Promise<void
           const timeout = setTimeout(() => {
             child.kill('SIGKILL');
             resolveStop();
-          }, 9_000);
+          // Allow with-paseo's 8s SIGTERM and 2s SIGKILL cleanup to finish.
+          }, 11_000);
           timeout.unref?.();
           child.once('exit', () => {
             clearTimeout(timeout);

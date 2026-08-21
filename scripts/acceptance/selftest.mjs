@@ -71,8 +71,8 @@ mutation('preflight non-loopback URL', () => assertPreflight({ apiUrl: 'http://l
 mutation('preflight rendered port mismatch', () => assertPreflight({ apiUrl: 'http://127.0.0.1:40557', renderedPorts: { services: { ...rendered.services, 'agent-server': { ports: [{ host_ip: '127.0.0.1', published: '32783', target: 3000 }] } } }, expectedPorts, requestedProvider: 'claude', effectiveProvider: 'claude' }));
 const handleFixture = { state: { ports: { postgres: 41001, api: 41002, web: 41003 } } };
 const renderedFixture = `services:\n  postgres:\n    ports: [{host_ip: 127.0.0.1, published: \"41001\", target: 5432}]\n  agent-server:\n    ports: [{host_ip: 127.0.0.1, published: \"41002\", target: 3000}]\n  web:\n    ports: [{host_ip: 127.0.0.1, published: \"41003\", target: 3001}]`;
-assertFinalSql({ provider: 'claude', workRef: 'work-1', workRun: 'run-1', workStatus: 'complete' });
-mutation('terminal SQL missing work_ref', () => assertFinalSql({ provider: 'claude', workRun: 'run-1', workStatus: 'complete' }));
+assertFinalSql({ provider: 'claude', workRef: 'work-1', workRun: 'run-1', workStatus: 'completed' });
+mutation('terminal SQL missing work_ref', () => assertFinalSql({ provider: 'claude', workRun: 'run-1', workStatus: 'completed' }));
 mutation('terminal SQL failed Work', () => assertFinalSql({ provider: 'claude', workRef: 'work-1', workRun: 'run-1', workStatus: 'failed' }));
 
 assert.deepEqual(acceptanceRuntime('claude', 'deepseek-v4-flash'), { adapter: 'paseo', provider: 'claude', model: 'deepseek-v4-flash' });
@@ -87,8 +87,9 @@ mutation('SERVICE_ACCOUNTS_JSON empty', () => parseServiceAccounts(''));
 mutation('SERVICE_ACCOUNTS_JSON empty array', () => parseServiceAccounts('[]'));
 mutation('SERVICE_ACCOUNTS_JSON token missing', () => parseServiceAccounts(JSON.stringify([{ serviceAccountId: 'sa' }])));
 
-const goodObs = { messages: [{ provider: 'claude', work_ref: 'w1' }], works: [{ id: 'w1', status: 'complete' }], runs: [{ id: 'r1', work_id: 'w1' }] };
-assert.equal(deriveTerminalFacts(goodObs, 'w1').workStatus, 'complete');
+// 🔴 形状对齐真实表：works 无 status 列；终局状态来自 tasks（work_runs.root_task_id -> tasks.status）
+const goodObs = { messages: [{ provider: 'claude', work_ref: 'w1' }], works: [{ id: 'w1', origin: 'created' }], runs: [{ id: 'r1', work_id: 'w1' }], tasks: [{ id: 't1', status: 'completed', work_id: 'w1' }] };
+assert.equal(deriveTerminalFacts(goodObs, 'w1').workStatus, 'completed');
 mutation('terminal facts messages not observed', () => deriveTerminalFacts({ ...goodObs, messages: [] }, 'w1'));
 mutation('terminal facts no work_ref observed', () => deriveTerminalFacts({ ...goodObs, messages: [{ provider: 'claude' }] }, 'w1'));
 mutation('terminal facts works not observed', () => deriveTerminalFacts({ messages: goodObs.messages, runs: goodObs.runs }, 'w1'));
@@ -110,7 +111,7 @@ mutation('preflight effective provider not observed', () => assertPreflight({ ap
 mutation('preflight rendered vs lifecycle env port divergence', () => assertPreflight({ apiUrl: 'http://127.0.0.1:41002', renderedPorts: renderedFor(41004), expectedPorts: expectedPortsFromEnvironment(envFull), requestedProvider: 'claude', effectiveProvider: 'claude' }));
 
 // --- R4: 终局事实的关联必须被证明 ---
-const rel = { messages: [{ provider: 'claude', work_ref: 'w1' }], works: [{ id: 'w1', status: 'complete' }], runs: [{ id: 'r1', work_id: 'w1' }] };
+const rel = { messages: [{ provider: 'claude', work_ref: 'w1' }], works: [{ id: 'w1', origin: 'created' }], runs: [{ id: 'r1', work_id: 'w1' }], tasks: [{ id: 't1', status: 'completed', work_id: 'w1' }] };
 assert.equal(deriveTerminalFacts(rel, 'w1').workRun, 'r1');
 mutation('observed workRef not supplied', () => deriveTerminalFacts(rel));
 mutation('observed workRef has no carrying message', () => deriveTerminalFacts(rel, 'bogus'));
@@ -120,10 +121,11 @@ mutation('work has no matching work_run', () => deriveTerminalFacts({ ...rel, ru
 // 认证的必须是 step-8 在 DOM 里看到的那一个，⛔ 不许退回去认证更早的那个。
 const twoWorks = {
   messages: [{ provider: 'claude', work_ref: 'old-complete' }, { provider: 'claude', work_ref: 'new-visible' }],
-  works: [{ id: 'old-complete', status: 'complete' }, { id: 'new-visible', status: 'failed' }],
+  works: [{ id: 'old-complete', origin: 'created' }, { id: 'new-visible', origin: 'created' }],
   runs: [{ id: 'run-old', work_id: 'old-complete' }, { id: 'run-new', work_id: 'new-visible' }],
+  tasks: [{ id: 't-old', status: 'completed', work_id: 'old-complete' }, { id: 't-new', status: 'failed', work_id: 'new-visible' }],
 };
-assert.equal(deriveTerminalFacts(twoWorks, 'old-complete').workStatus, 'complete');
+assert.equal(deriveTerminalFacts(twoWorks, 'old-complete').workStatus, 'completed');
 assert.equal(deriveTerminalFacts(twoWorks, 'new-visible').workStatus, 'failed');
 mutation('screen shows failed Work while an earlier Work is complete', () => assertFinalSql(deriveTerminalFacts(twoWorks, 'new-visible')));
 

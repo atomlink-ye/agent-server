@@ -213,7 +213,11 @@ async function finalObservations(definitionId, conversationId) {
     runtime: await query('SELECT tenant_id, agent_definition_id, active_agent_version_id, epoch, status FROM agent_chat_runtimes WHERE tenant_id=$1 AND agent_definition_id=$2', [tenantId, definitionId]),
     messages: await query('SELECT sequence, author_type, provider, work_ref, delivery_id, body FROM chat_messages WHERE tenant_id=$1 AND conversation_id=$2 ORDER BY sequence', [tenantId, conversationId]),
     links: await query('SELECT conversation_id, work_id, trigger_message_id FROM conversation_work_links WHERE tenant_id=$1 AND conversation_id=$2 ORDER BY created_at', [tenantId, conversationId]),
-    works: await query('SELECT id, status FROM works WHERE tenant_id=$1 ORDER BY created_at', [tenantId]),
+    // 🔴 works 表【没有】status 列（0029_product_work_identity.sql:6-22；已在 PGlite 上跑完
+    // 全部 migration 后查 information_schema 确认）。先前这里 `SELECT id, status FROM works`
+    // 会直接 SQL 报错。Work 的完成态实际走 work_runs.root_task_id -> tasks.status。
+    works: await query('SELECT id, origin, archived_at FROM works WHERE tenant_id=$1 ORDER BY created_at', [tenantId]),
+    tasks: await query('SELECT t.id, t.status, r.work_id FROM tasks t JOIN work_runs r ON r.root_task_id=t.id WHERE t.tenant_id=$1', [tenantId]),
     runs: await query('SELECT id, work_id, status FROM work_runs WHERE tenant_id=$1 ORDER BY created_at', [tenantId]),
   };
   await save('final-sql-observations.json', observations);

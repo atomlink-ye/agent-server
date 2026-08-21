@@ -18,5 +18,7 @@ export function assertPreflight({ apiUrl, renderedPorts, expectedPorts, requeste
 export function assertFinalSql(observations) {
   if (!['claude', 'codex'].includes(observations.provider)) throw new Error('terminal provider is not accepted');
   if (!observations.workRef) throw new Error('terminal work_ref is missing');
-  if (!observations.workRun || observations.workStatus !== 'complete') throw new Error(`terminal Work state is not complete: ${observations.workStatus}`);
+  // 🔴 完成态取值来自 tasks 表的 CHECK 约束：queued|active|completed|failed|cancelled
+  // （⛔ 不是 'complete'，先前那个字面量在真实数据上永远不会命中）
+  if (!observations.workRun || observations.workStatus !== 'completed') throw new Error(`terminal Work state is not completed: ${observations.workStatus}`);
 }

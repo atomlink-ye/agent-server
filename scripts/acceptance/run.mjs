@@ -57,7 +57,19 @@ export function deriveTerminalFacts(observations, observedWorkRef) {
   if (!run) {
     throw new Error(`final SQL observations: work ${work.id} has no matching work_run — association not observed`);
   }
-  return { provider: carrier.provider, workRef: observedWorkRef, workRun: run.id, workStatus: work.status };
+  // 🔴 works 表没有 status 列（0029_product_work_identity.sql:6-22）。
+  // 先前这里读 work.status，对真实数据库行永远是 undefined —— 之所以对偶全绿，
+  // 是因为 selftest 喂的是手写 JS 对象而非真实行（fixture 形状必须来自真实响应）。
+  // 完成态的真实来源：work_runs.root_task_id -> tasks.status。
+  const tasks = observations?.tasks;
+  if (!Array.isArray(tasks) || tasks.length === 0) {
+    throw new Error('final SQL observations: task rows not observed — cannot determine terminal state');
+  }
+  const task = tasks.find((t) => t.work_id === work.id);
+  if (!task) {
+    throw new Error(`final SQL observations: work ${work.id} has no bound root task — terminal state not observed`);
+  }
+  return { provider: carrier.provider, workRef: observedWorkRef, workRun: run.id, workStatus: task.status };
 }
 
 

@@ -18,8 +18,8 @@ export async function seedPublishedWorkDefinition(
     readonly name?: string;
     /**
      * When provided, create a strict one-field schema. When omitted, use the
-     * canonical scripted Golden Path lifecycle schema: start_work sends
-     * `query`, while continue_work sends `instruction`.
+     * canonical scripted Golden Path lifecycle schema: start_work sends a
+     * `query`; continue_work translates its MCP feedback into `input.feedback`.
      */
     readonly inputField?: string;
     readonly now?: string;
@@ -40,14 +40,14 @@ export async function seedPublishedWorkDefinition(
         type: 'object' as const,
         properties: {
           query: { type: 'string' as const },
-          instruction: { type: 'string' as const },
+          feedback: { type: 'string' as const },
         },
         required: [],
         additional_properties: false,
       };
   const inputSchemaYaml = options.inputField
     ? `    properties:\n      ${options.inputField}:\n        type: string\n    required: [${options.inputField}]\n    additional_properties: false`
-    : `    properties:\n      query:\n        type: string\n      instruction:\n        type: string\n    required: []\n    additional_properties: false`;
+    : `    properties:\n      query:\n        type: string\n      feedback:\n        type: string\n    required: []\n    additional_properties: false`;
   const source = {
     kind: 'single_agent' as const,
     agentVersionId: options.agentVersionId,

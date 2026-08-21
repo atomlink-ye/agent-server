@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { SeedDatabase } from './types.js';
 import { seedPublishedAgentVersion } from './agent.js';
 import { seedConversation } from './conversation.js';
+import { seedWorkEntitlement } from './entitlement.js';
 import { seedEnvironmentVersion } from './environment.js';
 import { seedPublishedTeamVersion } from './team.js';
 import { seedActiveTask, seedPublishedWorkDefinition } from './work.js';
@@ -12,6 +13,7 @@ export {
   seedActiveTask,
   seedPublishedAgentVersion,
   seedConversation,
+  seedWorkEntitlement,
   seedEnvironmentVersion,
   seedPublishedTeamVersion,
   seedPublishedWorkDefinition,
@@ -46,6 +48,10 @@ export async function seedGoldenPathWorld(
     name: `${options.name ?? 'Golden Path'} Team`,
   });
   const conversation = await seedConversation(db, owner);
+  const entitlement = await seedWorkEntitlement(db, owner, {
+    conversationId: conversation.id,
+    agentDefinitionId: agent.definitionId,
+  });
   const workDefinition = await seedPublishedWorkDefinition(db, owner, {
     agentVersionId: agent.versionId,
     environmentVersionId: environment.versionId,
@@ -59,6 +65,7 @@ export async function seedGoldenPathWorld(
     agent,
     team,
     conversation,
+    entitlement,
     workDefinition,
     triggerMessageId: randomUUID(),
   } as const;

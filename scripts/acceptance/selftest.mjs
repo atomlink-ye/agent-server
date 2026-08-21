@@ -10,7 +10,7 @@ import {
 import { assertGoldenRecord, assertStep8Observation, goldenEight } from './golden-eight.mjs';
 import { acceptanceRuntime } from './lifecycle.mjs';
 import { assertFinalSql, assertPreflight } from './preflight.mjs';
-import { expectedPortsFromEnvironment, deriveTerminalFacts } from './run.mjs';
+import { expectedPortsFromEnvironment, deriveTerminalFacts, waitForHttpReady } from './run.mjs';
 import { parseServiceAccounts } from './credentials.mjs';
 import { assertGateReport } from './gate-report.mjs';
 
@@ -36,6 +36,13 @@ const initializedLog = [
 
 function mutation(name, fn) {
   assert.throws(fn, Error, `${name} must be rejected`);
+  console.log(`PASS mutation ${name}`);
+}
+
+// 🔴 assert.throws 只认【同步】抛出：async 函数返回的是一个 rejected promise，
+// 它不会同步抛，所以异步谓词必须走这一条，⛔ 不要复用上面那个。
+async function asyncMutation(name, fn) {
+  await assert.rejects(fn, Error, `${name} must be rejected`);
   console.log(`PASS mutation ${name}`);
 }
 
@@ -146,5 +153,33 @@ mutation('gate report belongs to a different HEAD', () => assertGateReport(goodR
 mutation('expected HEAD was not supplied', () => assertGateReport(goodReport, undefined));
 mutation('expected HEAD is blank', () => assertGateReport(goodReport, '  '));
 mutation('gate report is not an object', () => assertGateReport(null, 'ffd9359c9'));
+
+
+// --- R4: UI 就绪等待（离线，用注入的 fetch/clock，⛔ 不碰真实网络）---
+// 绿的一条：第 3 次尝试才应答，必须返回 ready 并如实记下等了多久。
+{
+  let clock = 0;
+  const tick = () => (clock += 2000);
+  let calls = 0;
+  const flaky = async () => {
+    calls += 1;
+    if (calls < 3) throw new Error('connect ECONNREFUSED');
+    return { status: 200 };
+  };
+  const result = await waitForHttpReady('http://127.0.0.1:18081', 120000, { intervalMs: 0, now: () => clock, fetchImpl: async (u) => { const r = await flaky(u); tick(); return r; } });
+  assert.equal(result.ready, true);
+  assert.equal(result.attempts, 3);
+  assert.equal(result.status, 200);
+}
+// 🔴 对偶：一直不应答必须【红】，⛔ 不许超时后静默放行。
+{
+  let clock = 0;
+  await asyncMutation('UI never answers within the budget', async () =>
+    waitForHttpReady('http://127.0.0.1:18081', 10000, {
+      intervalMs: 0,
+      now: () => (clock += 2000),
+      fetchImpl: async () => { throw new Error('connect ECONNREFUSED'); },
+    }));
+}
 
 console.log('PASS acceptance:selftest (offline; no Compose, database, provider, or sandbox used)');

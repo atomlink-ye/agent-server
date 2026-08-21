@@ -105,6 +105,34 @@ export function expectedPortsFromEnvironment(environment) {
   return expected;
 }
 
+// 🔴 UI 就绪等待。`docker compose up --wait` 对【没有 healthcheck 的服务】只等到"在跑"，
+// ⛔ 它打印的 `Healthy` 不代表就绪 —— 这是实测的，不是推断：
+//   services: nohc(无 healthcheck) / withhc(有 healthcheck)
+//   docker compose -p hcprobe up -d --wait
+//   → `Container hcprobe-nohc-1  Healthy`   与有 healthcheck 的那个【一模一样】
+// 而 web / web-vite 两个服务在四个 compose 文件与 Dockerfile 里都没有 healthcheck。
+// ⇒ 装置先前把浏览器指向一个可能还在启动的 dev server，得到 ERR_SOCKET_NOT_CONNECTED。
+// ⛔ 超时不许静默放行：它必须红，并把等了多久写进证据。
+export async function waitForHttpReady(url, budgetMs, { intervalMs = 2000, now = () => Date.now(), fetchImpl = fetch } = {}) {
+  const started = now();
+  let attempts = 0;
+  let lastError = 'no attempt was made';
+  while (now() - started < budgetMs) {
+    attempts += 1;
+    try {
+      const response = await fetchImpl(url, { redirect: 'manual' });
+      if (response.status > 0) {
+        return { url, ready: true, attempts, waitedMs: now() - started, status: response.status };
+      }
+      lastError = `status ${response.status}`;
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  throw new Error(`${url} did not answer within ${budgetMs}ms (${attempts} attempt(s)); last error: ${lastError} — the UI was never ready, so no browser step may run`);
+}
+
 async function main() {
   const provider = process.argv[2];
   const model = process.argv[3];
@@ -130,13 +158,18 @@ async function main() {
     const expectedPorts = expectedPortsFromEnvironment(rendered.environment);
     assertPreflight({ apiUrl: apiUrl.origin, renderedPorts, expectedPorts, effectiveProvider: rendered.environment.PASEO_PROVIDER, requestedProvider: provider });
 
+    // 🔴 在把 URL 交给浏览器之前，先证明它真的在应答。
+    const browserBaseUrl = `http://127.0.0.1:${handle.state.ports.webVite ?? 18081}`;
+    const uiReadiness = await waitForHttpReady(browserBaseUrl, 120000);
+    await writeFile(path.join(evidenceDir, 'ui-readiness.json'), JSON.stringify(uiReadiness, null, 2));
+
     const driverEnv = {
       ...process.env,
       PASEO_PROVIDER: provider,
       R2_EVIDENCE_DIR: evidenceDir,
       AGENT_SERVER_BASE_URL: apiUrl.origin,
       AGENT_SERVER_SERVICE_TOKEN: token,
-      R2_BROWSER_BASE_URL: `http://127.0.0.1:${handle.state.ports.webVite ?? 18081}`,
+      R2_BROWSER_BASE_URL: browserBaseUrl,
       R2_BROWSER_IMAGE: process.env.R2_BROWSER_IMAGE ?? 'agent-server-web-testing:r2',
       R2_BROWSER_SCRIPT_HOST: BROWSER_SCRIPT,
       R2_COMPOSE_PROJECT: handle.state.projectName,

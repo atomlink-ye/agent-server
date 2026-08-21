@@ -4,6 +4,7 @@ import type {
   RuntimeSession,
   RuntimeSessionRepository,
 } from '../../application/ports/runtime-session-repository.js';
+import type { RuntimeScope } from '../../domain/runtime/runtime-invocation-context.js';
 
 const PASEO_PLANE = 'paseo';
 const SESSION_SELECT = `SELECT rs.*, sls.workspace_id, sls.agent_version_id,
@@ -389,7 +390,7 @@ function map(row: any): RuntimeSession {
   };
 }
 
-function runtimeScope(row: any): RuntimeSession['scope'] {
+function runtimeScope(row: any): RuntimeScope {
   switch (row.scope_kind) {
     case 'agent_chat': {
       if (!row.scope_id)
@@ -420,7 +421,7 @@ function runtimeScope(row: any): RuntimeSession['scope'] {
   }
 }
 
-function runtimeScopeId(scope: RuntimeSession['scope']): string {
+function runtimeScopeId(scope: RuntimeScope): string {
   switch (scope.kind) {
     case 'agent_chat':
       return agentChatScopeId(scope.agentChatRuntimeId, scope.runtimeEpoch);

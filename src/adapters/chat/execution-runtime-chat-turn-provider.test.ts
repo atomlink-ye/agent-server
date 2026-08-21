@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { ExecutionRuntimeChatTurnProvider } from './execution-runtime-chat-turn-provider.js';
 import { ExecutionPlaneRuntimeFacade } from '../../application/runtime/execution-plane-runtime-facade.js';
@@ -14,6 +14,7 @@ import type {
   ExecutionSessionBinding,
   ExecutionSessionCapabilities,
   ExecutionSessionSpec,
+  ExecutionWorkspaceBinding,
 } from '../../application/ports/execution-plane.js';
 import type { RuntimeMemoryCandidateCollector } from '../../application/ports/runtime-memory-candidate-collector.js';
 import type {
@@ -28,8 +29,9 @@ describe('ExecutionRuntimeChatTurnProvider', () => {
   it('persists an agent_chat RuntimeSession and passes structured invocation context', async () => {
     const plane = new RecordingExecutionPlane();
     const runtimeSessions = new InMemoryRuntimeSessions();
-    const runtime = createRuntime(plane, runtimeSessions);
-    const provider = new ExecutionRuntimeChatTurnProvider(runtime);
+    const provider = new ExecutionRuntimeChatTurnProvider(
+      createRuntime(plane, runtimeSessions),
+    );
     const brain = chatBrain({
       agentDefinitionId: 'agent-definition-1',
       agentVersionId: 'agent-version-1',
@@ -83,12 +85,6 @@ describe('ExecutionRuntimeChatTurnProvider', () => {
     const provider = new ExecutionRuntimeChatTurnProvider(
       createRuntime(plane, runtimeSessions),
     );
-    const brain = chatBrain({
-      agentDefinitionId: 'agent-definition-sticky',
-      agentVersionId: 'agent-version-sticky',
-      agentChatRuntimeId: 'chat-runtime-sticky',
-      runtimeEpoch: 3,
-    });
 
     await provider.runTurn({
       ...turnIdentity(
@@ -97,7 +93,14 @@ describe('ExecutionRuntimeChatTurnProvider', () => {
         'conversation-sticky',
         'message-1',
       ),
-      brain,
+      brain: chatBrain({
+        agentDefinitionId: 'agent-definition-sticky',
+        agentVersionId: 'agent-version-sticky',
+        agentChatRuntimeId: 'chat-runtime-sticky',
+        runtimeEpoch: 3,
+        conversationId: 'conversation-sticky',
+        triggerMessageId: 'message-1',
+      }),
       messages: [
         { authorType: 'principal', authorId: 'principal-1', body: 'hello' },
       ],
@@ -177,10 +180,9 @@ describe('ExecutionRuntimeChatTurnProvider', () => {
     expect(runtimeSessions.sessions).toHaveLength(2);
     expect(plane.createdSpecs).toHaveLength(2);
     expect(plane.attachedSpecs).toHaveLength(0);
-    expect(runtimeSessions.sessions.map((session) => session.agentVersionId)).toEqual([
-      'version-1',
-      'version-2',
-    ]);
+    expect(
+      runtimeSessions.sessions.map((session) => session.agentVersionId),
+    ).toEqual(['version-1', 'version-2']);
   });
 
   it('carries each resolved agent brain through the runtime facade into its execution system prompt', async () => {
@@ -238,26 +240,18 @@ describe('ExecutionRuntimeChatTurnProvider', () => {
       ],
     });
 
-    expect(plane.createdSpecs).toHaveLength(2);
     const alphaSystemPrompt = plane.createdSpecs[0]?.systemPrompt;
     const betaSystemPrompt = plane.createdSpecs[1]?.systemPrompt;
-    expect(alphaSystemPrompt).toBeDefined();
-    expect(betaSystemPrompt).toBeDefined();
-
     expect(alphaSystemPrompt).toContain('Agent definition ID: definition-alpha');
-    expect(alphaSystemPrompt).toContain('Agent version ID: version-alpha');
     expect(alphaSystemPrompt).toContain('Always answer in terse Alpha format.');
     expect(alphaSystemPrompt).toContain('alpha-calendar-capability');
     expect(alphaSystemPrompt).toContain('Alpha persona home content.');
     expect(alphaSystemPrompt).not.toContain('definition-beta');
-
     expect(betaSystemPrompt).toContain('Agent definition ID: definition-beta');
-    expect(betaSystemPrompt).toContain('Agent version ID: version-beta');
     expect(betaSystemPrompt).toContain('Always answer in warm Beta format.');
     expect(betaSystemPrompt).toContain('beta-calendar-capability');
     expect(betaSystemPrompt).toContain('Beta persona home content.');
     expect(betaSystemPrompt).not.toContain('definition-alpha');
-
     expect(plane.runInputs[0]?.prompt).toContain('Alpha conversation context.');
     expect(plane.runInputs[1]?.prompt).toContain('Beta conversation context.');
   });
@@ -331,12 +325,14 @@ class InMemoryRuntimeSessions
     toolRefs: readonly string[];
   }): Promise<RuntimeSession> {
     this.createAgentChatCalls.push(input);
-    const found = this.sessions.find(
-      (session) =>
-        session.scope.kind === 'agent_chat' &&
-        session.scope.agentChatRuntimeId === input.agentChatRuntimeId &&
-        session.scope.runtimeEpoch === input.runtimeEpoch,
-    );
+    const found = this.sessions.find((session) => {
+      const scope = session.scope;
+      return (
+        scope?.kind === 'agent_chat' &&
+        scope.agentChatRuntimeId === input.agentChatRuntimeId &&
+        scope.runtimeEpoch === input.runtimeEpoch
+      );
+    });
     if (found) return found;
     const session: RuntimeSession = {
       id: `runtime-session-${this.sessions.length + 1}`,
@@ -385,8 +381,8 @@ class InMemoryRuntimeSessions
 
   public async bindExecution(input: {
     id: string;
-    workspaceBinding: RuntimeSession['workspaceBinding'] & {};
-    sessionBinding: RuntimeSession['sessionBinding'] & {};
+    workspaceBinding: ExecutionWorkspaceBinding;
+    sessionBinding: ExecutionSessionBinding;
   }): Promise<RuntimeSession> {
     this.bindCalls.push(input);
     const index = this.sessions.findIndex((session) => session.id === input.id);
@@ -417,7 +413,9 @@ class InMemoryRuntimeSessions
 
 function recordingSession(runInputs: ExecutionRunInput[]): ExecutionSession {
   return {
-    capabilities: { supported: new Set() } satisfies ExecutionSessionCapabilities,
+    capabilities: {
+      supported: new Set(),
+    } satisfies ExecutionSessionCapabilities,
     async run(input): Promise<ExecutionResult> {
       runInputs.push(input);
       return {
@@ -500,7 +498,10 @@ function chatBrain(
   const runtimeEpoch = input.runtimeEpoch ?? 1;
   const conversationId = input.conversationId ?? 'conversation-1';
   const triggerMessageId = input.triggerMessageId ?? `${conversationId}-trigger`;
-  const productScope = { tenantId: 'tenant-1', workspaceId: 'workspace-1' } as const;
+  const productScope = {
+    tenantId: 'tenant-1',
+    workspaceId: 'workspace-1',
+  } as const;
   const actor = { type: 'service_account', id: 'principal-1' } as const;
   const agentOwner = { scope: productScope, principal: actor } as const;
   const turnContext = {

@@ -556,15 +556,12 @@ function redactRuntimeValues(content: string, values: readonly string[]): string
 class RuntimeLogRedactor extends Writable {
   private pending = '';
 
-  private readonly maxSecretLength: number;
-
   constructor(
     private readonly destination: NodeJS.WritableStream,
     private readonly secretValues: readonly string[],
     options?: WritableOptions,
   ) {
     super({ ...options, decodeStrings: false });
-    this.maxSecretLength = secretValues[0]?.length ?? 0;
   }
 
   override _write(
@@ -574,10 +571,13 @@ class RuntimeLogRedactor extends Writable {
   ): void {
     this.pending +=
       typeof chunk === 'string' ? chunk : chunk.toString('utf8');
-    const retainedLength = this.maxSecretLength;
-    const processableLength = Math.max(0, this.pending.length - retainedLength);
-    const processable = this.pending.slice(0, processableLength);
-    this.pending = this.pending.slice(processableLength);
+    const newline = this.pending.lastIndexOf('\n');
+    if (newline < 0) {
+      callback();
+      return;
+    }
+    const processable = this.pending.slice(0, newline + 1);
+    this.pending = this.pending.slice(newline + 1);
     if (!processable) {
       callback();
       return;

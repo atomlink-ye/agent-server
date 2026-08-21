@@ -186,7 +186,11 @@ if (command.length === 0) {
     process.env.ANTHROPIC_BASE_URL = anthropicDefaults.ANTHROPIC_BASE_URL;
     process.env.ANTHROPIC_API_KEY = process.env.OPENCODE_GO_API_KEY.trim();
   }
+  const startedAt = Date.now();
   const providerBinaries = await prepareProviderToolchain();
+  process.stderr.write(
+    `with-paseo phase=provider-prep elapsed_ms=${Date.now() - startedAt}\n`,
+  );
   process.env.PASEO_BIN = providerBinaries.paseo;
   process.env.OPENCODE_BIN = providerBinaries.opencode;
   process.env.CLAUDE_CODE_BIN = providerBinaries.claude;
@@ -233,6 +237,9 @@ if (command.length === 0) {
     listenHost: paseoListenHost,
     environmentVariableNames: paseoEnvironmentNames,
   });
+  process.stderr.write(
+    `with-paseo phase=paseo-start elapsed_ms=${Date.now() - startedAt}\n`,
+  );
 
   const child = spawn(command[0], command.slice(1), {
     cwd: repositoryRoot,
@@ -245,6 +252,9 @@ if (command.length === 0) {
     detached: process.platform !== 'win32',
     stdio: 'inherit',
   });
+  process.stderr.write(
+    `with-paseo phase=api-spawn elapsed_ms=${Date.now() - startedAt}\n`,
+  );
 
   let stopping;
   const stop = () => {
@@ -267,7 +277,10 @@ if (command.length === 0) {
     child.once('exit', (code, signal) => {
       resolveExit(code ?? (signal ? 1 : 0));
     });
-    child.once('error', () => resolveExit(1));
+    child.once('error', (error) => {
+      process.stderr.write(`${error.message}\n`);
+      resolveExit(1);
+    });
   });
   await stopProcessTree(paseo.child);
   process.exitCode = exitCode;

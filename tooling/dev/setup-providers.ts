@@ -1,4 +1,11 @@
-import { access, constants, mkdir } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import {
+  access,
+  constants,
+  mkdir,
+  readFile,
+  readlink,
+} from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { delimiter, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -19,6 +26,15 @@ const providerToolchainScript = resolve(
   repositoryRoot,
   'provider-toolchain/scripts/provider-toolchain.mjs',
 );
+const providerToolchainSourceRoot = resolve(repositoryRoot, 'provider-toolchain');
+const providerToolchainInputFiles = [
+  'providers.manifest.json',
+  'pnpm-lock.yaml',
+  'pnpm-workspace.yaml',
+  'package.json',
+  'patches/@getpaseo__server@0.1.110.patch',
+  'scripts/provider-toolchain.mjs',
+];
 
 export const providerToolchainPaths = Object.freeze({
   root: providerToolchainRoot,
@@ -35,6 +51,38 @@ type ProviderToolchainCommandResult = Readonly<{
   stdout: string;
   stderr: string;
 }>;
+
+function stable(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stable(record[key])}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value) ?? 'null';
+}
+
+function sha256(value: string | Buffer): string {
+  return createHash('sha256').update(value).digest('hex');
+}
+
+function providerTarget(): string | undefined {
+  if (process.platform !== 'linux') return undefined;
+  if (process.arch === 'x64') return 'linux-amd64';
+  if (process.arch === 'arm64') return 'linux-arm64';
+  return undefined;
+}
+
+async function currentToolchainDigest(): Promise<string> {
+  const hash = createHash('sha256');
+  for (const file of providerToolchainInputFiles) {
+    hash.update(`provider-toolchain/${file}`);
+    hash.update(await readFile(join(providerToolchainSourceRoot, file)));
+  }
+  return hash.digest('hex');
+}
 
 function redactOutput(output: string, environment: NodeJS.ProcessEnv): string {
   return Object.entries(environment).reduce((result, [name, value]) => {
@@ -155,6 +203,29 @@ export async function findInstalledProviderToolchain(): Promise<
   typeof providerToolchainPaths | undefined
 > {
   try {
+    const target = providerTarget();
+    if (!target) return undefined;
+    const manifest = JSON.parse(
+      await readFile(providerToolchainManifest, 'utf8'),
+    );
+    const manifestDigest = sha256(Buffer.from(stable(manifest)));
+    const current = await readlink(join(providerToolchainRoot, 'current'));
+    if (current !== `releases/${manifestDigest}`) return undefined;
+    const releaseRoot = join(
+      providerToolchainRoot,
+      'releases',
+      manifestDigest,
+    );
+    const ready = await readFile(join(releaseRoot, '.ready'), 'utf8');
+    if (ready.trim() !== manifestDigest) return undefined;
+    const release = JSON.parse(
+      await readFile(join(releaseRoot, 'release.json'), 'utf8'),
+    ) as { toolchainDigest?: unknown; target?: unknown };
+    if (
+      release.toolchainDigest !== (await currentToolchainDigest()) ||
+      release.target !== target
+    )
+      return undefined;
     await assertProviderExecutables();
     return providerToolchainPaths;
   } catch {

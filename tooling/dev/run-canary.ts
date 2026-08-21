@@ -16,6 +16,7 @@ import {
   stopOwned,
   waitForHttp,
 } from './host-native.js';
+import { setupProviders } from './setup-providers.js';
 
 export type CanaryKind = 'runtime' | 'golden-path';
 
@@ -50,6 +51,14 @@ function parseKind(value: string | undefined): CanaryKind {
   throw new Error('usage: run-canary.ts <runtime|golden-path>');
 }
 
+function canaryReadyTimeout(environment: NodeJS.ProcessEnv): number {
+  const configured =
+    environment.CANARY_READY_TIMEOUT_MS?.trim() ||
+    environment.PASEO_DAEMON_STARTUP_TIMEOUT_MS?.trim();
+  const parsed = configured ? Number.parseInt(configured, 10) : 300_000;
+  return Number.isFinite(parsed) ? Math.max(parsed, 300_000) : 300_000;
+}
+
 export async function runHostCanary(
   kind: CanaryKind,
   environment: NodeJS.ProcessEnv = process.env,
@@ -68,6 +77,8 @@ export async function runHostCanary(
       const runtimeEnvironment = hostRuntimeEnvironment(prepared);
       const apiPort = canaryPort(runtimeEnvironment, 'PORT', 3000);
       await assertCanaryPortFree('runtime API', apiPort);
+      const readyTimeoutMs = canaryReadyTimeout(runtimeEnvironment);
+      await setupProviders(runtimeEnvironment);
       const apiBaseUrl = `http://127.0.0.1:${apiPort}`;
       const api = spawnOwned(
         'node',
@@ -84,7 +95,7 @@ export async function runHostCanary(
       children.push(api);
       primaryChild = api;
       primaryEnvironment = runtimeEnvironment;
-      await waitForHttp(`${apiBaseUrl}/health/ready`, 90_000, {
+      await waitForHttp(`${apiBaseUrl}/health/ready`, readyTimeoutMs, {
         child: api,
         environment: runtimeEnvironment,
         label: 'runtime canary API',
@@ -109,6 +120,7 @@ export async function runHostCanary(
     const apiPort = canaryPort(loaded, 'PORT', 3000);
     await assertCanaryPortFree('golden-path API', apiPort);
     await assertCanaryPortFree('golden-path web', 3001);
+    const readyTimeoutMs = canaryReadyTimeout(loaded);
     const apiBaseUrl = `http://127.0.0.1:${apiPort}`;
     const dev = spawnOwned(
       'node',
@@ -118,12 +130,12 @@ export async function runHostCanary(
     children.push(dev);
     primaryChild = dev;
     primaryEnvironment = loaded;
-    await waitForHttp(`${apiBaseUrl}/health/ready`, 90_000, {
+    await waitForHttp(`${apiBaseUrl}/health/ready`, readyTimeoutMs, {
       child: dev,
       environment: loaded,
       label: 'golden-path dev',
     });
-    await waitForHttp('http://127.0.0.1:3001', 90_000, {
+    await waitForHttp('http://127.0.0.1:3001', readyTimeoutMs, {
       child: dev,
       environment: loaded,
       label: 'golden-path dev',

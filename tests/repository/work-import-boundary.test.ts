@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -22,7 +22,6 @@ describe('Work module concrete import boundary', () => {
       .split('\n')
       .filter(Boolean)
       .filter((path) => sourceFilePattern.test(path))
-      .filter((path) => existsSync(resolve(root, path)))
       .filter((path) => !path.includes('.test.'));
     const violations: string[] = [];
     for (const path of files) {

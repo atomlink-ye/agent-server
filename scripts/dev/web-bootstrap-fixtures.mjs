@@ -13,6 +13,12 @@ spec:
   tools:
     - ref: agent-server/memory-read
       kind: tool
+    - ref: agent-server/product-work-create
+      kind: tool
+    - ref: agent-server/product-work-run-start
+      kind: tool
+    - ref: agent-server/list-agent-workflows
+      kind: tool
   skills:
     - ref: agent-server/memory-api
   input:

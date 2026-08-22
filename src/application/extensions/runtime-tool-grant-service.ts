@@ -63,10 +63,14 @@ export type RuntimeToolGrantIssue = Readonly<{
   readonly token: string;
 }>;
 
-type StoredGrant = RuntimeToolGrant & { readonly tokenHash: Buffer };
+type StoredGrant = RuntimeToolGrant & {
+  readonly tokenHash: Buffer;
+  readonly renewableUntil?: number;
+};
 
 export class RuntimeToolGrantService {
   readonly #grants = new Map<string, StoredGrant>();
+  readonly #renewable = new Map<string, StoredGrant>();
   readonly #activeCalls = new Map<string, number>();
 
   public issue(input: {
@@ -113,9 +117,17 @@ export class RuntimeToolGrantService {
     for (const grant of existing) this.#grants.delete(grant.grantId);
 
     const token = randomBytes(32).toString('base64url');
+    const issuedAt = Date.now();
     const expiresAt = new Date(
-      Date.now() + Math.max(1, input.ttlMs ?? 15 * 60 * 1000),
+      issuedAt + Math.max(1, input.ttlMs ?? 15 * 60 * 1000),
     ).toISOString();
+    const renewableUntil =
+      input.chatContext &&
+      input.productSessionId === undefined &&
+      input.teamMemberRunId === undefined &&
+      input.teamRunId === undefined
+        ? issuedAt + 24 * 60 * 60 * 1000
+        : undefined;
     const grant: StoredGrant = {
       grantId: randomUUID(),
       tenantId: input.tenantId,
@@ -142,6 +154,7 @@ export class RuntimeToolGrantService {
           }
         : {}),
       expiresAt,
+      ...(renewableUntil !== undefined ? { renewableUntil } : {}),
       tokenHash: hashToken(token),
     };
     this.#grants.set(grant.grantId, grant);
@@ -177,6 +190,7 @@ export class RuntimeToolGrantService {
 
   public revoke(grantId: string): void {
     this.#grants.delete(grantId);
+    this.#renewable.delete(grantId);
     if ((this.#activeCalls.get(grantId) ?? 0) === 0)
       this.#activeCalls.delete(grantId);
   }
@@ -230,6 +244,47 @@ export class RuntimeToolGrantService {
         expiresAt,
       });
     }
+  }
+
+  public refreshForChatScope(input: {
+    readonly tenantId: string;
+    readonly principalType: string;
+    readonly principalId: string;
+    readonly workspaceId: string;
+    readonly scopeId: string;
+    readonly allowedTools: readonly string[];
+    readonly chatContext: RuntimeToolChatContext;
+  }): RuntimeToolGrant | null {
+    this.pruneExpired();
+    const matches = (candidate: StoredGrant) =>
+      candidate.tenantId === input.tenantId &&
+      candidate.principalType === input.principalType &&
+      candidate.principalId === input.principalId &&
+      candidate.workspaceId === input.workspaceId &&
+      candidate.scopeId === input.scopeId &&
+      isRenewableChatGrant(candidate);
+    const grant =
+      [...this.#grants.values()].find(matches) ??
+      [...this.#renewable.values()].find(matches);
+    if (!grant) return null;
+    if (this.activeToolCalls(grant.grantId) > 0)
+      throw new Error('Runtime grant refresh fence is active.');
+    validateTools(input.allowedTools);
+    if (input.allowedTools.some((tool) => !grant.catalogTools.includes(tool)))
+      throw new Error('Runtime grant allowed tools exceed catalog.');
+    validateChatContext(input.chatContext);
+    const updated: StoredGrant = {
+      ...grant,
+      allowedTools: Object.freeze([...input.allowedTools]),
+      chatContext: Object.freeze({
+        conversationId: input.chatContext.conversationId,
+        triggerMessageId: input.chatContext.triggerMessageId,
+      }),
+      expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+    };
+    this.#renewable.delete(grant.grantId);
+    this.#grants.set(grant.grantId, updated);
+    return publicGrant(updated);
   }
 
   /**
@@ -347,14 +402,43 @@ export class RuntimeToolGrantService {
 
   private pruneExpired(): void {
     const now = Date.now();
+    for (const [grantId, grant] of this.#renewable) {
+      if ((grant.renewableUntil ?? 0) > now) continue;
+      this.#renewable.delete(grantId);
+      this.#activeCalls.delete(grantId);
+    }
     for (const [grantId, grant] of this.#grants) {
+      if (isRenewableChatGrant(grant)) {
+        if ((grant.renewableUntil ?? 0) <= now) {
+          this.#grants.delete(grantId);
+          this.#activeCalls.delete(grantId);
+          continue;
+        }
+        if (Date.parse(grant.expiresAt) <= now) {
+          this.#grants.delete(grantId);
+          this.#renewable.set(grantId, grant);
+          continue;
+        }
+      }
       if (Date.parse(grant.expiresAt) > now) continue;
-      if ((this.#activeCalls.get(grantId) ?? 0) > 0 || grant.teamMemberRunId)
+      if (
+        (this.#activeCalls.get(grantId) ?? 0) > 0 ||
+        grant.teamMemberRunId
+      )
         continue;
       this.#grants.delete(grantId);
       this.#activeCalls.delete(grantId);
     }
   }
+}
+
+function isRenewableChatGrant(grant: RuntimeToolGrant): boolean {
+  return Boolean(
+    grant.chatContext &&
+      grant.productSessionId === undefined &&
+      grant.teamMemberRunId === undefined &&
+      grant.teamRunId === undefined,
+  );
 }
 
 function activeTurnFromIssue(input: {
@@ -402,7 +486,11 @@ function resolveScopeId(input: {
 }
 
 function publicGrant(grant: StoredGrant): RuntimeToolGrant {
-  const { tokenHash: _tokenHash, ...value } = grant;
+  const {
+    tokenHash: _tokenHash,
+    renewableUntil: _renewableUntil,
+    ...value
+  } = grant;
   return value;
 }
 

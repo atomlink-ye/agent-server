@@ -83,16 +83,17 @@ async function startWorkThroughScriptedRuntime(
   product: ReturnType<AgentServerHarness['work']['scenario']>,
   scopeId: string,
 ) {
+  const chatContext = {
+    conversationId: world.conversation.id,
+    triggerMessageId: world.triggerMessageId,
+  } as const;
   const mcp = h.mcp.track(
     new RuntimeMcpServer(
       new RuntimeToolRegistry([
         (context: any) =>
           product.workModule.contributeRuntime({
             ...context,
-            chatContext: {
-              conversationId: world.conversation.id,
-              triggerMessageId: world.triggerMessageId,
-            },
+            chatContext,
           }),
       ]),
     ),
@@ -103,6 +104,7 @@ async function startWorkThroughScriptedRuntime(
     principalType: world.owner.principalType,
     principalId: world.owner.principalId,
     scopeId,
+    chatContext,
     allowedTools: [
       AGENT_SERVER_LIST_AGENT_WORKFLOWS_TOOL_REF,
       AGENT_SERVER_PRODUCT_WORK_RUN_START_TOOL_REF,

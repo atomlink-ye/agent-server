@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { Pool } from 'pg';
 import {
   managedAgentYaml,
   managedEnvironmentYaml,
@@ -54,12 +55,14 @@ else
 // stale WEB_SAMPLE_WORK_ID forward from an older runtime bootstrap, otherwise a
 // fresh/recreated local database can point the Web UI at a non-existent Work.
 let sampleWorkId = skipProductWork ? '' : env('WEB_SAMPLE_WORK_ID');
-if (!sampleWorkId && !skipProductWork) {
+if (!skipProductWork) {
   const { definitionId, definitionVersionId } = await bootstrapWorkDefinition(
     agentVersionId,
     environmentVersionId,
   );
-  sampleWorkId = await bootstrapWork(definitionId, definitionVersionId);
+  await bootstrapAgentWorkflowAssociation(agentVersionId, definitionId);
+  if (!sampleWorkId)
+    sampleWorkId = await bootstrapWork(definitionId, definitionVersionId);
 }
 
 await mkdir(dirname(outputPath), { recursive: true });
@@ -89,7 +92,10 @@ async function readPublished(url) {
 }
 
 async function bootstrapAgentVersion() {
-  return bootstrapPublishedAgent(managedAgentYaml(), 'web-chat-mve-agent');
+  return bootstrapPublishedAgent(
+    managedAgentYaml(),
+    'web-chat-mve-agent-work-tools',
+  );
 }
 
 async function bootstrapPublishedAgent(source, key) {
@@ -206,7 +212,7 @@ spec:
       headers: {
         authorization: `Bearer ${token}`,
         'content-type': 'application/json',
-        'idempotency-key': 'web-bootstrap-single-agent-apply-v1',
+        'idempotency-key': 'web-bootstrap-single-agent-work-tools-apply-v1',
       },
       body: JSON.stringify({ source: workDefinitionSource }),
       signal: AbortSignal.timeout(15_000),
@@ -246,6 +252,46 @@ async function bootstrapWork(definitionId, definitionVersionId) {
     fail('Work bootstrap returned no id.');
 
   return workId;
+}
+
+async function bootstrapAgentWorkflowAssociation(agentVersionId, definitionId) {
+  const version = await readPublished(
+    `${baseUrl}/api/v1/agent-versions/${agentVersionId}`,
+  );
+  const agentDefinitionId = version.definition_id;
+  if (typeof agentDefinitionId !== 'string')
+    fail('Agent bootstrap returned no definition id.');
+
+  const databaseUrl =
+    process.env.DATABASE_URL?.trim() || process.env.POSTGRES_URL?.trim();
+  if (!databaseUrl)
+    fail('DATABASE_URL or POSTGRES_URL is required to bootstrap agent workflows.');
+
+  const pool = new Pool({ connectionString: databaseUrl, max: 1 });
+  try {
+    const result = await pool.query(
+      `INSERT INTO agent_workflow_associations
+         (tenant_id,workspace_id,agent_definition_id,work_definition_id,created_at)
+       SELECT tenant_id,workspace_id,$1,id,now()
+         FROM work_definition_source_definitions
+        WHERE id=$2
+       ON CONFLICT (tenant_id,workspace_id,agent_definition_id,work_definition_id)
+       DO NOTHING`,
+      [agentDefinitionId, definitionId],
+    );
+    if (result.rowCount === 0) {
+      const existing = await pool.query(
+        `SELECT 1
+           FROM agent_workflow_associations
+          WHERE agent_definition_id=$1 AND work_definition_id=$2`,
+        [agentDefinitionId, definitionId],
+      );
+      if (existing.rowCount !== 1)
+        fail('Agent workflow association bootstrap did not persist.');
+    }
+  } finally {
+    await pool.end();
+  }
 }
 
 async function request(url, options = {}) {

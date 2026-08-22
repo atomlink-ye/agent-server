@@ -150,6 +150,7 @@ export function createRuntimeModule(options: {
     options.config.paseo.agentCwd,
     options.config.skillRegistryRoot,
     mcpHost,
+    options.logger,
   );
 
   const readiness: ReadinessProbe = options.debugRuntime

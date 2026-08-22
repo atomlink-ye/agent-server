@@ -274,7 +274,7 @@ export function createWorkModule(options: {
           : {}),
         conversationWorkLinks,
         ...(context.chatContext
-          ? { conversationOrigin: context.chatContext }
+          ? { chatContext: context.chatContext }
           : {}),
       });
     },

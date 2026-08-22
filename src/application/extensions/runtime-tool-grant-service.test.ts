@@ -221,4 +221,77 @@ describe('RuntimeToolGrantService', () => {
     ).toBeNull();
     expect(service.resolve(grant.token)).toBeNull();
   });
+
+  it('keeps an expired chat bearer unavailable until its trusted scope refreshes it', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-06T00:00:00.000Z'));
+    const service = new RuntimeToolGrantService();
+    const grant = service.issue({
+      ...base,
+      scopeId: 'chat-scope',
+      ttlMs: 10,
+      chatContext: {
+        conversationId: 'conversation-1',
+        triggerMessageId: 'trigger-1',
+      },
+    });
+    vi.advanceTimersByTime(20);
+
+    expect(service.resolve(grant.token)).toBeNull();
+    expect(service.get(grant.receipt.grantId)).toBeNull();
+    expect(() => service.beginToolCall(grant.receipt.grantId)).toThrow(
+      'Runtime grant not found.',
+    );
+
+    const refreshed = service.refreshForChatScope({
+      ...base,
+      scopeId: 'chat-scope',
+      chatContext: {
+        conversationId: 'conversation-1',
+        triggerMessageId: 'trigger-2',
+      },
+    });
+    expect(refreshed).toMatchObject({
+      grantId: grant.receipt.grantId,
+      chatContext: {
+        conversationId: 'conversation-1',
+        triggerMessageId: 'trigger-2',
+      },
+    });
+    expect(Date.parse(refreshed!.expiresAt)).toBeGreaterThan(Date.now());
+    expect(service.resolve(grant.token)?.grantId).toBe(grant.receipt.grantId);
+  });
+
+  it('rejects a chat-grant refresh unless every identity and scope field matches', () => {
+    const service = new RuntimeToolGrantService();
+    service.issue({
+      ...base,
+      scopeId: 'chat-scope',
+      chatContext: {
+        conversationId: 'conversation-1',
+        triggerMessageId: 'trigger-1',
+      },
+    });
+    const refresh = {
+      ...base,
+      scopeId: 'chat-scope',
+      chatContext: {
+        conversationId: 'conversation-1',
+        triggerMessageId: 'trigger-2',
+      },
+    };
+
+    for (const mismatch of [
+      { tenantId: 'tenant-2' },
+      { workspaceId: 'workspace-2' },
+      { principalType: 'user' },
+      { principalId: 'principal-2' },
+      { scopeId: 'other-scope' },
+    ])
+      expect(service.refreshForChatScope({ ...refresh, ...mismatch })).toBeNull();
+
+    expect(service.refreshForChatScope(refresh)?.chatContext?.triggerMessageId).toBe(
+      'trigger-2',
+    );
+  });
 });

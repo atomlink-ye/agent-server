@@ -14,28 +14,55 @@ import {
   type ExecutionExtensionBinding,
 } from '../../application/ports/execution-plane.js';
 import type { RuntimeToolGrantService } from '../../application/extensions/runtime-tool-grant-service.js';
+import type { Logger } from '../../shared/observability/logger.js';
 import { materializeOpenCodeSkill } from '../filesystem/opencode-skill-materializer.js';
 import { RuntimeMcpServer } from './runtime-mcp-server.js';
+
+type CachedChatBinding = Readonly<{
+  readonly grantId: string;
+  readonly binding: ExecutionExtensionBinding;
+}>;
+
+const MAX_CHAT_BINDINGS = 256;
 
 export class LocalRuntimeExtensionBinder implements RuntimeExtensionBinder {
   readonly #agentCwd: string;
   readonly #registryRoot: string;
   readonly #mcp: RuntimeMcpServer;
+  readonly #chatBindings = new Map<string, CachedChatBinding>();
+  readonly #logger: Logger | undefined;
 
   public constructor(
     agentCwd: string,
     registryRoot: string,
     mcp: RuntimeMcpServer,
+    logger?: Logger,
   ) {
     this.#agentCwd = resolve(agentCwd);
     this.#registryRoot = resolve(registryRoot);
     this.#mcp = mcp;
+    this.#logger = logger;
   }
 
   public async bind(
     input: Parameters<RuntimeExtensionBinder['bind']>[0],
   ): Promise<ExecutionExtensionBinding | undefined> {
     const platformCollaboration = Boolean(input.teamMemberRunId);
+    const isChatScope = Boolean(
+      input.chatContext &&
+        input.scopeId &&
+        !input.productSessionId &&
+        !platformCollaboration,
+    );
+    const chatKey = isChatScope
+      ? chatBindingKey({
+          tenantId: input.tenantId,
+          workspaceId: input.workspaceId,
+          principalType: input.principalType,
+          principalId: input.principalId,
+          scopeId: input.scopeId!,
+        })
+      : undefined;
     if (
       !input.skills.length &&
       !input.toolRefs.length &&
@@ -61,6 +88,36 @@ export class LocalRuntimeExtensionBinder implements RuntimeExtensionBinder {
 
     if (!input.productSessionId && !input.scopeId)
       throw new Error('Runtime extension scope is unavailable.');
+    if (chatKey && input.chatContext) {
+      const refreshed = this.#mcp.grants.refreshForChatScope({
+        tenantId: input.tenantId,
+        principalType: input.principalType,
+        principalId: input.principalId,
+        workspaceId: input.workspaceId,
+        scopeId: input.scopeId!,
+        allowedTools: input.toolRefs,
+        chatContext: input.chatContext,
+      });
+      if (refreshed) {
+        const cached = this.#chatBindings.get(chatKey);
+        if (!cached)
+          throw new Error('Runtime Chat extension binding is unavailable.');
+        this.#logger?.log('info', 'runtime.chat_grant.refreshed', {
+          grant_id_prefix: `${refreshed.grantId.slice(0, 8)}…`,
+          scope_id: input.scopeId,
+        });
+        return cached.binding;
+      }
+      const stale = this.#chatBindings.get(chatKey);
+      if (stale) {
+        this.#logger?.log('warn', 'runtime.chat_binding.stale', {
+          grant_id_prefix: `${stale.grantId.slice(0, 8)}…`,
+          scope_id: input.scopeId,
+        });
+        this.#chatBindings.delete(chatKey);
+        throw new Error('Runtime Chat extension binding is stale.');
+      }
+    }
     const receipt = this.#mcp.grants.issue({
       tenantId: input.tenantId,
       principalType: input.principalType,
@@ -109,7 +166,7 @@ export class LocalRuntimeExtensionBinder implements RuntimeExtensionBinder {
       await chmod(receiptPath, 0o444);
       await validateGrantReceipt(receiptPath, content);
       const url = await this.#mcp.start();
-      return {
+      const binding: ExecutionExtensionBinding = {
         mcpServers: [
           {
             name: AGENT_SERVER_EXECUTION_MCP_SERVER_NAME,
@@ -118,6 +175,12 @@ export class LocalRuntimeExtensionBinder implements RuntimeExtensionBinder {
           },
         ],
       };
+      if (chatKey)
+        this.cacheChatBinding(chatKey, {
+          grantId: receipt.receipt.grantId,
+          binding,
+        });
+      return binding;
     } catch (error) {
       this.#mcp.grants.revoke(receipt.receipt.grantId);
       if (ownedReceipt && receiptPath) {
@@ -170,6 +233,9 @@ export class LocalRuntimeExtensionBinder implements RuntimeExtensionBinder {
   }
 
   public revoke(grantId: string): void {
+    for (const [key, cached] of this.#chatBindings) {
+      if (cached.grantId === grantId) this.#chatBindings.delete(key);
+    }
     this.#mcp.grants.revoke(grantId);
   }
 
@@ -180,6 +246,35 @@ export class LocalRuntimeExtensionBinder implements RuntimeExtensionBinder {
   public activeToolCalls(grantId: string): number {
     return this.#mcp.grants.activeToolCalls(grantId);
   }
+
+  private cacheChatBinding(
+    key: string,
+    value: CachedChatBinding,
+  ): void {
+    this.#chatBindings.delete(key);
+    this.#chatBindings.set(key, value);
+    while (this.#chatBindings.size > MAX_CHAT_BINDINGS) {
+      const oldest = this.#chatBindings.keys().next().value;
+      if (typeof oldest !== 'string') break;
+      this.#chatBindings.delete(oldest);
+    }
+  }
+}
+
+function chatBindingKey(input: {
+  readonly tenantId: string;
+  readonly workspaceId: string;
+  readonly principalType: string;
+  readonly principalId: string;
+  readonly scopeId: string;
+}): string {
+  return JSON.stringify([
+    input.tenantId,
+    input.workspaceId,
+    input.principalType,
+    input.principalId,
+    input.scopeId,
+  ]);
 }
 
 async function ensureSafeDirectoryPath(path: string): Promise<void> {

@@ -67,6 +67,17 @@ export interface WorkReference {
   readonly definition_version_id: string;
 }
 
+function toConversationOrigin(
+  chatContext: RuntimeToolChatContext | null | undefined,
+): ConversationWorkOrigin | undefined {
+  return chatContext
+    ? {
+        conversationId: chatContext.conversationId,
+        triggerMessageId: chatContext.triggerMessageId,
+      }
+    : undefined;
+}
+
 /**
  * Extracted so integration tests can exercise the real `start_work`
  * provenance-writing code path without standing up a full MCP transport.
@@ -381,13 +392,15 @@ export function registerProductWorkMcpTools(input: {
   >;
 }): void {
   const { server, grant, grants } = input;
-  const conversationOrigin: ConversationWorkOrigin | undefined =
-    input.chatContext
-      ? {
-          conversationId: input.chatContext.conversationId,
-          triggerMessageId: input.chatContext.triggerMessageId,
-        }
-      : undefined;
+  const fallbackConversationOrigin = toConversationOrigin(input.chatContext);
+  const currentConversationOrigin = (
+    current: RuntimeToolGrant,
+  ): ConversationWorkOrigin | undefined => {
+    if (current.chatContext) return toConversationOrigin(current.chatContext);
+    if (input.chatContext)
+      throw new Error('Chat runtime grant context is unavailable.');
+    return fallbackConversationOrigin;
+  };
   if (grant.catalogTools.includes(PRODUCT_WORK_CREATE_TOOL_REF))
     (server.registerTool as any)(
       'product_work_create',
@@ -540,6 +553,7 @@ export function registerProductWorkMcpTools(input: {
           };
         grants.beginToolCall(current.grantId);
         try {
+          const conversationOrigin = currentConversationOrigin(current);
           return await executeOneCallWorkStart(args, {
             workIdentity: input.workIdentity,
             startWorkRun: input.startWorkRun,
@@ -581,6 +595,7 @@ export function registerProductWorkMcpTools(input: {
           };
         grants.beginToolCall(current.grantId);
         try {
+          const conversationOrigin = currentConversationOrigin(current);
           return await executeProductWorkRunStart(args, {
             startWorkRun: input.startWorkRun,
             ...(input.conversations
@@ -623,6 +638,7 @@ export function registerProductWorkMcpTools(input: {
           };
         grants.beginToolCall(current.grantId);
         try {
+          const conversationOrigin = currentConversationOrigin(current);
           return await executeContinueWork(args, {
             workIdentity: input.workIdentity,
             startWorkRun: input.startWorkRun,

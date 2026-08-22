@@ -1,13 +1,13 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
 
-import { chatCommands } from '../features/conversations/conversations-gateway';
-import type { ChatCommands } from '../features/conversations/components/contracts';
-import { createAppStore, type AppStore } from '../stores/app';
+import { chatCommands } from '../../features/conversations/conversations-gateway';
+import type { ChatCommands } from '../../features/conversations/contracts';
+import { createAppStore, type AppStore } from '../../features/conversations/stores/app';
 import {
   createConversationsStore,
   type ConversationsStore,
-} from '../stores/conversations';
-import { createMessagesStore, type MessagesStore } from '../stores/messages';
+} from '../../features/conversations/stores/conversations';
+import { createMessagesStore, type MessagesStore } from '../../features/conversations/stores/messages';
 
 export interface AppRuntime {
   readonly commands: ChatCommands;

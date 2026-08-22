@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import type { ConversationId, ChatMessage } from './contracts';
-import type { ConversationMessagesState } from '../../../stores/messages';
+import type { ConversationMessagesState } from '../stores/messages';
 import { WorkCard } from '../../work/components/WorkCard';
 
 export interface ChatTranscriptProps {

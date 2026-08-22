@@ -1,12 +1,7 @@
 import { useEffect, useState } from 'react';
-import type {
-  ChatCommands,
-  WorkListItem,
-  WorkListProductState,
-} from '../conversations/components/contracts';
+import { loadWorks, type WorkListItem } from './work-gateway';
 
 export interface WorkPaneProps {
-  readonly commands: ChatCommands;
   readonly onOpenWork: (workId: string) => void;
   readonly onCreateNew: () => void;
   readonly selectedWorkId?: string | null;
@@ -18,7 +13,6 @@ type WorkPaneState =
   | { readonly status: 'error'; readonly works: readonly WorkListItem[]; readonly error: string };
 
 export function WorkPane({
-  commands,
   onOpenWork,
   onCreateNew,
   selectedWorkId = null,
@@ -30,8 +24,8 @@ export function WorkPane({
 
   const load = (): void => {
     setState((current) => ({ status: 'loading', works: current.works }));
-    void commands.loadWorks()
-      .then((works) => setState({ status: 'ready', works }))
+    void loadWorks()
+      .then((response) => setState({ status: 'ready', works: response.works }))
       .catch((error: unknown) => {
         setState((current) => ({
           status: 'error',
@@ -44,9 +38,9 @@ export function WorkPane({
   useEffect(() => {
     let active = true;
     setState({ status: 'loading', works: [] });
-    void commands.loadWorks()
-      .then((works) => {
-        if (active) setState({ status: 'ready', works });
+    void loadWorks()
+      .then((response) => {
+        if (active) setState({ status: 'ready', works: response.works });
       })
       .catch((error: unknown) => {
         if (!active) return;
@@ -59,7 +53,7 @@ export function WorkPane({
     return () => {
       active = false;
     };
-  }, [commands.loadWorks]);
+  }, []);
 
   return (
     <aside className="sidebar work-pane" aria-label="Work navigation">
@@ -121,11 +115,11 @@ export function WorkPane({
             <span className="work-list-copy">
               <strong>{work.title}</strong>
               <span>
-                <span className={`work-status-dot work-status-dot--${work.productState}`} />
-                {workStateLabel(work.productState)}
+                <span className={`work-status-dot work-status-dot--${work.product_state}`} />
+                {workStateLabel(work.product_state)}
               </span>
             </span>
-            <time dateTime={work.updatedAt}>{formatUpdatedTime(work.updatedAt)}</time>
+            <time dateTime={work.updated_at}>{formatUpdatedTime(work.updated_at)}</time>
           </button>
         ))}
       </div>
@@ -133,7 +127,7 @@ export function WorkPane({
   );
 }
 
-function workStateLabel(state: WorkListProductState): string {
+function workStateLabel(state: WorkListItem['product_state']): string {
   switch (state) {
     case 'running':
       return 'Running';

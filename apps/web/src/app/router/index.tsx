@@ -1,7 +1,8 @@
 import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
 
-import { useAppRuntime } from './providers';
-import AppShell from './shell/AppShell';
+import { useAppRuntime } from '../providers';
+import AppShell from '../shell/AppShell';
+import { parseSessionIndex } from '../routes';
 
 export function AppRouter() {
   return (
@@ -40,7 +41,7 @@ function WorkspaceRoute() {
       routeConversationId={conversationId ?? null}
       returnConversationId={returnConversationId}
       selectedRunId={query.get('run')}
-      selectedSessionIndex={query.get('session')}
+      selectedSessionIndex={parseSessionIndex(query.get('session'))}
       selectedWorkId={workId ?? null}
       workTab={query.get('tab')}
     />

@@ -1,11 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import type {
-  ChatCommands,
-  Conversation,
-  Coworker,
-  WorkListItem,
-} from '../conversations/components/contracts';
+import { loadConversations } from '../conversations/conversations-gateway';
+import { loadCoworkers } from '../agents/agents-gateway';
+import { loadWorks } from '../work/work-gateway';
 import {
   admitConversationToWork,
   loadContextFile,
@@ -17,6 +14,11 @@ import {
   type ContextScopeRequest,
 } from './files-gateway';
 import TitleBar from '../../app/shell/TitleBar';
+import './files.css';
+
+type Conversation = Awaited<ReturnType<typeof loadConversations>>[number];
+type Coworker = Awaited<ReturnType<typeof loadCoworkers>>[number];
+type WorkListItem = Awaited<ReturnType<typeof loadWorks>>['works'][number];
 
 type ScopeChoice = Readonly<{
   key: string;
@@ -28,7 +30,7 @@ type ScopeChoice = Readonly<{
   agent?: Coworker;
 }>;
 
-export function FilesPage({ commands }: { readonly commands: ChatCommands }) {
+export function FilesPage() {
   const [coworkers, setCoworkers] = useState<readonly Coworker[]>([]);
   const [conversations, setConversations] = useState<readonly Conversation[]>([]);
   const [works, setWorks] = useState<readonly WorkListItem[]>([]);
@@ -42,9 +44,9 @@ export function FilesPage({ commands }: { readonly commands: ChatCommands }) {
   useEffect(() => {
     let active = true;
     void Promise.all([
-      commands.loadCoworkers(),
-      commands.loadConversations(),
-      commands.loadWorks(),
+      loadCoworkers(),
+      loadConversations(),
+      loadWorks().then((response) => response.works),
     ]).then(
       ([nextCoworkers, nextConversations, nextWorks]) => {
         if (!active) return;
@@ -59,7 +61,7 @@ export function FilesPage({ commands }: { readonly commands: ChatCommands }) {
     return () => {
       active = false;
     };
-  }, [commands]);
+  }, []);
 
   const choices = useMemo<readonly ScopeChoice[]>(() => {
     const result: ScopeChoice[] = [
@@ -180,9 +182,9 @@ export function FilesPage({ commands }: { readonly commands: ChatCommands }) {
 
   return (
     <>
-      <aside className="sidebar n3-pane" aria-label="Files and Context navigation">
+      <aside className="sidebar files-pane" aria-label="Files and Context navigation">
         <div className="pane-heading"><div><span className="eyebrow">Shared world</span><h1>Files</h1></div></div>
-        <div className="n3-scope-list">
+        <div className="files-scope-list">
           {choices.map((choice) => (
             <button
               type="button"
@@ -196,17 +198,17 @@ export function FilesPage({ commands }: { readonly commands: ChatCommands }) {
         </div>
       </aside>
 
-      <main className="chat-panel n3-main">
+      <main className="chat-panel files-main">
         <TitleBar section="Files" />
-        <section className="n3-files" aria-label="Context files">
-          <header className="n3-files-header">
+        <section className="files-files" aria-label="Context files">
+          <header className="files-files-header">
             <div><span className="eyebrow">{selected.kind}</span><h1>{selected.label}</h1></div>
-            <span className="n3-access">{listing?.access === 'read_only' ? 'Read only' : 'Read / write'}</span>
+            <span className="files-access">{listing?.access === 'read_only' ? 'Read only' : 'Read / write'}</span>
           </header>
-          {error ? <p className="n3-error" role="alert">{error}</p> : null}
-          {notice ? <p className="n3-notice" role="status">{notice}</p> : null}
-          <div className="n3-files-grid">
-            <div className="n3-file-list">
+          {error ? <p className="files-error" role="alert">{error}</p> : null}
+          {notice ? <p className="files-notice" role="status">{notice}</p> : null}
+          <div className="files-files-grid">
+            <div className="files-file-list">
               {listing === null ? <p className="pane-placeholder">Loading context…</p> : null}
               {listing?.entries.length === 0 ? <p className="pane-placeholder">No files in this canonical scope.</p> : null}
               {listing?.entries.map((entry) => (
@@ -216,12 +218,12 @@ export function FilesPage({ commands }: { readonly commands: ChatCommands }) {
                 </button>
               ))}
             </div>
-            <article className="n3-file-viewer">
+            <article className="files-file-viewer">
               {!file ? <div className="work-main-empty"><span className="work-main-icon">▱</span><h1>Choose a file</h1><p>This surface shows ContextFS product facts, never a provider cwd.</p></div> : (
                 <>
-                  <header><div><span className="eyebrow">Canonical ContextFS</span><h2>{file.path}</h2></div><span className="n3-mono">{shortHash(file.contentSha256)}</span></header>
+                  <header><div><span className="eyebrow">Canonical ContextFS</span><h2>{file.path}</h2></div><span className="files-mono">{shortHash(file.contentSha256)}</span></header>
                   <pre>{file.content}</pre>
-                  <div className="n3-file-actions">
+                  <div className="files-file-actions">
                     {selected.conversation?.directAgent ? (
                       <button type="button" onClick={() => void promoteToRelationship()}>Promote to my memory</button>
                     ) : null}

@@ -4,10 +4,10 @@ import type {
   Conversation,
   ConversationId,
   Coworker,
-} from './components/contracts';
+} from './contracts';
 import { ConversationsList } from './components/ConversationsList';
-import type { AppStore } from '../../stores/app';
-import type { ConversationsStore } from '../../stores/conversations';
+import type { AppStore } from './stores/app';
+import type { ConversationsStore } from './stores/conversations';
 
 export interface ConversationsPaneProps {
   readonly commands: ChatCommands;

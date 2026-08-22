@@ -6,7 +6,7 @@ import type {
   Coworker,
   WorkListItem,
   WorkListProductState,
-} from './components/contracts';
+} from './contracts';
 import { apiTransport, ApiTransportError } from '../../api/transport';
 
 export type WorkProductState = 'running' | 'needs_you' | 'complete' | 'problem';
@@ -36,14 +36,14 @@ export const isUuid = (value: unknown): value is string =>
   );
 
 export async function loadCoworkers(): Promise<readonly Coworker[]> {
-  const payload = asRecord(await apiTransport.request<unknown>('/api/agents'));
+  const payload = asRecord(await apiTransport.request('/api/agents'));
   const values = payload?.items;
   if (!Array.isArray(values)) throw invalidResponse();
   return values.map(normalizeCoworker);
 }
 
 export async function loadConversations(): Promise<readonly Conversation[]> {
-  const payload = asRecord(await apiTransport.request<unknown>('/api/conversations'));
+  const payload = asRecord(await apiTransport.request('/api/conversations'));
   const values = payload?.conversations;
   if (!Array.isArray(values)) throw invalidResponse();
   return values.map(normalizeConversation);
@@ -53,7 +53,7 @@ export async function createConversation(
   agentDefinitionId: string,
 ): Promise<Conversation> {
   const payload = asRecord(
-    await apiTransport.request<unknown>('/api/conversations', {
+    await apiTransport.request('/api/conversations', {
       method: 'POST',
       body: JSON.stringify({ agent_definition_id: agentDefinitionId }),
     }),
@@ -64,7 +64,7 @@ export async function createConversation(
 }
 
 export async function loadWorks(): Promise<readonly WorkListItem[]> {
-  const payload = asRecord(await apiTransport.request<unknown>('/api/works'));
+  const payload = asRecord(await apiTransport.request('/api/works'));
   const values = payload?.works;
   if (!Array.isArray(values)) throw invalidResponse();
   return values.map(normalizeWorkListItem);
@@ -74,7 +74,7 @@ export async function loadMessages(
   conversationId: ConversationId,
 ): Promise<readonly ChatMessage[]> {
   const payload = asRecord(
-    await apiTransport.request<unknown>(
+    await apiTransport.request(
       `/api/conversations/${encodeURIComponent(conversationId)}/messages`,
     ),
   );
@@ -92,7 +92,7 @@ export async function sendMessage(
   body: string,
 ): Promise<ChatMessage> {
   const payload = asRecord(
-    await apiTransport.request<unknown>(
+    await apiTransport.request(
       `/api/conversations/${encodeURIComponent(conversationId)}/messages`,
       {
         method: 'POST',
@@ -109,7 +109,7 @@ export async function loadWorkCard(workId: string): Promise<WorkChatCard> {
   if (!isUuid(workId))
     throw new ApiTransportError(400, 'invalid_request', 'This Work is unavailable.');
   const card = asRecord(
-    await apiTransport.request<unknown>(
+    await apiTransport.request(
       `/api/works/${encodeURIComponent(workId)}/chat-card`,
     ),
   );

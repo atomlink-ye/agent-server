@@ -1,16 +1,15 @@
 import { useLocation, useNavigate } from 'react-router-dom';
 
-import type { ChatCommands } from '../../features/conversations/components/contracts';
+import type { ChatCommands } from '../../features/conversations/contracts';
 import { ConversationsPage } from '../../features/conversations/ConversationsPage';
 import AgentsPage from '../../features/agents/AgentsPage';
 import FilesPage from '../../features/files/FilesPage';
 import { WorkPage } from '../../features/work/WorkPage';
-import type { AppStore } from '../../stores/app';
-import type { ConversationsStore } from '../../stores/conversations';
-import type { MessagesStore } from '../../stores/messages';
+import type { AppStore } from '../../features/conversations/stores/app';
+import type { ConversationsStore } from '../../features/conversations/stores/conversations';
+import type { MessagesStore } from '../../features/conversations/stores/messages';
 import { conversationPath, workPath, workRootPath } from '../routes';
 import Rail, { type DesktopTab } from './Rail';
-import './shell.css';
 
 export interface AppShellProps {
   readonly commands: ChatCommands;
@@ -22,7 +21,7 @@ export interface AppShellProps {
   readonly selectedWorkId?: string | null;
   readonly workTab?: string | null;
   readonly selectedRunId?: string | null;
-  readonly selectedSessionIndex?: string | null;
+  readonly selectedSessionIndex?: number | null;
 }
 
 export function AppShell({
@@ -75,11 +74,10 @@ export function AppShell({
           returnConversationId={returnConversationId}
         />
       ) : null}
-      {activeTab === 'agents' ? <AgentsPage commands={commands} /> : null}
-      {activeTab === 'files' ? <FilesPage commands={commands} /> : null}
+      {activeTab === 'agents' ? <AgentsPage /> : null}
+      {activeTab === 'files' ? <FilesPage /> : null}
       {activeTab === 'work' ? (
         <WorkPage
-          commands={commands}
           returnConversationId={returnConversationId}
           selectedWorkId={selectedWorkId}
           workTab={workTab}

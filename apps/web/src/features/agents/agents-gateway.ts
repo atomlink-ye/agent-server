@@ -1,5 +1,11 @@
-import type { Coworker } from '../conversations/components/contracts';
+import type { Coworker } from './contracts';
 import { apiTransport } from '../../api/transport';
+
+export async function loadCoworkers(): Promise<readonly Coworker[]> {
+  const root = record(await apiTransport.request('/api/agents'));
+  if (!Array.isArray(root?.items)) throw new Error('Invalid Coworker response.');
+  return root.items.map(normalizeCoworker);
+}
 
 export interface CoworkerProfile {
   readonly agent: Coworker;
@@ -12,7 +18,7 @@ export interface CoworkerProfile {
 }
 
 export async function loadCoworkerProfile(agentId: string): Promise<CoworkerProfile> {
-  const payload = await apiTransport.request<unknown>(
+  const payload = await apiTransport.request(
     `/api/agents/${encodeURIComponent(agentId)}/profile`,
   );
   const root = record(payload);
@@ -41,6 +47,17 @@ function record(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null;
+}
+function normalizeCoworker(value: unknown): Coworker {
+  const agent = record(value);
+  return {
+    id: text(agent?.id),
+    displayName: text(agent?.display_name),
+    roleLabel: nullableText(agent?.role_label),
+    summary: nullableText(agent?.summary),
+    activeAgentVersionId: text(agent?.active_agent_version_id),
+    runtimeStatus: runtimeStatus(agent?.runtime_status),
+  };
 }
 function text(value: unknown): string {
   if (typeof value !== 'string' || !value.trim()) throw new Error('Invalid Coworker profile.');

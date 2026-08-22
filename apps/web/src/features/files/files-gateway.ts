@@ -111,7 +111,7 @@ async function post(path: string, body: Record<string, unknown>): Promise<unknow
   return json(path, { method: 'POST', body: JSON.stringify(body) });
 }
 async function json(path: string, init: RequestInit = {}): Promise<unknown> {
-  return apiTransport.request<unknown>(path, init);
+  return apiTransport.request(path, init);
 }
 function scopeParams(request: ContextScopeRequest): string {
   const params = new URLSearchParams({ scope: request.scope });

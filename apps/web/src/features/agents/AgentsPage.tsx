@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
-import type { ChatCommands, Coworker } from '../conversations/components/contracts';
-import { loadCoworkerProfile, type CoworkerProfile } from './agents-gateway';
+import { createConversation } from '../conversations/conversations-gateway';
+import { loadCoworkers, loadCoworkerProfile, type CoworkerProfile } from './agents-gateway';
+import type { Coworker } from './contracts';
 import TitleBar from '../../app/shell/TitleBar';
+import './agents.css';
 
-export function AgentsPage({ commands }: { readonly commands: ChatCommands }) {
+export function AgentsPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const selectedAgentId = useMemo(() => {
@@ -21,7 +23,7 @@ export function AgentsPage({ commands }: { readonly commands: ChatCommands }) {
   useEffect(() => {
     let active = true;
     setLoading(true);
-    void commands.loadCoworkers().then(
+    void loadCoworkers().then(
       (items) => {
         if (!active) return;
         setAgents(items);
@@ -38,7 +40,7 @@ export function AgentsPage({ commands }: { readonly commands: ChatCommands }) {
     return () => {
       active = false;
     };
-  }, [commands, navigate, selectedAgentId]);
+  }, [navigate, selectedAgentId]);
 
   useEffect(() => {
     if (!selectedAgentId) {
@@ -62,7 +64,7 @@ export function AgentsPage({ commands }: { readonly commands: ChatCommands }) {
     setOpening(true);
     setError(null);
     try {
-      const conversation = await commands.createConversation(selectedAgentId);
+      const conversation = await createConversation(selectedAgentId);
       navigate('/', { state: { returnConversationId: conversation.id } });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
@@ -72,39 +74,39 @@ export function AgentsPage({ commands }: { readonly commands: ChatCommands }) {
 
   return (
     <>
-      <aside className="sidebar n3-pane" aria-label="Agents navigation">
+      <aside className="sidebar agents-pane" aria-label="Agents navigation">
         <div className="pane-heading">
           <div><span className="eyebrow">Coworkers</span><h1>Agents</h1></div>
         </div>
-        <div className="n3-list">
+        <div className="agents-list">
           {loading && agents.length === 0 ? <p className="pane-placeholder">Loading Agents…</p> : null}
           {agents.map((agent) => (
             <button
               type="button"
-              className="n3-list-item"
+              className="agents-list-item"
               data-active={selectedAgentId === agent.id ? 'true' : 'false'}
               aria-current={selectedAgentId === agent.id ? 'page' : undefined}
               key={agent.id}
               onClick={() => navigate(`/agents/${encodeURIComponent(agent.id)}`)}
             >
-              <span className="n3-avatar" aria-hidden="true">{agent.displayName.slice(0, 1).toUpperCase()}</span>
+              <span className="agents-avatar" aria-hidden="true">{agent.displayName.slice(0, 1).toUpperCase()}</span>
               <span><strong>{agent.displayName}</strong><small>{agent.roleLabel ?? 'Coworker'}</small></span>
-              <span className={`n3-runtime n3-runtime--${agent.runtimeStatus}`}>{agent.runtimeStatus}</span>
+              <span className={`agents-runtime agents-runtime--${agent.runtimeStatus}`}>{agent.runtimeStatus}</span>
             </button>
           ))}
         </div>
       </aside>
 
-      <main className="chat-panel n3-main">
+      <main className="chat-panel agents-main">
         <TitleBar section="Agents" />
-        <section className="n3-detail" aria-label="Agent profile">
-          {error ? <p className="n3-error" role="alert">{error}</p> : null}
+        <section className="agents-detail" aria-label="Agent profile">
+          {error ? <p className="agents-error" role="alert">{error}</p> : null}
           {!profile ? (
             <div className="work-main-empty"><span className="work-main-icon">◎</span><h1>Choose an Agent</h1><p>Open a canonical Coworker profile.</p></div>
           ) : (
             <>
-              <header className="n3-profile-header">
-                <span className="n3-profile-avatar" aria-hidden="true">{profile.agent.displayName.slice(0, 1).toUpperCase()}</span>
+              <header className="agents-profile-header">
+                <span className="agents-profile-avatar" aria-hidden="true">{profile.agent.displayName.slice(0, 1).toUpperCase()}</span>
                 <div>
                   <span className="eyebrow">AI Coworker</span>
                   <h1>{profile.agent.displayName}</h1>
@@ -114,22 +116,22 @@ export function AgentsPage({ commands }: { readonly commands: ChatCommands }) {
                   {opening ? 'Opening…' : 'Open conversation'}
                 </button>
               </header>
-              <div className="n3-card-grid">
-                <article className="n3-card">
+              <div className="agents-card-grid">
+                <article className="agents-card">
                   <h2>About</h2>
                   <p>{profile.agent.summary ?? 'No summary provided.'}</p>
                   <dl>
                     <dt>Runtime</dt><dd>{profile.agent.runtimeStatus}</dd>
-                    <dt>Published version</dt><dd className="n3-mono">{profile.agent.activeAgentVersionId}</dd>
+                    <dt>Published version</dt><dd className="agents-mono">{profile.agent.activeAgentVersionId}</dd>
                     <dt>Model policy</dt><dd>{profile.capabilities.modelPolicyRef}</dd>
                   </dl>
                 </article>
-                <article className="n3-card">
+                <article className="agents-card">
                   <h2>Capabilities</h2>
                   <h3>Tools</h3>
-                  <div className="n3-chips">{profile.capabilities.tools.length ? profile.capabilities.tools.map((tool) => <span key={tool}>{tool}</span>) : <em>No declared tools</em>}</div>
+                  <div className="agents-chips">{profile.capabilities.tools.length ? profile.capabilities.tools.map((tool) => <span key={tool}>{tool}</span>) : <em>No declared tools</em>}</div>
                   <h3>Skills</h3>
-                  <div className="n3-chips">{profile.capabilities.skills.length ? profile.capabilities.skills.map((skill) => <span key={skill}>{skill}</span>) : <em>No declared skills</em>}</div>
+                  <div className="agents-chips">{profile.capabilities.skills.length ? profile.capabilities.skills.map((skill) => <span key={skill}>{skill}</span>) : <em>No declared skills</em>}</div>
                 </article>
               </div>
             </>

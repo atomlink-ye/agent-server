@@ -3,6 +3,7 @@ import type {
   ProductWorkRunDetail,
   WorkListItem,
 } from '@atomlink-ye/agent-server/product-contract';
+import { workTabPath } from '../../../app/routes';
 
 export type WorkTab = 'overview' | 'runs' | 'transcript' | 'artifacts' | 'definition';
 
@@ -23,13 +24,13 @@ export function normalizeWorkTab(value: string | undefined): WorkTab {
     : 'overview';
 }
 
-export function workTabHref(workId: string, tab: WorkTab, runId?: string) {
-  const query = new URLSearchParams();
-  if (tab !== 'overview') query.set('tab', tab);
-  if (runId) query.set('run', runId);
-  const encodedWorkId = encodeURIComponent(workId);
-  const suffix = query.toString();
-  return `/work/${encodedWorkId}${suffix ? `?${suffix}` : ''}`;
+export function workTabHref(
+  workId: string,
+  tab: WorkTab,
+  runId?: string,
+  originConversationId?: string | null,
+) {
+  return workTabPath(workId, tab, runId ?? null, originConversationId ?? null);
 }
 
 export function productStatePresentation(state: WorkListItem['product_state']) {

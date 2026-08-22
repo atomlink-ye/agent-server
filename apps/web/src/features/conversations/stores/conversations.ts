@@ -1,5 +1,5 @@
 import type { AppStore } from './app';
-import type { Conversation } from '../features/conversations/components/contracts';
+import type { Conversation } from '../contracts';
 import type { StoreListener } from './app';
 
 export type ConversationListStatus = 'idle' | 'loading' | 'ready' | 'error';

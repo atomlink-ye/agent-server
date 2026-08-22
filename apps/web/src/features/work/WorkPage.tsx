@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import type { ChatCommands } from '../conversations/components/contracts';
 import { NewWork } from './components/new-work';
 import { WorkDetailShell } from './components/work-shell';
 import { workPath, workRootPath } from '../../app/routes';
@@ -10,16 +9,14 @@ import WorkPane from './WorkPane';
 import './work-page.css';
 
 export interface WorkPageProps {
-  readonly commands: ChatCommands;
   readonly returnConversationId?: string | null;
   readonly selectedWorkId?: string | null;
   readonly workTab?: string | null;
   readonly selectedRunId?: string | null;
-  readonly selectedSessionIndex?: string | null;
+  readonly selectedSessionIndex?: number | null;
 }
 
 export function WorkPage({
-  commands,
   returnConversationId = null,
   selectedWorkId = null,
   workTab = null,
@@ -49,7 +46,6 @@ export function WorkPage({
   return (
     <>
       <WorkPane
-        commands={commands}
         onCreateNew={() => {
           navigate(workRootPath(returnConversationId));
           setShowNewWork(true);
@@ -67,13 +63,14 @@ export function WorkPage({
               </button>
             </div>
           ) : null}
-          {showNewWork ? <NewWork /> : null}
+          {showNewWork ? <NewWork originConversationId={returnConversationId} /> : null}
           {!showNewWork && selectedWorkId ? (
             <WorkDetailShell
               workId={selectedWorkId}
               tab={workTab ?? undefined}
               selectedRunId={selectedRunId ?? undefined}
               selectedSessionIndex={selectedSessionIndex ?? undefined}
+              originConversationId={returnConversationId}
             />
           ) : null}
           {!showNewWork && !selectedWorkId ? (

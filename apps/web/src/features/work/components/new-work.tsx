@@ -21,7 +21,7 @@ type AuthoringState =
   | 'applied'
   | 'error';
 
-export function NewWork() {
+export function NewWork({ originConversationId = null }: { readonly originConversationId?: string | null }) {
   const [source, setSource] = useState('');
   const [title, setTitle] = useState('');
   const [state, setState] = useState<AuthoringState>('idle');
@@ -98,7 +98,7 @@ export function NewWork() {
   async function createWork(definitionId: string, versionId: string) {
     try {
       const created = await createWorkRequest(definitionId, versionId, title);
-      window.location.assign(workTabHref(created.workId, 'definition'));
+      window.location.assign(workTabHref(created.workId, 'definition', undefined, originConversationId));
     } catch (error) {
       setState('error');
       setStatusMessage(error instanceof Error ? error.message : 'The Work could not be created.');

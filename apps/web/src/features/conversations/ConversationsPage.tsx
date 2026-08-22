@@ -2,20 +2,21 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useSyncExternalStore,
 } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ChatComposer } from './components/ChatComposer';
 import { ChatTranscript } from './components/ChatTranscript';
-import type { ChatCommands } from './components/contracts';
+import type { ChatCommands } from './contracts';
 import { ConversationsPane } from './ConversationsPane';
 import TitleBar from '../../app/shell/TitleBar';
-import { createAppStore, type AppStore } from '../../stores/app';
+import { createAppStore, type AppStore } from './stores/app';
 import {
   createConversationsStore,
   type ConversationsStore,
-} from '../../stores/conversations';
-import { createMessagesStore, type MessagesStore } from '../../stores/messages';
+} from './stores/conversations';
+import { createMessagesStore, type MessagesStore } from './stores/messages';
 import { conversationPath, workPath } from '../../app/routes';
 
 export interface ConversationsPageProps {
@@ -55,6 +56,7 @@ export function ConversationsPage({
     () => providedMessagesStore ?? createMessagesStore(),
     [providedMessagesStore],
   );
+  const initialSelectionResolved = useRef(false);
 
   const selection = useSyncExternalStore(
     appSelectionStore.subscribe,
@@ -155,12 +157,14 @@ export function ConversationsPage({
     }
 
     const selected = appSelectionStore.getSnapshot().selectedConversationId;
+    if (!selected && initialSelectionResolved.current) return;
     if (!selected && location.pathname !== '/') return;
     const selectedExists = selected
       ? conversations.some(({ id }) => id === selected)
       : false;
     const nextConversationId = selectedExists ? selected! : conversations[0]!.id;
     appSelectionStore.select(nextConversationId);
+    initialSelectionResolved.current = true;
     if (location.pathname === '/') {
       navigate(conversationPath(nextConversationId), { replace: true });
     }

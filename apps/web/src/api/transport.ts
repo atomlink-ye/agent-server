@@ -13,7 +13,7 @@ export class ApiTransportError extends Error {
 }
 
 export class ApiTransport {
-  async request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  async request(path: string, init: RequestInit = {}): Promise<unknown> {
     let response: Response;
     try {
       response = await fetch(path, {
@@ -48,7 +48,7 @@ export class ApiTransport {
         'The service returned an invalid response.',
       );
     }
-    return payload as T;
+    return payload;
   }
 }
 

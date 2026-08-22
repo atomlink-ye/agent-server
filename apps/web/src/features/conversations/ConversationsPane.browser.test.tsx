@@ -7,9 +7,9 @@ import type {
   ChatCommands,
   Conversation,
   Coworker,
-} from './components/contracts';
-import { createAppStore } from '../../stores/app';
-import { createConversationsStore } from '../../stores/conversations';
+} from './contracts';
+import { createAppStore } from './stores/app';
+import { createConversationsStore } from './stores/conversations';
 
 (
   globalThis as typeof globalThis & {

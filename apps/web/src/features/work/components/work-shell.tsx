@@ -33,6 +33,7 @@ import {
   type RoleSummary,
   type WorkDetailData,
 } from '@/features/work/work-gateway';
+import { workTabPath } from '@/app/routes';
 import './work-shell.css';
 import './work-shell-overrides.css';
 
@@ -127,11 +128,13 @@ export function WorkDetailShell({
   tab,
   selectedRunId,
   selectedSessionIndex,
+  originConversationId,
 }: {
   readonly workId: string;
   readonly tab?: string;
   readonly selectedRunId?: string;
-  readonly selectedSessionIndex?: string;
+  readonly selectedSessionIndex?: number;
+  readonly originConversationId?: string | null;
 }) {
   const [state, setState] = useState<LoadState>('loading');
   const [detail, setDetail] = useState<WorkDetailData | null>(null);
@@ -206,6 +209,7 @@ export function WorkDetailShell({
           data={detail}
           selectedRunId={selectedRunId}
           selectedSessionIndex={selectedSessionIndex}
+          originConversationId={originConversationId}
         />
       ) : null}
     </WorkShellFrame>
@@ -257,11 +261,13 @@ function WorkDetail({
   data,
   selectedRunId,
   selectedSessionIndex,
+  originConversationId,
 }: {
   readonly activeTab: WorkTab;
   readonly data: WorkDetailData;
   readonly selectedRunId?: string;
-  readonly selectedSessionIndex?: string;
+  readonly selectedSessionIndex?: number;
+  readonly originConversationId?: string | null;
 }) {
   const { work, run } = data;
   const runId = run?.work_run.id;
@@ -290,19 +296,20 @@ function WorkDetail({
           </p>
         </div>
       </header>
-      <RunTrigger workId={work.id} />
+      <RunTrigger workId={work.id} originConversationId={originConversationId} />
       <WorkTabs
         activeTab={activeTab}
         definitionRunId={undefined}
         runId={runId}
         workId={work.id}
+        originConversationId={originConversationId}
       />
-      {activeTab === 'overview' ? <OverviewPanel data={data} key={data.run?.work_run.id} /> : null}
-      {activeTab === 'runs' ? <RunsPanel data={data} /> : null}
+      {activeTab === 'overview' ? <OverviewPanel data={data} originConversationId={originConversationId} key={data.run?.work_run.id} /> : null}
+      {activeTab === 'runs' ? <RunsPanel data={data} originConversationId={originConversationId} /> : null}
       {activeTab === 'transcript' ? (
         <TranscriptPanel
           data={data}
-          selectedSessionIndex={selectedSessionIndex ? Number(selectedSessionIndex) : undefined}
+          selectedSessionIndex={selectedSessionIndex}
         />
       ) : null}
       {activeTab === 'artifacts' ? <ArtifactsUnavailable /> : null}
@@ -317,6 +324,7 @@ function WorkDetail({
           version={data.definitionVersion}
           workDefinitionId={work.definition_id}
           workId={work.id}
+          originConversationId={originConversationId}
         />
       ) : null}
     </>
@@ -328,11 +336,13 @@ function WorkTabs({
   definitionRunId,
   runId,
   workId,
+  originConversationId,
 }: {
   readonly activeTab: WorkTab;
   readonly definitionRunId: string | undefined;
   readonly runId: string | undefined;
   readonly workId: string;
+  readonly originConversationId?: string | null;
 }) {
   return (
     <nav className="work-tabs" aria-label="Work detail sections">
@@ -341,7 +351,7 @@ function WorkTabs({
         return (
           <a
             aria-current={activeTab === tab.id ? 'page' : undefined}
-            href={workTabHref(workId, tab.id, targetRunId)}
+            href={workTabHref(workId, tab.id, targetRunId, originConversationId)}
             key={tab.id}
           >
             {tab.label}
@@ -352,7 +362,7 @@ function WorkTabs({
   );
 }
 
-function RunRoleCards({ trace, workId, runId }: { readonly trace: AnchoredTrace; readonly workId: string; readonly runId: string }) {
+function RunRoleCards({ trace, workId, runId, originConversationId }: { readonly trace: AnchoredTrace; readonly workId: string; readonly runId: string; readonly originConversationId?: string | null }) {
   const [sessions, setSessions] = useState<readonly RoleSummary[] | null>(null);
 
   useEffect(() => {
@@ -382,7 +392,7 @@ function RunRoleCards({ trace, workId, runId }: { readonly trace: AnchoredTrace;
             className="work-role-card"
             key={`${session.label.name}-${index}`}
             onClick={() => {
-              window.location.assign(`${workTabHref(workId, 'transcript', runId)}&session=${index}`);
+              window.location.assign(workTabPath(workId, 'transcript', runId, originConversationId ?? null, index));
             }}
             title={title}
             type="button"
@@ -397,7 +407,7 @@ function RunRoleCards({ trace, workId, runId }: { readonly trace: AnchoredTrace;
   );
 }
 
-function OverviewPanel({ data }: { readonly data: WorkDetailData }) {
+function OverviewPanel({ data, originConversationId }: { readonly data: WorkDetailData; readonly originConversationId?: string | null }) {
   const [selectedAttemptId, setSelectedAttemptId] = useState<string | null>(null);
   const [traceView, setTraceView] = useState<TraceView>('timeline');
   if (!data.run || !data.trace)
@@ -444,7 +454,7 @@ function OverviewPanel({ data }: { readonly data: WorkDetailData }) {
         view={traceView}
         onViewChange={setTraceView}
       />
-      <RunRoleCards trace={trace} workId={data.work.id} runId={run.work_run.id} />
+      <RunRoleCards trace={trace} workId={data.work.id} runId={run.work_run.id} originConversationId={originConversationId} />
       <RunReview
         run={run}
         trace={trace}
@@ -674,7 +684,7 @@ function ReviewFact({
   );
 }
 
-function RunsPanel({ data }: { readonly data: WorkDetailData }) {
+function RunsPanel({ data, originConversationId }: { readonly data: WorkDetailData; readonly originConversationId?: string | null }) {
   if (data.runs.length === 0)
     return (
       <section className="work-detail-state">
@@ -723,10 +733,10 @@ function RunsPanel({ data }: { readonly data: WorkDetailData }) {
               ) : (
                 <span className="work-run-list__quiet">Outcome loads on open</span>
               )}
-              <a href={workTabHref(data.work.id, 'overview', run.id)}>
+              <a href={workTabHref(data.work.id, 'overview', run.id, originConversationId)}>
                 {selected ? 'View Overview' : 'Open Run'}
               </a>
-              <a href={workTabHref(data.work.id, 'definition', run.id)}>
+              <a href={workTabHref(data.work.id, 'definition', run.id, originConversationId)}>
                 Definition used
               </a>
             </li>
@@ -763,7 +773,7 @@ function definitionName(
   return typeof name === 'string' && name.length > 0 ? name : null;
 }
 
-function RunTrigger({ workId }: { readonly workId: string }) {
+function RunTrigger({ workId, originConversationId }: { readonly workId: string; readonly originConversationId?: string | null }) {
   const [state, setState] = useState<'idle' | 'starting' | 'error'>('idle');
   const [errorDetail, setErrorDetail] = useState<string | null>(null);
 
@@ -772,7 +782,7 @@ function RunTrigger({ workId }: { readonly workId: string }) {
     setErrorDetail(null);
     try {
       const runId = await startWorkRun(workId);
-      window.location.assign(workTabHref(workId, 'overview', runId));
+      window.location.assign(workTabHref(workId, 'overview', runId, originConversationId));
     } catch (error) {
       setErrorDetail(error instanceof Error ? error.message : 'Please try again.');
       setState('error');

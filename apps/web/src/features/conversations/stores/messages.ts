@@ -1,4 +1,4 @@
-import type { ChatMessage, ConversationId } from '../features/conversations/components/contracts';
+import type { ChatMessage, ConversationId } from '../contracts';
 import type { StoreListener } from './app';
 
 export type MessageListStatus = 'idle' | 'loading' | 'ready' | 'error';

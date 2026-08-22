@@ -32,6 +32,7 @@ export function DefinitionPanel({
   selectedVersionId,
   version,
   editable,
+  originConversationId = null,
 }: {
   readonly workId: string;
   readonly workDefinitionId: string;
@@ -39,6 +40,7 @@ export function DefinitionPanel({
   readonly selectedVersionId: string;
   readonly version: ProductWorkDefinitionVersionResponse | null;
   readonly editable: boolean;
+  readonly originConversationId?: string | null;
 }) {
   const normalizedSource = useMemo(
     () => (version ? stringify(version.source) : ''),
@@ -156,7 +158,7 @@ export function DefinitionPanel({
     }
     setState('applied');
     setStatusMessage('Applied and pinned as the current Work Definition version.');
-    window.location.assign(workTabHref(workId, 'definition'));
+    window.location.assign(workTabHref(workId, 'definition', undefined, originConversationId));
   }
 
   async function runCurrentVersion() {
@@ -165,7 +167,7 @@ export function DefinitionPanel({
     setStatusMessage(null);
     try {
       const runId = await startWorkRun(workId);
-      window.location.assign(workTabHref(workId, 'overview', runId));
+      window.location.assign(workTabHref(workId, 'overview', runId, originConversationId));
     } catch (error) {
       setState('error');
       const errorDetail = error instanceof Error ? error.message : 'Please try again.';

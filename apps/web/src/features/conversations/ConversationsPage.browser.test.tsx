@@ -15,10 +15,10 @@ import type {
   ChatMessage,
   Conversation,
   ConversationId,
-} from './components/contracts';
-import { createAppStore } from '../../stores/app';
-import { createConversationsStore } from '../../stores/conversations';
-import { createMessagesStore } from '../../stores/messages';
+} from './contracts';
+import { createAppStore } from './stores/app';
+import { createConversationsStore } from './stores/conversations';
+import { createMessagesStore } from './stores/messages';
 
 (
   globalThis as typeof globalThis & {

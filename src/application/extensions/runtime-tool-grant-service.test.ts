@@ -186,7 +186,7 @@ describe('RuntimeToolGrantService', () => {
     ).toThrow('Runtime turn close fence is active.');
     service.endToolCall(grant.receipt.grantId);
 
-    const closed = service.closeTeamMemberTurn({
+    const closed = await service.closeTeamMemberTurn({
       grantId: grant.receipt.grantId,
       teamMemberRunId: 'member-1',
       scopeId: 'member-1',
@@ -243,7 +243,7 @@ describe('RuntimeToolGrantService', () => {
       'Runtime grant not found.',
     );
 
-    const refreshed = service.refreshForChatScope({
+    const refreshed = await service.refreshForChatScope({
       ...base,
       scopeId: 'chat-scope',
       chatContext: {
@@ -264,7 +264,7 @@ describe('RuntimeToolGrantService', () => {
 
   it('rejects a chat-grant refresh unless every identity and scope field matches', async () => {
     const service = new RuntimeToolGrantService();
-    service.issue({
+    await service.issue({
       ...base,
       scopeId: 'chat-scope',
       chatContext: {
@@ -289,11 +289,11 @@ describe('RuntimeToolGrantService', () => {
       { scopeId: 'other-scope' },
     ])
       expect(
-        service.refreshForChatScope({ ...refresh, ...mismatch }),
+        await service.refreshForChatScope({ ...refresh, ...mismatch }),
       ).toBeNull();
 
     expect(
-      service.refreshForChatScope(refresh)?.chatContext?.triggerMessageId,
+      (await service.refreshForChatScope(refresh))?.chatContext?.triggerMessageId,
     ).toBe('trigger-2');
   });
 });

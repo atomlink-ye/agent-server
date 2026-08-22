@@ -1,5 +1,8 @@
+import { createHash } from 'node:crypto';
+
 import {
   ExecutionBindingUnavailableError,
+  type ExecutionExtensionBinding,
   type ExecutionPlanePort,
   type ExecutionSession,
   type ExecutionSessionSpec,
@@ -14,18 +17,23 @@ import type {
 export interface ResolvedExecutionSession {
   readonly runtimeSession: RuntimeSession;
   readonly session: ExecutionSession;
+  readonly resolution: 'created' | 'reused' | 'reconfigured' | 'replaced';
 }
 
 /**
- * Resolves one durable RuntimeSession to one process-local ExecutionSession.
- * External creation and durable binding happen here, before any turn prompt is sent.
+ * Resolves one stable RuntimeSession to a provider generation that satisfies the
+ * current desired bootstrap spec. Returning from this method is the postcondition:
+ * the active generation is usable with the current Agent Server extension plane.
  */
 export class ExecutionSessionResolver {
   public constructor(
     private readonly plane: ExecutionPlanePort,
     private readonly runtimeSessions: Pick<
       RuntimeSessionRepository,
-      'bindExecution'
+      | 'reconcileDesiredSpec'
+      | 'bindExecution'
+      | 'replaceExecution'
+      | 'markUnavailable'
     >,
   ) {}
 
@@ -33,25 +41,40 @@ export class ExecutionSessionResolver {
     readonly runtimeSession: RuntimeSession;
     readonly spec: Omit<
       ExecutionSessionSpec,
-      'runtimeSessionId' | 'workspace'
+      | 'runtimeSessionId'
+      | 'workspace'
+      | 'desiredRevision'
+      | 'bootstrapSpecDigest'
+      | 'endpointEpoch'
     > & {
       readonly workspace: Omit<ExecutionSessionSpec['workspace'], 'binding'>;
     };
     readonly workspaceBinding?: ExecutionWorkspaceBinding | null;
   }): Promise<ResolvedExecutionSession> {
-    const runtime = input.runtimeSession;
-    const hasWorkspaceBinding = runtime.workspaceBinding !== null;
-    const hasSessionBinding = runtime.sessionBinding !== null;
-    if (hasWorkspaceBinding !== hasSessionBinding)
-      throw new ExecutionBindingUnavailableError(
-        'Runtime session execution binding is partial.',
-      );
-
+    const initialRuntime = input.runtimeSession;
     const effectiveWorkspaceBinding =
-      runtime.workspaceBinding ?? input.workspaceBinding ?? null;
+      initialRuntime.currentGeneration?.workspaceBinding ??
+      input.workspaceBinding ??
+      null;
+    const desiredDigest = executionBootstrapDigest({
+      provider: input.spec.provider,
+      model: input.spec.model,
+      systemPrompt: input.spec.systemPrompt,
+      cwd: input.spec.workspace.cwd,
+      workspaceBinding: effectiveWorkspaceBinding,
+      extensions: input.spec.extensions,
+    });
+    const runtime = await this.runtimeSessions.reconcileDesiredSpec({
+      id: initialRuntime.id,
+      digest: desiredDigest,
+    });
+    const endpointEpoch = input.spec.extensions?.endpointEpoch ?? 'none';
     const spec: ExecutionSessionSpec = {
       ...input.spec,
       runtimeSessionId: runtime.id,
+      desiredRevision: runtime.desiredRevision,
+      bootstrapSpecDigest: desiredDigest,
+      endpointEpoch,
       workspace: {
         ...input.spec.workspace,
         ...(effectiveWorkspaceBinding
@@ -60,36 +83,166 @@ export class ExecutionSessionResolver {
       },
     };
 
-    if (runtime.sessionBinding) {
+    const generation = runtime.currentGeneration;
+    if (generation) {
       requirePlaneCapability(this.plane.capabilities(), 'reusable_session');
       requirePlaneCapability(this.plane.capabilities(), 'external_workspace');
-      if (!runtime.workspaceBinding)
-        throw new ExecutionBindingUnavailableError(
-          'Reusable execution session has no workspace binding.',
-        );
-      const session = await this.plane.attachSession(
-        runtime.sessionBinding,
+      const outcome = await this.plane.attachSession(
+        generation.sessionBinding,
         spec,
+        {
+          appliedRevision: generation.appliedRevision,
+          appliedSpecDigest: generation.appliedSpecDigest,
+          endpointEpoch: generation.endpointEpoch,
+        },
       );
-      return { runtimeSession: runtime, session };
+      if (outcome.kind === 'reused') {
+        if (
+          generation.appliedRevision !== runtime.desiredRevision ||
+          generation.appliedSpecDigest !== desiredDigest ||
+          generation.endpointEpoch !== endpointEpoch
+        )
+          throw new ExecutionBindingUnavailableError(
+            'Execution plane reported reuse without applying the desired runtime spec.',
+          );
+        return { runtimeSession: runtime, session: outcome.session, resolution: 'reused' };
+      }
+      if (outcome.kind === 'reconfigured') {
+        const replacedRecord = await this.runtimeSessions.replaceExecution({
+          id: runtime.id,
+          workspaceBinding: generation.workspaceBinding,
+          sessionBinding: generation.sessionBinding,
+          appliedRevision: runtime.desiredRevision,
+          appliedSpecDigest: desiredDigest,
+          endpointEpoch,
+          ...(input.spec.extensions?.grantId
+            ? { extensionGrantId: input.spec.extensions.grantId }
+            : {}),
+        });
+        return {
+          runtimeSession: replacedRecord,
+          session: outcome.session,
+          resolution: 'reconfigured',
+        };
+      }
+      return this.replaceGeneration({
+        runtime,
+        spec,
+        desiredDigest,
+        endpointEpoch,
+      });
     }
 
     if (effectiveWorkspaceBinding)
       requirePlaneCapability(this.plane.capabilities(), 'external_workspace');
-    const created = await this.plane.createSession(spec);
+    return this.createInitialGeneration({
+      runtime,
+      spec,
+      desiredDigest,
+      endpointEpoch,
+    });
+  }
+
+  private async createInitialGeneration(input: {
+    readonly runtime: RuntimeSession;
+    readonly spec: ExecutionSessionSpec;
+    readonly desiredDigest: string;
+    readonly endpointEpoch: string;
+  }): Promise<ResolvedExecutionSession> {
+    const created = await this.plane.createSession(input.spec);
     let bound: RuntimeSession;
     try {
       bound = await this.runtimeSessions.bindExecution({
-        id: runtime.id,
+        id: input.runtime.id,
         workspaceBinding: created.workspaceBinding,
         sessionBinding: created.sessionBinding,
+        appliedRevision: input.runtime.desiredRevision,
+        appliedSpecDigest: input.desiredDigest,
+        endpointEpoch: input.endpointEpoch,
+        ...(input.spec.extensions?.grantId
+          ? { extensionGrantId: input.spec.extensions.grantId }
+          : {}),
       });
     } catch (error) {
-      // close() is process-local and deliberately non-destructive. Most
-      // importantly, run() has not been called, so no first prompt escaped.
       await created.session.close().catch(() => undefined);
       throw error;
     }
-    return { runtimeSession: bound, session: created.session };
+    return { runtimeSession: bound, session: created.session, resolution: 'created' };
   }
+
+  private async replaceGeneration(input: {
+    readonly runtime: RuntimeSession;
+    readonly spec: ExecutionSessionSpec;
+    readonly desiredDigest: string;
+    readonly endpointEpoch: string;
+  }): Promise<ResolvedExecutionSession> {
+    let created: Awaited<ReturnType<ExecutionPlanePort['createSession']>>;
+    try {
+      created = await this.plane.createSession(input.spec);
+    } catch (error) {
+      await this.runtimeSessions.markUnavailable(input.runtime.id);
+      throw error;
+    }
+    try {
+      const replaced = await this.runtimeSessions.replaceExecution({
+        id: input.runtime.id,
+        workspaceBinding: created.workspaceBinding,
+        sessionBinding: created.sessionBinding,
+        appliedRevision: input.runtime.desiredRevision,
+        appliedSpecDigest: input.desiredDigest,
+        endpointEpoch: input.endpointEpoch,
+        ...(input.spec.extensions?.grantId
+          ? { extensionGrantId: input.spec.extensions.grantId }
+          : {}),
+      });
+      return {
+        runtimeSession: replaced,
+        session: created.session,
+        resolution: 'replaced',
+      };
+    } catch (error) {
+      await created.session.close().catch(() => undefined);
+      throw error;
+    }
+  }
+}
+
+function executionBootstrapDigest(input: {
+  readonly provider?: string;
+  readonly model?: string;
+  readonly systemPrompt: string;
+  readonly cwd: string;
+  readonly workspaceBinding: ExecutionWorkspaceBinding | null;
+  readonly extensions?: ExecutionExtensionBinding;
+}): string {
+  return createHash('sha256')
+    .update(
+      JSON.stringify({
+        provider: input.provider ?? null,
+        model: input.model ?? null,
+        systemPromptSha256: createHash('sha256')
+          .update(input.systemPrompt, 'utf8')
+          .digest('hex'),
+        cwd: input.cwd,
+        workspace: input.workspaceBinding
+          ? {
+              plane: input.workspaceBinding.plane,
+              externalWorkspaceId:
+                input.workspaceBinding.externalWorkspaceId,
+            }
+          : null,
+        extensions: input.extensions
+          ? {
+              digest: input.extensions.digest ?? null,
+              endpointEpoch: input.extensions.endpointEpoch ?? null,
+              grantId: input.extensions.grantId ?? null,
+              servers: (input.extensions.mcpServers ?? []).map((server) => ({
+                name: server.name,
+                url: server.url,
+              })),
+            }
+          : null,
+      }),
+    )
+    .digest('hex');
 }

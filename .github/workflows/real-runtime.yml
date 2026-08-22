@@ -192,3 +192,36 @@ jobs:
             echo "All external main flows ran against the real provider and asserted"
             echo "positive provider-side usage."
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Redact real-runtime diagnostics
+        id: diagnostics
+        if: always()
+        env:
+          DIAGNOSTIC_SECRET: ${{ secrets.OPENCODE_GO_API_KEY }}
+          DIAGNOSTIC_ROOTS: .local/dev-runtime/logs:.local/test-runs
+        run: |
+          node tooling/dev/redact-diagnostics.mjs >> "$GITHUB_OUTPUT"
+
+      - name: Summarize real-runtime diagnostics
+        if: always()
+        run: |
+          {
+            echo "## Real runtime diagnostics"
+            echo
+            echo "- Files scanned: ${{ steps.diagnostics.outputs.files_scanned }}"
+            echo "- \`canary-*\` diagnostic files: ${{ steps.diagnostics.outputs.canary_log_files }}"
+            echo "- Diagnostic bytes scanned: ${{ steps.diagnostics.outputs.bytes_scanned }}"
+            echo "- OPENCODE_GO_API_KEY matches before redaction: ${{ steps.diagnostics.outputs.secret_matches_before }}"
+            echo "- OPENCODE_GO_API_KEY matches after redaction: ${{ steps.diagnostics.outputs.secret_matches_after }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload real-runtime diagnostics
+        if: always() && steps.diagnostics.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-runtime-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .local/dev-runtime/logs/**
+            .local/test-runs/**
+          if-no-files-found: warn
+          retention-days: 7

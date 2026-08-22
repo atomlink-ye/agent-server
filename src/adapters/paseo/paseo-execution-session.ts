@@ -31,6 +31,7 @@ export class PaseoExecutionSession implements ExecutionSession {
       readonly provider: string;
       readonly model: string;
       readonly cwd: string;
+      readonly systemPromptBytes: number;
     },
     private readonly gateway: PaseoGateway,
     private readonly turnRunner: PaseoTurnRunner,
@@ -47,6 +48,7 @@ export class PaseoExecutionSession implements ExecutionSession {
       provider: this.metadata.provider,
       model: this.metadata.model,
       cwd: this.metadata.cwd,
+      systemPromptBytes: this.metadata.systemPromptBytes,
       ...(observer ? { observer } : {}),
     });
   }

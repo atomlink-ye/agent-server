@@ -202,6 +202,7 @@ export class PaseoExecutionPlane implements ExecutionPlanePort {
         agent.provider,
         agent.model,
         cwd,
+        Buffer.byteLength(spec.systemPrompt, 'utf8'),
       ),
     };
   }
@@ -258,6 +259,7 @@ export class PaseoExecutionPlane implements ExecutionPlanePort {
         provider,
         model,
         spec.workspace.cwd,
+        Buffer.byteLength(spec.systemPrompt, 'utf8'),
       ),
     };
   }
@@ -332,11 +334,12 @@ export class PaseoExecutionPlane implements ExecutionPlanePort {
     provider: string,
     model: string,
     cwd: string,
+    systemPromptBytes: number,
   ): PaseoExecutionSession {
     return new PaseoExecutionSession(
       binding,
       workspaceBinding,
-      { provider, model, cwd },
+      { provider, model, cwd, systemPromptBytes },
       this.#gateway,
       this.#runner,
     );

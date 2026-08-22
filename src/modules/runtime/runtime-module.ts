@@ -130,6 +130,7 @@ export function createRuntimeModule(options: {
     executionRuns,
     new LocalRuntimeMemoryCandidateCollector(),
     options.config.paseo.agentCwd,
+    options.logger,
   );
   const scopedMemory =
     options.scopedMemory ??

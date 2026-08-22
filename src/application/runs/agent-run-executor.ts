@@ -664,6 +664,7 @@ export class AgentRunExecutor {
         {
           runId: claim.run.id,
           prompt: prompts.deliveredTurnPrompt,
+          recoveryPrompt: prompts.recoveryTurnPrompt,
           ...(sessionRuntime ? { runtimeSessionId: sessionRuntime.id } : {}),
           ...(cellCwd ? { cwd: cellCwd } : {}),
           ...(priorSessionBinding && !sessionRuntime

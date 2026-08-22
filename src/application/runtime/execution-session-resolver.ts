@@ -11,8 +11,10 @@ import {
 import { requirePlaneCapability } from './execution-capabilities.js';
 import type {
   RuntimeSession,
+  RuntimeSessionGeneration,
   RuntimeSessionRepository,
 } from '../ports/runtime-session-repository.js';
+import type { Logger } from '../../shared/observability/logger.js';
 
 export interface ResolvedExecutionSession {
   readonly runtimeSession: RuntimeSession;
@@ -35,10 +37,12 @@ export class ExecutionSessionResolver {
       | 'replaceExecution'
       | 'markUnavailable'
     >,
+    private readonly logger?: Logger,
   ) {}
 
   public async resolve(input: {
     readonly runtimeSession: RuntimeSession;
+    readonly runId?: string;
     readonly spec: Omit<
       ExecutionSessionSpec,
       | 'runtimeSessionId'
@@ -56,14 +60,16 @@ export class ExecutionSessionResolver {
       initialRuntime.currentGeneration?.workspaceBinding ??
       input.workspaceBinding ??
       null;
-    const desiredDigest = executionBootstrapDigest({
+    const bootstrap = {
       ...(input.spec.provider ? { provider: input.spec.provider } : {}),
       ...(input.spec.model ? { model: input.spec.model } : {}),
       systemPrompt: input.spec.systemPrompt,
       cwd: input.spec.workspace.cwd,
       workspaceBinding: effectiveWorkspaceBinding,
       ...(input.spec.extensions ? { extensions: input.spec.extensions } : {}),
-    });
+    };
+    const desiredDigest = executionBootstrapDigest(bootstrap);
+    const components = executionBootstrapComponentFingerprints(bootstrap);
     const runtime = await this.runtimeSessions.reconcileDesiredSpec({
       id: initialRuntime.id,
       digest: desiredDigest,
@@ -105,6 +111,15 @@ export class ExecutionSessionResolver {
           throw new ExecutionBindingUnavailableError(
             'Execution plane reported reuse without applying the desired runtime spec.',
           );
+        this.logResolution({
+          runtime,
+          runId: input.runId,
+          generation,
+          resolution: 'reused',
+          reason: null,
+          desiredDigest,
+          components,
+        });
         return {
           runtimeSession: runtime,
           session: outcome.session,
@@ -123,27 +138,94 @@ export class ExecutionSessionResolver {
             ? { extensionGrantId: input.spec.extensions.grantId }
             : {}),
         });
+        this.logResolution({
+          runtime,
+          runId: input.runId,
+          generation,
+          resolution: 'reconfigured',
+          reason: 'plane_reconfigured',
+          desiredDigest,
+          components,
+        });
         return {
           runtimeSession: replacedRecord,
           session: outcome.session,
           resolution: 'reconfigured',
         };
       }
-      return this.replaceGeneration({
+      const replaced = await this.replaceGeneration({
         runtime,
+        runId: input.runId,
         spec,
         desiredDigest,
         endpointEpoch,
       });
+      this.logResolution({
+        runtime,
+        runId: input.runId,
+        generation,
+        resolution: 'replaced',
+        reason: outcome.reason,
+        desiredDigest,
+        components,
+      });
+      return replaced;
     }
 
     if (effectiveWorkspaceBinding)
       requirePlaneCapability(this.plane.capabilities(), 'external_workspace');
-    return this.createInitialGeneration({
+    const created = await this.createInitialGeneration({
       runtime,
       spec,
       desiredDigest,
       endpointEpoch,
+    });
+    this.logResolution({
+      runtime,
+      runId: input.runId,
+      generation: null,
+      resolution: 'created',
+      reason: 'initial_generation',
+      desiredDigest,
+      components,
+    });
+    return created;
+  }
+
+  private logResolution(input: {
+    readonly runtime: RuntimeSession;
+    readonly runId?: string;
+    readonly generation: RuntimeSessionGeneration | null;
+    readonly resolution: ResolvedExecutionSession['resolution'];
+    readonly reason:
+      | 'initial_generation'
+      | 'plane_reconfigured'
+      | 'extensions_changed'
+      | 'endpoint_epoch_changed'
+      | 'provider_binding_stale'
+      | 'provider_cannot_reconfigure'
+      | null;
+    readonly desiredDigest: string;
+    readonly components: Readonly<Record<string, string | null>>;
+  }): void {
+    this.logger?.log('info', 'runtime.session.resolution', {
+      runtime_session_id: input.runtime.id,
+      run_id: input.runId ?? null,
+      resolution: input.resolution,
+      components: input.components,
+      ...(input.resolution === 'reused'
+        ? {}
+        : {
+            reason: input.reason,
+            applied_spec_digest_prefix: prefix(input.generation?.appliedSpecDigest),
+            applied_endpoint_epoch_prefix: prefix(
+              input.generation?.endpointEpoch,
+            ),
+            applied_extension_grant_id_prefix: prefix(
+              input.generation?.extensionGrantId ?? null,
+            ),
+            desired_spec_digest_prefix: prefix(input.desiredDigest),
+          }),
     });
   }
 
@@ -180,6 +262,7 @@ export class ExecutionSessionResolver {
 
   private async replaceGeneration(input: {
     readonly runtime: RuntimeSession;
+    readonly runId?: string;
     readonly spec: ExecutionSessionSpec;
     readonly desiredDigest: string;
     readonly endpointEpoch: string;
@@ -192,22 +275,31 @@ export class ExecutionSessionResolver {
       throw error;
     }
     try {
-      const replaced = await this.runtimeSessions.replaceExecution({
-        id: input.runtime.id,
-        workspaceBinding: created.workspaceBinding,
-        sessionBinding: created.sessionBinding,
-        appliedRevision: input.runtime.desiredRevision,
-        appliedSpecDigest: input.desiredDigest,
-        endpointEpoch: input.endpointEpoch,
-        ...(input.spec.extensions?.grantId
-          ? { extensionGrantId: input.spec.extensions.grantId }
-          : {}),
-      });
-      return {
-        runtimeSession: replaced,
-        session: created.session,
-        resolution: 'replaced',
-      };
+      const replaceStartedAt = Date.now();
+      try {
+        const replaced = await this.runtimeSessions.replaceExecution({
+          id: input.runtime.id,
+          workspaceBinding: created.workspaceBinding,
+          sessionBinding: created.sessionBinding,
+          appliedRevision: input.runtime.desiredRevision,
+          appliedSpecDigest: input.desiredDigest,
+          endpointEpoch: input.endpointEpoch,
+          ...(input.spec.extensions?.grantId
+            ? { extensionGrantId: input.spec.extensions.grantId }
+            : {}),
+        });
+        return {
+          runtimeSession: replaced,
+          session: created.session,
+          resolution: 'replaced',
+        };
+      } finally {
+        this.logger?.log('info', 'runtime.session.replace_execution.completed', {
+          runtime_session_id: input.runtime.id,
+          run_id: input.runId ?? null,
+          duration_ms: Date.now() - replaceStartedAt,
+        });
+      }
     } catch (error) {
       await created.session.close().catch(() => undefined);
       throw error;
@@ -215,14 +307,16 @@ export class ExecutionSessionResolver {
   }
 }
 
-function executionBootstrapDigest(input: {
+interface ExecutionBootstrap {
   readonly provider?: string;
   readonly model?: string;
   readonly systemPrompt: string;
   readonly cwd: string;
   readonly workspaceBinding: ExecutionWorkspaceBinding | null;
   readonly extensions?: ExecutionExtensionBinding;
-}): string {
+}
+
+function executionBootstrapDigest(input: ExecutionBootstrap): string {
   return createHash('sha256')
     .update(
       JSON.stringify({
@@ -252,4 +346,44 @@ function executionBootstrapDigest(input: {
       }),
     )
     .digest('hex');
+}
+
+function executionBootstrapComponentFingerprints(
+  input: ExecutionBootstrap,
+): Readonly<Record<string, string | null>> {
+  return Object.freeze({
+    provider: fingerprint(input.provider ?? null),
+    model: fingerprint(input.model ?? null),
+    systemPromptSha256: fingerprint(input.systemPrompt),
+    cwd: fingerprint(input.cwd),
+    workspace: input.workspaceBinding
+      ? fingerprint({
+          plane: input.workspaceBinding.plane,
+          externalWorkspaceId: input.workspaceBinding.externalWorkspaceId,
+        })
+      : null,
+    extensions: input.extensions
+      ? fingerprint({
+          digest: input.extensions.digest ?? null,
+          endpointEpoch: input.extensions.endpointEpoch ?? null,
+          grantId: input.extensions.grantId ?? null,
+          servers: (input.extensions.mcpServers ?? []).map((server) => ({
+            name: server.name,
+            url: server.url,
+          })),
+        })
+      : null,
+  });
+}
+
+function fingerprint(value: unknown): string | null {
+  if (value === null) return null;
+  return createHash('sha256')
+    .update(typeof value === 'string' ? value : JSON.stringify(value), 'utf8')
+    .digest('hex')
+    .slice(0, 12);
+}
+
+function prefix(value: string | null | undefined): string | null {
+  return value ? `${value.slice(0, 12)}…` : null;
 }

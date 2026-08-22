@@ -53,6 +53,25 @@ export class LocalRuntimeExtensionBinder implements RuntimeExtensionBinder {
   public async bind(
     input: Parameters<RuntimeExtensionBinder['bind']>[0],
   ): Promise<ExecutionExtensionBinding | undefined> {
+    const startedAt = Date.now();
+    const state = { cacheHit: false, reissued: false };
+    try {
+      return await this.bindInternal(input, state);
+    } finally {
+      this.#logger?.log('info', 'runtime.grant.bind.completed', {
+        run_id: input.runId ?? null,
+        team_member_run_id: input.teamMemberRunId ?? null,
+        cache_hit: state.cacheHit,
+        revoke_reissue: state.reissued,
+        duration_ms: Date.now() - startedAt,
+      });
+    }
+  }
+
+  private async bindInternal(
+    input: Parameters<RuntimeExtensionBinder['bind']>[0],
+    state: { cacheHit: boolean; reissued: boolean },
+  ): Promise<ExecutionExtensionBinding | undefined> {
     const platformCollaboration = Boolean(input.teamMemberRunId);
     if (
       !input.skills.length &&
@@ -87,12 +106,14 @@ export class LocalRuntimeExtensionBinder implements RuntimeExtensionBinder {
         if (refreshed.grantId !== cached.grantId)
           throw new Error('Runtime grant identity changed during refresh.');
         this.touchBinding(key, cached);
+        state.cacheHit = true;
         return cached.binding;
       }
 
       if (this.#mcp.grants.activeToolCalls(existing.grantId) > 0)
         throw new Error('Runtime grant replacement fence is active.');
       await this.#mcp.grants.revoke(existing.grantId);
+      state.reissued = true;
       this.#bindings.delete(key);
       this.#logger?.log('info', 'runtime.grant.reissued_after_restart', {
         previous_grant_id_prefix: `${existing.grantId.slice(0, 8)}…`,

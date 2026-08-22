@@ -24,6 +24,7 @@ import type {
   RuntimeSessionRepository,
 } from '../ports/runtime-session-repository.js';
 import type { RuntimeWorkspaceRepository } from '../ports/runtime-workspace-repository.js';
+import type { Logger } from '../../shared/observability/logger.js';
 import { ExecutionRunRegistry } from './execution-run-registry.js';
 import { ExecutionSessionResolver } from './execution-session-resolver.js';
 
@@ -123,8 +124,13 @@ export class ExecutionPlaneRuntimeFacade implements ExecutionRuntimeService {
     private readonly runRegistry: ExecutionRunRegistry,
     private readonly memoryCandidates: RuntimeMemoryCandidateCollector,
     private readonly defaultCwd: string,
+    private readonly logger?: Logger,
   ) {
-    this.#resolver = new ExecutionSessionResolver(plane, runtimeSessions);
+    this.#resolver = new ExecutionSessionResolver(
+      plane,
+      runtimeSessions,
+      logger,
+    );
   }
 
   public async ensureReady(): Promise<boolean> {
@@ -196,6 +202,7 @@ export class ExecutionPlaneRuntimeFacade implements ExecutionRuntimeService {
         );
       const resolved = await this.#resolver.resolve({
         runtimeSession,
+        runId: input.runId,
         spec: {
           workspace: {
             cwd,
@@ -231,6 +238,7 @@ export class ExecutionPlaneRuntimeFacade implements ExecutionRuntimeService {
       if (durable) {
         const resolved = await this.#resolver.resolve({
           runtimeSession: durable,
+          runId: input.runId,
           spec: {
             workspace: {
               cwd,
@@ -330,6 +338,23 @@ export class ExecutionPlaneRuntimeFacade implements ExecutionRuntimeService {
         ...(result.output.usage ? { usage: result.output.usage } : {}),
         ...(candidates.length > 0 ? { memoryCandidates: candidates } : {}),
       };
+    } catch (error) {
+      if (error instanceof RuntimeTimedOutError) {
+        this.logger?.log('warn', 'runtime.session.timeout_diagnostics', {
+          run_id: input.runId,
+          resolution: sessionResolution ?? 'fresh',
+          durable_runtime_session: input.runtimeSessionId !== undefined,
+          extensions_present: input.extensions !== undefined,
+          extension_grant_id_prefix: input.extensions?.grantId
+            ? `${input.extensions.grantId.slice(0, 8)}…`
+            : null,
+          extension_digest_prefix: input.extensions?.digest
+            ? `${input.extensions.digest.slice(0, 12)}…`
+            : null,
+          extension_endpoint_epoch: input.extensions?.endpointEpoch ?? null,
+        });
+      }
+      throw error;
     } finally {
       if (closeAfterTurn) await executionSession.close().catch(() => undefined);
     }

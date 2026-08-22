@@ -1,6 +1,6 @@
 # Agent repository instructions
 
-This file is the mandatory entrypoint for every coding agent. Read it before changing code or documentation.
+This file is the mandatory entrypoint for every coding agent. Read it before changing code or documentation. It is a map: use the linked docs and `.agents/skills/` for detailed procedures.
 
 ## Repository purpose
 
@@ -12,59 +12,85 @@ Repository documentation must remain usable without private Drive access. Curren
 
 1. [README](README.md) for the runnable baseline and commands.
 2. [Development](docs/development.md) for the host-native developer/test boundary.
-3. [Frontend architecture](docs/frontend.md) when changing Web, browser API/BFF, Chat, Work UI, routing, or frontend dependencies.
-4. [Product](docs/product.md) and [Features](docs/features.md) for scope/status.
-5. The relevant [Component](docs/components.md) and [Contract](docs/contracts.md).
-6. [Testing and evaluations](docs/quality/testing-and-evaluations.md) when changing verification/runtime setup.
-7. [Agent handbook](docs/agents.md) for implementation and handoff rules.
+3. [Architecture](docs/architecture.md) plus the relevant architecture leaf for module/data/recovery work.
+4. [Frontend architecture](docs/frontend.md) for Web, browser API/BFF, Chat, Work UI, routing, or frontend dependencies.
+5. [Product](docs/product.md) and [Features](docs/features.md) for scope/status.
+6. The relevant [Component](docs/components.md) and [Contract](docs/contracts.md).
+7. [Testing and evaluations](docs/quality/testing-and-evaluations.md) for verification/runtime setup.
+8. [Agent handbook](docs/agents.md) for implementation and handoff rules.
+9. The matching workflow under [`.agents/skills`](.agents/skills/) for review, simplification, runtime recovery, docs, browser evidence, or pre-push work.
 
 Never infer that a documented target is implemented. Current code and observed behavior are primary implementation facts; tests are supporting repeatable verification.
 
 ## Non-negotiable architecture boundaries
 
 - Product-facing execution is `Work Definition -> Work -> WorkRun`; inside that Product boundary, `Task` is the canonical execution-node invocation and technical `Run` is one Task attempt.
-- Domain and application code cannot import Paseo packages. Execution-plane details stay behind the runtime/execution boundary.
+- Durable Agent Server identity must not be replaced by Paseo/provider identity. RuntimeSession owns stable control-plane identity; provider sessions are execution bindings/generations.
+- Domain and application code cannot import Paseo packages or concrete Postgres/Hono entrypoints. External details stay behind application ports and adapter/infrastructure boundaries.
 - Team coordination, joins, approvals, retry, budget, and durable state belong to the control plane, not to a runtime prompt.
 - HTTP callers cannot choose arbitrary paid models. Automatic selection must never silently select a paid model.
-- Prompts, credentials, tokens, raw provider errors, and private local paths must not enter ordinary responses or logs.
+- Prompts, credentials, bearer tokens, raw provider errors, and private local paths must not enter ordinary responses or logs.
 - A public API, tenant/security/credential boundary, migration/durable-state contract, destructive behavior, or core dependency change is a Human Gate.
-- `apps/web` is the only browser application. It is React 18 + Vite + React Router with the Cumora-inspired coworker shell. Do not reintroduce Next.js, `apps/web-vite`, a second product shell, or frontend-held service credentials.
+- `apps/web` is the only browser application. It is React + Vite + React Router with the Cumora-inspired coworker shell. Do not reintroduce Next.js, `apps/web-vite`, a second product shell, or frontend-held service credentials.
+
+## Runtime recovery rule
+
+For RuntimeSession, ExecutionPlane, MCP, grant, process or worker lifecycle changes, use `.agents/skills/agent-server-runtime-recovery-review/SKILL.md`.
+
+A successful reusable-session attach must establish the current desired execution specification, including the Agent Server extension/tool plane. Proving only that an external provider session ID exists is insufficient. If the provider cannot apply the current desired spec, the application must explicitly replace/supersede the provider generation or fail with a safe recovery error; it must never return a stale-success session.
+
+Process-local maps, handles and active-call counters may accelerate live execution but are not durable authority.
 
 ## Repository hygiene — mandatory
 
-Git HEAD stores durable product/engineering truth and repeatable verification. It does **not** store the history of how one task, phase, lane, or PR was proven.
+Git HEAD stores durable product/engineering truth, active execution plans, reusable Agent Skills, and repeatable verification. It does **not** store one-run evidence or completed implementation history.
 
 Do not commit:
 
 - generated logs, browser screenshots/recordings, one-run API captures, DB dumps, or runtime observations;
-- task-specific evidence ledgers, mutation outputs, manager/worker handoffs, acceptance reports, or completed task plans;
-- long-lived files/commands named after temporary development phases such as `phase-b`, `c3`, `e8`, `worker-c`, or `lane-h` unless that term is literally a product concept;
+- task-specific evidence ledgers, mutation outputs, manager/worker handoffs, or acceptance bundles that belong in CI/PR artifacts;
+- long-lived files/commands named after temporary development phases such as `phase-b`, `c3`, `e8`, `worker-c`, `lane-h`, or `n3` unless that term is literally a product concept;
 - scenario-specific setup runners created only because a test is inconvenient to start.
 
-Generated test/runtime output belongs under ignored `.local/` paths and may be uploaded as a CI artifact. Git history and PR/Issue history are the archive for development history.
+Long-running cross-module work may use `docs/exec-plans/active/`; completed plans move out of `active` in the same change that writes final architecture/contracts.
+
+Generated test/runtime output belongs under ignored `.local/` paths and may be uploaded as a CI artifact. Git history and PR/Issue history are the archive for development choreography.
 
 `package.json` + pnpm is the sole repository command surface. Do not reintroduce a Makefile or a second command wrapper whose only job is to rename package scripts.
+
+## Canonical quality commands
+
+```bash
+pnpm scope:changed --base <verified-base-ref>
+pnpm lint
+pnpm check:imports
+pnpm check:dead-code
+pnpm check:duplication
+pnpm docs:check
+pnpm gates:changed --base <verified-base-ref>
+pnpm test:scenario
+pnpm test:pg
+pnpm canary:runtime
+pnpm canary:golden-path
+pnpm canary:runtime-restart
+```
+
+Use `.agents/skills/agent-server-pre-push-checks/SKILL.md` to select the smallest credible evidence for the outgoing diff. Report only commands that actually ran.
 
 ## Developer/environment model
 
 The normal development boundary is the existing host/sandbox, not Docker.
-
-Canonical commands:
 
 ```bash
 pnpm setup
 pnpm doctor
 pnpm dev
 pnpm dev:runtime
-pnpm test:scenario
-pnpm test:pg
-pnpm canary:runtime
-pnpm canary:golden-path
 ```
 
 - `pnpm dev` is host-native API + Web with the execution runtime disabled/mock-gated.
 - `pnpm dev:runtime` is host-native API + Web + Paseo/provider helper.
-- `tooling/dev/` owns host-native developer orchestration.
+- `tooling/dev/` owns host-native developer/test/canary orchestration.
 - `apps/web` is the canonical Vite browser application on port 3001; browser-safe `/api/*` BFF routes are hosted by the Agent Server API process.
 - CI may provide PostgreSQL as a service container; local development does not own a container topology.
 
@@ -97,12 +123,14 @@ Deterministic software behavior belongs in Vitest. Model/Agent quality belongs i
 ## Repository map
 
 ```text
-apps/web/                    single React/Vite browser application and Cumora-style workspace shell
+apps/web/                    single React/Vite browser application
 src/domain/                 framework-free state and invariants
-src/application/            use cases and ports
+src/application/            use cases, policies and ports
 src/adapters/               external-system translations
-src/infrastructure/         storage/process-neutral infrastructure
-src/entrypoints/            HTTP/channel/CLI entrypoints, including browser-safe Web BFF routes
+src/infrastructure/         storage/files/process implementations
+src/composition/            concrete module graph, profiles and lifecycle
+src/contracts/              HTTP/event/MCP/browser-safe contracts
+src/entrypoints/            API/channel/CLI process entrypoints
 tests/harness/              reusable deterministic scenario composition + semantic seeds
 tests/contract/             public contract checks
 tests/integration/          component/datastore boundaries
@@ -112,42 +140,43 @@ tests/scenarios/            deterministic product journeys
 e2e/                        explicit browser/process E2E
 evals/                      Agent/model-quality evaluation
 tooling/dev/                host-native developer/test/canary orchestration
-tooling/dev/                host-native development orchestration
 scripts/dev/                reusable runtime/bootstrap helpers
+scripts/quality/            repository mechanical gates
 scripts/smoke/              canonical real external main flows
 scripts/ops/                migrations/recovery/operator utilities
+.agents/skills/              reusable repository workflows
 docs/                       durable product/engineering authority
 ```
 
-## Current stage and cadence
+During the active convergence refactor, some source files may still be migrating toward this target map. The active execution plan owns that migration and must not leave duplicate production ownership at completion.
 
-The repository is in **Prove / MVE-first product implementation** until the user explicitly changes the stage. The goal is fast learning through the smallest real vertical slice, not production hardening or comprehensive test growth.
+## Current stage and current exception
 
-Bounded code gardening is allowed when it removes a proven transitional seam or lowers the modification radius for the next MVE probe. It does **not** change the stage, justify broad hardening, or create a standing refactor phase.
+The product remains **Prove / MVE-first** for feature development. However, the user explicitly authorized one repository-wide convergence pass before additional features. While `docs/exec-plans/active/2026-08-22-deepseek-harness-repository-convergence.md` is active, its complete R0–R6 scope is authorized and is not constrained by the ordinary “bounded gardening only” rule.
 
-For each slice:
+After that plan is completed/archived, normal MVE-first cadence resumes:
 
-1. Bound one observable outcome and explicit non-goals.
-2. Probe only a technical unknown that can invalidate the path.
-3. Build the thinnest real path.
-4. Exercise the path early.
-5. Fix `BLOCKER-NOW`; record non-blocking follow-up without absorbing it into scope unless the current user explicitly asks for the full follow-up scope.
-6. Stop at proof.
+1. bound one observable outcome and non-goals;
+2. probe only invalidating unknowns;
+3. build the thinnest real path;
+4. exercise early;
+5. fix current blockers;
+6. stop at proof.
 
-Automated test authoring is not a default feature deliverable. Add a test when the user requests it, the changed risk warrants it, or it is the cheapest durable replacement for behavior previously encoded in an ad-hoc script. Do not create a second harness merely to prove the harness.
+Automated test authoring is not a default feature deliverable. Add a test when the changed risk warrants it or it is the cheapest durable replacement for behavior previously encoded in an ad-hoc script.
 
 ## Completion definition
 
-A Prove-stage slice is complete when:
+A change is complete when:
 
 - the scoped implementation produces the promised observable result;
 - checks that actually ran are reported truthfully;
-- no `BLOCKER-NOW` or unresolved required Human Gate remains;
-- the intended diff contains no credentials, debug residue, generated runtime evidence, or task-history artifacts;
+- no unresolved required Human Gate remains;
+- the intended diff contains no credentials, debug residue, generated runtime evidence, or stale implementation-history artifacts;
 - temporary infrastructure is stopped or explicitly handed off;
-- non-blocking findings are recorded in the appropriate durable issue/roadmap/decision context instead of being smuggled into the current scope.
-
-See [docs/agents](docs/agents.md) for the detailed workflow and handoff contract.
+- current docs/contracts are updated;
+- any active execution plan touched by the work is updated or closed;
+- remaining risk is explicitly owned rather than hidden in a compatibility shim or TODO.
 
 ## Cloned dependency source
 

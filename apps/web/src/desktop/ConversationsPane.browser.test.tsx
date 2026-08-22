@@ -17,53 +17,30 @@ import { createConversationsStore } from '../stores/conversations';
   }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
+const coworker: Coworker = {
+  id: '11111111-1111-4111-8111-111111111111',
+  displayName: 'Research Analyst',
+  roleLabel: 'Researcher',
+  summary: 'Investigates markets and evidence.',
+  activeAgentVersionId: '22222222-2222-4222-8222-222222222222',
+  runtimeStatus: 'available',
+};
+
 it('opens Direct Chat from the Coworker roster without exposing AgentDefinition IDs', async () => {
-  const coworker: Coworker = {
-    id: '11111111-1111-4111-8111-111111111111',
-    displayName: 'Research Analyst',
-    roleLabel: 'Researcher',
-    summary: 'Investigates markets and evidence.',
-    activeAgentVersionId: '22222222-2222-4222-8222-222222222222',
-    runtimeStatus: 'available',
-  };
-  const direct: Conversation = {
-    id: '33333333-3333-4333-8333-333333333333',
-    kind: 'direct',
-    title: null,
-    directAgent: {
-      agentDefinitionId: coworker.id,
-      displayName: coworker.displayName,
-    },
-    updatedAt: '2026-08-22T00:00:00.000Z',
-  };
+  const direct = directConversation(
+    '33333333-3333-4333-8333-333333333333',
+    coworker,
+  );
   const createConversation = vi.fn(async () => direct);
-  const commands: ChatCommands = {
+  const commands = commandsFor({
     loadCoworkers: async () => [coworker],
-    loadConversations: async () => [],
     createConversation,
-    loadWorks: async () => [],
-    loadMessages: async () => [],
-    sendMessage: async () => {
-      throw new Error('not used');
-    },
-  };
+  });
   const appStore = createAppStore();
   const conversationsStore = createConversationsStore({ selectionStore: appStore });
-  const host = document.createElement('div');
-  document.body.append(host);
-  const root = createRoot(host);
+  const { host, root } = renderPane(commands, appStore, conversationsStore);
 
   try {
-    await act(async () => {
-      root.render(
-        <ConversationsPane
-          commands={commands}
-          appStore={appStore}
-          conversationsStore={conversationsStore}
-        />,
-      );
-    });
-
     const newConversation = findButton(host, 'New conversation');
     await act(async () => {
       newConversation.click();
@@ -92,6 +69,146 @@ it('opens Direct Chat from the Coworker roster without exposing AgentDefinition 
     host.remove();
   }
 });
+
+it('reloads the Coworker roster on every picker open and reuses an existing Direct Chat', async () => {
+  const direct = directConversation(
+    '33333333-3333-4333-8333-333333333334',
+    coworker,
+  );
+  const loadCoworkers = vi.fn(async () => [coworker]);
+  const createConversation = vi.fn(async () => direct);
+  const commands = commandsFor({ loadCoworkers, createConversation });
+  const appStore = createAppStore();
+  const conversationsStore = createConversationsStore({ selectionStore: appStore });
+  conversationsStore.hydrate([direct]);
+  const { host, root } = renderPane(commands, appStore, conversationsStore);
+
+  try {
+    await act(async () => {
+      findButton(host, 'New conversation').click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(loadCoworkers).toHaveBeenCalledTimes(1);
+    expect(host.textContent).toContain('Research Analyst · Researcher · Open');
+
+    await act(async () => {
+      findButton(host, 'Cancel').click();
+      findButton(host, 'New conversation').click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(loadCoworkers).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      findButton(host, 'Research Analyst').click();
+      await Promise.resolve();
+    });
+    expect(createConversation).not.toHaveBeenCalled();
+    expect(appStore.getSnapshot().selectedConversationId).toBe(direct.id);
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+  }
+});
+
+it('searches Direct Chat by the Coworker display identity shown in the list', async () => {
+  const research = directConversation(
+    '33333333-3333-4333-8333-333333333335',
+    coworker,
+  );
+  const opsCoworker: Coworker = {
+    ...coworker,
+    id: '11111111-1111-4111-8111-111111111112',
+    displayName: 'Operations Partner',
+  };
+  const operations = directConversation(
+    '33333333-3333-4333-8333-333333333336',
+    opsCoworker,
+  );
+  const commands = commandsFor();
+  const appStore = createAppStore();
+  const conversationsStore = createConversationsStore({ selectionStore: appStore });
+  conversationsStore.hydrate([research, operations]);
+  const { host, root } = renderPane(commands, appStore, conversationsStore);
+
+  try {
+    expect(host.textContent).toContain('Research Analyst');
+    expect(host.textContent).toContain('Operations Partner');
+    const input = host.querySelector('#conversation-search');
+    if (!(input instanceof HTMLInputElement)) throw new Error('search input missing');
+
+    await act(async () => {
+      setInputValue(input, 'research');
+    });
+
+    expect(host.textContent).toContain('Research Analyst');
+    expect(host.textContent).not.toContain('Operations Partner');
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+  }
+});
+
+function commandsFor(
+  overrides: Partial<ChatCommands> = {},
+): ChatCommands {
+  return {
+    loadCoworkers: async () => [],
+    loadConversations: async () => [],
+    createConversation: async () => {
+      throw new Error('unexpected create');
+    },
+    loadWorks: async () => [],
+    loadMessages: async () => [],
+    sendMessage: async () => {
+      throw new Error('not used');
+    },
+    ...overrides,
+  };
+}
+
+function directConversation(id: string, agent: Coworker): Conversation {
+  return {
+    id,
+    kind: 'direct',
+    title: null,
+    directAgent: {
+      agentDefinitionId: agent.id,
+      displayName: agent.displayName,
+    },
+    updatedAt: '2026-08-22T00:00:00.000Z',
+  };
+}
+
+function renderPane(
+  commands: ChatCommands,
+  appStore: ReturnType<typeof createAppStore>,
+  conversationsStore: ReturnType<typeof createConversationsStore>,
+) {
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  act(() => {
+    root.render(
+      <ConversationsPane
+        commands={commands}
+        appStore={appStore}
+        conversationsStore={conversationsStore}
+      />,
+    );
+  });
+  return { host, root };
+}
+
+function setInputValue(input: HTMLInputElement, value: string): void {
+  const setter = Object.getOwnPropertyDescriptor(
+    HTMLInputElement.prototype,
+    'value',
+  )?.set;
+  setter?.call(input, value);
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+}
 
 function findButton(host: HTMLElement, label: string): HTMLButtonElement {
   const button = [...host.querySelectorAll('button')].find((candidate) =>

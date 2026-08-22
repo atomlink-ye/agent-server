@@ -10,28 +10,6 @@ permissions:
   contents: read
 
 jobs:
-  n1-scenario-patch:
-    if: github.event_name == 'pull_request' && github.head_ref == 'refactor/final-agent-identity-harness-convergence' && github.actor != 'github-actions[bot]'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: refactor/final-agent-identity-harness-convergence
-          fetch-depth: 0
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-      - run: node scripts/dev/n1-scenario-migrate.mjs
-      - name: Commit scenario migration
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add tests/scenarios/north-star-host-harness.scenario.test.ts
-          git commit -m "test: carry structured Agent identity through North Star harness"
-          git push origin HEAD:refactor/final-agent-identity-harness-convergence
-
   deterministic:
     runs-on: ubuntu-latest
     timeout-minutes: 30

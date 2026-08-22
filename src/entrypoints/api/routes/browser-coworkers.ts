@@ -1,4 +1,5 @@
 import type { Hono } from 'hono';
+import { type ZodType } from 'zod';
 
 import {
   AgentCoworkerListResponseSchema,
@@ -50,7 +51,7 @@ export function registerBrowserCoworkerRoutes(
 async function forwardValidated(
   config: AppConfig,
   path: string,
-  schema: { safeParse(value: unknown): { success: boolean; data?: unknown } },
+  schema: ZodType<unknown>,
   requestFailure: string,
   invalidResponse: string,
 ): Promise<Response> {
@@ -72,7 +73,7 @@ async function forwardValidated(
 
   const body = await upstream.json().catch(() => undefined);
   if (!upstream.ok) return jsonResponse(normalizeError(body, requestFailure), safeStatus(upstream.status));
-  const decoded = schema.safeParse(body);
+  const decoded = decodeProductResponse(body, schema);
   if (!decoded.success) {
     return jsonResponse(
       { error: { code: 'invalid_response', message: invalidResponse } },

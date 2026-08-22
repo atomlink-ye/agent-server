@@ -12,9 +12,6 @@ export interface ProductWorkspace {
   readonly updatedAt: string;
 }
 
-/** @deprecated Prefer ProductWorkspace; retained while legacy callers migrate. */
-export type Workspace = ProductWorkspace;
-
 export interface ProductSession {
   readonly id: string;
   readonly workspaceId: string;

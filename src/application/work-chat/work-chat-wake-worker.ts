@@ -176,6 +176,9 @@ export class WorkChatWakeWorker implements StepWorker {
       // The visible Work update is durable first. Only after that append do we
       // enqueue a Chat activation using the exact same queue as user messages.
       const delivered = await this.#dependencies.delivery.deliver(delivery);
+      const productState = delivery.card.productState;
+      if (!isEligibleState(productState))
+        throw new Error('Claimed Work Chat wake is not activation-eligible.');
       if (this.#dependencies.state.enqueueChatActivation) {
         await this.#dependencies.state.enqueueChatActivation({
           tenantId: delivery.tenantId,
@@ -190,10 +193,9 @@ export class WorkChatWakeWorker implements StepWorker {
             deliveryId: delivery.deliveryId,
             workId: delivery.workId,
             workRef: delivery.card.workRef,
-            productState: delivery.card.productState,
+            productState,
           },
-          priority:
-            delivery.card.productState === 'complete' ? 'normal' : 'urgent',
+          priority: productState === 'complete' ? 'normal' : 'urgent',
         });
       }
     } catch (error: unknown) {

@@ -3,7 +3,9 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 
 import {
   ExecutionBindingUnavailableError,
+  type AttachExecutionSessionOutcome,
   type CreatedExecutionSession,
+  type ExecutionAppliedSessionSpec,
   type ExecutionMcpServerConfig,
   type ExecutionPlaneCapabilities,
   type ExecutionPlaneHealth,
@@ -60,11 +62,22 @@ export class ScriptedExecutionPlane implements ExecutionPlanePort {
 
   public async attachSession(
     binding: ExecutionSessionBinding,
-    _spec: ExecutionSessionSpec,
-  ): Promise<ExecutionSession> {
-    const session = this.#sessions.get(binding.externalSessionId);
-    if (!session) throw new ExecutionBindingUnavailableError();
-    return session;
+    spec: ExecutionSessionSpec,
+    applied?: ExecutionAppliedSessionSpec,
+  ): Promise<AttachExecutionSessionOutcome> {
+    const existing = this.#sessions.get(binding.externalSessionId);
+    if (!existing) throw new ExecutionBindingUnavailableError();
+    const desiredRevision = spec.desiredRevision ?? applied?.appliedRevision ?? 1;
+    if (
+      applied &&
+      spec.bootstrapSpecDigest &&
+      applied.appliedSpecDigest !== spec.bootstrapSpecDigest
+    ) {
+      const session = new ScriptedExecutionSession(spec);
+      this.#sessions.set(binding.externalSessionId, session);
+      return { kind: 'reconfigured', session, appliedRevision: desiredRevision };
+    }
+    return { kind: 'reused', session: existing, appliedRevision: desiredRevision };
   }
 
   public async health(): Promise<ExecutionPlaneHealth> {

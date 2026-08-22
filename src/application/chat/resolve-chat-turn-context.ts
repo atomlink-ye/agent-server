@@ -2,7 +2,10 @@ import type { AgentChatRuntime } from '../../domain/chat/agent-chat-runtime.js';
 import type { ChatMessage } from '../../domain/chat/chat-message.js';
 import { principalRef, type PrincipalRef } from '../../domain/tenancy/product-context.js';
 import type { ConversationWorkEntitlement } from '../../domain/chat/conversation-work-entitlement.js';
-import type { ChatDispatch } from '../ports/chat-dispatch-repository.js';
+import type {
+  ChatDispatch,
+  ChatDispatchRepository,
+} from '../ports/chat-dispatch-repository.js';
 import type { ConversationRepository } from '../ports/conversation-repository.js';
 import type { ConversationWorkEntitlementRepository } from '../ports/conversation-work-entitlement-repository.js';
 import type { ChatTurnWindow } from '../ports/chat-turn-provider.js';
@@ -33,7 +36,7 @@ export class ResolveChatTurnContext {
       'getChatRuntime' | 'listMessages' | 'findPrincipalMember'
     >,
     private readonly watermarks: Pick<
-      import('../ports/chat-dispatch-repository.js').ChatDispatchRepository,
+      ChatDispatchRepository,
       'getRuntimeWatermark'
     >,
     private readonly workEntitlements?: ConversationWorkEntitlementRepository,
@@ -51,12 +54,14 @@ export class ResolveChatTurnContext {
     if (!runtime || runtime.status !== 'available')
       throw new Error('chat_turn_runtime_unavailable');
 
-    const watermark = await this.watermarks.getRuntimeWatermark({
-      agentChatRuntimeId: runtime.id,
-      runtimeEpoch: runtime.epoch,
-      tenantId: dispatch.tenantId,
-      conversationId: dispatch.conversationId,
-    });
+    const watermark = this.watermarks.getRuntimeWatermark
+      ? await this.watermarks.getRuntimeWatermark({
+          agentChatRuntimeId: runtime.id,
+          runtimeEpoch: runtime.epoch,
+          tenantId: dispatch.tenantId,
+          conversationId: dispatch.conversationId,
+        })
+      : 0;
     // A retry may observe a reply that was materialized before the worker lost
     // its dispatch lease. Treat that as already complete and never re-run it.
     if (watermark >= dispatch.throughSequence) return null;

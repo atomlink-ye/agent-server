@@ -14,9 +14,9 @@ export interface WorkerRuntimeInvocationResolver {
 }
 
 /**
- * Production runtime decorator that adds machine-readable Worker ContextFS
- * facts at the last common runtime seam. Chat supplies its own invocationContext.
- * Worker memory is resolved by the same pure scoped policy as Chat memory.
+ * Last common runtime seam for canonical ContextFS identity and scoped Memory.
+ * Chat supplies RuntimeInvocationContext directly; Workers resolve it from the
+ * durable RuntimeSession. Both use the same memory visibility policy.
  */
 export class ContextAwareExecutionRuntime implements ExecutionRuntimeService {
   public constructor(
@@ -49,12 +49,11 @@ export class ContextAwareExecutionRuntime implements ExecutionRuntimeService {
     input: ExecutionTurnRequest,
     observer?: ExecutionObservationSink,
   ) {
-    if (input.invocationContext || !input.runtimeSessionId)
-      return this.delegate.executeTurn(input, observer);
-
-    const invocationContext = await this.workerContext.resolve(
-      input.runtimeSessionId,
-    );
+    const invocationContext =
+      input.invocationContext ??
+      (input.runtimeSessionId
+        ? await this.workerContext.resolve(input.runtimeSessionId)
+        : null);
     if (!invocationContext)
       return this.delegate.executeTurn(input, observer);
 

@@ -923,12 +923,12 @@ describe('ExecuteRun', () => {
           runtime: { modelPolicyRef: 'free-only' },
         },
       },
-    })) as unknown as (
-      owner: unknown,
-      versionId: string,
-    ) => Promise<never>;
+    })) as unknown as (owner: unknown, versionId: string) => Promise<never>;
     const findVersionByTenant = vi.fn(
-      async (input: { readonly tenantId: string; readonly versionId: string }) =>
+      async (input: {
+        readonly tenantId: string;
+        readonly versionId: string;
+      }) =>
         findVersion(
           {
             tenantId: input.tenantId,
@@ -1665,7 +1665,7 @@ describe('ExecuteRun', () => {
             findVersion: vi.fn(async () => null),
             findVersionByTenant: vi.fn(async () => null),
           } as never,
-      { resolve: vi.fn(async () => null) },
+          { resolve: vi.fn(async () => null) },
         ),
         events as never,
       );

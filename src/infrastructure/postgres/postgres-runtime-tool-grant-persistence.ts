@@ -11,7 +11,10 @@ export interface RuntimeGrantDatabase {
   query<Row extends Record<string, unknown> = Record<string, unknown>>(
     sql: string,
     values?: readonly unknown[],
-  ): Promise<{ readonly rows?: readonly Row[]; readonly rowCount?: number | null }>;
+  ): Promise<{
+    readonly rows?: readonly Row[];
+    readonly rowCount?: number | null;
+  }>;
 }
 
 interface GrantRow extends Record<string, unknown> {
@@ -36,9 +39,7 @@ interface GrantRow extends Record<string, unknown> {
   readonly updated_at: string | Date;
 }
 
-export class PostgresRuntimeToolGrantPersistence
-  implements RuntimeToolGrantPersistence
-{
+export class PostgresRuntimeToolGrantPersistence implements RuntimeToolGrantPersistence {
   public constructor(private readonly database: RuntimeGrantDatabase) {}
 
   public async loadRecoverable(
@@ -142,8 +143,12 @@ function mapGrant(row: GrantRow): PersistedRuntimeToolGrant {
       ? { teamMemberRunId: row.team_member_run_id }
       : {}),
     ...(row.team_run_id ? { teamRunId: row.team_run_id } : {}),
-    allowedTools: Object.freeze(stringArray(row.allowed_tools, 'allowed_tools')),
-    catalogTools: Object.freeze(stringArray(row.catalog_tools, 'catalog_tools')),
+    allowedTools: Object.freeze(
+      stringArray(row.allowed_tools, 'allowed_tools'),
+    ),
+    catalogTools: Object.freeze(
+      stringArray(row.catalog_tools, 'catalog_tools'),
+    ),
     activeTurn: objectOrNull<RuntimeActiveTurn>(row.active_turn, 'active_turn'),
     ...(row.chat_context
       ? {

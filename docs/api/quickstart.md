@@ -117,7 +117,7 @@ Equivalent canonical source converges to the same immutable version. A changed s
 Create `input.json`:
 
 ```json
-{"question":"In one sentence, explain why durable task identity matters."}
+{ "question": "In one sentence, explain why durable task identity matters." }
 ```
 
 Then:

@@ -1,11 +1,7 @@
 export type ConversationId = string;
 
 export type WorkListProductState =
-  | 'running'
-  | 'needs_you'
-  | 'complete'
-  | 'problem'
-  | 'not_captured';
+  'running' | 'needs_you' | 'complete' | 'problem' | 'not_captured';
 
 export interface WorkListItem {
   readonly id: string;

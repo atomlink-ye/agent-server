@@ -25,7 +25,9 @@ describe('North Star runtime grant boundary', () => {
     const versionId = '00000000-0000-4000-8000-000000000203';
     const definitions = {
       async listDefinitionsForAgent() {
-        return [{ id: definitionId, name: 'OpenAI analysis', description: null }];
+        return [
+          { id: definitionId, name: 'OpenAI analysis', description: null },
+        ];
       },
       async listProductVersions() {
         return {
@@ -95,14 +97,18 @@ describe('North Star runtime grant boundary', () => {
         AGENT_SERVER_PRODUCT_WORK_RUN_START_TOOL_REF,
       ],
     });
-    const principal = { type: 'service_account' as const, id: 'principal-grant' };
+    const principal = {
+      type: 'service_account' as const,
+      id: 'principal-grant',
+    };
     const productScope = {
       tenantId: 'tenant-grant',
       workspaceId: 'workspace-grant',
     };
     const session = await h.runtime.createSession({
       runtimeSessionId: 'chat-runtime-grant',
-      systemPrompt: 'Structured Agent identity is supplied by RuntimeInvocationContext.',
+      systemPrompt:
+        'Structured Agent identity is supplied by RuntimeInvocationContext.',
       invocationContext: {
         scope: {
           kind: 'agent_chat',

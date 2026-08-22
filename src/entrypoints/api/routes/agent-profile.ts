@@ -6,7 +6,10 @@ import type {
 } from '../../../application/ports/agent-registry.js';
 import type { AgentResolutionApi } from '../../../application/ports/agent-resolution-api.js';
 import { ServiceAccountAuthenticator } from '../../../application/control-plane/service-account-authenticator.js';
-import { AgentCoworkerProfileResponseSchema, AgentIdSchema } from '../../../contracts/agents.js';
+import {
+  AgentCoworkerProfileResponseSchema,
+  AgentIdSchema,
+} from '../../../contracts/agents.js';
 import { HttpError } from '../../../contracts/http.js';
 import type { ApiEnvironment } from '../../../platform/http-types.js';
 import type { AppConfig } from '../../../shared/config.js';

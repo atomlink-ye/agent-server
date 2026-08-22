@@ -126,9 +126,11 @@ export function ChatShell({
         return;
       }
       refreshInFlight = true;
-      void conversationListStore.load(commands.loadConversations).finally(() => {
-        refreshInFlight = false;
-      });
+      void conversationListStore
+        .load(commands.loadConversations)
+        .finally(() => {
+          refreshInFlight = false;
+        });
     };
     const startPolling = (): void => {
       if (disposed || document.visibilityState !== 'visible') return;
@@ -184,7 +186,9 @@ export function ChatShell({
     const selectedExists = selected
       ? conversations.some(({ id }) => id === selected)
       : false;
-    const nextConversationId = selectedExists ? selected! : conversations[0]!.id;
+    const nextConversationId = selectedExists
+      ? selected!
+      : conversations[0]!.id;
     appSelectionStore.select(nextConversationId);
     if (location.pathname === '/') {
       navigate(conversationPath(nextConversationId), { replace: true });
@@ -280,7 +284,8 @@ export function ChatShell({
 
   const send = useCallback(
     async (body: string): Promise<void> => {
-      if (!conversationId || !messageStore.beginSend(conversationId, body)) return;
+      if (!conversationId || !messageStore.beginSend(conversationId, body))
+        return;
       try {
         const message = await commands.sendMessage(conversationId, body);
         if (!message) {
@@ -374,13 +379,7 @@ export function ChatShell({
       const target = returnConversationId ?? conversationId;
       navigate(target ? conversationPath(target) : '/');
     },
-    [
-      activeTab,
-      conversationId,
-      navigate,
-      returnConversationId,
-      selectedWorkId,
-    ],
+    [activeTab, conversationId, navigate, returnConversationId, selectedWorkId],
   );
 
   const respondInChat = useCallback((): void => {
@@ -494,7 +493,9 @@ export function ChatShell({
                     ✓
                   </span>
                   <h1>Choose a Work item</h1>
-                  <p>Select a real Work item from the pane, or create a new Work.</p>
+                  <p>
+                    Select a real Work item from the pane, or create a new Work.
+                  </p>
                   <button type="button" onClick={() => setShowNewWork(true)}>
                     New Work
                   </button>

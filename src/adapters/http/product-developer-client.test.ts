@@ -28,98 +28,100 @@ describe('ProductDeveloperClient', () => {
       body: unknown;
       idempotencyKey: string | null;
     }> = [];
-    const request = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
-      const url = String(input);
-      const headers = new Headers(init?.headers);
-      const body = init?.body ? JSON.parse(String(init.body)) : null;
-      calls.push({
-        url,
-        method: init?.method ?? 'GET',
-        body,
-        idempotencyKey: headers.get('idempotency-key'),
-      });
-      if (url.endsWith('/api/v1/work-definitions:apply'))
-        return jsonResponse(
-          {
-            result: 'created',
-            definition: {
-              id: definitionId,
-              normalized_name: 'quickstart',
-              description: null,
-              created_at: at,
-              latest_version_id: definitionVersionId,
-              links: {
-                self: `/api/v1/work-definitions/${definitionId}`,
-                versions: `/api/v1/work-definitions/${definitionId}/versions`,
+    const request = vi.fn(
+      async (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input);
+        const headers = new Headers(init?.headers);
+        const body = init?.body ? JSON.parse(String(init.body)) : null;
+        calls.push({
+          url,
+          method: init?.method ?? 'GET',
+          body,
+          idempotencyKey: headers.get('idempotency-key'),
+        });
+        if (url.endsWith('/api/v1/work-definitions:apply'))
+          return jsonResponse(
+            {
+              result: 'created',
+              definition: {
+                id: definitionId,
+                normalized_name: 'quickstart',
+                description: null,
+                created_at: at,
+                latest_version_id: definitionVersionId,
+                links: {
+                  self: `/api/v1/work-definitions/${definitionId}`,
+                  versions: `/api/v1/work-definitions/${definitionId}/versions`,
+                },
               },
-            },
-            version: {
-              id: definitionVersionId,
-              definition_id: definitionId,
-              status: 'published',
-              fingerprint: `sha256:${'a'.repeat(64)}`,
-              source_yaml: source,
-              source: {
-                apiVersion: 'agentserver.dev/v1alpha1',
-                kind: 'WorkDefinition',
+              version: {
+                id: definitionVersionId,
+                definition_id: definitionId,
+                status: 'published',
+                fingerprint: `sha256:${'a'.repeat(64)}`,
+                source_yaml: source,
+                source: {
+                  apiVersion: 'agentserver.dev/v1alpha1',
+                  kind: 'WorkDefinition',
+                },
+                resolved: {
+                  resource_manifest_fingerprint: `sha256:${'b'.repeat(64)}`,
+                },
+                created_at: at,
+                published_at: at,
+                links: {
+                  self: `/api/v1/work-definition-versions/${definitionVersionId}`,
+                  definition: `/api/v1/work-definitions/${definitionId}`,
+                },
               },
               resolved: {
                 resource_manifest_fingerprint: `sha256:${'b'.repeat(64)}`,
               },
-              created_at: at,
-              published_at: at,
-              links: {
-                self: `/api/v1/work-definition-versions/${definitionVersionId}`,
-                definition: `/api/v1/work-definitions/${definitionId}`,
+            },
+            201,
+          );
+        if (url.endsWith('/api/v1/works'))
+          return jsonResponse(
+            {
+              work: {
+                id: workId,
+                tenant_id: 'tenant-1',
+                workspace_id: workspaceId,
+                definition_id: definitionId,
+                definition_version_id: definitionVersionId,
+                title: 'Quickstart work',
+                origin: 'created',
+                archived_at: null,
+                created_at: at,
+                updated_at: at,
               },
             },
-            resolved: {
-              resource_manifest_fingerprint: `sha256:${'b'.repeat(64)}`,
+            201,
+          );
+        if (url.endsWith(`/api/v1/works/${workId}/runs`))
+          return jsonResponse(
+            {
+              work_run: {
+                id: workRunId,
+                work_id: workId,
+                definition_version_id: definitionVersionId,
+                trigger_kind: 'manual',
+                trigger_ref: 'manual',
+                expires_at: '2026-08-17T00:00:00.000Z',
+                bound_at: at,
+                created_at: at,
+                updated_at: at,
+              },
+              execution_receipt: {
+                reused: false,
+                source_refs: { task_id: taskId },
+              },
             },
-          },
-          201,
-        );
-      if (url.endsWith('/api/v1/works'))
-        return jsonResponse(
-          {
-            work: {
-              id: workId,
-              tenant_id: 'tenant-1',
-              workspace_id: workspaceId,
-              definition_id: definitionId,
-              definition_version_id: definitionVersionId,
-              title: 'Quickstart work',
-              origin: 'created',
-              archived_at: null,
-              created_at: at,
-              updated_at: at,
-            },
-          },
-          201,
-        );
-      if (url.endsWith(`/api/v1/works/${workId}/runs`))
-        return jsonResponse(
-          {
-            work_run: {
-              id: workRunId,
-              work_id: workId,
-              definition_version_id: definitionVersionId,
-              trigger_kind: 'manual',
-              trigger_ref: 'manual',
-              expires_at: '2026-08-17T00:00:00.000Z',
-              bound_at: at,
-              created_at: at,
-              updated_at: at,
-            },
-            execution_receipt: {
-              reused: false,
-              source_refs: { task_id: taskId },
-            },
-          },
-          202,
-        );
-      throw new Error(`unexpected URL ${url}`);
-    });
+            202,
+          );
+        throw new Error(`unexpected URL ${url}`);
+      },
+    );
 
     const client = new ProductDeveloperClient({
       baseUrl: 'http://agent-server.test',

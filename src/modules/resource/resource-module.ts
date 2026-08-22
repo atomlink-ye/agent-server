@@ -96,9 +96,13 @@ export async function createResourceModule(
 
   // The managed Agent registry is the only production Agent source. The legacy
   // invokable repository remains solely for Team compatibility.
-  const agentResolutionApi = new ResolveAgentVersion(agentRegistry, skillCatalog);
+  const agentResolutionApi = new ResolveAgentVersion(
+    agentRegistry,
+    skillCatalog,
+  );
   const definitionReadApi: DefinitionReadApi = {
-    findTeamDefinitionById: (id) => invokableRepository.findTeamDefinitionById(id),
+    findTeamDefinitionById: (id) =>
+      invokableRepository.findTeamDefinitionById(id),
     findPublishedTeamVersionById: (id, ownerScope) =>
       invokableRepository.findPublishedTeamVersionById(id, ownerScope),
   };

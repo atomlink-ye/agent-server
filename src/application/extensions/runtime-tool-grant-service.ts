@@ -292,8 +292,8 @@ export class RuntimeToolGrantService {
     const grant = this.#grants.get(grantId);
     return Boolean(
       grant &&
-        Date.parse(grant.expiresAt) > this.now().getTime() &&
-        grant.allowedTools.includes(toolRef),
+      Date.parse(grant.expiresAt) > this.now().getTime() &&
+      grant.allowedTools.includes(toolRef),
     );
   }
 
@@ -306,7 +306,9 @@ export class RuntimeToolGrantService {
     this.pruneMemory();
     validateTools(allowedTools);
     const now = this.now();
-    const expiresAt = new Date(now.getTime() + Math.max(1, ttlMs)).toISOString();
+    const expiresAt = new Date(
+      now.getTime() + Math.max(1, ttlMs),
+    ).toISOString();
     for (const [grantId, grant] of this.#grants) {
       if (grant.productSessionId !== productSessionId) continue;
       if (Date.parse(grant.expiresAt) <= now.getTime()) continue;
@@ -333,7 +335,10 @@ export class RuntimeToolGrantService {
   }): Promise<RuntimeToolGrant | null> {
     await this.initialize();
     this.pruneMemory();
-    const matches = [...this.#grants.values(), ...this.#renewable.values()].filter(
+    const matches = [
+      ...this.#grants.values(),
+      ...this.#renewable.values(),
+    ].filter(
       (candidate) =>
         candidate.tenantId === input.tenantId &&
         candidate.principalType === input.principalType &&
@@ -457,7 +462,10 @@ export class RuntimeToolGrantService {
     const revokedAt = this.now().toISOString();
     if (this.persistence)
       await this.persistence.revokeForTeamRun(teamRunId, revokedAt);
-    for (const grant of [...this.#grants.values(), ...this.#renewable.values()]) {
+    for (const grant of [
+      ...this.#grants.values(),
+      ...this.#renewable.values(),
+    ]) {
       if (grant.teamRunId !== teamRunId) continue;
       this.#grants.delete(grant.grantId);
       this.#renewable.delete(grant.grantId);
@@ -491,7 +499,8 @@ export class RuntimeToolGrantService {
     if (!this.#initialized) return;
     const now = this.now().getTime();
     for (const [grantId, grant] of this.#renewable) {
-      if (grant.renewableUntil && Date.parse(grant.renewableUntil) > now) continue;
+      if (grant.renewableUntil && Date.parse(grant.renewableUntil) > now)
+        continue;
       this.#renewable.delete(grantId);
       this.#activeCalls.delete(grantId);
     }
@@ -509,10 +518,7 @@ export class RuntimeToolGrantService {
         }
       }
       if (Date.parse(grant.expiresAt) > now) continue;
-      if (
-        (this.#activeCalls.get(grantId) ?? 0) > 0 ||
-        grant.teamMemberRunId
-      )
+      if ((this.#activeCalls.get(grantId) ?? 0) > 0 || grant.teamMemberRunId)
         continue;
       this.#grants.delete(grantId);
       this.#activeCalls.delete(grantId);
@@ -532,9 +538,9 @@ export class RuntimeToolGrantService {
 function isRenewableChatGrant(grant: RuntimeToolGrant): boolean {
   return Boolean(
     grant.chatContext &&
-      grant.productSessionId === undefined &&
-      grant.teamMemberRunId === undefined &&
-      grant.teamRunId === undefined,
+    grant.productSessionId === undefined &&
+    grant.teamMemberRunId === undefined &&
+    grant.teamRunId === undefined,
   );
 }
 
@@ -635,9 +641,7 @@ function toPersisted(grant: StoredGrant): PersistedRuntimeToolGrant {
     activeTurn: grant.activeTurn,
     ...(grant.chatContext ? { chatContext: grant.chatContext } : {}),
     expiresAt: grant.expiresAt,
-    ...(grant.renewableUntil
-      ? { renewableUntil: grant.renewableUntil }
-      : {}),
+    ...(grant.renewableUntil ? { renewableUntil: grant.renewableUntil } : {}),
     revision: grant.revision,
     createdAt: grant.createdAt,
     updatedAt: grant.updatedAt,
@@ -664,9 +668,7 @@ function fromPersisted(grant: PersistedRuntimeToolGrant): StoredGrant {
     activeTurn: grant.activeTurn,
     ...(grant.chatContext ? { chatContext: grant.chatContext } : {}),
     expiresAt: grant.expiresAt,
-    ...(grant.renewableUntil
-      ? { renewableUntil: grant.renewableUntil }
-      : {}),
+    ...(grant.renewableUntil ? { renewableUntil: grant.renewableUntil } : {}),
     tokenHash: Buffer.from(grant.tokenHashHex, 'hex'),
     revision: grant.revision,
     createdAt: grant.createdAt,

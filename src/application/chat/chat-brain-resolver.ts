@@ -49,7 +49,10 @@ export type ResolvedChatBrain = Readonly<{
   readonly capabilitySummary: ChatTurnCapabilitySummary;
   /** Compatibility prompt projection while consumers migrate to ContextFS. */
   readonly agentHome: ChatAgentHomeProjection;
-  readonly resolvedSkills: readonly Pick<ResolvedSkillPackage, 'ref' | 'digest'>[];
+  readonly resolvedSkills: readonly Pick<
+    ResolvedSkillPackage,
+    'ref' | 'digest'
+  >[];
   readonly toolRefs: readonly string[];
 }>;
 
@@ -71,7 +74,10 @@ export class ChatBrainResolver {
       'findManagedDefinitionByTenant'
     >,
     private readonly agentResolution: AgentResolutionApi,
-    private readonly listAgentHomeEntries: Pick<ListAgentHomeEntries, 'execute'>,
+    private readonly listAgentHomeEntries: Pick<
+      ListAgentHomeEntries,
+      'execute'
+    >,
     private readonly contextViews: ContextViewResolver = new ContextViewResolver(),
     private readonly scopedMemory?: Pick<ScopedMemoryResolver, 'resolve'>,
   ) {}

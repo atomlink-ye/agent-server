@@ -67,7 +67,8 @@ export class ScriptedExecutionPlane implements ExecutionPlanePort {
   ): Promise<AttachExecutionSessionOutcome> {
     const existing = this.#sessions.get(binding.externalSessionId);
     if (!existing) throw new ExecutionBindingUnavailableError();
-    const desiredRevision = spec.desiredRevision ?? applied?.appliedRevision ?? 1;
+    const desiredRevision =
+      spec.desiredRevision ?? applied?.appliedRevision ?? 1;
     if (
       applied &&
       spec.bootstrapSpecDigest &&
@@ -75,9 +76,17 @@ export class ScriptedExecutionPlane implements ExecutionPlanePort {
     ) {
       const session = new ScriptedExecutionSession(spec);
       this.#sessions.set(binding.externalSessionId, session);
-      return { kind: 'reconfigured', session, appliedRevision: desiredRevision };
+      return {
+        kind: 'reconfigured',
+        session,
+        appliedRevision: desiredRevision,
+      };
     }
-    return { kind: 'reused', session: existing, appliedRevision: desiredRevision };
+    return {
+      kind: 'reused',
+      session: existing,
+      appliedRevision: desiredRevision,
+    };
   }
 
   public async health(): Promise<ExecutionPlaneHealth> {

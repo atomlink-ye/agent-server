@@ -14,7 +14,10 @@ interface RuntimeSessionDatabase {
   query<Row extends Record<string, unknown> = Record<string, unknown>>(
     sql: string,
     values?: readonly unknown[],
-  ): Promise<{ readonly rows?: readonly Row[]; readonly rowCount?: number | null }>;
+  ): Promise<{
+    readonly rows?: readonly Row[];
+    readonly rowCount?: number | null;
+  }>;
 }
 
 interface RuntimeSessionRow extends Record<string, unknown> {
@@ -50,11 +53,7 @@ interface RuntimeSessionRow extends Record<string, unknown> {
   readonly generation_endpoint_epoch: string | null;
   readonly generation_extension_grant_id: string | null;
   readonly generation_status:
-    | 'active'
-    | 'superseded'
-    | 'unavailable'
-    | 'closed'
-    | null;
+    'active' | 'superseded' | 'unavailable' | 'closed' | null;
   readonly generation_created_at: string | Date | null;
   readonly generation_superseded_at: string | Date | null;
 }
@@ -83,9 +82,7 @@ FROM runtime_sessions rs
 JOIN session_launch_snapshots sls ON sls.id=rs.launch_snapshot_id
 LEFT JOIN runtime_session_generations rsg ON rsg.id=rs.current_generation_id`;
 
-export class PostgresRuntimeSessionRepository
-  implements RuntimeSessionRepository
-{
+export class PostgresRuntimeSessionRepository implements RuntimeSessionRepository {
   public constructor(private readonly db: RuntimeSessionDatabase) {}
 
   public async createOrGetForAgentChat(
@@ -130,7 +127,9 @@ export class PostgresRuntimeSessionRepository
     if (!created)
       throw new Error('Agent chat runtime session could not be created.');
     if (created.agentVersionId !== input.agentVersionId)
-      throw new Error('Agent chat runtime session version does not match epoch.');
+      throw new Error(
+        'Agent chat runtime session version does not match epoch.',
+      );
     return created;
   }
 
@@ -309,8 +308,7 @@ export class PostgresRuntimeSessionRepository
       ],
     );
     const created = await this.findByTask(input);
-    if (!created)
-      throw new Error('Task runtime session could not be created.');
+    if (!created) throw new Error('Task runtime session could not be created.');
     return created;
   }
 
@@ -353,7 +351,10 @@ export class PostgresRuntimeSessionRepository
   public async bindExecution(
     input: Parameters<RuntimeSessionRepository['bindExecution']>[0],
   ): Promise<RuntimeSession> {
-    assertExecutionBinding(input.workspaceBinding.plane, input.sessionBinding.plane);
+    assertExecutionBinding(
+      input.workspaceBinding.plane,
+      input.sessionBinding.plane,
+    );
     const generationId = randomUUID();
     const now = new Date().toISOString();
     const result = await this.db.query(
@@ -390,7 +391,10 @@ export class PostgresRuntimeSessionRepository
       ],
     );
     if ((result.rowCount ?? 0) === 0) {
-      const existing = await this.requireById(input.id, 'after binding conflict');
+      const existing = await this.requireById(
+        input.id,
+        'after binding conflict',
+      );
       if (!sameGeneration(existing.currentGeneration, input))
         throw new Error('Runtime session binding conflict.');
       return existing;
@@ -401,7 +405,10 @@ export class PostgresRuntimeSessionRepository
   public async replaceExecution(
     input: Parameters<RuntimeSessionRepository['replaceExecution']>[0],
   ): Promise<RuntimeSession> {
-    assertExecutionBinding(input.workspaceBinding.plane, input.sessionBinding.plane);
+    assertExecutionBinding(
+      input.workspaceBinding.plane,
+      input.sessionBinding.plane,
+    );
     const generationId = randomUUID();
     const now = new Date().toISOString();
     const result = await this.db.query(
@@ -519,9 +526,13 @@ export class PostgresRuntimeSessionRepository
     return result.rows?.[0] ? map(result.rows[0]) : null;
   }
 
-  private async requireById(id: string, context: string): Promise<RuntimeSession> {
+  private async requireById(
+    id: string,
+    context: string,
+  ): Promise<RuntimeSession> {
     const result = await this.findOne(`${SESSION_SELECT} WHERE rs.id=$1`, [id]);
-    if (!result) throw new Error(`Runtime session could not be loaded ${context}.`);
+    if (!result)
+      throw new Error(`Runtime session could not be loaded ${context}.`);
     return result;
   }
 }
@@ -644,27 +655,34 @@ function sameGeneration(
 ): boolean {
   return Boolean(
     generation &&
-      generation.workspaceBinding.plane === input.workspaceBinding.plane &&
-      generation.workspaceBinding.externalWorkspaceId ===
-        input.workspaceBinding.externalWorkspaceId &&
-      generation.sessionBinding.plane === input.sessionBinding.plane &&
-      generation.sessionBinding.externalSessionId ===
-        input.sessionBinding.externalSessionId &&
-      generation.appliedRevision === input.appliedRevision &&
-      generation.appliedSpecDigest === input.appliedSpecDigest &&
-      generation.endpointEpoch === input.endpointEpoch &&
-      generation.extensionGrantId === (input.extensionGrantId ?? null),
+    generation.workspaceBinding.plane === input.workspaceBinding.plane &&
+    generation.workspaceBinding.externalWorkspaceId ===
+      input.workspaceBinding.externalWorkspaceId &&
+    generation.sessionBinding.plane === input.sessionBinding.plane &&
+    generation.sessionBinding.externalSessionId ===
+      input.sessionBinding.externalSessionId &&
+    generation.appliedRevision === input.appliedRevision &&
+    generation.appliedSpecDigest === input.appliedSpecDigest &&
+    generation.endpointEpoch === input.endpointEpoch &&
+    generation.extensionGrantId === (input.extensionGrantId ?? null),
   );
 }
 
-function assertExecutionBinding(workspacePlane: string, sessionPlane: string): void {
+function assertExecutionBinding(
+  workspacePlane: string,
+  sessionPlane: string,
+): void {
   if (workspacePlane !== sessionPlane)
     throw new Error('Runtime workspace/session planes do not match.');
-  if (!workspacePlane) throw new Error('Runtime execution plane is unavailable.');
+  if (!workspacePlane)
+    throw new Error('Runtime execution plane is unavailable.');
 }
 
-function skillRefs(value: unknown): { readonly ref: string; readonly digest: string }[] {
-  if (!Array.isArray(value)) throw new Error('Runtime session skills are invalid.');
+function skillRefs(
+  value: unknown,
+): { readonly ref: string; readonly digest: string }[] {
+  if (!Array.isArray(value))
+    throw new Error('Runtime session skills are invalid.');
   return value.map((item) => {
     if (
       !item ||
@@ -702,5 +720,7 @@ function iso(value: string | Date): string {
 
 function assertPositiveRuntimeEpoch(runtimeEpoch: number): void {
   if (!Number.isSafeInteger(runtimeEpoch) || runtimeEpoch <= 0)
-    throw new Error('Agent chat RuntimeSession requires a positive runtime epoch.');
+    throw new Error(
+      'Agent chat RuntimeSession requires a positive runtime epoch.',
+    );
 }

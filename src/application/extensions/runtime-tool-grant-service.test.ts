@@ -288,10 +288,12 @@ describe('RuntimeToolGrantService', () => {
       { principalId: 'principal-2' },
       { scopeId: 'other-scope' },
     ])
-      expect(service.refreshForChatScope({ ...refresh, ...mismatch })).toBeNull();
+      expect(
+        service.refreshForChatScope({ ...refresh, ...mismatch }),
+      ).toBeNull();
 
-    expect(service.refreshForChatScope(refresh)?.chatContext?.triggerMessageId).toBe(
-      'trigger-2',
-    );
+    expect(
+      service.refreshForChatScope(refresh)?.chatContext?.triggerMessageId,
+    ).toBe('trigger-2');
   });
 });

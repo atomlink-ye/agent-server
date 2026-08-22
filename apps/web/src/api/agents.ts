@@ -10,13 +10,21 @@ export interface CoworkerProfile {
   };
 }
 
-export async function loadCoworkerProfile(agentId: string): Promise<CoworkerProfile> {
-  const response = await fetch(`/api/agents/${encodeURIComponent(agentId)}/profile`, {
-    credentials: 'same-origin',
-    headers: { accept: 'application/json' },
-  });
+export async function loadCoworkerProfile(
+  agentId: string,
+): Promise<CoworkerProfile> {
+  const response = await fetch(
+    `/api/agents/${encodeURIComponent(agentId)}/profile`,
+    {
+      credentials: 'same-origin',
+      headers: { accept: 'application/json' },
+    },
+  );
   const payload = await response.json().catch(() => null);
-  if (!response.ok) throw new Error(errorMessage(payload, 'Coworker profile could not be loaded.'));
+  if (!response.ok)
+    throw new Error(
+      errorMessage(payload, 'Coworker profile could not be loaded.'),
+    );
   const root = record(payload);
   const agent = record(root?.agent);
   const capabilities = record(root?.capabilities);
@@ -32,7 +40,10 @@ export async function loadCoworkerProfile(agentId: string): Promise<CoworkerProf
     },
     capabilities: {
       modelPolicyRef: text(capabilities.model_policy_ref),
-      proposalLimit: capabilities.proposal_limit === null ? null : integer(capabilities.proposal_limit),
+      proposalLimit:
+        capabilities.proposal_limit === null
+          ? null
+          : integer(capabilities.proposal_limit),
       tools: strings(capabilities.tools),
       skills: strings(capabilities.skills),
     },
@@ -45,7 +56,8 @@ function record(value: unknown): Record<string, unknown> | null {
     : null;
 }
 function text(value: unknown): string {
-  if (typeof value !== 'string' || !value.trim()) throw new Error('Invalid Coworker profile.');
+  if (typeof value !== 'string' || !value.trim())
+    throw new Error('Invalid Coworker profile.');
   return value;
 }
 function nullableText(value: unknown): string | null {
@@ -57,14 +69,18 @@ function strings(value: unknown): readonly string[] {
   return value as string[];
 }
 function integer(value: unknown): number {
-  if (!Number.isSafeInteger(value) || (value as number) < 0) throw new Error('Invalid Coworker profile.');
+  if (!Number.isSafeInteger(value) || (value as number) < 0)
+    throw new Error('Invalid Coworker profile.');
   return value as number;
 }
 function runtimeStatus(value: unknown): Coworker['runtimeStatus'] {
-  if (value === 'available' || value === 'draining' || value === 'unavailable') return value;
+  if (value === 'available' || value === 'draining' || value === 'unavailable')
+    return value;
   throw new Error('Invalid Coworker runtime status.');
 }
 function errorMessage(payload: unknown, fallback: string): string {
   const error = record(record(payload)?.error);
-  return typeof error?.message === 'string' && error.message.trim() ? error.message : fallback;
+  return typeof error?.message === 'string' && error.message.trim()
+    ? error.message
+    : fallback;
 }

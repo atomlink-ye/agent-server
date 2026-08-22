@@ -86,7 +86,9 @@ const ServiceAccountsEnvironmentSchema = z
           });
         } else tokenIndexes.set(account.token, index);
 
-        const existingScope = serviceAccountScopes.get(account.serviceAccountId);
+        const existingScope = serviceAccountScopes.get(
+          account.serviceAccountId,
+        );
         if (!existingScope) {
           serviceAccountScopes.set(account.serviceAccountId, {
             tenantId: account.tenantId,
@@ -356,8 +358,7 @@ export function loadConfig(
           connectionKey: requiredConfig(parsed.data.LARK_CANARY_CONNECTION_KEY),
           appId: requiredConfig(parsed.data.LARK_CANARY_APP_ID),
           domain: requiredConfig(parsed.data.LARK_CANARY_DOMAIN) as
-            | 'feishu'
-            | 'lark',
+            'feishu' | 'lark',
           appSecret: requiredConfig(parsed.data.LARK_CANARY_APP_SECRET),
           botOpenId: requiredConfig(parsed.data.LARK_CANARY_BOT_OPEN_ID),
           allowedChatId: requiredConfig(

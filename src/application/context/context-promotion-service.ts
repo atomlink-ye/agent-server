@@ -1,5 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import type { LogicalFileEntry, LogicalFileStore } from '../ports/logical-file-store.js';
+import type {
+  LogicalFileEntry,
+  LogicalFileStore,
+} from '../ports/logical-file-store.js';
 import type { ContextTransitionRepository } from '../ports/memory-context-repository.js';
 import {
   agentContextScope,
@@ -47,7 +50,10 @@ export class ContextPromotionService {
         scope: targetScope,
         path: input.targetPath,
         content: copied.content,
-        source: { kind: 'conversation_promotion', sourceId: input.conversationId },
+        source: {
+          kind: 'conversation_promotion',
+          sourceId: input.conversationId,
+        },
         now: this.now().toISOString(),
       });
     }
@@ -135,7 +141,10 @@ export class ContextPromotionService {
     readonly targetScope: ContextScope;
     readonly targetPath: string;
   }): Promise<LogicalFileEntry> {
-    if (input.sourceScope.tenantId !== input.tenantId || input.targetScope.tenantId !== input.tenantId)
+    if (
+      input.sourceScope.tenantId !== input.tenantId ||
+      input.targetScope.tenantId !== input.tenantId
+    )
       throw new Error('Context transition cannot cross tenants.');
     const source = await this.files.read(input.sourceScope, input.sourcePath);
     if (!source) throw new Error('Context transition source does not exist.');

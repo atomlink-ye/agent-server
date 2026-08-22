@@ -63,7 +63,12 @@ export function ChatComposer({
           }}
         />
         <div className="composer-actions">
-          <button className="composer-tool" type="button" aria-label="Attach a file" disabled>
+          <button
+            className="composer-tool"
+            type="button"
+            aria-label="Attach a file"
+            disabled
+          >
             ＋
           </button>
           <button
@@ -76,7 +81,9 @@ export function ChatComposer({
           </button>
         </div>
       </form>
-      <p className="composer-hint">Press Enter to send · Shift + Enter for a new line</p>
+      <p className="composer-hint">
+        Press Enter to send · Shift + Enter for a new line
+      </p>
     </>
   );
 }

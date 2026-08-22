@@ -1,5 +1,9 @@
 import type { ContextView } from '../context/context-fs.js';
-import type { PrincipalRef, ProductScope, ResourceOwner } from '../tenancy/product-context.js';
+import type {
+  PrincipalRef,
+  ProductScope,
+  ResourceOwner,
+} from '../tenancy/product-context.js';
 
 export type RuntimeScope =
   | Readonly<{

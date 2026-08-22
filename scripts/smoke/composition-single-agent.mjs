@@ -147,7 +147,9 @@ spec:
     expectedStatus: 200,
   });
   if (validated.valid !== true || !validated.fingerprint)
-    throw new Error(`composition Product Definition validation failed: ${JSON.stringify(validated)}`);
+    throw new Error(
+      `composition Product Definition validation failed: ${JSON.stringify(validated)}`,
+    );
   const applied = await request('/api/v1/work-definitions:apply', {
     method: 'POST',
     body: { source: publicDefinition },
@@ -161,7 +163,9 @@ spec:
     applied.version?.fingerprint !== validated.fingerprint ||
     !applied.resolved?.resource_manifest_fingerprint
   )
-    throw new Error(`composition Product Definition apply invalid: ${JSON.stringify(applied)}`);
+    throw new Error(
+      `composition Product Definition apply invalid: ${JSON.stringify(applied)}`,
+    );
 
   const pool = new Pool({ connectionString: databaseUrl, max: 1 });
   try {
@@ -210,7 +214,9 @@ spec:
     );
     if (
       inputSnapshot.rows[0]?.input_snapshot?.marker !== marker ||
-      !/^sha256:[0-9a-f]{64}$/.test(inputSnapshot.rows[0]?.input_fingerprint ?? '')
+      !/^sha256:[0-9a-f]{64}$/.test(
+        inputSnapshot.rows[0]?.input_fingerprint ?? '',
+      )
     )
       throw new Error(
         `composition WorkRun input snapshot mismatch: ${JSON.stringify(inputSnapshot.rows[0])}`,
@@ -483,9 +489,7 @@ spec:
     expectedStatus: 200,
   });
   if (validated.valid !== true || !validated.fingerprint)
-    throw new Error(
-      `inline validate failed: ${JSON.stringify(validated)}`,
-    );
+    throw new Error(`inline validate failed: ${JSON.stringify(validated)}`);
 
   const planned = await request('/api/v1/work-definitions:plan', {
     method: 'POST',
@@ -516,9 +520,7 @@ spec:
     applied.version?.fingerprint !== validated.fingerprint ||
     !applied.resolved?.resource_manifest_fingerprint
   )
-    throw new Error(
-      `inline apply invalid: ${JSON.stringify(applied)}`,
-    );
+    throw new Error(`inline apply invalid: ${JSON.stringify(applied)}`);
 
   const pool = new Pool({ connectionString: databaseUrl, max: 1 });
   try {
@@ -529,9 +531,7 @@ spec:
     );
     const owner = workspace.rows[0];
     if (!owner)
-      throw new Error(
-        `inline smoke workspace missing: ${workspaceId}`,
-      );
+      throw new Error(`inline smoke workspace missing: ${workspaceId}`);
 
     const created = await request('/api/v1/works', {
       method: 'POST',
@@ -581,9 +581,7 @@ spec:
         continue;
       }
       if (!response.ok)
-        throw new Error(
-          `inline WorkRun projection -> ${response.status}`,
-        );
+        throw new Error(`inline WorkRun projection -> ${response.status}`);
       projection = await response.json();
       const state = projection.work_run?.product_state;
       if (state === 'running') {
@@ -595,22 +593,39 @@ spec:
       let failTrace = null;
       let failRunEvents = null;
       try {
-        const traceResp = await fetch(new URL(`/api/v1/works/${workId}/runs/${workRunId}/trace`, baseUrl), {
-          headers: { authorization: `Bearer ${token}`, accept: 'application/json' },
-          signal: AbortSignal.timeout(10_000),
-        });
+        const traceResp = await fetch(
+          new URL(`/api/v1/works/${workId}/runs/${workRunId}/trace`, baseUrl),
+          {
+            headers: {
+              authorization: `Bearer ${token}`,
+              accept: 'application/json',
+            },
+            signal: AbortSignal.timeout(10_000),
+          },
+        );
         if (traceResp.ok) {
           failTrace = await traceResp.json();
           const technicalRunId = failTrace?.runs?.[0]?.source_refs?.run_id;
           if (technicalRunId) {
-            const eventsResp = await fetch(new URL(`/api/v1/runs/${encodeURIComponent(technicalRunId)}/events`, baseUrl), {
-              headers: { authorization: `Bearer ${token}`, accept: 'application/json' },
-              signal: AbortSignal.timeout(10_000),
-            });
+            const eventsResp = await fetch(
+              new URL(
+                `/api/v1/runs/${encodeURIComponent(technicalRunId)}/events`,
+                baseUrl,
+              ),
+              {
+                headers: {
+                  authorization: `Bearer ${token}`,
+                  accept: 'application/json',
+                },
+                signal: AbortSignal.timeout(10_000),
+              },
+            );
             if (eventsResp.ok) failRunEvents = await eventsResp.json();
           }
         }
-      } catch { /* best-effort */ }
+      } catch {
+        /* best-effort */
+      }
       progress('composition_inline_failed_trace', {
         work_run: projection.work_run,
         trace: failTrace,
@@ -693,12 +708,7 @@ spec:
          JOIN session_launch_snapshots sls ON sls.id=rs.launch_snapshot_id
         WHERE rs.task_id=$1 AND rs.tenant_id=$2
           AND rs.principal_type=$3 AND rs.principal_id=$4`,
-      [
-        rootTaskId,
-        owner.tenant_id,
-        owner.principal_type,
-        owner.principal_id,
-      ],
+      [rootTaskId, owner.tenant_id, owner.principal_type, owner.principal_id],
     );
     const runtimeSession = session.rows[0];
     if (

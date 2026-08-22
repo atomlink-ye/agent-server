@@ -25,7 +25,10 @@ export interface MemoryContextRepository {
     readonly now: string;
   }): Promise<MemoryContextRecordRef>;
 
-  find(memoryId: string, tenantId: string): Promise<MemoryContextRecordRef | null>;
+  find(
+    memoryId: string,
+    tenantId: string,
+  ): Promise<MemoryContextRecordRef | null>;
   listByTenant(tenantId: string): Promise<readonly MemoryContextRecordRef[]>;
 }
 
@@ -46,10 +49,14 @@ export interface ContextTransitionRecord {
 }
 
 export interface ContextTransitionRepository {
-  record(input: Omit<ContextTransitionRecord, 'id'>): Promise<ContextTransitionRecord>;
+  record(
+    input: Omit<ContextTransitionRecord, 'id'>,
+  ): Promise<ContextTransitionRecord>;
 }
 
-export function memoryProvenanceFromRef(ref: MemoryContextRecordRef): MemoryProvenance {
+export function memoryProvenanceFromRef(
+  ref: MemoryContextRecordRef,
+): MemoryProvenance {
   return Object.freeze({
     tenantId: ref.tenantId,
     scope: ref.scope,

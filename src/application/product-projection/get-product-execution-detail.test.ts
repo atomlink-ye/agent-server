@@ -15,21 +15,25 @@ const timestamp = '2026-08-18T01:00:00.000Z';
 
 const owner = { tenantId: 'tenant-1', workspaceId: 'workspace-1' };
 
-function service(overrides: {
-  readonly work?: unknown;
-  readonly workRun?: unknown;
-} = {}) {
-  const work = overrides.work === undefined
-    ? { id: workId, tenantId: owner.tenantId, workspaceId: owner.workspaceId }
-    : overrides.work;
-  const workRun = overrides.workRun === undefined
-    ? {
-        id: workRunId,
-        workId,
-        rootTaskId,
-        boundAt: timestamp,
-      }
-    : overrides.workRun;
+function service(
+  overrides: {
+    readonly work?: unknown;
+    readonly workRun?: unknown;
+  } = {},
+) {
+  const work =
+    overrides.work === undefined
+      ? { id: workId, tenantId: owner.tenantId, workspaceId: owner.workspaceId }
+      : overrides.work;
+  const workRun =
+    overrides.workRun === undefined
+      ? {
+          id: workRunId,
+          workId,
+          rootTaskId,
+          boundAt: timestamp,
+        }
+      : overrides.workRun;
   const workIdentity = {
     findWorkById: vi.fn().mockResolvedValue(work),
     findWorkRunById: vi.fn().mockResolvedValue(workRun),

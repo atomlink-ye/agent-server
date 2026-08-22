@@ -51,9 +51,7 @@ const definitionVersion = ProductWorkDefinitionVersionSchema.parse({
     spec: {
       kind: 'collaboration',
       lead: { name: 'Lead', agent_version_id: leadVersionId },
-      members: [
-        { name: 'Researcher', agent_version_id: researcherVersionId },
-      ],
+      members: [{ name: 'Researcher', agent_version_id: researcherVersionId }],
       environment_version_id: environmentVersionId,
       memory_version_ids: [],
       input_schema: {
@@ -91,8 +89,9 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 it('validates current Definition source and renders the server-resolved one-way preview', async () => {
-  const fetchMock = vi.fn().mockImplementation(
-    async (path: string, init?: RequestInit) => {
+  const fetchMock = vi
+    .fn()
+    .mockImplementation(async (path: string, init?: RequestInit) => {
       const method = init?.method ?? 'GET';
       if (method === 'POST' && path === '/api/work-definitions/validate')
         return jsonResponse({
@@ -149,8 +148,7 @@ it('validates current Definition source and renders the server-resolved one-way 
       const body = responses.get(path);
       if (!body) throw new Error(`unexpected request: ${method} ${path}`);
       return jsonResponse(body);
-    },
-  );
+    });
   vi.stubGlobal('fetch', fetchMock);
 
   const host = document.createElement('div');
@@ -162,7 +160,9 @@ it('validates current Definition source and renders the server-resolved one-way 
       await new Promise((resolve) => setTimeout(resolve, 25));
     });
 
-    expect(host.querySelector('[data-testid="definition-authoring"]')).not.toBeNull();
+    expect(
+      host.querySelector('[data-testid="definition-authoring"]'),
+    ).not.toBeNull();
     const editor = host.querySelector<HTMLTextAreaElement>(
       '[data-testid="definition-source-editor"]',
     );
@@ -170,9 +170,9 @@ it('validates current Definition source and renders the server-resolved one-way 
     expect(editor?.value).toContain('kind: collaboration');
     expect(host.textContent).toContain('Current Work version');
 
-    const validate = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
-      (button) => button.textContent?.trim() === 'Validate & plan',
-    );
+    const validate = [
+      ...host.querySelectorAll<HTMLButtonElement>('button'),
+    ].find((button) => button.textContent?.trim() === 'Validate & plan');
     expect(validate).toBeDefined();
     if (!validate) return;
     await act(async () => {

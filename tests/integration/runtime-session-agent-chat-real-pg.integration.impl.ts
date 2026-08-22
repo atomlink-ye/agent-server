@@ -58,16 +58,23 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await pool.query('DELETE FROM runtime_sessions WHERE tenant_id=$1', [tenantId]);
+  await pool.query('DELETE FROM runtime_sessions WHERE tenant_id=$1', [
+    tenantId,
+  ]);
   await pool.query('DELETE FROM session_launch_snapshots WHERE tenant_id=$1', [
     tenantId,
   ]);
-  await pool.query('DELETE FROM agent_chat_runtimes WHERE tenant_id=$1', [tenantId]);
-  await pool.query('DELETE FROM agent_registry_idempotency WHERE tenant_id=$1', [
+  await pool.query('DELETE FROM agent_chat_runtimes WHERE tenant_id=$1', [
     tenantId,
   ]);
+  await pool.query(
+    'DELETE FROM agent_registry_idempotency WHERE tenant_id=$1',
+    [tenantId],
+  );
   await pool.query('DELETE FROM agent_versions WHERE tenant_id=$1', [tenantId]);
-  await pool.query('DELETE FROM agent_definitions WHERE tenant_id=$1', [tenantId]);
+  await pool.query('DELETE FROM agent_definitions WHERE tenant_id=$1', [
+    tenantId,
+  ]);
   await pool.query('DELETE FROM workspaces WHERE id=$1', [workspaceId]);
   await pool.end();
 });

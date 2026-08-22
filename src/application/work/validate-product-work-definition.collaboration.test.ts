@@ -32,7 +32,8 @@ describe('Product Work Definition collaboration contract', () => {
   it('declares participants directly without exposing an internal Team id', () => {
     const result = validateProductWorkDefinition(SOURCE);
     expect(result.valid).toBe(true);
-    if (!result.valid) throw new Error('expected valid collaboration Definition');
+    if (!result.valid)
+      throw new Error('expected valid collaboration Definition');
     expect(result.document.spec.kind).toBe('collaboration');
     if (result.document.spec.kind !== 'collaboration') return;
     expect(result.document.spec.lead).toMatchObject({

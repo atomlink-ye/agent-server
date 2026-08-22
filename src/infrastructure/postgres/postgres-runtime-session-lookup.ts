@@ -42,11 +42,7 @@ interface Row extends Record<string, unknown> {
   readonly generation_endpoint_epoch: string | null;
   readonly generation_extension_grant_id: string | null;
   readonly generation_status:
-    | 'active'
-    | 'superseded'
-    | 'unavailable'
-    | 'closed'
-    | null;
+    'active' | 'superseded' | 'unavailable' | 'closed' | null;
   readonly generation_created_at: string | Date | null;
   readonly generation_superseded_at: string | Date | null;
 }
@@ -210,8 +206,11 @@ function runtimeScopeId(scope: RuntimeScope): string {
   }
 }
 
-function skillRefs(value: unknown): { readonly ref: string; readonly digest: string }[] {
-  if (!Array.isArray(value)) throw new Error('Runtime session skills are invalid.');
+function skillRefs(
+  value: unknown,
+): { readonly ref: string; readonly digest: string }[] {
+  if (!Array.isArray(value))
+    throw new Error('Runtime session skills are invalid.');
   return value.map((item) => {
     if (
       !item ||

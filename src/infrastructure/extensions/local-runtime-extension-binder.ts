@@ -130,8 +130,15 @@ export class LocalRuntimeExtensionBinder implements RuntimeExtensionBinder {
     }
 
     if (input.teamMemberRunId) {
-      if (!input.taskId || !input.runId || !input.contextEpoch || !input.scopeId)
-        throw new Error('Team runtime extension requires an active turn context.');
+      if (
+        !input.taskId ||
+        !input.runId ||
+        !input.contextEpoch ||
+        !input.scopeId
+      )
+        throw new Error(
+          'Team runtime extension requires an active turn context.',
+        );
       return this.#mcp.grants.refreshForTeamMember({
         grantId: existing.grantId,
         teamMemberRunId: input.teamMemberRunId,
@@ -150,7 +157,9 @@ export class LocalRuntimeExtensionBinder implements RuntimeExtensionBinder {
       );
       const refreshed = await this.#mcp.grants.findForScope(grantScope(input));
       if (!refreshed)
-        throw new Error('Product Session runtime grant disappeared during refresh.');
+        throw new Error(
+          'Product Session runtime grant disappeared during refresh.',
+        );
       return refreshed;
     }
 
@@ -238,7 +247,9 @@ export class LocalRuntimeExtensionBinder implements RuntimeExtensionBinder {
       });
       return binding;
     } catch (error) {
-      await this.#mcp.grants.revoke(receipt.receipt.grantId).catch(() => undefined);
+      await this.#mcp.grants
+        .revoke(receipt.receipt.grantId)
+        .catch(() => undefined);
       if (ownedReceipt && receiptPath) {
         try {
           const stat = await lstat(receiptPath);
@@ -377,10 +388,15 @@ function extensionDigest(input: {
     .digest('hex');
 }
 
-function sameToolRefs(left: readonly string[], right: readonly string[]): boolean {
+function sameToolRefs(
+  left: readonly string[],
+  right: readonly string[],
+): boolean {
   if (left.length !== right.length) return false;
   const rightSet = new Set(right);
-  return new Set(left).size === left.length && left.every((ref) => rightSet.has(ref));
+  return (
+    new Set(left).size === left.length && left.every((ref) => rightSet.has(ref))
+  );
 }
 
 async function ensureSafeDirectoryPath(path: string): Promise<void> {

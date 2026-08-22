@@ -13,7 +13,8 @@ function walk(dir: string): string[] {
     const path = resolve(dir, name);
     const stat = statSync(path);
     if (stat.isDirectory()) result.push(...walk(path));
-    else if (/\.(?:ts|tsx)$/.test(name) && !/\.test\./.test(name)) result.push(path);
+    else if (/\.(?:ts|tsx)$/.test(name) && !/\.test\./.test(name))
+      result.push(path);
   }
   return result;
 }
@@ -26,7 +27,8 @@ const recordSymbols = new Set(
 );
 
 function requireRecord(path: string, symbol: string, category: string): void {
-  if (!recordSymbols.has(symbol)) violations.push(`${path}: ${category} ${symbol}`);
+  if (!recordSymbols.has(symbol))
+    violations.push(`${path}: ${category} ${symbol}`);
 }
 
 for (const file of walk(src)) {
@@ -37,7 +39,9 @@ for (const file of walk(src)) {
   )) {
     requireRecord(path, match[1]!, '@deprecated production surface');
   }
-  for (const match of text.matchAll(/\b(?:type|interface|class|function|const)\s+(Legacy[A-Za-z0-9_]*)/g)) {
+  for (const match of text.matchAll(
+    /\b(?:type|interface|class|function|const)\s+(Legacy[A-Za-z0-9_]*)/g,
+  )) {
     requireRecord(path, match[1]!, 'legacy production symbol');
   }
 }

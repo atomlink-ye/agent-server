@@ -75,7 +75,10 @@ export interface ProductWorkCommandDependencies {
   readonly workListProjection: ProductProjectionApi['getWorkListItem'];
   readonly productWorkRun?: ProductProjectionApi['getWorkRun'];
   readonly teamDriver?: Pick<TeamDriver, 'decideCompletion'>;
-  readonly teamExecutions?: Pick<TeamExecutionRepository, 'findTeamRunByRootTaskId'>;
+  readonly teamExecutions?: Pick<
+    TeamExecutionRepository,
+    'findTeamRunByRootTaskId'
+  >;
 }
 
 export function registerProductWorkCommandRoutes(
@@ -95,10 +98,13 @@ export function registerProductWorkCommandRoutes(
     try {
       const page =
         order === 'updated_desc'
-          ? await requireProductLists(dependencies).listWorksLatestFirst(owner, {
-              limit,
-              cursor,
-            })
+          ? await requireProductLists(dependencies).listWorksLatestFirst(
+              owner,
+              {
+                limit,
+                cursor,
+              },
+            )
           : await dependencies.workIdentity.listWorks({
               owner,
               accessContext,
@@ -272,12 +278,13 @@ export function registerProductWorkCommandRoutes(
       );
     const accessContext = getAuthenticatedAccessContext(context);
     try {
-      const work = await dependencies.workIdentity.updateCurrentDefinitionVersion({
-        owner: WorkIdentityApi.ownerFromAccessContext(accessContext),
-        accessContext,
-        workId,
-        definitionVersionId: parsed.data.definition_version_id,
-      });
+      const work =
+        await dependencies.workIdentity.updateCurrentDefinitionVersion({
+          owner: WorkIdentityApi.ownerFromAccessContext(accessContext),
+          accessContext,
+          workId,
+          definitionVersionId: parsed.data.definition_version_id,
+        });
       return context.json(
         UpdateWorkDefinitionVersionResponseSchema.parse({
           work: toWorkResponse(work),
@@ -317,7 +324,9 @@ export function registerProductWorkCommandRoutes(
         ...(parsed.data.trigger_ref !== undefined
           ? { triggerRef: parsed.data.trigger_ref }
           : {}),
-        ...(parsed.data.input !== undefined ? { input: parsed.data.input } : {}),
+        ...(parsed.data.input !== undefined
+          ? { input: parsed.data.input }
+          : {}),
       });
       return context.json(
         {
@@ -448,11 +457,7 @@ export function registerProductWorkCommandRoutes(
             error.code === 'invalid_transition' ||
             error.code === 'not_allowed'
           )
-            throw new HttpError(
-              409,
-              'control_revision_stale',
-              error.message,
-            );
+            throw new HttpError(409, 'control_revision_stale', error.message);
         }
         throw error;
       }

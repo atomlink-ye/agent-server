@@ -30,7 +30,9 @@ export class ContextAwareExecutionRuntime implements ExecutionRuntimeService {
   }
 
   public ensureAgentChatRuntimeSession(
-    input: Parameters<ExecutionRuntimeService['ensureAgentChatRuntimeSession']>[0],
+    input: Parameters<
+      ExecutionRuntimeService['ensureAgentChatRuntimeSession']
+    >[0],
   ) {
     return this.delegate.ensureAgentChatRuntimeSession(input);
   }
@@ -44,8 +46,7 @@ export class ContextAwareExecutionRuntime implements ExecutionRuntimeService {
       (input.runtimeSessionId
         ? await this.workerContext.resolve(input.runtimeSessionId)
         : null);
-    if (!invocationContext)
-      return this.delegate.executeTurn(input, observer);
+    if (!invocationContext) return this.delegate.executeTurn(input, observer);
 
     const memory = this.scopedMemory
       ? await this.scopedMemory.resolve(invocationContext)

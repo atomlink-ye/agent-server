@@ -11,7 +11,12 @@ function files(dir: string): string[] {
     const path = resolve(dir, name);
     const stat = statSync(path);
     if (stat.isDirectory()) out.push(...files(path));
-    else if (/\.(?:ts|tsx)$/.test(name) && !name.endsWith('.test.ts') && !name.endsWith('.test.tsx')) out.push(path);
+    else if (
+      /\.(?:ts|tsx)$/.test(name) &&
+      !name.endsWith('.test.ts') &&
+      !name.endsWith('.test.tsx')
+    )
+      out.push(path);
   }
   return out;
 }
@@ -33,7 +38,9 @@ for (const file of files(src)) {
         /(?:^|\/)composition\//.test(specifier) ||
         /(?:^|\/)entrypoints\//.test(specifier)
       ) {
-        violations.push(`${rel}: domain imports forbidden dependency ${specifier}`);
+        violations.push(
+          `${rel}: domain imports forbidden dependency ${specifier}`,
+        );
       }
     }
     if (rel.startsWith('src/application/')) {
@@ -44,7 +51,9 @@ for (const file of files(src)) {
         /(?:^|\/)entrypoints\//.test(specifier) ||
         /(?:^|\/)composition\//.test(specifier)
       ) {
-        violations.push(`${rel}: application imports concrete boundary ${specifier}`);
+        violations.push(
+          `${rel}: application imports concrete boundary ${specifier}`,
+        );
       }
     }
   }

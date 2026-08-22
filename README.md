@@ -136,7 +136,6 @@ TEST_DATABASE_URL=postgresql://$USER@127.0.0.1:5432/agent_server_test pnpm test:
 
 If `TEST_DATABASE_URL` / `INTEGRATION_DATABASE_URL` is unset, `pnpm test:pg` prints a skip message and exits successfully. The runner refuses database names that do not contain `test` and refuses production-flavored names such as `prod`, `production`, `main`, or `live`.
 
-
 ## Scenario harness
 
 Reusable scenario composition lives under `tests/harness/`:

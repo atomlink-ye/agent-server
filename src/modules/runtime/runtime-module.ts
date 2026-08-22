@@ -77,7 +77,10 @@ export interface RuntimeModuleDatabase {
   query<Row extends Record<string, unknown> = Record<string, unknown>>(
     sql: string,
     values?: readonly unknown[],
-  ): Promise<{ readonly rows?: readonly Row[]; readonly rowCount?: number | null }>;
+  ): Promise<{
+    readonly rows?: readonly Row[];
+    readonly rowCount?: number | null;
+  }>;
 }
 
 export function createRuntimeModule(options: {

@@ -34,7 +34,10 @@ import {
 import { PostgresRunDispatcher } from '../../src/infrastructure/postgres/postgres-run-dispatcher.js';
 import { PostgresAdmissionRepository } from '../../src/infrastructure/postgres/postgres-admission-repository.js';
 import { PostgresInvokableRepository } from '../../src/infrastructure/postgres/postgres-invokable-repository.js';
-import { canonicalAgentResolver, seedCanonicalPublishedAgent } from '../fixtures/canonical-agent.js';
+import {
+  canonicalAgentResolver,
+  seedCanonicalPublishedAgent,
+} from '../fixtures/canonical-agent.js';
 import { PostgresRunRepository } from '../../src/infrastructure/postgres/postgres-run-repository.js';
 import { PostgresTaskRepository } from '../../src/infrastructure/postgres/postgres-task-repository.js';
 import { PostgresWorkspaceMemoryRepository } from '../../src/infrastructure/postgres/postgres-workspace-memory-repository.js';

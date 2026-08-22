@@ -107,7 +107,10 @@ export function DefinitionPanel({
     setDiagnostics([]);
     setPlan(null);
     setStatusMessage(null);
-    const validation = await authoringRequest('/api/work-definitions/validate', source);
+    const validation = await authoringRequest(
+      '/api/work-definitions/validate',
+      source,
+    );
     if (!validation.ok || !isValidSuccess(validation.body)) {
       const nextDiagnostics = diagnosticsFrom(validation.body);
       setDiagnostics(nextDiagnostics);
@@ -119,11 +122,16 @@ export function DefinitionPanel({
       setState('error');
       return null;
     }
-    const planned = await authoringRequest('/api/work-definitions/plan', source);
+    const planned = await authoringRequest(
+      '/api/work-definitions/plan',
+      source,
+    );
     if (!planned.ok || !isPlan(planned.body)) {
       const nextDiagnostics = diagnosticsFrom(planned.body);
       setDiagnostics(nextDiagnostics);
-      setStatusMessage('The Definition validated, but its resource plan failed.');
+      setStatusMessage(
+        'The Definition validated, but its resource plan failed.',
+      );
       setState('error');
       return null;
     }
@@ -148,7 +156,9 @@ export function DefinitionPanel({
     }).catch(() => null);
     if (!response) {
       setState('error');
-      setStatusMessage('The Definition apply request could not reach Agent Server.');
+      setStatusMessage(
+        'The Definition apply request could not reach Agent Server.',
+      );
       return;
     }
     const body = await response.json().catch(() => undefined);
@@ -182,7 +192,9 @@ export function DefinitionPanel({
       return;
     }
     setState('applied');
-    setStatusMessage('Applied and pinned as the current Work Definition version.');
+    setStatusMessage(
+      'Applied and pinned as the current Work Definition version.',
+    );
     window.location.assign(workTabHref(workId, 'definition'));
   }
 
@@ -190,18 +202,25 @@ export function DefinitionPanel({
     if (!isCurrentVersion) return;
     setState('running');
     setStatusMessage(null);
-    const response = await fetch(`/api/works/${encodeURIComponent(workId)}/runs`, {
-      method: 'POST',
-      cache: 'no-store',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ trigger_kind: 'manual' }),
-    }).catch(() => null);
-    const body = response ? await response.json().catch(() => undefined) : undefined;
+    const response = await fetch(
+      `/api/works/${encodeURIComponent(workId)}/runs`,
+      {
+        method: 'POST',
+        cache: 'no-store',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ trigger_kind: 'manual' }),
+      },
+    ).catch(() => null);
+    const body = response
+      ? await response.json().catch(() => undefined)
+      : undefined;
     const runId = runIdFromStart(body);
     if (!response?.ok || !runId) {
       setState('error');
       const errorDetail = formatStartRunError(body);
-      setStatusMessage(`The current Definition version could not be started: ${errorDetail}`);
+      setStatusMessage(
+        `The current Definition version could not be started: ${errorDetail}`,
+      );
       return;
     }
     window.location.assign(workTabHref(workId, 'overview', runId));
@@ -225,14 +244,18 @@ export function DefinitionPanel({
       </div>
 
       {editable ? (
-        <div className="work-definition__authoring" data-testid="definition-authoring">
+        <div
+          className="work-definition__authoring"
+          data-testid="definition-authoring"
+        >
           <div className="work-definition__editor-column">
             <div className="work-definition__editor-heading">
               <div>
                 <h3>YAML source</h3>
                 <p>
-                  The API currently returns normalized source. It is re-serialized as YAML here,
-                  so original comments and formatting are not round-tripped.
+                  The API currently returns normalized source. It is
+                  re-serialized as YAML here, so original comments and
+                  formatting are not round-tripped.
                 </p>
               </div>
               <span>{source.length.toLocaleString()} chars</span>
@@ -253,7 +276,11 @@ export function DefinitionPanel({
             />
             <div className="work-definition__actions">
               <button
-                disabled={state === 'validating' || state === 'applying' || state === 'running'}
+                disabled={
+                  state === 'validating' ||
+                  state === 'applying' ||
+                  state === 'running'
+                }
                 onClick={() => void validateAndPlan()}
                 type="button"
               >
@@ -261,14 +288,22 @@ export function DefinitionPanel({
               </button>
               <button
                 className="work-definition__primary-action"
-                disabled={state === 'validating' || state === 'applying' || state === 'running'}
+                disabled={
+                  state === 'validating' ||
+                  state === 'applying' ||
+                  state === 'running'
+                }
                 onClick={() => void applyDefinition()}
                 type="button"
               >
                 {state === 'applying' ? 'Applying…' : 'Apply new version'}
               </button>
               <button
-                disabled={!isCurrentVersion || state === 'running' || state === 'applying'}
+                disabled={
+                  !isCurrentVersion ||
+                  state === 'running' ||
+                  state === 'applying'
+                }
                 onClick={() => void runCurrentVersion()}
                 type="button"
               >
@@ -285,7 +320,10 @@ export function DefinitionPanel({
               </p>
             ) : null}
             {diagnostics.length ? (
-              <ul className="work-definition__diagnostics" data-testid="definition-diagnostics">
+              <ul
+                className="work-definition__diagnostics"
+                data-testid="definition-diagnostics"
+              >
                 {diagnostics.map((diagnostic, index) => (
                   <li key={`${diagnostic.path}:${diagnostic.code}:${index}`}>
                     <code>{diagnostic.path}</code>
@@ -296,7 +334,11 @@ export function DefinitionPanel({
               </ul>
             ) : null}
           </div>
-          <DefinitionPlanPreview fallbackKind={kind} plan={plan} participants={participants} />
+          <DefinitionPlanPreview
+            fallbackKind={kind}
+            plan={plan}
+            participants={participants}
+          />
         </div>
       ) : null}
 
@@ -316,7 +358,11 @@ export function DefinitionPanel({
           label="Description"
           value={description ?? 'No description captured'}
         />
-        <Fact label="Environment" value={environment.label} code={environment.code} />
+        <Fact
+          label="Environment"
+          value={environment.label}
+          code={environment.code}
+        />
       </dl>
       {!editable ? (
         <div className="work-definition__agents">
@@ -337,16 +383,23 @@ function DefinitionPlanPreview({
   readonly plan: Plan | null;
   readonly participants: readonly ParticipantView[];
 }) {
-  const previewParticipants = plan?.resolved.participants ?? participants.map((participant) => ({
-    name: participant.name,
-    role: participant.role,
-    source: participant.versionId ? ('referenced' as const) : ('inline' as const),
-    agent_version_id: participant.versionId,
-    skills: [] as readonly string[],
-    tools: [] as readonly string[],
-  }));
+  const previewParticipants =
+    plan?.resolved.participants ??
+    participants.map((participant) => ({
+      name: participant.name,
+      role: participant.role,
+      source: participant.versionId
+        ? ('referenced' as const)
+        : ('inline' as const),
+      agent_version_id: participant.versionId,
+      skills: [] as readonly string[],
+      tools: [] as readonly string[],
+    }));
   return (
-    <aside className="work-definition__preview" aria-label="Resolved Definition preview">
+    <aside
+      className="work-definition__preview"
+      aria-label="Resolved Definition preview"
+    >
       <p className="work-shell-kicker">Structured preview</p>
       <h3>{humanize(plan?.resolved.kind ?? fallbackKind)}</h3>
       <p>
@@ -359,8 +412,12 @@ function DefinitionPlanPreview({
         {previewParticipants.map((participant) => (
           <li key={`${participant.role}:${participant.name}`}>
             <strong>{participant.name}</strong>
-            <span>{humanize(participant.role)} · {participant.source}</span>
-            {participant.agent_version_id ? <code>{participant.agent_version_id}</code> : null}
+            <span>
+              {humanize(participant.role)} · {participant.source}
+            </span>
+            {participant.agent_version_id ? (
+              <code>{participant.agent_version_id}</code>
+            ) : null}
           </li>
         ))}
       </ul>
@@ -562,7 +619,8 @@ function formatStartRunError(body: unknown): string {
   const code = errorRecord.code;
 
   if (typeof path === 'string' && path.length > 0) {
-    const codePart = typeof code === 'string' && code.length > 0 ? `${code}: ` : '';
+    const codePart =
+      typeof code === 'string' && code.length > 0 ? `${code}: ` : '';
     return `${codePart}${path} — ${message}`;
   }
   if (typeof code === 'string' && code.length > 0) {

@@ -1462,7 +1462,7 @@ describeRealPostgres(
       ]);
     });
 
-    it('hides another principal\'s managed agent within the same tenant', async () => {
+    it("hides another principal's managed agent within the same tenant", async () => {
       if (!pool) return;
       const tenant = 'real_registry_hidden';
       await reset(tenant);

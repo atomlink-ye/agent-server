@@ -6,7 +6,10 @@ import {
   isModelPolicyRef,
   type ModelPolicyRef,
 } from '../../domain/agents/managed-agent-package.js';
-import { resourceOwner, type ResourceOwner } from '../../domain/tenancy/product-context.js';
+import {
+  resourceOwner,
+  type ResourceOwner,
+} from '../../domain/tenancy/product-context.js';
 import { SUPPORTED_MANAGED_AGENT_TOOL_REFS } from './built-in-skills.js';
 import type {
   ResolvedSkillPackage,
@@ -30,8 +33,7 @@ export class ResolveAgentVersion implements AgentResolutionApi {
   public constructor(
     private readonly managed: CanonicalAgentVersionRead,
     private readonly skillCatalog: SkillCatalogPort,
-  ) {
-  }
+  ) {}
 
   public async resolvePublished(
     versionId: string,
@@ -57,14 +59,20 @@ export class ResolveAgentVersion implements AgentResolutionApi {
           toolRefs: [],
         };
       }
-      const toolRefs = managedVersion.package.spec.tools.map((tool) => tool.ref);
+      const toolRefs = managedVersion.package.spec.tools.map(
+        (tool) => tool.ref,
+      );
       validateToolRefs(toolRefs);
-      const skillRefs = managedVersion.package.spec.skills.map((skill) => skill.ref);
+      const skillRefs = managedVersion.package.spec.skills.map(
+        (skill) => skill.ref,
+      );
       const seenSkills = new Set<string>();
       const skills: ResolvedSkillPackage[] = [];
       for (const ref of skillRefs) {
         if (seenSkills.has(ref))
-          throw new Error('The managed Agent references a Skill more than once.');
+          throw new Error(
+            'The managed Agent references a Skill more than once.',
+          );
         seenSkills.add(ref);
         const resolved = await this.skillCatalog.resolve(ref);
         if (!resolved)

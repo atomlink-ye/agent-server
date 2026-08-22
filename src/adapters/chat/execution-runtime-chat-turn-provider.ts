@@ -68,7 +68,9 @@ export class ExecutionRuntimeChatTurnProvider implements ChatTurnProvider {
   private execute(
     input: Parameters<ChatTurnProvider['runTurn']>[0],
     durableSession: RuntimeSession | null,
-    invocationContext: Parameters<ExecutionRuntimeService['executeTurn']>[0]['invocationContext'],
+    invocationContext: Parameters<
+      ExecutionRuntimeService['executeTurn']
+    >[0]['invocationContext'],
     mode: ChatTurnMode,
   ) {
     return this.runtime.executeTurn({
@@ -103,10 +105,7 @@ function resolveInitialMode(
   if (requested !== 'delta' || !durableSession) return requested;
   const generation = durableSession.currentGeneration;
   if (!generation || durableSession.status !== 'ready') return 'recover';
-  if (
-    currentGrantId &&
-    generation.extensionGrantId !== currentGrantId
-  )
+  if (currentGrantId && generation.extensionGrantId !== currentGrantId)
     return 'recover';
   return 'delta';
 }
@@ -201,7 +200,8 @@ function deterministicJson(value: unknown): string {
 
 function normalizeForPrompt(value: unknown): unknown {
   if (value === null || typeof value !== 'object') {
-    if (typeof value === 'number' && !Number.isFinite(value)) return String(value);
+    if (typeof value === 'number' && !Number.isFinite(value))
+      return String(value);
     return value;
   }
   if (Array.isArray(value)) return value.map(normalizeForPrompt);

@@ -52,7 +52,9 @@ export function ChatTranscript({
   }
 
   if (conversationId === null) {
-    return <StateMessage>Select a conversation to view its messages.</StateMessage>;
+    return (
+      <StateMessage>Select a conversation to view its messages.</StateMessage>
+    );
   }
 
   if (state === null || state.status === 'loading') {
@@ -75,7 +77,11 @@ export function ChatTranscript({
   }
 
   return (
-    <div className="chat-transcript" aria-live="polite" aria-label="Message transcript">
+    <div
+      className="chat-transcript"
+      aria-live="polite"
+      aria-label="Message transcript"
+    >
       {state.messages.map((message) => (
         <Message
           key={`${message.sequence}:${message.id}`}

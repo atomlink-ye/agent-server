@@ -23,7 +23,9 @@ export class ContextAwareMemoryApiRepository implements MemoryApiRepository {
     private readonly canonical: ContextMemoryService,
   ) {}
 
-  public createStore(input: CreateMemoryStoreInput): Promise<MemoryStore | null> {
+  public createStore(
+    input: CreateMemoryStoreInput,
+  ): Promise<MemoryStore | null> {
     return this.legacy.createStore(input);
   }
 
@@ -48,7 +50,10 @@ export class ContextAwareMemoryApiRepository implements MemoryApiRepository {
     const memory = await this.legacy.createMemory(input, principal);
     if (!memory) return null;
     const store = await this.legacy.getStore(input.storeId, principal);
-    if (!store) throw new Error('Created Memory store disappeared before ContextFS projection.');
+    if (!store)
+      throw new Error(
+        'Created Memory store disappeared before ContextFS projection.',
+      );
     await this.canonical.write({
       memoryId: memory.id,
       scope: workspaceContextScope({
@@ -82,7 +87,10 @@ export class ContextAwareMemoryApiRepository implements MemoryApiRepository {
     const memory = await this.legacy.updateMemory(input);
     if (!memory) return null;
     const store = await this.legacy.getStore(input.storeId, input.principal);
-    if (!store) throw new Error('Updated Memory store disappeared before ContextFS projection.');
+    if (!store)
+      throw new Error(
+        'Updated Memory store disappeared before ContextFS projection.',
+      );
     // Updating an old row is the deliberate migration event. Mere reads never
     // invent a scope for historical data.
     await this.canonical.write({

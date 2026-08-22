@@ -17,9 +17,7 @@ type AgentVersionRow = {
   instructions: string;
 };
 
-export class PostgresAgentHomeDefinitionSource
-  implements AgentHomeDefinitionSource
-{
+export class PostgresAgentHomeDefinitionSource implements AgentHomeDefinitionSource {
   public constructor(private readonly database: Database) {}
 
   public async readDefinition(

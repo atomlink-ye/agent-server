@@ -298,9 +298,7 @@ export class PostgresConversationRepository implements ConversationRepository {
         ? input.author.principalId
         : input.author.agentDefinitionId;
     const agentDefinitionId =
-      authorType === 'agent_definition'
-        ? input.author.agentDefinitionId
-        : null;
+      authorType === 'agent_definition' ? input.author.agentDefinitionId : null;
     const agentVersionId =
       authorType === 'agent_definition'
         ? (input.author.agentVersionId ?? null)
@@ -360,7 +358,9 @@ export class PostgresConversationRepository implements ConversationRepository {
         authorType === 'principal' &&
         member.member_principal_type !== input.author.principalType
       ) {
-        throw new Error('Principal message author type does not match membership.');
+        throw new Error(
+          'Principal message author type does not match membership.',
+        );
       }
 
       const sequence = Number(conversationRow.next_sequence);
@@ -475,7 +475,10 @@ export class PostgresConversationRepository implements ConversationRepository {
     readonly conversationId: string;
     readonly principalType: string;
     readonly principalId: string;
-  }): Promise<{ readonly lastReadSequence: number; readonly unreadCount: number }> {
+  }): Promise<{
+    readonly lastReadSequence: number;
+    readonly unreadCount: number;
+  }> {
     const readResult = await this.database.query<ConversationReadRow>(
       `SELECT last_read_sequence FROM conversation_reads
        WHERE conversation_id=$1 AND principal_type=$2 AND principal_id=$3`,

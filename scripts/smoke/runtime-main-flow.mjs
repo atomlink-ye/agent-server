@@ -2,7 +2,10 @@
 
 import { createHash, randomUUID } from 'node:crypto';
 import { loadRealProviderDefaults } from '../dev/real-provider-defaults.mjs';
-import { runCompositionSingleAgentSmoke, runCompositionSingleAgentInlineSmoke } from './composition-single-agent.mjs';
+import {
+  runCompositionSingleAgentSmoke,
+  runCompositionSingleAgentInlineSmoke,
+} from './composition-single-agent.mjs';
 
 const realProviderDefaults = loadRealProviderDefaults();
 

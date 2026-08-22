@@ -133,7 +133,10 @@ describe('WorkExecutionService', () => {
 
   it('projects ordinary product state without leaking Task or Run identities', async () => {
     const { service } = setup(firstRun);
-    const state = await service.getWorkState({ accessContext, workId: work.id });
+    const state = await service.getWorkState({
+      accessContext,
+      workId: work.id,
+    });
 
     expect(state).toMatchObject({
       work: { id: work.id },

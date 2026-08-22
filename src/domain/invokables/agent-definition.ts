@@ -33,8 +33,7 @@ export type LegacyAgentDefinitionProjection = Readonly<
 
 export type LegacyAgentDefinitionSnapshot = LegacyAgentDefinitionProjection;
 
-export interface CreateLegacyAgentDefinitionProjectionOptions
-  extends InvokableOwnerScope {
+export interface CreateLegacyAgentDefinitionProjectionOptions extends InvokableOwnerScope {
   readonly id?: string;
   readonly name: string;
   readonly description?: string | null;
@@ -77,7 +76,11 @@ export function rehydrateLegacyAgentDefinitionProjection(
 ): LegacyAgentDefinitionProjection {
   assertNonEmptyString('id', snapshot.id, 'Legacy agent definition projection');
   assertInvokableOwnerScope(snapshot, 'Legacy agent definition projection');
-  assertNonEmptyString('name', snapshot.name, 'Legacy agent definition projection');
+  assertNonEmptyString(
+    'name',
+    snapshot.name,
+    'Legacy agent definition projection',
+  );
   assertCreatedAndUpdatedAt(
     snapshot.createdAt,
     snapshot.updatedAt,

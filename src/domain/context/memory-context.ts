@@ -58,26 +58,30 @@ export function isMemoryVisible(
     case 'organization':
       return true;
     case 'workspace':
-      return Boolean(context.workspaceId && context.workspaceId === scope.workspaceId);
+      return Boolean(
+        context.workspaceId && context.workspaceId === scope.workspaceId,
+      );
     case 'agent':
       return Boolean(
         context.agentDefinitionId &&
-          context.agentDefinitionId === scope.agentDefinitionId,
+        context.agentDefinitionId === scope.agentDefinitionId,
       );
     case 'agent_user':
       return Boolean(
         context.agentDefinitionId === scope.agentDefinitionId &&
-          context.actor &&
-          context.actor.type === scope.principal.type &&
-          context.actor.id === scope.principal.id,
+        context.actor &&
+        context.actor.type === scope.principal.type &&
+        context.actor.id === scope.principal.id,
       );
     case 'conversation':
       return Boolean(
-        context.conversationId && context.conversationId === scope.conversationId,
+        context.conversationId &&
+        context.conversationId === scope.conversationId,
       );
     case 'work':
       return Boolean(
-        context.workspaceId === scope.workspaceId && context.workId === scope.workId,
+        context.workspaceId === scope.workspaceId &&
+        context.workId === scope.workId,
       );
     case 'agent_home':
     case 'runtime_scratch':
@@ -87,13 +91,16 @@ export function isMemoryVisible(
 
 export function assertCanonicalMemoryScope(scope: ContextScope): void {
   if (scope.kind === 'agent_home' || scope.kind === 'runtime_scratch') {
-    throw new Error(`Context scope ${scope.kind} is not a canonical Memory scope.`);
+    throw new Error(
+      `Context scope ${scope.kind} is not a canonical Memory scope.`,
+    );
   }
 }
 
 export function canonicalMemoryPath(memoryId: string, path: string): string {
   const cleanId = memoryId.trim();
   const cleanPath = path.replace(/^\/+/, '').trim();
-  if (!cleanId || !cleanPath) throw new Error('Canonical Memory requires id and path.');
+  if (!cleanId || !cleanPath)
+    throw new Error('Canonical Memory requires id and path.');
   return `memory/${encodeURIComponent(cleanId)}/${cleanPath}`;
 }

@@ -12,7 +12,10 @@ import {
   contextScopeTenantId,
   type ContextScope,
 } from '../../domain/context/context-fs.js';
-import { principalRef, productScope } from '../../domain/tenancy/product-context.js';
+import {
+  principalRef,
+  productScope,
+} from '../../domain/tenancy/product-context.js';
 
 class MemoryLogicalFileStore implements LogicalFileStore {
   private readonly entries = new Map<string, LogicalFileEntry>();
@@ -25,7 +28,10 @@ class MemoryLogicalFileStore implements LogicalFileStore {
       .sort((a, b) => a.path.localeCompare(b.path));
   }
 
-  async read(scope: ContextScope, path: string): Promise<LogicalFileEntry | null> {
+  async read(
+    scope: ContextScope,
+    path: string,
+  ): Promise<LogicalFileEntry | null> {
     return this.entries.get(`${scopeKey(scope)}\0${path}`) ?? null;
   }
 
@@ -152,7 +158,10 @@ describe('ContextFS shared world', () => {
 
   it('projects different Chat and Worker views over the same canonical store', () => {
     const resolver = new ContextViewResolver();
-    const scope = productScope({ tenantId: 'tenant-1', workspaceId: 'workspace-1' });
+    const scope = productScope({
+      tenantId: 'tenant-1',
+      workspaceId: 'workspace-1',
+    });
     const chat = resolver.forChat({
       productScope: scope,
       actor: principalRef({ principalType: 'user', principalId: 'alice' }),
@@ -183,7 +192,9 @@ describe('ContextFS shared world', () => {
       '/work',
       '/scratch',
     ]);
-    expect(worker.mounts.some((mount) => mount.mountPath === '/conversation')).toBe(false);
+    expect(
+      worker.mounts.some((mount) => mount.mountPath === '/conversation'),
+    ).toBe(false);
     const input = worker.mounts.find((mount) => mount.mountPath === '/input');
     const work = worker.mounts.find((mount) => mount.mountPath === '/work');
     expect(input?.scope).toEqual(work?.scope);

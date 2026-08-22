@@ -37,7 +37,9 @@ it('opens Direct Chat from the Coworker roster without exposing AgentDefinition 
     createConversation,
   });
   const appStore = createAppStore();
-  const conversationsStore = createConversationsStore({ selectionStore: appStore });
+  const conversationsStore = createConversationsStore({
+    selectionStore: appStore,
+  });
   const { host, root } = renderPane(commands, appStore, conversationsStore);
 
   try {
@@ -63,7 +65,9 @@ it('opens Direct Chat from the Coworker roster without exposing AgentDefinition 
     expect(createConversation).toHaveBeenCalledTimes(1);
     expect(createConversation).toHaveBeenCalledWith(coworker.id);
     expect(appStore.getSnapshot().selectedConversationId).toBe(direct.id);
-    expect(conversationsStore.getSnapshot().conversations).toContainEqual(direct);
+    expect(conversationsStore.getSnapshot().conversations).toContainEqual(
+      direct,
+    );
   } finally {
     await act(async () => root.unmount());
     host.remove();
@@ -79,7 +83,9 @@ it('reloads the Coworker roster on every picker open and reuses an existing Dire
   const createConversation = vi.fn(async () => direct);
   const commands = commandsFor({ loadCoworkers, createConversation });
   const appStore = createAppStore();
-  const conversationsStore = createConversationsStore({ selectionStore: appStore });
+  const conversationsStore = createConversationsStore({
+    selectionStore: appStore,
+  });
   conversationsStore.hydrate([direct]);
   const { host, root } = renderPane(commands, appStore, conversationsStore);
 
@@ -128,7 +134,9 @@ it('searches Direct Chat by the Coworker display identity shown in the list', as
   );
   const commands = commandsFor();
   const appStore = createAppStore();
-  const conversationsStore = createConversationsStore({ selectionStore: appStore });
+  const conversationsStore = createConversationsStore({
+    selectionStore: appStore,
+  });
   conversationsStore.hydrate([research, operations]);
   const { host, root } = renderPane(commands, appStore, conversationsStore);
 
@@ -136,7 +144,8 @@ it('searches Direct Chat by the Coworker display identity shown in the list', as
     expect(host.textContent).toContain('Research Analyst');
     expect(host.textContent).toContain('Operations Partner');
     const input = host.querySelector('#conversation-search');
-    if (!(input instanceof HTMLInputElement)) throw new Error('search input missing');
+    if (!(input instanceof HTMLInputElement))
+      throw new Error('search input missing');
 
     await act(async () => {
       setInputValue(input, 'research');
@@ -150,9 +159,7 @@ it('searches Direct Chat by the Coworker display identity shown in the list', as
   }
 });
 
-function commandsFor(
-  overrides: Partial<ChatCommands> = {},
-): ChatCommands {
+function commandsFor(overrides: Partial<ChatCommands> = {}): ChatCommands {
   return {
     loadCoworkers: async () => [],
     loadConversations: async () => [],

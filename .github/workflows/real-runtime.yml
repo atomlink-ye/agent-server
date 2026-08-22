@@ -183,7 +183,6 @@ jobs:
         if: steps.credentials.outputs.available == 'true'
         run: node --import tsx tooling/dev/run-canary.ts user-defined-team-work
 
-
       - name: Record that the real-provider checks ran
         if: steps.credentials.outputs.available == 'true'
         run: |

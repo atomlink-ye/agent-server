@@ -105,7 +105,11 @@ export class ExecutionSessionResolver {
           throw new ExecutionBindingUnavailableError(
             'Execution plane reported reuse without applying the desired runtime spec.',
           );
-        return { runtimeSession: runtime, session: outcome.session, resolution: 'reused' };
+        return {
+          runtimeSession: runtime,
+          session: outcome.session,
+          resolution: 'reused',
+        };
       }
       if (outcome.kind === 'reconfigured') {
         const replacedRecord = await this.runtimeSessions.replaceExecution({
@@ -167,7 +171,11 @@ export class ExecutionSessionResolver {
       await created.session.close().catch(() => undefined);
       throw error;
     }
-    return { runtimeSession: bound, session: created.session, resolution: 'created' };
+    return {
+      runtimeSession: bound,
+      session: created.session,
+      resolution: 'created',
+    };
   }
 
   private async replaceGeneration(input: {
@@ -227,8 +235,7 @@ function executionBootstrapDigest(input: {
         workspace: input.workspaceBinding
           ? {
               plane: input.workspaceBinding.plane,
-              externalWorkspaceId:
-                input.workspaceBinding.externalWorkspaceId,
+              externalWorkspaceId: input.workspaceBinding.externalWorkspaceId,
             }
           : null,
         extensions: input.extensions

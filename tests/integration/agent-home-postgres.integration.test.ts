@@ -51,7 +51,15 @@ async function insertAgentVersion(
   await db.query(
     `INSERT INTO agent_versions (id, definition_id, tenant_id, workspace_id, principal_type, principal_id, status, name, description, instructions, created_at, updated_at, published_at)
      VALUES ($1, $2, $3, $4, 'service_account', $5, 'published', 'Test Agent', $6, $7, NOW(), NOW(), NOW())`,
-    [randomUUID(), agentDefinitionId, tenantId, workspaceId, 'principal_test', description, instructions],
+    [
+      randomUUID(),
+      agentDefinitionId,
+      tenantId,
+      workspaceId,
+      'principal_test',
+      description,
+      instructions,
+    ],
   );
 }
 

@@ -5,7 +5,8 @@ import { fileURLToPath } from 'node:url';
 const root = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 const args = process.argv.slice(2);
 const baseIndex = args.indexOf('--base');
-if (baseIndex < 0 || !args[baseIndex + 1]) throw new Error('Usage: pnpm gates:changed --base <verified-base-ref>');
+if (baseIndex < 0 || !args[baseIndex + 1])
+  throw new Error('Usage: pnpm gates:changed --base <verified-base-ref>');
 const base = args[baseIndex + 1]!;
 
 function git(argv: readonly string[]): string {
@@ -21,7 +22,8 @@ const changed = git(['diff', '--name-only', `${mergeBase}..HEAD`])
   .split('\n')
   .map((value) => value.trim())
   .filter(Boolean);
-const has = (predicate: (path: string) => boolean): boolean => changed.some(predicate);
+const has = (predicate: (path: string) => boolean): boolean =>
+  changed.some(predicate);
 
 run('pnpm', ['check:imports']);
 run('pnpm', ['check:compatibility-surfaces']);
@@ -35,6 +37,14 @@ if (has((path) => path.startsWith('apps/web/'))) {
   run('pnpm', ['web:check:architecture']);
   run('pnpm', ['web:build']);
 }
-if (has((path) => path.startsWith('src/') || path.startsWith('tests/') || path.startsWith('tooling/') || path.startsWith('scripts/'))) {
+if (
+  has(
+    (path) =>
+      path.startsWith('src/') ||
+      path.startsWith('tests/') ||
+      path.startsWith('tooling/') ||
+      path.startsWith('scripts/'),
+  )
+) {
   run('pnpm', ['typecheck']);
 }

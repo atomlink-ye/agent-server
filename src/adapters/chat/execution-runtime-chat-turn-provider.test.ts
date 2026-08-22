@@ -242,7 +242,9 @@ describe('ExecutionRuntimeChatTurnProvider', () => {
 
     const alphaSystemPrompt = plane.createdSpecs[0]?.systemPrompt;
     const betaSystemPrompt = plane.createdSpecs[1]?.systemPrompt;
-    expect(alphaSystemPrompt).toContain('Agent definition ID: definition-alpha');
+    expect(alphaSystemPrompt).toContain(
+      'Agent definition ID: definition-alpha',
+    );
     expect(alphaSystemPrompt).toContain('Always answer in terse Alpha format.');
     expect(alphaSystemPrompt).toContain('alpha-calendar-capability');
     expect(alphaSystemPrompt).toContain('Alpha persona home content.');
@@ -374,7 +376,8 @@ class InMemoryRuntimeSessions
     return (
       this.sessions.find(
         (session) =>
-          session.sessionBinding?.externalSessionId === binding.externalSessionId,
+          session.sessionBinding?.externalSessionId ===
+          binding.externalSessionId,
       ) ?? null
     );
   }
@@ -497,7 +500,8 @@ function chatBrain(
   const agentChatRuntimeId = input.agentChatRuntimeId ?? 'chat-runtime-1';
   const runtimeEpoch = input.runtimeEpoch ?? 1;
   const conversationId = input.conversationId ?? 'conversation-1';
-  const triggerMessageId = input.triggerMessageId ?? `${conversationId}-trigger`;
+  const triggerMessageId =
+    input.triggerMessageId ?? `${conversationId}-trigger`;
   const productScope = {
     tenantId: 'tenant-1',
     workspaceId: 'workspace-1',

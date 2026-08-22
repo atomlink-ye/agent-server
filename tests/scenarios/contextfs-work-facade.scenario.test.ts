@@ -105,7 +105,9 @@ describe('ContextFS + WorkExecutionService host scenario', () => {
       agentDefinitionId: world.agent.definitionId,
       workId,
     });
-    expect(workerView.mounts.some((mount) => mount.mountPath === '/work')).toBe(true);
+    expect(workerView.mounts.some((mount) => mount.mountPath === '/work')).toBe(
+      true,
+    );
     expect(
       workerView.mounts.some((mount) => mount.mountPath === '/conversation'),
     ).toBe(false);

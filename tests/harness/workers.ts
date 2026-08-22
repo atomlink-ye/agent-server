@@ -3,7 +3,10 @@ export type {
   WorkerStepResult,
 } from '../../src/shared/workers/step-worker.js';
 
-import type { StepWorker, WorkerStepResult } from '../../src/shared/workers/step-worker.js';
+import type {
+  StepWorker,
+  WorkerStepResult,
+} from '../../src/shared/workers/step-worker.js';
 
 export async function stepWorker<T>(
   worker: StepWorker<T>,
@@ -25,5 +28,7 @@ export async function drainWorker<T>(
     results.push(result);
     if (result.kind === 'idle') return results;
   }
-  throw new Error(`worker did not become idle within ${maxSteps} deterministic steps`);
+  throw new Error(
+    `worker did not become idle within ${maxSteps} deterministic steps`,
+  );
 }

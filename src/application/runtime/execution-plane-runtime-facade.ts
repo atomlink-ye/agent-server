@@ -73,7 +73,8 @@ export interface ExecutionTurnOutcome {
   readonly text: string;
   readonly workspaceBinding: ExecutionWorkspaceBinding;
   readonly sessionBinding: ExecutionSessionBinding;
-  readonly sessionResolution?: 'created' | 'reused' | 'reconfigured' | 'replaced';
+  readonly sessionResolution?:
+    'created' | 'reused' | 'reconfigured' | 'replaced';
   readonly usedRecoveryPrompt?: boolean;
   readonly usage?: RunUsage;
   readonly memoryCandidates?: readonly RuntimeMemoryCandidate[];

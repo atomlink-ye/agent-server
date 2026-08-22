@@ -165,16 +165,28 @@ function createApi(repository: MemoryDefinitionRepository) {
 }
 
 class MemoryDefinitionRepository implements WorkDefinitionSourceRepository {
-  public readonly definitions = new Map<string, WorkDefinitionSourceDefinition>();
-  public readonly versions = new Map<string, ProductWorkDefinitionVersionRecord>();
-  private readonly applyRequests = new Map<string, WorkDefinitionApplyRequestRecord>();
+  public readonly definitions = new Map<
+    string,
+    WorkDefinitionSourceDefinition
+  >();
+  public readonly versions = new Map<
+    string,
+    ProductWorkDefinitionVersionRecord
+  >();
+  private readonly applyRequests = new Map<
+    string,
+    WorkDefinitionApplyRequestRecord
+  >();
 
   public async findDefinition(id: string, owner: WorkDefinitionSourceOwner) {
     const value = this.definitions.get(id) ?? null;
     return value && sameOwner(value.owner, owner) ? value : null;
   }
 
-  public async findPublishedVersion(id: string, owner: WorkDefinitionSourceOwner) {
+  public async findPublishedVersion(
+    id: string,
+    owner: WorkDefinitionSourceOwner,
+  ) {
     const value = this.versions.get(id)?.version ?? null;
     return value && sameOwner(value.owner, owner) ? value : null;
   }
@@ -211,7 +223,10 @@ class MemoryDefinitionRepository implements WorkDefinitionSourceRepository {
     return { definition, version };
   }
 
-  public async findProductVersion(id: string, owner: WorkDefinitionSourceOwner) {
+  public async findProductVersion(
+    id: string,
+    owner: WorkDefinitionSourceOwner,
+  ) {
     const value = this.versions.get(id) ?? null;
     return value && sameOwner(value.version.owner, owner) ? value : null;
   }

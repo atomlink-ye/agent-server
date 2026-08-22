@@ -15,7 +15,11 @@ export interface WorkPaneProps {
 type WorkPaneState =
   | { readonly status: 'loading'; readonly works: readonly WorkListItem[] }
   | { readonly status: 'ready'; readonly works: readonly WorkListItem[] }
-  | { readonly status: 'error'; readonly works: readonly WorkListItem[]; readonly error: string };
+  | {
+      readonly status: 'error';
+      readonly works: readonly WorkListItem[];
+      readonly error: string;
+    };
 
 export function WorkPane({
   commands,
@@ -30,7 +34,8 @@ export function WorkPane({
 
   const load = (): void => {
     setState((current) => ({ status: 'loading', works: current.works }));
-    void commands.loadWorks()
+    void commands
+      .loadWorks()
       .then((works) => setState({ status: 'ready', works }))
       .catch((error: unknown) => {
         setState((current) => ({
@@ -44,7 +49,8 @@ export function WorkPane({
   useEffect(() => {
     let active = true;
     setState({ status: 'loading', works: [] });
-    void commands.loadWorks()
+    void commands
+      .loadWorks()
       .then((works) => {
         if (active) setState({ status: 'ready', works });
       })
@@ -121,11 +127,15 @@ export function WorkPane({
             <span className="work-list-copy">
               <strong>{work.title}</strong>
               <span>
-                <span className={`work-status-dot work-status-dot--${work.productState}`} />
+                <span
+                  className={`work-status-dot work-status-dot--${work.productState}`}
+                />
                 {workStateLabel(work.productState)}
               </span>
             </span>
-            <time dateTime={work.updatedAt}>{formatUpdatedTime(work.updatedAt)}</time>
+            <time dateTime={work.updatedAt}>
+              {formatUpdatedTime(work.updatedAt)}
+            </time>
           </button>
         ))}
       </div>

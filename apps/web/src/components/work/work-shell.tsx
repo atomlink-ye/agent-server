@@ -26,7 +26,11 @@ import {
   type WorkTab,
 } from '@/components/work/work-presentation';
 import { ExecutionTranscript } from '@/features/run-trace/execution-transcript';
-import { MapView, RunTrace, type TraceView } from '@/features/run-trace/run-trace';
+import {
+  MapView,
+  RunTrace,
+  type TraceView,
+} from '@/features/run-trace/run-trace';
 import { SessionTranscripts } from '@/features/run-trace/session-transcripts';
 import './work-shell.css';
 import './work-shell-mve.css';
@@ -72,8 +76,8 @@ export function WorkListShell() {
             Does this need me? What happened in the latest Run?
           </p>
           <p className="work-list-header__coverage">
-            Delivered Artifacts are not shown until the Product API exposes them;
-            this view does not infer them from messages or tool output.
+            Delivered Artifacts are not shown until the Product API exposes
+            them; this view does not infer them from messages or tool output.
           </p>
         </div>
         <button
@@ -88,9 +92,17 @@ export function WorkListShell() {
       {showNewWork ? <NewWork /> : null}
       {state === 'loading' ? <WorkListLoading /> : null}
       {state === 'error' ? <WorkListError /> : null}
-      {state === 'available' && works.length === 0 ? <WorkListEmpty showNewWork={showNewWork} onNewWork={() => setShowNewWork(true)} /> : null}
+      {state === 'available' && works.length === 0 ? (
+        <WorkListEmpty
+          showNewWork={showNewWork}
+          onNewWork={() => setShowNewWork(true)}
+        />
+      ) : null}
       {state === 'available' && works.length > 0 ? (
-        <section aria-labelledby="work-list-heading" className="work-list-region">
+        <section
+          aria-labelledby="work-list-heading"
+          className="work-list-region"
+        >
           <div className="work-list-region__heading">
             <p className="work-list-region__eyebrow">Available Work</p>
             <h2 id="work-list-heading">Current Work</h2>
@@ -164,7 +176,8 @@ export function WorkDetailShell({
           timer = setTimeout(() => void refresh(), 2_000);
       } catch (error) {
         if (!active) return;
-        const isProjectionUnavailable = error instanceof ProductReadError && error.status === 503;
+        const isProjectionUnavailable =
+          error instanceof ProductReadError && error.status === 503;
         if (isProjectionUnavailable && firstLoad) {
           setState('starting');
           timer = setTimeout(() => void refresh(), 2_000);
@@ -197,7 +210,10 @@ export function WorkDetailShell({
         </p>
       ) : null}
       {state === 'error' ? (
-        <section className="work-list-state work-list-state--error" role="alert">
+        <section
+          className="work-list-state work-list-state--error"
+          role="alert"
+        >
           <p className="work-list-state__eyebrow">Couldn't load Work</p>
           <h2>The selected Work or Run is unavailable.</h2>
           <p>Return to My Work and choose an available Product Work record.</p>
@@ -277,7 +293,9 @@ function WorkDetail({
 
   return (
     <>
-      <p className="work-shell-breadcrumb"><a href="/">My Work</a> / {work.title}</p>
+      <p className="work-shell-breadcrumb">
+        <a href="/">My Work</a> / {work.title}
+      </p>
       <header className="work-detail-header work-detail-header--stacked">
         <div>
           <p className="work-shell-kicker">Work</p>
@@ -289,7 +307,8 @@ function WorkDetail({
               : ''}
           </p>
           <p className="work-detail-surface-note">
-            Define, run, inspect collaboration, and review through Product facts.
+            Define, run, inspect collaboration, and review through Product
+            facts.
           </p>
         </div>
       </header>
@@ -300,12 +319,16 @@ function WorkDetail({
         runId={runId}
         workId={work.id}
       />
-      {activeTab === 'overview' ? <OverviewPanel data={data} key={data.run?.work_run.id} /> : null}
+      {activeTab === 'overview' ? (
+        <OverviewPanel data={data} key={data.run?.work_run.id} />
+      ) : null}
       {activeTab === 'runs' ? <RunsPanel data={data} /> : null}
       {activeTab === 'transcript' ? (
         <TranscriptPanel
           data={data}
-          selectedSessionIndex={selectedSessionIndex ? Number(selectedSessionIndex) : undefined}
+          selectedSessionIndex={
+            selectedSessionIndex ? Number(selectedSessionIndex) : undefined
+          }
         />
       ) : null}
       {activeTab === 'artifacts' ? <ArtifactsUnavailable /> : null}
@@ -356,22 +379,37 @@ function WorkTabs({
 }
 
 type RoleSummary = {
-  readonly label: { readonly name: string; readonly role: string; readonly status: string };
+  readonly label: {
+    readonly name: string;
+    readonly role: string;
+    readonly status: string;
+  };
   readonly summary: {
     readonly entry_count: number;
     readonly last_meaningful: { readonly action: string | null } | null;
   };
 };
 
-function RunRoleCards({ trace, workId, runId }: { readonly trace: AnchoredTrace; readonly workId: string; readonly runId: string }) {
+function RunRoleCards({
+  trace,
+  workId,
+  runId,
+}: {
+  readonly trace: AnchoredTrace;
+  readonly workId: string;
+  readonly runId: string;
+}) {
   const [sessions, setSessions] = useState<readonly RoleSummary[] | null>(null);
 
   useEffect(() => {
     let active = true;
-    fetch(`/api/works/${encodeURIComponent(workId)}/runs/${encodeURIComponent(runId)}/session-transcripts`, {
-      cache: 'no-store',
-      headers: { accept: 'application/json' },
-    })
+    fetch(
+      `/api/works/${encodeURIComponent(workId)}/runs/${encodeURIComponent(runId)}/session-transcripts`,
+      {
+        cache: 'no-store',
+        headers: { accept: 'application/json' },
+      },
+    )
       .then((res) => (res.ok ? res.json() : null))
       .then((body) => {
         if (!active) return;
@@ -397,7 +435,9 @@ function RunRoleCards({ trace, workId, runId }: { readonly trace: AnchoredTrace;
             className="work-role-card"
             key={`${session.label.name}-${index}`}
             onClick={() => {
-              window.location.assign(`${workTabHref(workId, 'transcript', runId)}&session=${index}`);
+              window.location.assign(
+                `${workTabHref(workId, 'transcript', runId)}&session=${index}`,
+              );
             }}
             title={title}
             type="button"
@@ -413,7 +453,9 @@ function RunRoleCards({ trace, workId, runId }: { readonly trace: AnchoredTrace;
 }
 
 function OverviewPanel({ data }: { readonly data: WorkDetailData }) {
-  const [selectedAttemptId, setSelectedAttemptId] = useState<string | null>(null);
+  const [selectedAttemptId, setSelectedAttemptId] = useState<string | null>(
+    null,
+  );
   const [traceView, setTraceView] = useState<TraceView>('timeline');
   if (!data.run || !data.trace)
     return (
@@ -459,7 +501,11 @@ function OverviewPanel({ data }: { readonly data: WorkDetailData }) {
         view={traceView}
         onViewChange={setTraceView}
       />
-      <RunRoleCards trace={trace} workId={data.work.id} runId={run.work_run.id} />
+      <RunRoleCards
+        trace={trace}
+        workId={data.work.id}
+        runId={run.work_run.id}
+      />
       <RunReview
         run={run}
         trace={trace}
@@ -471,7 +517,13 @@ function OverviewPanel({ data }: { readonly data: WorkDetailData }) {
   );
 }
 
-function TranscriptPanel({ data, selectedSessionIndex }: { readonly data: WorkDetailData; readonly selectedSessionIndex?: number }) {
+function TranscriptPanel({
+  data,
+  selectedSessionIndex,
+}: {
+  readonly data: WorkDetailData;
+  readonly selectedSessionIndex?: number;
+}) {
   const [view, setView] = useState<'sessions' | 'execution'>('sessions');
   if (!data.run || !data.trace)
     return (
@@ -483,8 +535,15 @@ function TranscriptPanel({ data, selectedSessionIndex }: { readonly data: WorkDe
     );
   const live = data.run.work_run.product_state === 'running';
   return (
-    <section className="work-transcript-panel run-trace" data-testid="work-transcript-panel">
-      <div className="run-trace__tabs" role="tablist" aria-label="Transcript views">
+    <section
+      className="work-transcript-panel run-trace"
+      data-testid="work-transcript-panel"
+    >
+      <div
+        className="run-trace__tabs"
+        role="tablist"
+        aria-label="Transcript views"
+      >
         {(['sessions', 'execution'] as const).map((item) => (
           <button
             aria-selected={view === item}
@@ -494,12 +553,18 @@ function TranscriptPanel({ data, selectedSessionIndex }: { readonly data: WorkDe
             role="tab"
             type="button"
           >
-            {item === 'sessions' ? 'Session Transcripts' : 'Execution Transcript'}
+            {item === 'sessions'
+              ? 'Session Transcripts'
+              : 'Execution Transcript'}
           </button>
         ))}
       </div>
       {view === 'sessions' ? (
-        <SessionTranscripts live={live} trace={data.trace} initialSelectedIndex={selectedSessionIndex} />
+        <SessionTranscripts
+          live={live}
+          trace={data.trace}
+          initialSelectedIndex={selectedSessionIndex}
+        />
       ) : (
         <ExecutionTranscript live={live} trace={data.trace} />
       )}
@@ -507,7 +572,10 @@ function TranscriptPanel({ data, selectedSessionIndex }: { readonly data: WorkDe
   );
 }
 
-function scrollTestIdIntoViewAfterRender(testId: string, fallbackTestId?: string) {
+function scrollTestIdIntoViewAfterRender(
+  testId: string,
+  fallbackTestId?: string,
+) {
   // Two nested requestAnimationFrame calls: the first fires after React has
   // committed the state update that (may have) mounted the target element,
   // the second fires after the browser has painted that commit -- this is
@@ -521,7 +589,9 @@ function scrollTestIdIntoViewAfterRender(testId: string, fallbackTestId?: string
         return;
       }
       if (fallbackTestId) {
-        document.querySelector(`[data-testid="${fallbackTestId}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        document
+          .querySelector(`[data-testid="${fallbackTestId}"]`)
+          ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
     });
   });
@@ -581,8 +651,8 @@ function RunReview({
         <p className="work-shell-kicker">Review</p>
         <h2>Run result and collaboration summary</h2>
         <p>
-          This review uses captured Product facts only. No assistant text or file
-          is promoted to an Artifact.
+          This review uses captured Product facts only. No assistant text or
+          file is promoted to an Artifact.
         </p>
       </div>
       <div className="work-review__grid">
@@ -596,30 +666,55 @@ function RunReview({
         <dl className="work-review__facts">
           <ReviewFact label="Agents" value={trace.actors.length} />
           <ReviewFact label="Work Items" value={trace.work_items.length} />
-          <ReviewFact label="Attempts" value={attemptCount} onClick={() => {
-            onRequestTimelineView();
-            scrollTestIdIntoViewAfterRender('trace-timeline');
-          }} />
-          <ReviewFact label="Rework" value={feedbackCount} onClick={() => {
-            const reworkItem = trace.work_items.find((item) => item.attempts.length > 1);
-            if (reworkItem && reworkItem.attempts[0]) onSelectAttempt(reworkItem.attempts[0].id);
-            onRequestTimelineView();
-            scrollTestIdIntoViewAfterRender('trace-timeline');
-          }} />
-          <ReviewFact label="Agent messages" value={messageCount} onClick={() => {
-            onRequestTimelineView();
-            scrollTestIdIntoViewAfterRender('timeline-messages', 'trace-timeline');
-          }} />
-          <ReviewFact label="MCP activities" value={trace.mcp_activities.length} />
+          <ReviewFact
+            label="Attempts"
+            value={attemptCount}
+            onClick={() => {
+              onRequestTimelineView();
+              scrollTestIdIntoViewAfterRender('trace-timeline');
+            }}
+          />
+          <ReviewFact
+            label="Rework"
+            value={feedbackCount}
+            onClick={() => {
+              const reworkItem = trace.work_items.find(
+                (item) => item.attempts.length > 1,
+              );
+              if (reworkItem && reworkItem.attempts[0])
+                onSelectAttempt(reworkItem.attempts[0].id);
+              onRequestTimelineView();
+              scrollTestIdIntoViewAfterRender('trace-timeline');
+            }}
+          />
+          <ReviewFact
+            label="Agent messages"
+            value={messageCount}
+            onClick={() => {
+              onRequestTimelineView();
+              scrollTestIdIntoViewAfterRender(
+                'timeline-messages',
+                'trace-timeline',
+              );
+            }}
+          />
+          <ReviewFact
+            label="MCP activities"
+            value={trace.mcp_activities.length}
+          />
         </dl>
       </div>
       <div className="work-review__map" data-testid="review-mini-map">
         <h3>Run Map</h3>
-        <MapView selectedAttemptKey={selectedAttemptId} trace={trace} onSelect={(attemptId) => {
-          onSelectAttempt(attemptId);
-          onRequestTimelineView();
-          scrollTestIdIntoViewAfterRender('trace-timeline');
-        }} />
+        <MapView
+          selectedAttemptKey={selectedAttemptId}
+          trace={trace}
+          onSelect={(attemptId) => {
+            onSelectAttempt(attemptId);
+            onRequestTimelineView();
+            scrollTestIdIntoViewAfterRender('trace-timeline');
+          }}
+        />
       </div>
       <div className="work-review__problems" data-testid="review-problems">
         <h3>Problems & capture gaps</h3>
@@ -627,20 +722,29 @@ function RunReview({
           {reworkItems.length ? (
             <li>
               <strong>Rework:</strong>{' '}
-              {reworkItems.map((item) => item.subject).join(', ')} ({reworkItems.length} item{reworkItems.length > 1 ? 's' : ''} required multiple Attempts)
+              {reworkItems.map((item) => item.subject).join(', ')} (
+              {reworkItems.length} item{reworkItems.length > 1 ? 's' : ''}{' '}
+              required multiple Attempts)
             </li>
           ) : null}
           {mcpOnlyItems.length ? (
             <li>
-              <strong>MCP-only coverage:</strong>{' '}
-              {mcpOnlyItems.length} Work Item{mcpOnlyItems.length > 1 ? 's have' : ' has'} MCP activity but no observed Agent messages
+              <strong>MCP-only coverage:</strong> {mcpOnlyItems.length} Work
+              Item{mcpOnlyItems.length > 1 ? 's have' : ' has'} MCP activity but
+              no observed Agent messages
             </li>
           ) : null}
           <li>
             <strong>Timeline scope:</strong>{' '}
             {trace.timeline_coverage.scope.replaceAll('_', ' ')}
             {trace.timeline_coverage.excluded_execution.length ? (
-              <> — excluded: {trace.timeline_coverage.excluded_execution.map((e) => e.replaceAll('_', ' ')).join(', ')}</>
+              <>
+                {' '}
+                — excluded:{' '}
+                {trace.timeline_coverage.excluded_execution
+                  .map((e) => e.replaceAll('_', ' '))
+                  .join(', ')}
+              </>
             ) : null}
           </li>
           {!reworkItems.length && !mcpOnlyItems.length ? (
@@ -653,7 +757,9 @@ function RunReview({
           <h3>Key Agent outputs</h3>
           {keyOutputs.map((output, index) => (
             <article key={index}>
-              <strong>{output.subject} (Attempt {output.attemptNo})</strong>
+              <strong>
+                {output.subject} (Attempt {output.attemptNo})
+              </strong>
               {output.result ? <p>Result: {output.result}</p> : null}
               {output.feedback ? <p>Feedback: {output.feedback}</p> : null}
             </article>
@@ -675,7 +781,15 @@ function ReviewFact({
 }) {
   if (onClick) {
     return (
-      <div className="work-review__fact--clickable" role="button" tabIndex={0} onClick={onClick} onKeyDown={(e) => { if (e.key === 'Enter') onClick(); }}>
+      <div
+        className="work-review__fact--clickable"
+        role="button"
+        tabIndex={0}
+        onClick={onClick}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') onClick();
+        }}
+      >
         <dt>{label}</dt>
         <dd>{value}</dd>
       </div>
@@ -719,7 +833,9 @@ function RunsPanel({ data }: { readonly data: WorkDetailData }) {
             <li data-selected={selected ? 'true' : undefined} key={run.id}>
               <div className="work-run-list__identity">
                 <strong>{index === 0 ? 'Latest Run' : 'Historical Run'}</strong>
-                <time dateTime={run.created_at}>{formatTimestamp(run.created_at)}</time>
+                <time dateTime={run.created_at}>
+                  {formatTimestamp(run.created_at)}
+                </time>
               </div>
               <div className="work-run-list__definition">
                 <span>Definition</span>
@@ -733,10 +849,15 @@ function RunsPanel({ data }: { readonly data: WorkDetailData }) {
                 <span
                   className={`work-state-pill work-state-pill--${data.run.work_run.product_state}`}
                 >
-                  {productStatePresentation(data.run.work_run.product_state).label}
+                  {
+                    productStatePresentation(data.run.work_run.product_state)
+                      .label
+                  }
                 </span>
               ) : (
-                <span className="work-run-list__quiet">Outcome loads on open</span>
+                <span className="work-run-list__quiet">
+                  Outcome loads on open
+                </span>
               )}
               <a href={workTabHref(data.work.id, 'overview', run.id)}>
                 {selected ? 'View Overview' : 'Open Run'}
@@ -862,12 +983,15 @@ function RunTrigger({ workId }: { readonly workId: string }) {
   async function handleRun() {
     setState('starting');
     setErrorDetail(null);
-    const response = await fetch(`/api/works/${encodeURIComponent(workId)}/runs`, {
-      method: 'POST',
-      cache: 'no-store',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ trigger_kind: 'manual' }),
-    }).catch(() => null);
+    const response = await fetch(
+      `/api/works/${encodeURIComponent(workId)}/runs`,
+      {
+        method: 'POST',
+        cache: 'no-store',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ trigger_kind: 'manual' }),
+      },
+    ).catch(() => null);
     const body = response
       ? await response.json().catch(() => undefined)
       : undefined;
@@ -896,7 +1020,8 @@ function RunTrigger({ workId }: { readonly workId: string }) {
       </button>
       {state === 'error' ? (
         <p>
-          Failed to start Run{errorDetail ? `: ${errorDetail}` : '. Please try again.'}
+          Failed to start Run
+          {errorDetail ? `: ${errorDetail}` : '. Please try again.'}
         </p>
       ) : null}
     </div>
@@ -918,7 +1043,8 @@ function formatStartRunError(body: unknown): string {
   const code = errorRecord.code;
 
   if (typeof path === 'string' && path.length > 0) {
-    const codePart = typeof code === 'string' && code.length > 0 ? `${code}: ` : '';
+    const codePart =
+      typeof code === 'string' && code.length > 0 ? `${code}: ` : '';
     return `${codePart}${path} — ${message}`;
   }
   if (typeof code === 'string' && code.length > 0) {
@@ -971,7 +1097,10 @@ function WorkListError() {
   );
 }
 
-function WorkListEmpty({ showNewWork, onNewWork }: {
+function WorkListEmpty({
+  showNewWork,
+  onNewWork,
+}: {
   readonly showNewWork: boolean;
   readonly onNewWork: () => void;
 }) {
@@ -997,7 +1126,10 @@ function WorkListEmpty({ showNewWork, onNewWork }: {
 }
 
 class ProductReadError extends Error {
-  constructor(message: string, readonly status: number) {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
     super(message);
   }
 }
@@ -1008,7 +1140,8 @@ async function readJson<T>(path: string): Promise<T> {
     cache: 'no-store',
     headers: { accept: 'application/json' },
   });
-  if (!response.ok) throw new ProductReadError('Product read failed.', response.status);
+  if (!response.ok)
+    throw new ProductReadError('Product read failed.', response.status);
   return (await response.json()) as T;
 }
 

@@ -27,7 +27,10 @@ export interface MessagesStore {
     loader: (conversationId: ConversationId) => Promise<readonly ChatMessage[]>,
     isCurrent?: () => boolean,
   ): Promise<void>;
-  hydrate(conversationId: ConversationId, messages: readonly ChatMessage[]): void;
+  hydrate(
+    conversationId: ConversationId,
+    messages: readonly ChatMessage[],
+  ): void;
   append(conversationId: ConversationId, message: ChatMessage): void;
   clear(conversationId?: ConversationId): void;
   setDraft(conversationId: ConversationId, draft: string): void;
@@ -54,7 +57,8 @@ function normalizeMessages(
 ): readonly ChatMessage[] {
   const byId = new Map<string, ChatMessage>();
   messages.forEach((message) => {
-    if (message.conversationId === conversationId) byId.set(message.id, message);
+    if (message.conversationId === conversationId)
+      byId.set(message.id, message);
   });
   return [...byId.values()].sort(
     (left, right) =>
@@ -63,7 +67,8 @@ function normalizeMessages(
 }
 
 export function createMessagesStore(): MessagesStore {
-  let snapshot: Readonly<Record<ConversationId, ConversationMessagesState>> = {};
+  let snapshot: Readonly<Record<ConversationId, ConversationMessagesState>> =
+    {};
   const listeners = new Set<StoreListener>();
   const loadVersions = new Map<ConversationId, number>();
   const refreshVersions = new Map<ConversationId, number>();
@@ -174,9 +179,7 @@ export function createMessagesStore(): MessagesStore {
         }
         // Background refresh failures preserve the current transcript and retry surface.
       } finally {
-        if (
-          refreshInFlightVersions.get(conversationId) === requestVersion
-        ) {
+        if (refreshInFlightVersions.get(conversationId) === requestVersion) {
           refreshInFlightVersions.delete(conversationId);
         }
       }
@@ -195,7 +198,10 @@ export function createMessagesStore(): MessagesStore {
       update(conversationId, (current) => ({
         ...current,
         status: 'ready',
-        messages: normalizeMessages(conversationId, [...current.messages, message]),
+        messages: normalizeMessages(conversationId, [
+          ...current.messages,
+          message,
+        ]),
         error: null,
       }));
     },

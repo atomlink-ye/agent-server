@@ -112,7 +112,8 @@ async function startWorkThroughScriptedRuntime(
   });
   const created = await h.runtime.createSession({
     runtimeSessionId: scopeId,
-    systemPrompt: 'Structured Agent identity is supplied by RuntimeInvocationContext.',
+    systemPrompt:
+      'Structured Agent identity is supplied by RuntimeInvocationContext.',
     invocationContext: scenarioInvocationContext(world, scopeId),
     mcpServer: mcp,
     token: receipt.token,
@@ -213,16 +214,19 @@ describe('North Star host-native deterministic harness', () => {
     const { h, world, product } = await createHarnessWorld('Host Chat Bridge');
     const dispatches = new PostgresChatDispatchRepository(h.db as any);
     const links = new PostgresConversationWorkLinkRepository(h.db as any);
-    const trigger = await h.chat.postConversationMessage(product.conversations, {
-      author: {
-        type: 'principal',
-        tenantId: world.owner.tenantId,
-        conversationId: world.conversation.id,
-        principalType: world.owner.principalType,
-        principalId: world.owner.principalId,
+    const trigger = await h.chat.postConversationMessage(
+      product.conversations,
+      {
+        author: {
+          type: 'principal',
+          tenantId: world.owner.tenantId,
+          conversationId: world.conversation.id,
+          principalType: world.owner.principalType,
+          principalId: world.owner.principalId,
+        },
+        body: '请做正式分析 OpenAI',
       },
-      body: '请做正式分析 OpenAI',
-    });
+    );
     await dispatches.enqueue({
       tenantId: world.owner.tenantId,
       agentDefinitionId: world.agent.definitionId,
@@ -245,7 +249,8 @@ describe('North Star host-native deterministic harness', () => {
     );
     const runtime = {
       async executeTurn(input: any) {
-        if (!input.extensions) throw new Error('reconciler did not bind extensions');
+        if (!input.extensions)
+          throw new Error('reconciler did not bind extensions');
         const created = await h.runtime.plane.createSession({
           runtimeSessionId: `chat-runtime-${world.conversation.id}`,
           workspace: { cwd: process.cwd() },
@@ -258,7 +263,9 @@ describe('North Star host-native deterministic harness', () => {
           prompt: input.prompt,
         });
         if (result.status !== 'completed')
-          throw new Error(`scripted execution did not complete: ${result.status}`);
+          throw new Error(
+            `scripted execution did not complete: ${result.status}`,
+          );
         return {
           provider: result.output.provider,
           model: result.output.model,
@@ -274,7 +281,10 @@ describe('North Star host-native deterministic harness', () => {
       new ExecutionRuntimeChatTurnProvider(runtime),
       {
         async resolve(input: any) {
-          const invocationContext = scenarioInvocationContext(world, input.runtime.id);
+          const invocationContext = scenarioInvocationContext(
+            world,
+            input.runtime.id,
+          );
           return {
             instructions: 'Harness deterministic chat brain',
             capabilitySummary: {},

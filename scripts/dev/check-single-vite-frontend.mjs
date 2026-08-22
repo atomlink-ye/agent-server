@@ -26,7 +26,8 @@ async function walk(path) {
   return files;
 }
 
-if (await exists('apps/web-vite')) failures.push('apps/web-vite must not exist');
+if (await exists('apps/web-vite'))
+  failures.push('apps/web-vite must not exist');
 for (const path of [
   'apps/web/next.config.ts',
   'apps/web/next.config.js',
@@ -37,7 +38,9 @@ for (const path of [
   if (await exists(path)) failures.push(`${path} must not exist`);
 }
 
-const webPackage = JSON.parse(await readFile(resolve(root, 'apps/web/package.json'), 'utf8'));
+const webPackage = JSON.parse(
+  await readFile(resolve(root, 'apps/web/package.json'), 'utf8'),
+);
 if (!String(webPackage.scripts?.dev ?? '').includes('vite')) {
   failures.push('apps/web dev script must use Vite');
 }
@@ -52,22 +55,33 @@ for (const section of ['dependencies', 'devDependencies']) {
 for (const path of await walk('apps/web')) {
   if (!/\.(?:[cm]?[jt]sx?|json)$/u.test(path)) continue;
   const content = await readFile(resolve(root, path), 'utf8').catch(() => '');
-  if (/from\s+['"]next(?:\/|['"])/u.test(content) || /require\(['"]next(?:\/|['"])/u.test(content)) {
+  if (
+    /from\s+['"]next(?:\/|['"])/u.test(content) ||
+    /require\(['"]next(?:\/|['"])/u.test(content)
+  ) {
     failures.push(`${path} imports Next.js`);
   }
-  if (/['"]server-only['"]/u.test(content)) failures.push(`${path} imports server-only`);
+  if (/['"]server-only['"]/u.test(content))
+    failures.push(`${path} imports server-only`);
 }
 
 const lockfile = await readFile(resolve(root, 'pnpm-lock.yaml'), 'utf8');
 if (/^\s{2}apps\/web-vite:/mu.test(lockfile)) {
   failures.push('pnpm-lock.yaml still contains apps/web-vite importer');
 }
-if (/^\s{6}next:\s*$/mu.test(lockfile) || /^\s{6}server-only:\s*$/mu.test(lockfile)) {
-  failures.push('pnpm-lock.yaml still declares Next/server-only for a workspace importer');
+if (
+  /^\s{6}next:\s*$/mu.test(lockfile) ||
+  /^\s{6}server-only:\s*$/mu.test(lockfile)
+) {
+  failures.push(
+    'pnpm-lock.yaml still declares Next/server-only for a workspace importer',
+  );
 }
 
 if (failures.length > 0) {
-  process.stderr.write(`single Vite frontend guard failed:\n- ${failures.join('\n- ')}\n`);
+  process.stderr.write(
+    `single Vite frontend guard failed:\n- ${failures.join('\n- ')}\n`,
+  );
   process.exitCode = 1;
 } else {
   process.stdout.write('single Vite frontend guard passed\n');

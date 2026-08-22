@@ -38,7 +38,10 @@ interface Queryable {
   query<T = Record<string, unknown>>(
     sql: string,
     values?: readonly unknown[],
-  ): Promise<{ readonly rows?: readonly T[]; readonly rowCount?: number | null }>;
+  ): Promise<{
+    readonly rows?: readonly T[];
+    readonly rowCount?: number | null;
+  }>;
 }
 
 export interface ContextFileRouteDependencies {
@@ -66,7 +69,11 @@ export function registerContextFileRoutes(
   app.get(`${BASE}/files`, async (c) => {
     const access = getAuthenticatedAccessContext(c);
     const requested = parseScopeRequest(new URL(c.req.url).searchParams);
-    const resolved = await resolveScope(dependencies.database, access, requested);
+    const resolved = await resolveScope(
+      dependencies.database,
+      access,
+      requested,
+    );
     const entries = await dependencies.files.list(resolved.scope);
     return c.json({
       scope: scopeResponse(resolved.scope),
@@ -87,7 +94,11 @@ export function registerContextFileRoutes(
     const params = new URL(c.req.url).searchParams;
     const path = requiredParam(params, 'path');
     const requested = parseScopeRequest(params);
-    const resolved = await resolveScope(dependencies.database, access, requested);
+    const resolved = await resolveScope(
+      dependencies.database,
+      access,
+      requested,
+    );
     const entry = await dependencies.files.read(resolved.scope, path);
     if (!entry) throw notFound();
     return c.json({
@@ -223,7 +234,10 @@ async function resolveScope(
   database: Queryable,
   access: Access,
   request: RequestedScope,
-): Promise<{ readonly scope: ContextScope; readonly access: 'read_only' | 'read_write' }> {
+): Promise<{
+  readonly scope: ContextScope;
+  readonly access: 'read_only' | 'read_write';
+}> {
   switch (request.kind) {
     case 'organization':
       return {
@@ -248,7 +262,10 @@ async function resolveScope(
       return {
         scope: agentContextScope({
           tenantId: access.tenantId,
-          agentDefinitionId: required(request.agentDefinitionId, 'agent_definition_id'),
+          agentDefinitionId: required(
+            request.agentDefinitionId,
+            'agent_definition_id',
+          ),
         }),
         access: owned ? 'read_write' : 'read_only',
       };
@@ -263,7 +280,10 @@ async function resolveScope(
       return {
         scope: agentUserContextScope({
           tenantId: access.tenantId,
-          agentDefinitionId: required(request.agentDefinitionId, 'agent_definition_id'),
+          agentDefinitionId: required(
+            request.agentDefinitionId,
+            'agent_definition_id',
+          ),
           principal: principalRef({
             principalType: access.principalType,
             principalId: access.principalId,
@@ -272,7 +292,10 @@ async function resolveScope(
         access: 'read_write',
       };
     case 'conversation': {
-      const conversationId = required(request.conversationId, 'conversation_id');
+      const conversationId = required(
+        request.conversationId,
+        'conversation_id',
+      );
       await requireConversationAccess(database, access, conversationId);
       return {
         scope: conversationContextScope({
@@ -434,12 +457,21 @@ function requiredParam(params: URLSearchParams, key: string): string {
   return required(params.get(key) ?? undefined, key);
 }
 function required(value: string | undefined, key: string): string {
-  if (!value) throw new HttpError(400, 'invalid_request', `${key} is required.`);
+  if (!value)
+    throw new HttpError(400, 'invalid_request', `${key} is required.`);
   return value;
 }
 function invalidRequest(): HttpError {
-  return new HttpError(400, 'invalid_request', 'The context request is invalid.');
+  return new HttpError(
+    400,
+    'invalid_request',
+    'The context request is invalid.',
+  );
 }
 function notFound(): HttpError {
-  return new HttpError(404, 'not_found', 'The requested context resource does not exist.');
+  return new HttpError(
+    404,
+    'not_found',
+    'The requested context resource does not exist.',
+  );
 }

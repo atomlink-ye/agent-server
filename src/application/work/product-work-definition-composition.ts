@@ -187,8 +187,14 @@ export class ProductWorkDefinitionInspector {
           '$.spec.memory_version_ids',
           'Memory version resolution is unavailable.',
         );
-      for (const [index, versionId] of document.spec.memory_version_ids.entries()) {
-        const memory = await this.options.memories.findVersion(versionId, owner);
+      for (const [
+        index,
+        versionId,
+      ] of document.spec.memory_version_ids.entries()) {
+        const memory = await this.options.memories.findVersion(
+          versionId,
+          owner,
+        );
         if (!memory)
           throw new ProductWorkDefinitionReferenceError(
             `$.spec.memory_version_ids[${index}]`,
@@ -366,16 +372,10 @@ export class ProductWorkDefinitionMaterializer {
     const teamVersionId = stableProductUuid(
       `work-definition-team-version\0${input.versionId}`,
     );
-    const existing = await this.options.invokables.findTeamVersionById(
-      teamVersionId,
-    );
+    const existing =
+      await this.options.invokables.findTeamVersionById(teamVersionId);
     if (existing) {
-      assertInternalTeam(
-        existing,
-        input.owner,
-        teamDefinitionId,
-        input.spec,
-      );
+      assertInternalTeam(existing, input.owner, teamDefinitionId, input.spec);
       if (existing.status === 'published') return existing.id;
     }
 

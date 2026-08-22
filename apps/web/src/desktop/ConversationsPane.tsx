@@ -147,9 +147,7 @@ export function ConversationsPane({
       {createOpen ? (
         <div
           className="new-conversation-form"
-          aria-busy={
-            coworkerStatus === 'pending' || createStatus === 'pending'
-          }
+          aria-busy={coworkerStatus === 'pending' || createStatus === 'pending'}
         >
           <span className="eyebrow">Choose a coworker</span>
           {coworkerStatus === 'pending' ? <p>Loading coworkers…</p> : null}
@@ -161,7 +159,9 @@ export function ConversationsPane({
               {coworkers.map((coworker) => {
                 const available = coworker.runtimeStatus === 'available';
                 const secondary =
-                  coworker.roleLabel ?? coworker.summary ?? coworker.runtimeStatus;
+                  coworker.roleLabel ??
+                  coworker.summary ??
+                  coworker.runtimeStatus;
                 const existing = existingDirectConversation(
                   state.conversations,
                   coworker.id,

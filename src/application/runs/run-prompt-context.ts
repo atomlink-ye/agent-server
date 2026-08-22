@@ -126,7 +126,9 @@ export class RunPromptContext {
       ...(agentVersion.definitionId
         ? { agentDefinitionId: agentVersion.definitionId }
         : {}),
-      ...(agentVersion.agentOwner ? { agentOwner: agentVersion.agentOwner } : {}),
+      ...(agentVersion.agentOwner
+        ? { agentOwner: agentVersion.agentOwner }
+        : {}),
       modelPolicyRef: agentVersion.modelPolicyRef,
       skills: agentVersion.skills,
       toolRefs: agentVersion.toolRefs,

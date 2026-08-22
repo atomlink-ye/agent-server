@@ -83,11 +83,13 @@ export function ConversationsList({
 }
 
 function conversationInitials(conversation: Conversation): string {
-  const source = conversationDisplayName(conversation).trim() || conversation.id;
+  const source =
+    conversationDisplayName(conversation).trim() || conversation.id;
   const words = source.split(/\s+/).filter(Boolean);
-  return (words.length > 1
-    ? `${words[0][0] ?? ''}${words[1][0] ?? ''}`
-    : source.slice(0, 2)
+  return (
+    words.length > 1
+      ? `${words[0][0] ?? ''}${words[1][0] ?? ''}`
+      : source.slice(0, 2)
   ).toUpperCase();
 }
 
@@ -100,7 +102,10 @@ function conversationDisplayName(conversation: Conversation): string {
 
 function avatarTone(conversation: Conversation): number {
   const source = `${conversation.title ?? ''}:${conversation.id}`;
-  return [...source].reduce((hash, character) => hash + character.charCodeAt(0), 0) % 5;
+  return (
+    [...source].reduce((hash, character) => hash + character.charCodeAt(0), 0) %
+    5
+  );
 }
 
 function formatUpdatedTime(value: string): string {

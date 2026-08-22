@@ -81,17 +81,17 @@ it('renders Product Work state and latest Run summary with one list read', async
     });
 
     expect(host.textContent).toContain('Does this need me?');
-    const cards = [
-      ...host.querySelectorAll<HTMLLIElement>('.work-list-card'),
-    ];
+    const cards = [...host.querySelectorAll<HTMLLIElement>('.work-list-card')];
     expect(cards).toHaveLength(stateCases.length);
     for (const [index, [, stateLabel]] of stateCases.entries()) {
       const card = cards[index]!;
       expect(card.textContent).toContain(stateLabel);
       expect(card.textContent).toContain(`Latest recorded result ${index + 1}`);
-      expect(card.querySelector('[data-product-state]')?.getAttribute('data-product-state')).toBe(
-        stateCases[index]![0],
-      );
+      expect(
+        card
+          .querySelector('[data-product-state]')
+          ?.getAttribute('data-product-state'),
+      ).toBe(stateCases[index]![0]);
       expect(card.querySelector('a')?.getAttribute('href')).toBe(
         `/works/${populatedWorkList.works[index]!.id}`,
       );

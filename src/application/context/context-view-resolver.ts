@@ -1,4 +1,7 @@
-import type { LogicalFileEntry, LogicalFileStore } from '../ports/logical-file-store.js';
+import type {
+  LogicalFileEntry,
+  LogicalFileStore,
+} from '../ports/logical-file-store.js';
 import {
   agentContextScope,
   agentUserContextScope,
@@ -10,7 +13,10 @@ import {
   type ContextMount,
   type ContextView,
 } from '../../domain/context/context-fs.js';
-import type { PrincipalRef, ProductScope } from '../../domain/tenancy/product-context.js';
+import type {
+  PrincipalRef,
+  ProductScope,
+} from '../../domain/tenancy/product-context.js';
 
 export interface ResolveChatContextViewInput {
   readonly productScope: ProductScope;

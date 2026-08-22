@@ -101,22 +101,21 @@ function jsonResponse(body: unknown): Response {
   } as Response;
 }
 
-function mockProductReads(input: {
-  readonly runList?: typeof runs;
-  readonly selectedRunId?: string;
-  readonly runBody?: unknown;
-  readonly definition?: ReturnType<typeof productDefinitionVersion>;
-} = {}) {
+function mockProductReads(
+  input: {
+    readonly runList?: typeof runs;
+    readonly selectedRunId?: string;
+    readonly runBody?: unknown;
+    readonly definition?: ReturnType<typeof productDefinitionVersion>;
+  } = {},
+) {
   const runList = input.runList ?? runs;
   const runId = input.selectedRunId ?? selectedRun.id;
   const definition = input.definition ?? definitionVersion;
   const responses = new Map<string, unknown>([
     [`/api/works/${work.work.id}`, work],
     [`/api/works/${work.work.id}/runs`, runList],
-    [
-      `/api/work-definition-versions/${definition.id}`,
-      { version: definition },
-    ],
+    [`/api/work-definition-versions/${definition.id}`, { version: definition }],
     [`/api/works/${work.work.id}/runs/${runId}`, input.runBody ?? run],
     [`/api/works/${work.work.id}/runs/${runId}/trace`, trace],
   ]);
@@ -130,7 +129,9 @@ function mockProductReads(input: {
 }
 
 async function renderDetail(
-  props: React.ComponentProps<typeof WorkDetailShell> = { workId: work.work.id },
+  props: React.ComponentProps<typeof WorkDetailShell> = {
+    workId: work.work.id,
+  },
 ) {
   const host = document.createElement('div');
   document.body.append(host);
@@ -148,8 +149,8 @@ it('renders the four-tab Work shell and fixture-backed Overview through Product 
   try {
     expect(host.textContent).toContain(work.work.title);
     expect(
-      [...host.querySelectorAll<HTMLAnchorElement>('.work-tabs a')].map((item) =>
-        item.textContent?.trim(),
+      [...host.querySelectorAll<HTMLAnchorElement>('.work-tabs a')].map(
+        (item) => item.textContent?.trim(),
       ),
     ).toEqual(['Overview', 'Runs', 'Transcript', 'Artifacts', 'Definition']);
     expect(host.textContent).toContain('Historical Run Trace');
@@ -182,18 +183,26 @@ it('renders the exact Product DefinitionVersion used by the selected Run', async
     selectedRunId: selectedRun.id,
   });
   try {
-    expect(host.querySelector('[data-testid="definition-viewer"]')).not.toBeNull();
+    expect(
+      host.querySelector('[data-testid="definition-viewer"]'),
+    ).not.toBeNull();
     expect(host.textContent).toContain('supplier-risk-review');
     expect(host.textContent).toContain('collaboration');
     expect(host.textContent).toContain('Lead');
     expect(host.textContent).toContain('Researcher');
     expect(host.textContent).toContain(selectedRun.definition_version_id);
     // Definition tab link should not contain run= parameter (goes to current editable version)
-    const definitionLink = host.querySelector<HTMLAnchorElement>('.work-tabs a[href*="tab=definition"]');
+    const definitionLink = host.querySelector<HTMLAnchorElement>(
+      '.work-tabs a[href*="tab=definition"]',
+    );
     expect(definitionLink?.getAttribute('href')).not.toContain(`run=`);
     // Other tabs should contain run= parameter (stay on the selected Run)
-    const overviewLink = host.querySelector<HTMLAnchorElement>('.work-tabs a:not([href*="tab="])');
-    expect(overviewLink?.getAttribute('href')).toContain(`run=${selectedRun.id}`);
+    const overviewLink = host.querySelector<HTMLAnchorElement>(
+      '.work-tabs a:not([href*="tab="])',
+    );
+    expect(overviewLink?.getAttribute('href')).toContain(
+      `run=${selectedRun.id}`,
+    );
   } finally {
     await act(async () => root.unmount());
     host.remove();
@@ -239,7 +248,9 @@ it('reads an exact historical DefinitionVersion instead of falling back to Team-
     selectedRunId: historicalRunId,
   });
   try {
-    expect(host.querySelector('[data-testid="definition-viewer"]')).not.toBeNull();
+    expect(
+      host.querySelector('[data-testid="definition-viewer"]'),
+    ).not.toBeNull();
     expect(host.textContent).toContain('supplier-risk-review-v6');
     expect(host.textContent).toContain(historicalDefinitionId);
     const paths = fetchMock.mock.calls.map(([path]) => path as string);

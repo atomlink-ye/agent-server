@@ -616,13 +616,16 @@ describe('managed agent HTTP contracts', () => {
     expect(published.status).toBe(200);
 
     // Read requests from secondary principal should succeed (200)
-    const readDefinition = await app.request(`/api/v1/agents/${body.agent.id}`, {
-      headers: headersWithRequestId(
-        secondaryServiceAccountToken,
-        undefined,
-        'read-def',
-      ),
-    });
+    const readDefinition = await app.request(
+      `/api/v1/agents/${body.agent.id}`,
+      {
+        headers: headersWithRequestId(
+          secondaryServiceAccountToken,
+          undefined,
+          'read-def',
+        ),
+      },
+    );
     expect(readDefinition.status).toBe(200);
     const defResponse = AgentDefinitionResponseSchema.parse(
       await readDefinition.json(),
@@ -661,7 +664,9 @@ describe('managed agent HTTP contracts', () => {
     const versResponse = AgentVersionListResponseSchema.parse(
       await readVersions.json(),
     );
-    expect(versResponse.items.map((item) => item.id)).toContain(body.version.id);
+    expect(versResponse.items.map((item) => item.id)).toContain(
+      body.version.id,
+    );
     expectSafe(versResponse, forbiddenResponseFields);
 
     // Write operation (publish) from secondary principal should still fail (404)

@@ -1,7 +1,10 @@
 import { PGlite } from '@electric-sql/pglite';
 import { describe, expect, it } from 'vitest';
 
-import { workContextScope, agentUserContextScope } from '../../domain/context/context-fs.js';
+import {
+  workContextScope,
+  agentUserContextScope,
+} from '../../domain/context/context-fs.js';
 import { principalRef } from '../../domain/tenancy/product-context.js';
 import { applyDurableKernelMigrations } from './postgres.js';
 import { PostgresLogicalFileStore } from './postgres-logical-file-store.js';
@@ -50,7 +53,11 @@ describe('PostgresLogicalFileStore', () => {
       principal: principalRef({ principalType: 'user', principalId: 'bob' }),
     });
 
-    await files.write({ scope: alice, path: 'prefs.md', content: 'alice prefs' });
+    await files.write({
+      scope: alice,
+      path: 'prefs.md',
+      content: 'alice prefs',
+    });
     await files.write({ scope: bob, path: 'prefs.md', content: 'bob prefs' });
 
     await expect(files.read(alice, 'prefs.md')).resolves.toMatchObject({

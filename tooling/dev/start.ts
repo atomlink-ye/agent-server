@@ -50,7 +50,9 @@ async function readGeneratedWebEnv(): Promise<NodeJS.ProcessEnv> {
   }
 }
 
-function exitOf(child: ChildProcess): Promise<{ code: number; signal: string | null }> {
+function exitOf(
+  child: ChildProcess,
+): Promise<{ code: number; signal: string | null }> {
   return new Promise((resolveExit) => {
     child.once('error', () => resolveExit({ code: 1, signal: null }));
     child.once('exit', (code, signal) =>
@@ -125,7 +127,9 @@ export async function startHostDevelopment(
       ...generatedWebEnv,
       AGENT_SERVER_BASE_URL: apiBaseUrl,
     });
-    const web = spawnOwned('pnpm', ['web:dev'], { environment: webEnvironment });
+    const web = spawnOwned('pnpm', ['web:dev'], {
+      environment: webEnvironment,
+    });
     children.push(web);
 
     process.stdout.write(

@@ -25,7 +25,9 @@ function duplicateObjectKeys(raw: string, objectName: string): string[] {
   }
   if (end < 0) return [];
   const body = raw.slice(open + 1, end);
-  const keys = [...body.matchAll(/^\s*\"([^\"]+)\"\s*:/gm)].map((match) => match[1]!);
+  const keys = [...body.matchAll(/^\s*\"([^\"]+)\"\s*:/gm)].map(
+    (match) => match[1]!,
+  );
   const counts = new Map<string, number>();
   for (const key of keys) counts.set(key, (counts.get(key) ?? 0) + 1);
   return [...counts].filter(([, count]) => count > 1).map(([key]) => key);

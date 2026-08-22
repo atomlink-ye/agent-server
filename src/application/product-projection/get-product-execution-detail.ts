@@ -30,8 +30,14 @@ export class GetProductExecutionDetail {
       ProductWorkIdentityQuery,
       'findWorkById' | 'findWorkRunById'
     >,
-    private readonly workFacts: Pick<WorkProjectionFactsSource, 'getByRootTask'>,
-    private readonly executionFacts: Pick<ExecutionFactQuery, 'listRunsByRootTask'>,
+    private readonly workFacts: Pick<
+      WorkProjectionFactsSource,
+      'getByRootTask'
+    >,
+    private readonly executionFacts: Pick<
+      ExecutionFactQuery,
+      'listRunsByRootTask'
+    >,
     private readonly runEvents: Pick<RunEventRepository, 'list'>,
   ) {}
 
@@ -58,7 +64,10 @@ export class GetProductExecutionDetail {
 
     const [facts, runs] = await Promise.all([
       this.workFacts.getByRootTask(owner, workRun.rootTaskId),
-      this.executionFacts.listRunsByRootTask({ ...owner, rootTaskId: workRun.rootTaskId }),
+      this.executionFacts.listRunsByRootTask({
+        ...owner,
+        rootTaskId: workRun.rootTaskId,
+      }),
     ]);
     if (!facts) throw new ProductProjectionUnavailableError();
 
@@ -72,7 +81,8 @@ export class GetProductExecutionDetail {
     const executionTaskId = located.attempt.source_refs.task_id;
     if (!executionTaskId) throw new ProductProjectionUnavailableError();
     const matchingRuns = runs.filter((run) => run.taskId === executionTaskId);
-    if (matchingRuns.length === 0) throw new ProductProjectionUnavailableError();
+    if (matchingRuns.length === 0)
+      throw new ProductProjectionUnavailableError();
 
     const events: ProductExecutionDetailEvent[] = [];
     let truncated = false;
@@ -86,8 +96,15 @@ export class GetProductExecutionDetail {
           if (events.length >= MAX_DETAIL_EVENTS) {
             truncated =
               eventIndex < page.events.length - 1 ||
-              (await hasMoreRunEvents(this.runEvents, run.runId, event.sequence)) ||
-              (await hasMoreRuns(this.runEvents, matchingRuns.slice(runIndex + 1)));
+              (await hasMoreRunEvents(
+                this.runEvents,
+                run.runId,
+                event.sequence,
+              )) ||
+              (await hasMoreRuns(
+                this.runEvents,
+                matchingRuns.slice(runIndex + 1),
+              ));
             break;
           }
         }
@@ -178,8 +195,12 @@ export function projectRunEvent(event: RunEvent): ProductExecutionDetailEvent {
       cached_input_tokens: finiteNumber(payload.cached_input_tokens),
       output_tokens: finiteNumber(payload.output_tokens),
       total_cost_usd: finiteNumber(payload.total_cost_usd),
-      context_window_max_tokens: finiteNumber(payload.context_window_max_tokens),
-      context_window_used_tokens: finiteNumber(payload.context_window_used_tokens),
+      context_window_max_tokens: finiteNumber(
+        payload.context_window_max_tokens,
+      ),
+      context_window_used_tokens: finiteNumber(
+        payload.context_window_used_tokens,
+      ),
     };
   return lifecycleEvent(event, kind ?? 'output');
 }
@@ -223,11 +244,7 @@ function projectTool(
   const activityId = clippedString(payload.activity_id, 256);
   const category = payload.category;
   const status = payload.status;
-  if (
-    activityId === null ||
-    !isToolCategory(category) ||
-    !isToolStatus(status)
-  )
+  if (activityId === null || !isToolCategory(category) || !isToolStatus(status))
     return null;
   return {
     kind: 'tool_status',
@@ -330,21 +347,39 @@ function integerValue(value: unknown): number | null {
   return typeof value === 'number' && Number.isInteger(value) ? value : null;
 }
 const toolCategories = new Set<string>(productToolCategories);
-function isToolCategory(value: unknown): value is 'shell' | 'read' | 'edit' | 'write' | 'search' | 'fetch' | 'subagent' | 'other' {
+function isToolCategory(
+  value: unknown,
+): value is
+  | 'shell'
+  | 'read'
+  | 'edit'
+  | 'write'
+  | 'search'
+  | 'fetch'
+  | 'subagent'
+  | 'other' {
   return typeof value === 'string' && toolCategories.has(value);
 }
 const toolStatuses = new Set<string>(productToolStatuses);
-function isToolStatus(value: unknown): value is 'running' | 'completed' | 'failed' | 'cancelled' {
+function isToolStatus(
+  value: unknown,
+): value is 'running' | 'completed' | 'failed' | 'cancelled' {
   return typeof value === 'string' && toolStatuses.has(value);
 }
 const detailKinds = new Set<string>(productDetailKinds);
-function isDetailKind(value: unknown): value is 'shell' | 'read' | 'write' | 'edit' | 'search' | 'fetch' {
+function isDetailKind(
+  value: unknown,
+): value is 'shell' | 'read' | 'write' | 'edit' | 'search' | 'fetch' {
   return typeof value === 'string' && detailKinds.has(value);
 }
-function isItemKind(value: unknown): value is 'assistant' | 'reasoning' | 'tool' {
+function isItemKind(
+  value: unknown,
+): value is 'assistant' | 'reasoning' | 'tool' {
   return value === 'assistant' || value === 'reasoning' || value === 'tool';
 }
 const permissionCategories = new Set<string>(productPermissionCategories);
-function isPermissionCategory(value: unknown): value is 'tool' | 'plan' | 'question' | 'mode' | 'other' {
+function isPermissionCategory(
+  value: unknown,
+): value is 'tool' | 'plan' | 'question' | 'mode' | 'other' {
   return typeof value === 'string' && permissionCategories.has(value);
 }

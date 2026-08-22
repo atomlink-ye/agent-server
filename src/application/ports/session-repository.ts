@@ -60,8 +60,14 @@ export interface SubmitSessionTurnInput {
   readonly origin: SessionTurnOrigin;
 }
 export interface SessionRepository {
-  createWorkspace(name: string, owner: AccessContext): Promise<ProductWorkspace>;
-  getWorkspace(id: string, owner: AccessContext): Promise<ProductWorkspace | null>;
+  createWorkspace(
+    name: string,
+    owner: AccessContext,
+  ): Promise<ProductWorkspace>;
+  getWorkspace(
+    id: string,
+    owner: AccessContext,
+  ): Promise<ProductWorkspace | null>;
   createSession(input: {
     workspaceId: string;
     agentVersionId: string;

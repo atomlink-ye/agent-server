@@ -109,7 +109,8 @@ export function validateWorkDefinitionCompositionSource(
   if (
     source.description !== undefined &&
     source.description !== null &&
-    (typeof source.description !== 'string' || source.description.length > 2_000)
+    (typeof source.description !== 'string' ||
+      source.description.length > 2_000)
   )
     throw new InvalidWorkDefinitionSourceError(
       'The Work Definition description is invalid.',

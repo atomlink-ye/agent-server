@@ -15,17 +15,17 @@ type Plan = {
 };
 
 type AuthoringState =
-  | 'idle'
-  | 'validating'
-  | 'valid'
-  | 'applying'
-  | 'applied'
-  | 'error';
+  'idle' | 'validating' | 'valid' | 'applying' | 'applied' | 'error';
 
 function extractErrorMessage(value: unknown): string | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
-  if (!record.error || typeof record.error !== 'object' || Array.isArray(record.error)) return null;
+  if (
+    !record.error ||
+    typeof record.error !== 'object' ||
+    Array.isArray(record.error)
+  )
+    return null;
   const error = record.error as Record<string, unknown>;
   return typeof error.message === 'string' ? error.message : null;
 }
@@ -51,7 +51,9 @@ export function NewWork() {
       body: JSON.stringify({ source }),
     }).catch(() => null);
 
-    const validationBody = validation ? await validation.json().catch(() => undefined) : undefined;
+    const validationBody = validation
+      ? await validation.json().catch(() => undefined)
+      : undefined;
 
     if (!validation?.ok) {
       const nextDiagnostics = diagnosticsFrom(validationBody);
@@ -80,14 +82,18 @@ export function NewWork() {
 
     if (!planned?.ok) {
       setState('error');
-      setStatusMessage('The Definition validated, but its resource plan failed.');
+      setStatusMessage(
+        'The Definition validated, but its resource plan failed.',
+      );
       return null;
     }
 
     const plannedBody = await planned.json().catch(() => undefined);
     if (!plannedBody?.fingerprint) {
       setState('error');
-      setStatusMessage('The Definition validated, but its resource plan failed.');
+      setStatusMessage(
+        'The Definition validated, but its resource plan failed.',
+      );
       return null;
     }
 
@@ -115,7 +121,9 @@ export function NewWork() {
 
     if (!response) {
       setState('error');
-      setStatusMessage('The Definition apply request could not reach Agent Server.');
+      setStatusMessage(
+        'The Definition apply request could not reach Agent Server.',
+      );
       return;
     }
 
@@ -153,7 +161,9 @@ export function NewWork() {
     }).catch(() => null);
 
     if (!response?.ok) {
-      const body = response ? await response.json().catch(() => undefined) : undefined;
+      const body = response
+        ? await response.json().catch(() => undefined)
+        : undefined;
       setState('error');
       const errorMessage = extractErrorMessage(body);
       setStatusMessage(errorMessage || 'The Work could not be created.');
@@ -171,10 +181,7 @@ export function NewWork() {
   }
 
   return (
-    <section
-      className="new-work-form"
-      data-testid="new-work-form"
-    >
+    <section className="new-work-form" data-testid="new-work-form">
       <div className="new-work-form__heading">
         <h2>Create New Work</h2>
         <p>
@@ -244,7 +251,10 @@ export function NewWork() {
           ) : null}
 
           {diagnostics.length > 0 ? (
-            <ul className="new-work-form__diagnostics" data-testid="new-work-diagnostics">
+            <ul
+              className="new-work-form__diagnostics"
+              data-testid="new-work-diagnostics"
+            >
               {diagnostics.map((diagnostic, index) => (
                 <li key={`${diagnostic.path}:${diagnostic.code}:${index}`}>
                   <code>{diagnostic.path}</code>

@@ -4,7 +4,8 @@ import type {
   WorkListItem,
 } from '@atomlink-ye/agent-server/product-contract';
 
-export type WorkTab = 'overview' | 'runs' | 'transcript' | 'artifacts' | 'definition';
+export type WorkTab =
+  'overview' | 'runs' | 'transcript' | 'artifacts' | 'definition';
 
 export const WORK_TABS: readonly {
   readonly id: WorkTab;

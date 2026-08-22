@@ -82,7 +82,11 @@ export function createConversationsStore(
         hydrate(conversations);
       } catch {
         if (requestVersion !== loadVersion) return;
-        setSnapshot({ ...snapshot, status: 'error', error: 'Unable to load conversations.' });
+        setSnapshot({
+          ...snapshot,
+          status: 'error',
+          error: 'Unable to load conversations.',
+        });
       }
     },
     hydrate,

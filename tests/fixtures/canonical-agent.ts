@@ -39,7 +39,8 @@ export async function seedCanonicalPublishedAgent(
     ...(options.now ? { now: () => options.now! } : {}),
     idFactory: () => {
       const value = ids.shift();
-      if (!value) throw new Error('Canonical Agent fixture id factory exhausted.');
+      if (!value)
+        throw new Error('Canonical Agent fixture id factory exhausted.');
       return value;
     },
   });

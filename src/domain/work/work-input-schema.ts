@@ -26,7 +26,9 @@ export interface WorkInputSchema {
 
 export type WorkInputSnapshot = Readonly<Record<string, unknown>>;
 
-export function normalizeWorkInputSchema(value: WorkInputSchema): WorkInputSchema {
+export function normalizeWorkInputSchema(
+  value: WorkInputSchema,
+): WorkInputSchema {
   if (!value || value.type !== 'object' || !isRecord(value.properties))
     throw new Error('Work input schema must describe an object.');
   if (
@@ -70,11 +72,7 @@ export function normalizeWorkInputSchema(value: WorkInputSchema): WorkInputSchem
     if (type === 'number' || type === 'integer') {
       const minimum = optionalFiniteNumber(property.minimum);
       const maximum = optionalFiniteNumber(property.maximum);
-      if (
-        minimum !== undefined &&
-        maximum !== undefined &&
-        minimum > maximum
-      )
+      if (minimum !== undefined && maximum !== undefined && minimum > maximum)
         throw new Error('Work input schema numeric bounds are invalid.');
       properties[name] = {
         type,

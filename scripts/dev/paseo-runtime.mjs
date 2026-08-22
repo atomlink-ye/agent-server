@@ -63,47 +63,60 @@ const providerConfigurations = [
     provider: 'claude',
     path: join(runtimeRoot, 'home', '.claude', 'settings.json'),
     format: 'json',
-    content: ({ model: configuredModel }) => JSON.stringify({ env: { ANTHROPIC_MODEL: configuredModel } }),
+    content: ({ model: configuredModel }) =>
+      JSON.stringify({ env: { ANTHROPIC_MODEL: configuredModel } }),
   },
   {
     provider: 'codex',
     path: join(runtimeRoot, 'home', '.codex', 'config.toml'),
     format: 'toml',
-    content: () => [
-      'model_provider = "opencode-go"',
-      '',
-      '[model_providers.opencode-go]',
-      'name = "OpenCode Go"',
-      `base_url = "${gatewayBaseUrl}/v1"`,
-      'env_key = "OPENCODE_GO_API_KEY"',
-      'wire_api = "responses"',
-      '',
-    ].join('\n'),
+    content: () =>
+      [
+        'model_provider = "opencode-go"',
+        '',
+        '[model_providers.opencode-go]',
+        'name = "OpenCode Go"',
+        `base_url = "${gatewayBaseUrl}/v1"`,
+        'env_key = "OPENCODE_GO_API_KEY"',
+        'wire_api = "responses"',
+        '',
+      ].join('\n'),
   },
   {
     provider: 'opencode',
     path: join(runtimeRoot, 'xdg-config', 'opencode', 'opencode.json'),
     format: 'json',
-    content: ({ model: configuredModel }) => createOpenCodeConfigContent({ model: `opencode-go/${configuredModel}` }),
+    content: ({ model: configuredModel }) =>
+      createOpenCodeConfigContent({ model: `opencode-go/${configuredModel}` }),
   },
 ];
 
 for (const configuration of providerConfigurations) {
   try {
     await access(configuration.path);
-    process.stdout.write(`${JSON.stringify({ provider: configuration.provider, path: configuration.path, action: 'exists' })}\n`);
+    process.stdout.write(
+      `${JSON.stringify({ provider: configuration.provider, path: configuration.path, action: 'exists' })}\n`,
+    );
     continue;
   } catch (error) {
     if (error?.code !== 'ENOENT') throw error;
   }
   await mkdir(dirname(configuration.path), { recursive: true, mode: 0o700 });
   try {
-    await writeFile(configuration.path, configuration.content({ gatewayBaseUrl, model }), { mode: 0o600, flag: 'wx' });
+    await writeFile(
+      configuration.path,
+      configuration.content({ gatewayBaseUrl, model }),
+      { mode: 0o600, flag: 'wx' },
+    );
     await chmod(configuration.path, 0o600);
-    process.stdout.write(`${JSON.stringify({ provider: configuration.provider, path: configuration.path, action: 'created' })}\n`);
+    process.stdout.write(
+      `${JSON.stringify({ provider: configuration.provider, path: configuration.path, action: 'created' })}\n`,
+    );
   } catch (error) {
     if (error?.code !== 'EEXIST') throw error;
-    process.stdout.write(`${JSON.stringify({ provider: configuration.provider, path: configuration.path, action: 'exists' })}\n`);
+    process.stdout.write(
+      `${JSON.stringify({ provider: configuration.provider, path: configuration.path, action: 'exists' })}\n`,
+    );
   }
 }
 

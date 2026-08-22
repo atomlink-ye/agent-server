@@ -16,7 +16,12 @@ function git(argv: readonly string[]): string {
 
 const mergeBase = git(['merge-base', base, 'HEAD']);
 const lines = (value: string): string[] =>
-  value ? value.split('\n').map((item) => item.trim()).filter(Boolean) : [];
+  value
+    ? value
+        .split('\n')
+        .map((item) => item.trim())
+        .filter(Boolean)
+    : [];
 const committed = lines(git(['diff', '--name-only', `${mergeBase}..HEAD`]));
 const staged = lines(git(['diff', '--cached', '--name-only']));
 const unstaged = lines(git(['diff', '--name-only']));
@@ -25,24 +30,42 @@ const all = [...new Set([...committed, ...staged, ...unstaged, ...untracked])];
 
 const areaFor = (path: string): string => {
   if (path.startsWith('apps/web/')) return 'web';
-  if (path.startsWith('docs/') || path === 'AGENTS.md' || path.startsWith('.agents/')) return 'docs';
-  if (path.includes('/runtime') || path.includes('/paseo') || path.includes('/extensions/')) return 'runtime';
-  if (path.includes('/postgres/') || path.includes('/migrations/')) return 'persistence';
+  if (
+    path.startsWith('docs/') ||
+    path === 'AGENTS.md' ||
+    path.startsWith('.agents/')
+  )
+    return 'docs';
+  if (
+    path.includes('/runtime') ||
+    path.includes('/paseo') ||
+    path.includes('/extensions/')
+  )
+    return 'runtime';
+  if (path.includes('/postgres/') || path.includes('/migrations/'))
+    return 'persistence';
   if (path.includes('/team') || path.includes('/collaboration')) return 'team';
   if (path.includes('/work')) return 'work';
   if (path.startsWith('tests/')) return 'tests';
-  if (path.startsWith('scripts/') || path.startsWith('tooling/')) return 'harness';
+  if (path.startsWith('scripts/') || path.startsWith('tooling/'))
+    return 'harness';
   return 'core';
 };
 
-process.stdout.write(`${JSON.stringify({
-  repository: relative(process.cwd(), root) || '.',
-  base,
-  mergeBase,
-  head: git(['rev-parse', 'HEAD']),
-  committed,
-  staged,
-  unstaged,
-  untracked,
-  areas: [...new Set(all.map(areaFor))].sort(),
-}, null, 2)}\n`);
+process.stdout.write(
+  `${JSON.stringify(
+    {
+      repository: relative(process.cwd(), root) || '.',
+      base,
+      mergeBase,
+      head: git(['rev-parse', 'HEAD']),
+      committed,
+      staged,
+      unstaged,
+      untracked,
+      areas: [...new Set(all.map(areaFor))].sort(),
+    },
+    null,
+    2,
+  )}\n`,
+);

@@ -11,10 +11,7 @@ import type {
 export type WorkProductState = 'running' | 'needs_you' | 'complete' | 'problem';
 
 export type WorkResultCaptureStatus =
-  | 'present'
-  | 'not_present'
-  | 'redacted'
-  | 'not_captured';
+  'present' | 'not_present' | 'redacted' | 'not_captured';
 
 export interface WorkChatCard {
   readonly workId: string;
@@ -23,7 +20,8 @@ export interface WorkChatCard {
   readonly availability: 'available' | 'unavailable';
   readonly productState: WorkProductState | null;
   readonly problemKind: 'failed' | 'cancelled' | 'not_captured' | null;
-  readonly attentionReason: 'completion_approval_pending' | 'not_captured' | null;
+  readonly attentionReason:
+    'completion_approval_pending' | 'not_captured' | null;
   readonly resultSummary: string | null;
   readonly resultCaptureStatus: WorkResultCaptureStatus;
 }

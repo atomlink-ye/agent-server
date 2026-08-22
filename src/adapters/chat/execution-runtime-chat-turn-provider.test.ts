@@ -385,6 +385,7 @@ class InMemoryRuntimeSessions
       ...session,
       desiredSpecDigest: input.digest,
       desiredRevision: session.desiredRevision + 1,
+      status: 'ready' as const,
     };
   }
   public async replaceExecution(input: {

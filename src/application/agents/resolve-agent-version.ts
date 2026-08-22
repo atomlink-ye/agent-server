@@ -2,7 +2,7 @@ import type {
   AgentRegistry,
   ManagedAgentDefinitionRead,
 } from '../ports/agent-registry.js';
-import type { DefinitionReadApi } from '../ports/definition-read-api.js';
+import type { LegacyAgentVersionProjection } from '../../domain/invokables/agent-version.js';
 import {
   isModelPolicyRef,
   type ModelPolicyRef,
@@ -27,16 +27,47 @@ export type {
   ResolvedAgentVersion,
 } from '../ports/agent-resolution-api.js';
 
+/**
+ * Explicit read-only bridge for historical tests/data that predate managed
+ * Agent packages. Production composition does not install this bridge.
+ */
+export interface LegacyAgentVersionCompatibilityReader {
+  findPublishedAgentVersionById(
+    id: string,
+    ownerScope: AgentVersionResolutionScope,
+  ): Promise<LegacyAgentVersionProjection | null>;
+}
+
 export class ResolveAgentVersion implements AgentResolutionApi {
+  private readonly legacyCompatibility?: LegacyAgentVersionCompatibilityReader;
+  private readonly skillCatalog: SkillCatalogPort;
+
   public constructor(
     private readonly managed: Pick<AgentRegistry, 'findVersion'> &
       Pick<ManagedAgentDefinitionRead, 'findVersionByTenant'>,
-    private readonly legacy: Pick<
-      DefinitionReadApi,
-      'findPublishedAgentVersionById'
-    >,
-    private readonly skillCatalog: SkillCatalogPort,
-  ) {}
+    skillCatalog: SkillCatalogPort,
+  );
+  /** @deprecated Compatibility-only constructor for historical fixtures. */
+  public constructor(
+    managed: Pick<AgentRegistry, 'findVersion'> &
+      Pick<ManagedAgentDefinitionRead, 'findVersionByTenant'>,
+    legacyCompatibility: LegacyAgentVersionCompatibilityReader,
+    skillCatalog: SkillCatalogPort,
+  );
+  public constructor(
+    managed: Pick<AgentRegistry, 'findVersion'> &
+      Pick<ManagedAgentDefinitionRead, 'findVersionByTenant'>,
+    legacyOrCatalog: LegacyAgentVersionCompatibilityReader | SkillCatalogPort,
+    maybeCatalog?: SkillCatalogPort,
+  ) {
+    this.managed = managed;
+    if (maybeCatalog) {
+      this.legacyCompatibility = legacyOrCatalog as LegacyAgentVersionCompatibilityReader;
+      this.skillCatalog = maybeCatalog;
+    } else {
+      this.skillCatalog = legacyOrCatalog as SkillCatalogPort;
+    }
+  }
 
   public async resolvePublished(
     versionId: string,
@@ -62,20 +93,14 @@ export class ResolveAgentVersion implements AgentResolutionApi {
           toolRefs: [],
         };
       }
-      const toolRefs = managedVersion.package.spec.tools.map(
-        (tool) => tool.ref,
-      );
+      const toolRefs = managedVersion.package.spec.tools.map((tool) => tool.ref);
       validateToolRefs(toolRefs);
-      const skillRefs = managedVersion.package.spec.skills.map(
-        (skill) => skill.ref,
-      );
+      const skillRefs = managedVersion.package.spec.skills.map((skill) => skill.ref);
       const seenSkills = new Set<string>();
       const skills: ResolvedSkillPackage[] = [];
       for (const ref of skillRefs) {
         if (seenSkills.has(ref))
-          throw new Error(
-            'The managed Agent references a Skill more than once.',
-          );
+          throw new Error('The managed Agent references a Skill more than once.');
         seenSkills.add(ref);
         const resolved = await this.skillCatalog.resolve(ref);
         if (!resolved)
@@ -99,10 +124,16 @@ export class ResolveAgentVersion implements AgentResolutionApi {
         toolRefs: Object.freeze([...toolRefs]),
       };
     }
-    const legacyVersion = await this.legacy.findPublishedAgentVersionById(
-      versionId,
-      scope,
-    );
+
+    // Historical compatibility is opt-in. New production composition uses the
+    // two-argument constructor, so a missing managed Agent never silently falls
+    // through to the old invokable model.
+    if (!this.legacyCompatibility) return null;
+    const legacyVersion =
+      await this.legacyCompatibility.findPublishedAgentVersionById(
+        versionId,
+        scope,
+      );
     return legacyVersion
       ? {
           source: 'legacy',
@@ -139,6 +170,7 @@ function validateToolRefs(refs: readonly string[]): void {
     seen.add(ref);
   }
 }
+
 /**
  * Production registry entities carry all of these fields. Some deliberately
  * bounded unit/runtime fakes predate ContextFS and omit them; keep the new

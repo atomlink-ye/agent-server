@@ -63,11 +63,21 @@ export class ChatDeliveryReconciler {
     );
   }
 
+  /** Compatibility path for old unclaimed callers. Production uses ChatDeliveryWorker. */
   public async reconcilePendingDispatches(limit = 50): Promise<number> {
     const pending = await this.dispatches.listPending(limit);
     let processed = 0;
     for (const dispatch of pending) {
-      await this.reconcile(dispatch);
+      try {
+        await this.reconcile(dispatch);
+      } catch (error) {
+        if (error instanceof ChatTurnRuntimeUnavailableError) continue;
+        throw error;
+      }
+      await this.dispatches.markPublished(
+        dispatch.id,
+        this.now().toISOString(),
+      );
       processed += 1;
     }
     return processed;

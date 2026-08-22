@@ -154,6 +154,15 @@ export interface RuntimeSessionRepository {
     readonly extensionGrantId?: string;
   }): Promise<RuntimeSession>;
 
+  /** Records a provider generation that applied the current desired spec in place. */
+  recordAppliedSpec(input: {
+    readonly id: string;
+    readonly appliedRevision: number;
+    readonly appliedSpecDigest: string;
+    readonly endpointEpoch: string;
+    readonly extensionGrantId?: string;
+  }): Promise<RuntimeSession>;
+
   /** Supersedes the active provider generation and atomically installs its replacement. */
   replaceExecution(input: {
     readonly id: string;

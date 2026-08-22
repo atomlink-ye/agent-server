@@ -27,7 +27,7 @@ export interface WorkChatWakeStateRepository {
     leaseMs: number,
   ): Promise<WorkChatWakeDelivery | null>;
   /** Same durable activation queue used by ordinary Conversation messages. */
-  enqueueChatActivation(
+  enqueueChatActivation?(
     input: Parameters<ChatDispatchRepository['enqueue']>[0],
   ): ReturnType<ChatDispatchRepository['enqueue']>;
   markDelivered(deliveryId: string, workerId: string): Promise<void>;

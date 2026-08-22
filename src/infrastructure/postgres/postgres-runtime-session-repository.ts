@@ -29,16 +29,13 @@ export class PostgresRuntimeSessionRepository
       NonNullable<RuntimeSessionRepository['createOrGetForAgentChat']>
     >[0],
   ): Promise<RuntimeSession> {
+    assertPositiveRuntimeEpoch(input.runtimeEpoch);
     const existing = await this.findByAgentChat(input);
     if (existing) return existing;
 
     const now = new Date().toISOString();
     const snapshotId = randomUUID();
     const runtimeId = randomUUID();
-    const scopeId = agentChatScopeId(
-      input.agentChatRuntimeId,
-      input.runtimeEpoch,
-    );
     await this.insertSnapshot({
       id: snapshotId,
       tenantId: input.tenantId,
@@ -53,15 +50,16 @@ export class PostgresRuntimeSessionRepository
     });
     await this.db.query(
       `INSERT INTO runtime_sessions
-        (id,tenant_id,principal_type,principal_id,scope_kind,scope_id,product_session_id,task_id,launch_snapshot_id,created_at,updated_at)
-       VALUES($1,$2,$3,$4,'agent_chat',$5,NULL,NULL,$6,$7,$7)
+        (id,tenant_id,principal_type,principal_id,scope_kind,agent_chat_runtime_id,runtime_epoch,product_session_id,task_id,launch_snapshot_id,created_at,updated_at)
+       VALUES($1,$2,$3,$4,'agent_chat',$5,$6,NULL,NULL,$7,$8,$8)
        ON CONFLICT DO NOTHING`,
       [
         runtimeId,
         input.tenantId,
         input.principalType,
         input.principalId,
-        scopeId,
+        input.agentChatRuntimeId,
+        input.runtimeEpoch,
         snapshotId,
         now,
       ],
@@ -79,13 +77,16 @@ export class PostgresRuntimeSessionRepository
       NonNullable<RuntimeSessionRepository['findByAgentChat']>
     >[0],
   ): Promise<RuntimeSession | null> {
+    assertPositiveRuntimeEpoch(input.runtimeEpoch);
     const result = await this.db.query(
       `${SESSION_SELECT}
-       WHERE rs.scope_kind='agent_chat' AND rs.scope_id=$1
-         AND rs.tenant_id=$2 AND sls.workspace_id=$3
-         AND rs.principal_type=$4 AND rs.principal_id=$5`,
+       WHERE rs.scope_kind='agent_chat'
+         AND rs.agent_chat_runtime_id=$1 AND rs.runtime_epoch=$2
+         AND rs.tenant_id=$3 AND sls.workspace_id=$4
+         AND rs.principal_type=$5 AND rs.principal_id=$6`,
       [
-        agentChatScopeId(input.agentChatRuntimeId, input.runtimeEpoch),
+        input.agentChatRuntimeId,
+        input.runtimeEpoch,
         input.tenantId,
         input.workspaceId,
         input.principalType,
@@ -393,13 +394,14 @@ function map(row: any): RuntimeSession {
 function runtimeScope(row: any): RuntimeScope {
   switch (row.scope_kind) {
     case 'agent_chat': {
-      if (!row.scope_id)
-        throw new Error('Agent chat RuntimeSession has no scope id.');
-      const parsed = parseAgentChatScopeId(row.scope_id);
+      if (!row.agent_chat_runtime_id)
+        throw new Error('Agent chat RuntimeSession has no runtime id.');
+      const runtimeEpoch = Number(row.runtime_epoch);
+      assertPositiveRuntimeEpoch(runtimeEpoch);
       return {
         kind: 'agent_chat',
-        agentChatRuntimeId: parsed.agentChatRuntimeId,
-        runtimeEpoch: parsed.runtimeEpoch,
+        agentChatRuntimeId: row.agent_chat_runtime_id,
+        runtimeEpoch,
       };
     }
     case 'team_member':
@@ -424,7 +426,7 @@ function runtimeScope(row: any): RuntimeScope {
 function runtimeScopeId(scope: RuntimeScope): string {
   switch (scope.kind) {
     case 'agent_chat':
-      return agentChatScopeId(scope.agentChatRuntimeId, scope.runtimeEpoch);
+      return scope.agentChatRuntimeId;
     case 'team_member':
       return scope.teamMemberRunId;
     case 'task':
@@ -434,22 +436,7 @@ function runtimeScopeId(scope: RuntimeScope): string {
   }
 }
 
-function agentChatScopeId(agentChatRuntimeId: string, runtimeEpoch: number): string {
-  if (!agentChatRuntimeId || !Number.isSafeInteger(runtimeEpoch) || runtimeEpoch <= 0)
-    throw new Error('Agent chat RuntimeSession requires a positive runtime epoch.');
-  return `${agentChatRuntimeId}:${runtimeEpoch}`;
-}
-
-function parseAgentChatScopeId(scopeId: string): {
-  readonly agentChatRuntimeId: string;
-  readonly runtimeEpoch: number;
-} {
-  const separator = scopeId.lastIndexOf(':');
-  if (separator <= 0)
-    throw new Error('Agent chat RuntimeSession scope id is malformed.');
-  const agentChatRuntimeId = scopeId.slice(0, separator);
-  const runtimeEpoch = Number(scopeId.slice(separator + 1));
+function assertPositiveRuntimeEpoch(runtimeEpoch: number): void {
   if (!Number.isSafeInteger(runtimeEpoch) || runtimeEpoch <= 0)
-    throw new Error('Agent chat RuntimeSession epoch is malformed.');
-  return { agentChatRuntimeId, runtimeEpoch };
+    throw new Error('Agent chat RuntimeSession requires a positive runtime epoch.');
 }

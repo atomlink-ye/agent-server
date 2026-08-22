@@ -351,6 +351,7 @@ describe('managed agent HTTP contracts', () => {
     const routes = [
       ['POST', '/api/v1/agent-packages:validate', 200, { source }],
       ['POST', '/api/v1/agents:import', 201, { source }],
+      ['GET', '/api/v1/agents', 200],
       ['GET', `/api/v1/agents/${body.agent.id}`, 200],
       ['GET', `/api/v1/agents/${body.agent.id}/versions`, 200],
       ['GET', `/api/v1/agent-versions/${body.version.id}`, 200],
@@ -387,7 +388,7 @@ describe('managed agent HTTP contracts', () => {
     }
   });
 
-  it('exposes exactly the six approved managed Agent routes', async () => {
+  it('exposes exactly the seven approved managed Agent routes', async () => {
     const app = await createTestApp(new FakeAgentRuntime(), {
       startDispatcher: false,
     });
@@ -401,6 +402,7 @@ describe('managed agent HTTP contracts', () => {
     expect(actual).toEqual(
       [
         'GET /api/v1/agent-versions/:versionId',
+        'GET /api/v1/agents',
         'GET /api/v1/agents/:agentId',
         'GET /api/v1/agents/:agentId/versions',
         'POST /api/v1/agent-packages:validate',

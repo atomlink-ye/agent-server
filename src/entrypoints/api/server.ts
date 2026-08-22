@@ -3,6 +3,7 @@ import { serve } from '@hono/node-server';
 import { createService } from '../../bootstrap.js';
 import { loadConfig } from '../../shared/config.js';
 import { createLogger } from '../../shared/observability/logger.js';
+import { registerBrowserCoworkerRoutes } from './routes/browser-coworkers.js';
 import { registerBrowserWebRoutes } from './routes/browser-web.js';
 import { shutdownService } from './shutdown.js';
 
@@ -22,6 +23,7 @@ if (!process.env.AGENT_SERVER_SERVICE_TOKEN?.trim() && config.nodeEnv !== 'produ
   const localAccount = config.serviceAccounts?.find((account) => !account.disabled);
   if (localAccount) process.env.AGENT_SERVER_SERVICE_TOKEN = localAccount.token;
 }
+registerBrowserCoworkerRoutes(app, config);
 registerBrowserWebRoutes(app, config);
 
 const server = serve(

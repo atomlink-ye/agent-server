@@ -44,6 +44,7 @@ it('refreshes the selected transcript on its interval and stops when selection c
     return requestNumber === 1 ? [initialB] : [initialB, refreshedB];
   });
   const commands: ChatCommands = {
+    loadCoworkers: async () => [],
     loadConversations: async () => [conversationA, conversationB],
     createConversation: async () => conversationA,
     loadWorks: async () => [],
@@ -123,6 +124,7 @@ it('refreshes the selected transcript on its interval and stops when selection c
 it('renders Work as a sibling tab inside the same Cumora-style shell', async () => {
   const workId = '11111111-1111-4111-8111-111111111111';
   const commands: ChatCommands = {
+    loadCoworkers: async () => [],
     loadConversations: async () => [],
     createConversation: async () => conversation('conversation-a'),
     loadWorks: async () => [

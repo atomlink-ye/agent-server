@@ -83,13 +83,15 @@ function mapRuntimeSession(row: any): RuntimeSession {
 function runtimeScope(row: any): RuntimeScope {
   switch (row.scope_kind) {
     case 'agent_chat': {
-      if (!row.scope_id)
-        throw new Error('Agent chat RuntimeSession has no scope id.');
-      const parsed = parseAgentChatScopeId(row.scope_id);
+      if (!row.agent_chat_runtime_id)
+        throw new Error('Agent chat RuntimeSession has no runtime id.');
+      const runtimeEpoch = Number(row.runtime_epoch);
+      if (!Number.isSafeInteger(runtimeEpoch) || runtimeEpoch <= 0)
+        throw new Error('Agent chat RuntimeSession has an invalid epoch.');
       return {
         kind: 'agent_chat',
-        agentChatRuntimeId: parsed.agentChatRuntimeId,
-        runtimeEpoch: parsed.runtimeEpoch,
+        agentChatRuntimeId: row.agent_chat_runtime_id,
+        runtimeEpoch,
       };
     }
     case 'team_member':
@@ -114,7 +116,7 @@ function runtimeScope(row: any): RuntimeScope {
 function runtimeScopeId(scope: RuntimeScope): string {
   switch (scope.kind) {
     case 'agent_chat':
-      return `${scope.agentChatRuntimeId}:${scope.runtimeEpoch}`;
+      return scope.agentChatRuntimeId;
     case 'team_member':
       return scope.teamMemberRunId;
     case 'task':
@@ -122,18 +124,4 @@ function runtimeScopeId(scope: RuntimeScope): string {
     case 'product_session':
       return scope.productSessionId;
   }
-}
-
-function parseAgentChatScopeId(scopeId: string): {
-  readonly agentChatRuntimeId: string;
-  readonly runtimeEpoch: number;
-} {
-  const separator = scopeId.lastIndexOf(':');
-  if (separator <= 0)
-    throw new Error('Agent chat RuntimeSession scope id is malformed.');
-  const agentChatRuntimeId = scopeId.slice(0, separator);
-  const runtimeEpoch = Number(scopeId.slice(separator + 1));
-  if (!Number.isSafeInteger(runtimeEpoch) || runtimeEpoch <= 0)
-    throw new Error('Agent chat RuntimeSession epoch is malformed.');
-  return { agentChatRuntimeId, runtimeEpoch };
 }

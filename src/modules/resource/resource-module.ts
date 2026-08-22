@@ -6,6 +6,7 @@ import {
   AGENT_SERVER_MEMORY_API_SKILL_REF,
   AGENT_SERVER_MEMORY_READ_TOOL_REF,
 } from '../../application/agents/built-in-skills.js';
+import { EnsureCoworkerConversation } from '../../application/chat/ensure-coworker-conversation.js';
 import type { AgentResolutionApi } from '../../application/ports/agent-resolution-api.js';
 import type { ManagedAgentDefinitionRead } from '../../application/ports/agent-registry.js';
 import type { DefinitionReadApi } from '../../application/ports/definition-read-api.js';
@@ -23,6 +24,8 @@ import { registerProductWorkDefinitionRoutes } from '../../entrypoints/api/route
 import { registerTeamRoutes } from '../../entrypoints/api/routes/teams.js';
 import { LocalSkillCatalog } from '../../infrastructure/filesystem/local-skill-catalog.js';
 import { PostgresAgentRegistry } from '../../infrastructure/postgres/postgres-agent-registry.js';
+import { PostgresConversationRepository } from '../../infrastructure/postgres/postgres-conversation-repository.js';
+import { PostgresConversationWorkEntitlementRepository } from '../../infrastructure/postgres/postgres-conversation-work-entitlement-repository.js';
 import { PostgresEnvironmentRegistry } from '../../infrastructure/postgres/postgres-environment-registry.js';
 import { PostgresInvokableRepository } from '../../infrastructure/postgres/postgres-invokable-repository.js';
 import { PostgresMemoryVersionReadApi } from '../../infrastructure/postgres/postgres-memory-version-read-api.js';
@@ -37,6 +40,10 @@ export interface ResourceModuleDatabase {
   ): Promise<{ rows?: readonly Row[]; rowCount?: number | null }>;
 }
 
+export interface ResourceModuleHttpOptions {
+  readonly coworkerProvisioning?: Pick<EnsureCoworkerConversation, 'execute'>;
+}
+
 export interface ResourceModule {
   readonly managedAgentDefinitions: ManagedAgentDefinitionRead;
   readonly agentResolutionApi: AgentResolutionApi;
@@ -46,7 +53,11 @@ export interface ResourceModule {
   readonly workDefinitionSources: WorkDefinitionSourceRepository;
   readonly workDefinitionResolution: WorkDefinitionResolutionPort;
   readonly productWorkDefinitions: ProductWorkDefinitionApi;
-  installHttp(app: Hono<ApiEnvironment>, config: AppConfig): void;
+  installHttp(
+    app: Hono<ApiEnvironment>,
+    config: AppConfig,
+    options?: ResourceModuleHttpOptions,
+  ): void;
 }
 
 export interface CreateResourceModuleOptions {
@@ -119,6 +130,11 @@ export async function createResourceModule(
     environmentRegistry,
     memories: memoryVersionReadApi,
   });
+  const conversationRepository = new PostgresConversationRepository(
+    options.database,
+  );
+  const workEntitlementRepository =
+    new PostgresConversationWorkEntitlementRepository(options.database);
 
   return {
     managedAgentDefinitions: agentRegistry,
@@ -129,12 +145,28 @@ export async function createResourceModule(
     workDefinitionSources,
     workDefinitionResolution,
     productWorkDefinitions,
-    installHttp(app, config) {
+    installHttp(app, config, httpOptions) {
       registerProductWorkDefinitionRoutes(app, {
         config,
         definitions: productWorkDefinitions,
       });
-      registerAgentRoutes(app, { config, agentRegistry });
+      const configuredCoworkerProvisioning =
+        httpOptions?.coworkerProvisioning ??
+        (config.directChatPlane !== 'absent'
+          ? new EnsureCoworkerConversation(
+              conversationRepository,
+              config.productWorkPlane !== 'absent'
+                ? workEntitlementRepository
+                : undefined,
+            )
+          : undefined);
+      registerAgentRoutes(app, {
+        config,
+        agentRegistry,
+        ...(configuredCoworkerProvisioning
+          ? { coworkerProvisioning: configuredCoworkerProvisioning }
+          : {}),
+      });
       registerTeamRoutes(app, {
         config,
         invokableRepository,

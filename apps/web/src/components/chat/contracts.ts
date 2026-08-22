@@ -20,6 +20,17 @@ export interface WorkListItem {
   } | null;
 }
 
+export type CoworkerRuntimeStatus = 'available' | 'draining' | 'unavailable';
+
+export interface Coworker {
+  readonly id: string;
+  readonly displayName: string;
+  readonly roleLabel: string | null;
+  readonly summary: string | null;
+  readonly activeAgentVersionId: string;
+  readonly runtimeStatus: CoworkerRuntimeStatus;
+}
+
 export interface Conversation {
   readonly id: ConversationId;
   readonly kind: 'direct' | 'group';
@@ -45,6 +56,7 @@ export interface ChatMessage {
 }
 
 export interface ChatCommands {
+  readonly loadCoworkers: () => Promise<readonly Coworker[]>;
   readonly loadConversations: () => Promise<readonly Conversation[]>;
   readonly createConversation: (
     agentDefinitionId: string,

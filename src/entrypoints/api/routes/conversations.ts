@@ -6,6 +6,7 @@ import type { ConversationRepository } from '../../../application/ports/conversa
 import type { ChatDispatchRepository } from '../../../application/ports/chat-dispatch-repository.js';
 import type { ConversationWorkEntitlementRepository } from '../../../application/ports/conversation-work-entitlement-repository.js';
 import type { ManagedAgentDefinitionRead } from '../../../application/ports/agent-registry.js';
+import { EnsureCoworkerConversation } from '../../../application/chat/ensure-coworker-conversation.js';
 import { postConversationMessage } from '../../../application/chat/post-conversation-message.js';
 import { enqueueChatDispatchForMessage } from '../../../application/chat/enqueue-chat-dispatch.js';
 import { ServiceAccountAuthenticator } from '../../../application/control-plane/service-account-authenticator.js';
@@ -62,6 +63,10 @@ export function registerConversationRoutes(
     dependencies.config.serviceAccounts ?? [],
   );
   const auth = requireServiceAccountAccess(authenticator);
+  const coworkerProvisioning = new EnsureCoworkerConversation(
+    dependencies.conversations,
+    dependencies.workEntitlements,
+  );
   app.use(BASE, auth);
   app.use(`${BASE}/*`, auth);
 
@@ -97,11 +102,9 @@ export function registerConversationRoutes(
         'chat_runtime_unavailable',
         'The requested agent is not available for chat.',
       );
-    const conversation = await dependencies.conversations.findOrCreateDirect({
-      tenantId: access.tenantId,
-      principalId: access.principalId,
-      principalType: access.principalType,
-      agentDefinitionId: definition.id,
+    const { conversation } = await coworkerProvisioning.execute({
+      accessContext: access,
+      definition,
     });
     return c.json({ conversation: conversationResponse(conversation) }, 201);
   });

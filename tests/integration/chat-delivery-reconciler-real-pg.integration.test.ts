@@ -350,7 +350,7 @@ describe('Chat delivery reconciler on real PostgreSQL', () => {
   });
 
   it('4. scope_kind mutation: agent_chat scope is now allowed in runtime_sessions', async () => {
-    // This test verifies the migration 0039 constraint change.
+    // This test verifies the migration 0039 scope plus 0051 typed epoch shape.
     // We test within a transaction that is always rolled back to avoid pollution.
 
     const client = await pool.connect();
@@ -370,20 +370,21 @@ describe('Chat delivery reconciler on real PostgreSQL', () => {
         );
       }
 
-      // Positive: current schema (with 0039) allows agent_chat scope_kind
+      // Positive: current schema allows typed agent_chat scope identity.
       await client.query('SAVEPOINT test_agent_chat_allowed');
       const insertResult = await client.query(
-        `INSERT INTO runtime_sessions (id, tenant_id, principal_type, principal_id, scope_kind, launch_snapshot_id, created_at, updated_at)
-         VALUES (gen_random_uuid(), 'test-tenant-scope', 'service_account', 'sa-1', 'agent_chat', gen_random_uuid(), now(), now())`,
+        `INSERT INTO runtime_sessions
+          (id, tenant_id, principal_type, principal_id, scope_kind, agent_chat_runtime_id, runtime_epoch, launch_snapshot_id, created_at, updated_at)
+         VALUES (gen_random_uuid(), 'test-tenant-scope', 'service_account', 'sa-1', 'agent_chat', gen_random_uuid(), 1, gen_random_uuid(), now(), now())`,
       );
       expect(insertResult.rowCount).toBe(1);
       await client.query('ROLLBACK TO SAVEPOINT test_agent_chat_allowed');
 
-      // Negative: before 0039 (old constraints), agent_chat would be rejected
-      // Re-apply old constraints
+      // Negative: before 0039 (old constraints), agent_chat would be rejected.
       await client.query('SAVEPOINT test_old_constraints');
 
-      // Drop new constraints
+      // Drop current scope constraints. 0051's typed identity check stays in
+      // place so this branch isolates the historical scope-kind restriction.
       await client.query(
         `ALTER TABLE runtime_sessions DROP CONSTRAINT IF EXISTS runtime_sessions_scope_shape_check`,
       );
@@ -403,12 +404,13 @@ describe('Chat delivery reconciler on real PostgreSQL', () => {
           CHECK (scope_kind IN ('product_session','task','team_member'))
       `);
 
-      // Attempt to insert agent_chat with old constraints
+      // Attempt to insert a structurally typed agent_chat under old constraints.
       let oldConstraintRejectsAgentChat = false;
       try {
         await client.query(
-          `INSERT INTO runtime_sessions (id, tenant_id, principal_type, principal_id, scope_kind, launch_snapshot_id, created_at, updated_at)
-           VALUES (gen_random_uuid(), 'test-tenant-scope-old', 'service_account', 'sa-2', 'agent_chat', gen_random_uuid(), now(), now())`,
+          `INSERT INTO runtime_sessions
+            (id, tenant_id, principal_type, principal_id, scope_kind, agent_chat_runtime_id, runtime_epoch, launch_snapshot_id, created_at, updated_at)
+           VALUES (gen_random_uuid(), 'test-tenant-scope-old', 'service_account', 'sa-2', 'agent_chat', gen_random_uuid(), 1, gen_random_uuid(), now(), now())`,
         );
       } catch (error) {
         if (

@@ -117,7 +117,6 @@ src/domain/                 framework-free state and invariants
 src/application/            use cases, policies and ports
 src/adapters/               external-system translations
 src/infrastructure/         storage/files/process implementations
-src/composition/            concrete module graph, profiles and lifecycle
 src/contracts/              HTTP/event/MCP/browser-safe contracts
 src/entrypoints/            API/channel/CLI process entrypoints
 tests/harness/              reusable deterministic scenario composition + semantic seeds

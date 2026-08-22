@@ -59,8 +59,12 @@ export interface ExecutionMcpServerConfig {
   readonly headers: Readonly<Record<string, string>>;
 }
 
+/** Runtime extension identity excludes bearer plaintext from its stable digest. */
 export interface ExecutionExtensionBinding {
   readonly mcpServers?: readonly ExecutionMcpServerConfig[];
+  readonly endpointEpoch?: string;
+  readonly digest?: string;
+  readonly grantId?: string;
 }
 
 export interface ExecutionWorkspaceSpec {
@@ -79,8 +83,20 @@ export interface ExecutionSessionSpec {
   readonly title?: string;
   readonly labels?: Readonly<Record<string, string>>;
   readonly extensions?: ExecutionExtensionBinding;
+  /** Monotonic desired bootstrap revision owned by Agent Server. */
+  readonly desiredRevision?: number;
+  /** Stable digest of provider/model/workspace/extension bootstrap state. */
+  readonly bootstrapSpecDigest?: string;
+  /** Provider-visible Agent Server endpoint epoch used by this spec. */
+  readonly endpointEpoch?: string;
   /** Machine-readable product/runtime identity; never recover this from prompt text. */
   readonly invocationContext?: RuntimeInvocationContext;
+}
+
+export interface ExecutionAppliedSessionSpec {
+  readonly appliedRevision: number;
+  readonly appliedSpecDigest: string | null;
+  readonly endpointEpoch: string;
 }
 
 export interface CreatedExecutionSession {
@@ -88,6 +104,26 @@ export interface CreatedExecutionSession {
   readonly workspaceBinding: ExecutionWorkspaceBinding;
   readonly sessionBinding: ExecutionSessionBinding;
 }
+
+export type AttachExecutionSessionOutcome =
+  | {
+      readonly kind: 'reused';
+      readonly session: ExecutionSession;
+      readonly appliedRevision: number;
+    }
+  | {
+      readonly kind: 'reconfigured';
+      readonly session: ExecutionSession;
+      readonly appliedRevision: number;
+    }
+  | {
+      readonly kind: 'replacement_required';
+      readonly reason:
+        | 'extensions_changed'
+        | 'endpoint_epoch_changed'
+        | 'provider_binding_stale'
+        | 'provider_cannot_reconfigure';
+    };
 
 export interface ExecutionRunInput {
   readonly runId: string;
@@ -278,7 +314,8 @@ export interface ExecutionPlanePort {
   attachSession(
     binding: ExecutionSessionBinding,
     spec: ExecutionSessionSpec,
-  ): Promise<ExecutionSession>;
+    applied?: ExecutionAppliedSessionSpec,
+  ): Promise<AttachExecutionSessionOutcome>;
   health(): Promise<ExecutionPlaneHealth>;
   close(): Promise<void>;
 }

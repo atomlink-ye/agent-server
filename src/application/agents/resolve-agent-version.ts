@@ -2,7 +2,6 @@ import type {
   AgentRegistry,
   ManagedAgentDefinitionRead,
 } from '../ports/agent-registry.js';
-import type { LegacyAgentVersionProjection } from '../../domain/invokables/agent-version.js';
 import {
   isModelPolicyRef,
   type ModelPolicyRef,
@@ -27,45 +26,11 @@ export type {
 type CanonicalAgentVersionRead = Pick<AgentRegistry, 'findVersion'> &
   Pick<ManagedAgentDefinitionRead, 'findVersionByTenant'>;
 
-/**
- * Explicit read-only bridge for historical tests/data that predate managed
- * Agent packages. Production composition does not install this bridge.
- */
-export interface LegacyAgentVersionCompatibilityReader {
-  findPublishedAgentVersionById(
-    id: string,
-    ownerScope: AgentVersionResolutionScope,
-  ): Promise<LegacyAgentVersionProjection | null>;
-}
-
 export class ResolveAgentVersion implements AgentResolutionApi {
-  private readonly managed: CanonicalAgentVersionRead;
-  private readonly legacyCompatibility?: LegacyAgentVersionCompatibilityReader;
-  private readonly skillCatalog: SkillCatalogPort;
-
   public constructor(
-    managed: CanonicalAgentVersionRead,
-    skillCatalog: SkillCatalogPort,
-  );
-  /** @deprecated Compatibility-only constructor for historical fixtures. */
-  public constructor(
-    managed: CanonicalAgentVersionRead,
-    legacyCompatibility: LegacyAgentVersionCompatibilityReader,
-    skillCatalog: SkillCatalogPort,
-  );
-  public constructor(
-    managed: CanonicalAgentVersionRead,
-    legacyOrCatalog: LegacyAgentVersionCompatibilityReader | SkillCatalogPort,
-    maybeCatalog?: SkillCatalogPort,
+    private readonly managed: CanonicalAgentVersionRead,
+    private readonly skillCatalog: SkillCatalogPort,
   ) {
-    this.managed = managed;
-    if (maybeCatalog) {
-      this.legacyCompatibility =
-        legacyOrCatalog as LegacyAgentVersionCompatibilityReader;
-      this.skillCatalog = maybeCatalog;
-    } else {
-      this.skillCatalog = legacyOrCatalog as SkillCatalogPort;
-    }
   }
 
   public async resolvePublished(
@@ -123,28 +88,7 @@ export class ResolveAgentVersion implements AgentResolutionApi {
         toolRefs: Object.freeze([...toolRefs]),
       };
     }
-
-    // Historical compatibility is opt-in. New production composition uses the
-    // two-argument constructor, so a missing managed Agent never silently falls
-    // through to the old invokable model.
-    if (!this.legacyCompatibility) return null;
-    const legacyVersion =
-      await this.legacyCompatibility.findPublishedAgentVersionById(
-        versionId,
-        scope,
-      );
-    return legacyVersion
-      ? {
-          source: 'legacy',
-          id: legacyVersion.id,
-          ...resolvedIdentity(legacyVersion),
-          instructions: legacyVersion.instructions,
-          modelPolicyRef: 'free-only',
-          proposalLimit: 0,
-          skills: [],
-          toolRefs: [],
-        }
-      : null;
+    return null;
   }
 }
 

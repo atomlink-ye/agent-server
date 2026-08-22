@@ -2,11 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { AccessContext } from '../../platform/access-context.js';
 import { createRun, type Run } from '../../domain/runs/run.js';
-import {
-  createDraftAgentVersion,
-  publishAgentVersion,
-  type AgentVersion,
-} from '../../domain/invokables/agent-version.js';
+import type { AgentResolutionApi } from '../ports/agent-resolution-api.js';
 import { createRootTask, type Task } from '../../domain/tasks/task.js';
 import type {
   AdmissionRecord,
@@ -36,27 +32,31 @@ import {
 } from './invoke-task.js';
 
 const primaryAccessContext = createAccessContext();
-const publishedAgentVersion = publishAgentVersion(
-  createDraftAgentVersion({
-    id: '00000000-0000-4000-8000-0000000a0101',
-    definitionId: '00000000-0000-4000-8000-0000000a0001',
-    tenantId: primaryAccessContext.tenantId,
-    workspaceId: primaryAccessContext.workspaceId,
-    principalType: primaryAccessContext.principalType,
-    principalId: primaryAccessContext.principalId,
-    name: 'Task Agent',
-    instructions: 'Do the task.',
-    now: () => new Date('2026-07-22T12:00:00.000Z'),
-  }),
-  () => new Date('2026-07-22T12:05:00.000Z'),
-);
+const publishedAgentVersion = {
+  id: '00000000-0000-4000-8000-0000000a0101',
+};
+const publishedAgentResolver: AgentResolutionApi = {
+  resolvePublished: async (id) =>
+    id === publishedAgentVersion.id
+      ? {
+          source: 'managed',
+          id,
+          instructions: 'Do the task.',
+          modelPolicyRef: 'free-only',
+          proposalLimit: 0,
+          skills: [],
+          toolRefs: [],
+        }
+      : null,
+};
 
 describe('InvokeTask', () => {
   it('reuses the original task when the same key is replayed with the same canonical request', async () => {
     const repository = new InMemoryAdmissionRepository();
     const useCase = new InvokeTask(
       repository,
-      new PublishedInvokableRepository([publishedAgentVersion]),
+      new PublishedInvokableRepository(),
+      publishedAgentResolver,
       () => new Date('2026-07-22T12:10:00.000Z'),
     );
 
@@ -84,7 +84,8 @@ describe('InvokeTask', () => {
     const repository = new InMemoryAdmissionRepository();
     const useCase = new InvokeTask(
       repository,
-      new PublishedInvokableRepository([publishedAgentVersion]),
+      new PublishedInvokableRepository(),
+      publishedAgentResolver,
     );
 
     const result = await useCase.execute({
@@ -102,7 +103,8 @@ describe('InvokeTask', () => {
     const repository = new InMemoryAdmissionRepository();
     const useCase = new InvokeTask(
       repository,
-      new PublishedInvokableRepository([publishedAgentVersion]),
+      new PublishedInvokableRepository(),
+      publishedAgentResolver,
     );
     const first = await useCase.execute({
       idempotencyKey: 'transaction-visible-replay',
@@ -112,7 +114,8 @@ describe('InvokeTask', () => {
     });
     const replayUseCase = new InvokeTask(
       repository,
-      new PublishedInvokableRepository([publishedAgentVersion]),
+      new PublishedInvokableRepository(),
+      publishedAgentResolver,
     );
 
     const replay = await replayUseCase.execute({
@@ -131,7 +134,8 @@ describe('InvokeTask', () => {
     const repository = new InMemoryAdmissionRepository();
     const useCase = new InvokeTask(
       repository,
-      new PublishedInvokableRepository([publishedAgentVersion]),
+      new PublishedInvokableRepository(),
+      publishedAgentResolver,
     );
 
     await expect(
@@ -149,7 +153,8 @@ describe('InvokeTask', () => {
     const repository = new InMemoryAdmissionRepository();
     const useCase = new InvokeTask(
       repository,
-      new PublishedInvokableRepository([publishedAgentVersion]),
+      new PublishedInvokableRepository(),
+      publishedAgentResolver,
       () => new Date('2026-07-22T12:10:00.000Z'),
     );
 
@@ -172,13 +177,6 @@ describe('InvokeTask', () => {
 });
 
 class PublishedInvokableRepository implements InvokableRepository {
-  readonly #agentVersions = new Map<string, AgentVersion>();
-
-  public constructor(agentVersions: readonly AgentVersion[]) {
-    for (const version of agentVersions) {
-      this.#agentVersions.set(version.id, version);
-    }
-  }
 
   public async saveAgentDefinition(): Promise<void> {
     throw new Error('Not implemented in invoke-task tests');
@@ -194,25 +192,6 @@ class PublishedInvokableRepository implements InvokableRepository {
 
   public async findAgentVersionById(): Promise<null> {
     return null;
-  }
-
-  public async findPublishedAgentVersionById(
-    id: string,
-    ownerScope: {
-      readonly tenantId: string;
-      readonly workspaceId: string;
-      readonly principalType: string;
-      readonly principalId: string;
-    },
-  ): Promise<AgentVersion | null> {
-    const version = this.#agentVersions.get(id) ?? null;
-    return version &&
-      version.tenantId === ownerScope.tenantId &&
-      version.workspaceId === ownerScope.workspaceId &&
-      version.principalType === ownerScope.principalType &&
-      version.principalId === ownerScope.principalId
-      ? version
-      : null;
   }
 
   public async saveTeamDefinition(): Promise<void> {

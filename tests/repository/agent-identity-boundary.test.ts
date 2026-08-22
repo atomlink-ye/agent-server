@@ -78,4 +78,15 @@ describe('canonical Agent identity boundary', () => {
     expect(source).not.toMatch(/INSERT\s+INTO\s+agent_definitions/iu);
     expect(source).not.toMatch(/INSERT\s+INTO\s+agent_versions/iu);
   });
+
+  it('requires an explicit AgentResolutionApi when constructing InvokeTask', () => {
+    const source = readFileSync(
+      resolve(root, 'src/application/tasks/invoke-task.ts'),
+      'utf8',
+    );
+    expect(source).toMatch(
+      /private readonly resolver: AgentResolutionApi(?!\s*=)/u,
+    );
+    expect(source).not.toMatch(/legacyFixtureResolver/u);
+  });
 });

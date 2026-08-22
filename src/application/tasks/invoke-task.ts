@@ -1,10 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 
 import type { AccessContext } from '../../platform/access-context.js';
-import {
-  ResolveAgentVersion,
-  type LegacyAgentVersionCompatibilityReader,
-} from '../agents/resolve-agent-version.js';
 import type { AgentResolutionApi } from '../ports/agent-resolution-api.js';
 import type {
   AdmissionOwnerScope,
@@ -48,20 +44,10 @@ export class InvokeTask {
   public constructor(
     private readonly admissions: AdmissionRepository,
     private readonly definitions: DefinitionReadApi,
-    resolverOrNow: AgentResolutionApi | (() => Date) = legacyFixtureResolver(
-      definitions,
-    ),
-    now: () => Date = () => new Date(),
+    private readonly resolver: AgentResolutionApi,
+    private readonly now: () => Date = () => new Date(),
   ) {
-    this.resolver =
-      typeof resolverOrNow === 'function'
-        ? legacyFixtureResolver(definitions)
-        : resolverOrNow;
-    this.now = typeof resolverOrNow === 'function' ? resolverOrNow : now;
   }
-
-  private readonly resolver: AgentResolutionApi;
-  private readonly now: () => Date;
 
   public async execute(request: InvokeTaskRequest): Promise<InvokeTaskResult> {
     const resolvedWorkspaceId = resolveWorkspaceId(
@@ -205,32 +191,6 @@ export class InvokeTask {
           );
     if (!version) throw new InvokableNotFoundError();
   }
-}
-
-/**
- * Historical unit fixtures constructed InvokeTask with a combined definition
- * fake. Production bootstrap always supplies AgentResolutionApi explicitly.
- * Keep that test-only shape readable without putting Agent methods back onto
- * DefinitionReadApi.
- */
-function legacyFixtureResolver(definitions: DefinitionReadApi): AgentResolutionApi {
-  const candidate = definitions as DefinitionReadApi &
-    Partial<LegacyAgentVersionCompatibilityReader>;
-  const legacy =
-    typeof candidate.findPublishedAgentVersionById === 'function'
-      ? {
-          findPublishedAgentVersionById:
-            candidate.findPublishedAgentVersionById.bind(candidate),
-        }
-      : undefined;
-  const managed = {
-    findVersion: async () => null,
-    findVersionByTenant: async () => null,
-  };
-  const skills = { resolve: async () => null };
-  return legacy
-    ? new ResolveAgentVersion(managed, legacy, skills)
-    : new ResolveAgentVersion(managed, skills);
 }
 
 export class InvokableNotFoundError extends Error {

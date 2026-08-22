@@ -254,7 +254,19 @@ describe('ExecuteRun', () => {
       memorySnapshotId: 'snapshot-1',
       memorySnapshotHash: 'hash-1',
     } as Task;
-    const catalogResolve = vi.fn(async () => null);
+    const catalogResolve = vi.fn(async (ref: string) =>
+      ref === 'custom/skill'
+        ? {
+            ref,
+            name: 'Custom skill',
+            digest: 'sha256:custom-skill',
+            objectPath: 'skills/custom-skill',
+            manifestPath: 'skills/custom-skill/SKILL.md',
+            delivery: 'native_project' as const,
+            requiredToolRefs: [],
+          }
+        : null,
+    );
     const resolver = new ResolveAgentVersion(
       {
         findVersion: vi.fn(async () => ({
@@ -326,7 +338,7 @@ describe('ExecuteRun', () => {
       }),
       expect.objectContaining({ emit: expect.any(Function) }),
     );
-    expect(catalogResolve).not.toHaveBeenCalled();
+    expect(catalogResolve).toHaveBeenCalledWith('custom/skill');
     expect(binder).not.toHaveBeenCalled();
     expect(batch).toHaveBeenCalledTimes(1);
     expect(events.findLatestSessionBindingBySessionId).toHaveBeenCalledTimes(1);

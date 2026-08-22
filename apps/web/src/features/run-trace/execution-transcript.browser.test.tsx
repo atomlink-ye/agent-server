@@ -16,7 +16,9 @@ it('renders actual safe provider output through the Product-scoped Attempt detai
   const trace = parseRecordedTrace(reworkRecording);
   const selected = trace.work_items.find((item) => item.attempts.length > 0)!;
   const attempt = selected.attempts[0]!;
-  const actor = trace.actors.find((candidate) => candidate.id === selected.actor_id);
+  const actor = trace.actors.find(
+    (candidate) => candidate.id === selected.actor_id,
+  );
   const fetchMock = vi.fn().mockResolvedValue({
     ok: true,
     json: async () => ({
@@ -69,7 +71,9 @@ it('renders actual safe provider output through the Product-scoped Attempt detai
       await new Promise((resolve) => setTimeout(resolve, 10));
     });
 
-    expect(host.querySelector('[data-testid="execution-transcript"]')).not.toBeNull();
+    expect(
+      host.querySelector('[data-testid="execution-transcript"]'),
+    ).not.toBeNull();
     expect(host.textContent).toContain(actor?.name ?? 'Name not captured');
     expect(host.textContent).toContain(
       'Actual provider answer visible in Product execution detail.',

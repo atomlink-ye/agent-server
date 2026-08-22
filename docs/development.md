@@ -51,7 +51,7 @@ Setup is idempotent and owns only developer bootstrap responsibilities:
 4. when the default host database is absent, start or reuse a persistent PGlite wire server under `.local/dev-runtime`;
 5. create the real database with `createdb` when it is missing and the tool is available;
 6. apply the durable kernel migrations;
-6. print the next canonical command.
+7. print the next canonical command.
 
 Default real database:
 
@@ -185,10 +185,7 @@ Important background workers implement the shared `StepWorker` contract:
 
 ```ts
 interface StepWorker<T = unknown> {
-  step(): Promise<
-    | { kind: 'idle' }
-    | { kind: 'processed'; value?: T }
-  >;
+  step(): Promise<{ kind: 'idle' } | { kind: 'processed'; value?: T }>;
 }
 ```
 

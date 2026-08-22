@@ -63,8 +63,15 @@ export class GetProductSessionTranscripts {
             if (entries.length >= MAX_SESSION_TRANSCRIPT_ENTRIES) {
               truncated =
                 eventIndex < page.events.length - 1 ||
-                (await hasMoreRunEvents(this.runEvents, run.runId, event.sequence)) ||
-                (await hasMoreRuns(this.runEvents, member.runs.slice(runIndex + 1)));
+                (await hasMoreRunEvents(
+                  this.runEvents,
+                  run.runId,
+                  event.sequence,
+                )) ||
+                (await hasMoreRuns(
+                  this.runEvents,
+                  member.runs.slice(runIndex + 1),
+                ));
               break;
             }
           }

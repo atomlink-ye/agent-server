@@ -34,6 +34,12 @@ const OptionalConfigString = z.preprocess(
   z.string().trim().min(1).optional(),
 );
 
+const OptionalPort = z.preprocess(
+  (value) =>
+    typeof value === 'string' && value.trim() === '' ? undefined : value,
+  z.coerce.number().int().min(1).max(65_535).optional(),
+);
+
 const BooleanEnvironment = z.preprocess((value) => {
   if (value === undefined || value === '') return false;
   if (value === true || value === 'true' || value === '1') return true;
@@ -54,17 +60,11 @@ const ServiceAccountsEnvironmentSchema = z
   .string()
   .optional()
   .transform((value, context): unknown => {
-    if (value === undefined || value.trim() === '') {
-      return [];
-    }
-
+    if (value === undefined || value.trim() === '') return [];
     try {
       return JSON.parse(value) as unknown;
     } catch {
-      context.addIssue({
-        code: 'custom',
-        message: 'must be valid JSON',
-      });
+      context.addIssue({ code: 'custom', message: 'must be valid JSON' });
       return z.NEVER;
     }
   })
@@ -73,10 +73,7 @@ const ServiceAccountsEnvironmentSchema = z
       const tokenIndexes = new Map<string, number>();
       const serviceAccountScopes = new Map<
         string,
-        {
-          readonly tenantId: string;
-          readonly workspaceId: string;
-        }
+        { readonly tenantId: string; readonly workspaceId: string }
       >();
 
       for (const [index, account] of accounts.entries()) {
@@ -87,9 +84,7 @@ const ServiceAccountsEnvironmentSchema = z
             path: [index, 'token'],
             message: `duplicate service-account token is not allowed: ${account.token}`,
           });
-        } else {
-          tokenIndexes.set(account.token, index);
-        }
+        } else tokenIndexes.set(account.token, index);
 
         const existingScope = serviceAccountScopes.get(
           account.serviceAccountId,
@@ -101,12 +96,10 @@ const ServiceAccountsEnvironmentSchema = z
           });
           continue;
         }
-
-        const hasConflictingOwnerScope =
+        if (
           existingScope.tenantId !== account.tenantId ||
-          existingScope.workspaceId !== account.workspaceId;
-
-        if (hasConflictingOwnerScope) {
+          existingScope.workspaceId !== account.workspaceId
+        ) {
           context.addIssue({
             code: 'custom',
             path: [index, 'serviceAccountId'],
@@ -126,8 +119,6 @@ const ConfigSchema = z
     PORT: z.coerce.number().int().min(1).max(65_535).default(3_000),
     LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
     SERVICE_NAME: z.string().min(1).default('agent-server'),
-    // The legacy provider switch was ambiguous about which product surface it
-    // enabled. Reject it instead of silently accepting a second declaration.
     CHAT_TURN_PROVIDER: z
       .never({
         error:
@@ -143,6 +134,7 @@ const ConfigSchema = z
     RUNTIME_ADAPTER: z.enum(['none', 'paseo']).default('paseo'),
     RUNTIME_MCP_LISTEN_HOST: z.string().min(1).default('127.0.0.1'),
     RUNTIME_MCP_ADVERTISED_HOST: z.string().min(1).default('127.0.0.1'),
+    RUNTIME_MCP_PORT: OptionalPort,
     PASEO_WS_URL: z.url().default('ws://127.0.0.1:6767/ws'),
     PASEO_PROVIDER: z.enum(MANAGED_ENVIRONMENT_PROVIDERS).default('opencode'),
     PASEO_AGENT_CWD: z.string().min(1).default('.local/agent-workspace'),
@@ -163,8 +155,6 @@ const ConfigSchema = z
         typeof value === 'string' && value.trim() === '' ? undefined : value,
       z.coerce.number().int().min(1_000).max(600_000).default(150_000),
     ),
-    // This is a coarse upper bound for a stuck daemon RPC, not a latency
-    // tuning knob; keep it at least twice the execution timeout.
     PASEO_SESSION_RPC_TIMEOUT_MS: z.preprocess(
       (value) =>
         typeof value === 'string' && value.trim() === '' ? undefined : value,
@@ -276,11 +266,9 @@ export type AppConfig = Readonly<{
   port: number;
   logLevel: z.infer<typeof ConfigSchema>['LOG_LEVEL'];
   serviceName: string;
-  /** Explicit Direct Chat bridge declaration; this does not cover generic Runs/Tasks. */
   directChatPlane: z.infer<
     typeof ConfigSchema
   >['AGENT_SERVER_DIRECT_CHAT_PLANE'];
-  /** Explicit Product Work declaration; this does not cover generic Runs/Tasks/Sessions/Team execution. */
   productWorkPlane: z.infer<
     typeof ConfigSchema
   >['AGENT_SERVER_PRODUCT_WORK_PLANE'];
@@ -290,14 +278,14 @@ export type AppConfig = Readonly<{
   runtimeMcp?: {
     listenHost: string;
     advertisedHost: string;
+    /** Port 0 is reserved for test compositions; normal host profiles use a stable port. */
+    port: number;
   };
   teamCompletionApprovalRequired: boolean;
   serviceAccounts?: readonly ServiceAccountRecord[];
   larkCanary?: LarkCanaryConfig;
   skillRegistryRoot: string;
-  dispatcher?: {
-    concurrency: number;
-  };
+  dispatcher?: { concurrency: number };
   paseo: {
     wsUrl: string;
     provider: ManagedEnvironmentProvider;
@@ -313,6 +301,7 @@ export type AppConfig = Readonly<{
     sessionRpcTimeoutSource: 'env' | 'default';
   };
 }>;
+
 export class ConfigurationError extends Error {
   public constructor(issues: readonly z.core.$ZodIssue[]) {
     const details = issues
@@ -338,9 +327,7 @@ export function loadConfig(
     environment.PASEO_SESSION_RPC_TIMEOUT_MS?.trim() ? 'env' : 'default';
   const parsed = ConfigSchema.safeParse(environment);
 
-  if (!parsed.success) {
-    throw new ConfigurationError(parsed.error.issues);
-  }
+  if (!parsed.success) throw new ConfigurationError(parsed.error.issues);
 
   return Object.freeze({
     nodeEnv: parsed.data.NODE_ENV,
@@ -350,12 +337,13 @@ export function loadConfig(
     serviceName: parsed.data.SERVICE_NAME,
     directChatPlane: parsed.data.AGENT_SERVER_DIRECT_CHAT_PLANE,
     productWorkPlane: parsed.data.AGENT_SERVER_PRODUCT_WORK_PLANE,
-    runtime: {
-      adapter: parsed.data.RUNTIME_ADAPTER,
-    },
+    runtime: { adapter: parsed.data.RUNTIME_ADAPTER },
     runtimeMcp: {
       listenHost: parsed.data.RUNTIME_MCP_LISTEN_HOST,
       advertisedHost: parsed.data.RUNTIME_MCP_ADVERTISED_HOST,
+      port:
+        parsed.data.RUNTIME_MCP_PORT ??
+        (parsed.data.NODE_ENV === 'test' ? 0 : 39_117),
     },
     teamCompletionApprovalRequired:
       parsed.data.AGENT_SERVER_TEAM_COMPLETION_APPROVAL_REQUIRED,

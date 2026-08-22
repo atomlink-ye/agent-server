@@ -1,6 +1,5 @@
 export type WorkerStepResult<T = unknown> =
-  | Readonly<{ kind: 'idle' }>
-  | Readonly<{ kind: 'processed'; value?: T }>;
+  Readonly<{ kind: 'idle' }> | Readonly<{ kind: 'processed'; value?: T }>;
 
 /**
  * Deterministic seam for background workers.

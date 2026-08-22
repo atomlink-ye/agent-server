@@ -6,7 +6,10 @@ interface Queryable {
   query<Row = Record<string, unknown>>(
     sql: string,
     values?: readonly unknown[],
-  ): Promise<{ readonly rows?: readonly Row[]; readonly rowCount?: number | null }>;
+  ): Promise<{
+    readonly rows?: readonly Row[];
+    readonly rowCount?: number | null;
+  }>;
 }
 
 type EntitlementRow = {
@@ -19,9 +22,7 @@ type EntitlementRow = {
   updated_at: string | Date;
 };
 
-export class PostgresConversationWorkEntitlementRepository
-  implements ConversationWorkEntitlementRepository
-{
+export class PostgresConversationWorkEntitlementRepository implements ConversationWorkEntitlementRepository {
   public constructor(private readonly db: Queryable) {}
 
   public async enable(input: {
@@ -104,7 +105,12 @@ export class PostgresConversationWorkEntitlementRepository
                AND principal.member_principal_type=e.principal_type
           )
        RETURNING e.tenant_id`,
-      [input.tenantId, input.conversationId, input.principalType, input.principalId],
+      [
+        input.tenantId,
+        input.conversationId,
+        input.principalType,
+        input.principalId,
+      ],
     );
     return (result.rows?.length ?? result.rowCount ?? 0) > 0;
   }

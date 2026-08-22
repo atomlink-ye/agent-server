@@ -93,7 +93,11 @@ describe('resolveAgentHomeScopeKey', () => {
         // If someone mistakenly passes a user scope, it should be ignored
         conversationId: 'not_used',
       };
-      const key = resolveAgentHomeScopeKey('user', mockAccessContext, scopeParams);
+      const key = resolveAgentHomeScopeKey(
+        'user',
+        mockAccessContext,
+        scopeParams,
+      );
       expect(key).toBe('principal_test');
     });
 
@@ -103,14 +107,10 @@ describe('resolveAgentHomeScopeKey', () => {
         ...mockAccessContext,
         principalId: 'principal_alice',
       };
-      const key = resolveAgentHomeScopeKey(
-        'user',
-        accessContextOther,
-        {
-          // Even if caller tries to override, it should be ignored
-          conversationId: 'principal_bob',
-        },
-      );
+      const key = resolveAgentHomeScopeKey('user', accessContextOther, {
+        // Even if caller tries to override, it should be ignored
+        conversationId: 'principal_bob',
+      });
       expect(key).toBe('principal_alice');
     });
   });

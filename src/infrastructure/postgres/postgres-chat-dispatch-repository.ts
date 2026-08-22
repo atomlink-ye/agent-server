@@ -62,10 +62,11 @@ export class PostgresChatDispatchRepository implements ChatDispatchRepository {
     )
       throw new Error('Chat activation cause does not match its dispatch.');
 
-    const existingCause = await this.database.query<{ dispatch_id: string | number }>(
-      'SELECT dispatch_id FROM chat_activation_causes WHERE cause_key=$1',
-      [input.dedupeKey],
-    );
+    const existingCause = await this.database.query<{
+      dispatch_id: string | number;
+    }>('SELECT dispatch_id FROM chat_activation_causes WHERE cause_key=$1', [
+      input.dedupeKey,
+    ]);
     if (existingCause.rows?.[0]) {
       return {
         enqueued: false,
@@ -111,7 +112,9 @@ export class PostgresChatDispatchRepository implements ChatDispatchRepository {
     const row = dispatch.rows?.[0];
     if (!row) throw new Error('Chat activation could not be admitted.');
 
-    const insertedCause = await this.database.query<{ dispatch_id: string | number }>(
+    const insertedCause = await this.database.query<{
+      dispatch_id: string | number;
+    }>(
       `INSERT INTO chat_activation_causes
          (cause_key,dispatch_id,tenant_id,agent_definition_id,conversation_id,
           cause_kind,through_sequence,payload,created_at)
@@ -132,10 +135,11 @@ export class PostgresChatDispatchRepository implements ChatDispatchRepository {
     );
     const causeRow = insertedCause.rows?.[0];
     if (!causeRow) {
-      const replay = await this.database.query<{ dispatch_id: string | number }>(
-        'SELECT dispatch_id FROM chat_activation_causes WHERE cause_key=$1',
-        [input.dedupeKey],
-      );
+      const replay = await this.database.query<{
+        dispatch_id: string | number;
+      }>('SELECT dispatch_id FROM chat_activation_causes WHERE cause_key=$1', [
+        input.dedupeKey,
+      ]);
       return {
         enqueued: false,
         ...(replay.rows?.[0]
@@ -234,7 +238,9 @@ export class PostgresChatDispatchRepository implements ChatDispatchRepository {
     readonly tenantId: string;
     readonly conversationId: string;
   }): Promise<number> {
-    const result = await this.database.query<{ last_admitted_sequence: string | number }>(
+    const result = await this.database.query<{
+      last_admitted_sequence: string | number;
+    }>(
       `SELECT last_admitted_sequence
        FROM agent_chat_runtime_watermarks
        WHERE agent_chat_runtime_id=$1 AND runtime_epoch=$2
@@ -257,7 +263,9 @@ export class PostgresChatDispatchRepository implements ChatDispatchRepository {
     readonly throughSequence: number;
   }): Promise<number> {
     assertSequence(input.throughSequence);
-    const result = await this.database.query<{ last_admitted_sequence: string | number }>(
+    const result = await this.database.query<{
+      last_admitted_sequence: string | number;
+    }>(
       `INSERT INTO agent_chat_runtime_watermarks
          (agent_chat_runtime_id,runtime_epoch,tenant_id,conversation_id,
           last_admitted_sequence,updated_at)
@@ -385,16 +393,15 @@ function parsePayload(value: CauseRow['payload']): Record<string, unknown> {
   return value;
 }
 
-function requiredString(
-  value: unknown,
-  field: string,
-): string {
+function requiredString(value: unknown, field: string): string {
   if (typeof value !== 'string' || !value)
     throw new Error(`Chat activation cause ${field} is missing.`);
   return value;
 }
 
-function requiredWorkState(value: unknown): 'complete' | 'needs_you' | 'problem' {
+function requiredWorkState(
+  value: unknown,
+): 'complete' | 'needs_you' | 'problem' {
   if (value === 'complete' || value === 'needs_you' || value === 'problem')
     return value;
   throw new Error('Chat activation Work state is invalid.');

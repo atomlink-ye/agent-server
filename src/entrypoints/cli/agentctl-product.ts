@@ -183,10 +183,7 @@ async function jsonInput(
   try {
     value = JSON.parse(await readFile(resolve(path), 'utf8'));
   } catch {
-    throw new ProductCliError(
-      'CLI_INVALID_INPUT',
-      'Input must be valid JSON.',
-    );
+    throw new ProductCliError('CLI_INVALID_INPUT', 'Input must be valid JSON.');
   }
   if (!value || typeof value !== 'object' || Array.isArray(value))
     throw new ProductCliError(

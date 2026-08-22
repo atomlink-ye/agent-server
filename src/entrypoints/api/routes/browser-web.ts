@@ -88,7 +88,9 @@ const publicChatWorkCardSchema = z.object({
 const conversationListSchema = z.object({
   conversations: z.array(publicConversationSchema),
 });
-const conversationReadSchema = z.object({ conversation: publicConversationSchema });
+const conversationReadSchema = z.object({
+  conversation: publicConversationSchema,
+});
 const conversationMessagesSchema = z.object({
   messages: z.array(publicConversationMessageSchema),
 });
@@ -100,7 +102,13 @@ const createConversationRequestSchema = z
   .object({ agent_definition_id: z.string().trim().min(1).max(256) })
   .strict();
 const postConversationRequestSchema = z
-  .object({ body: z.string().trim().min(1).max(64 * 1024) })
+  .object({
+    body: z
+      .string()
+      .trim()
+      .min(1)
+      .max(64 * 1024),
+  })
   .strict();
 const workDefinitionAuthoringErrorSchema = z.union([
   WorkDefinitionValidateFailureSchema,
@@ -292,15 +300,18 @@ export function registerBrowserWebRoutes(
       ProductExecutionDetailResponseSchema,
     );
   });
-  app.get('/api/works/:workId/runs/:workRunId/session-transcripts', async (c) => {
-    const { workId, workRunId } = workParams(c.req.param());
-    if (!workId || !workRunId) return invalidProductRequest();
-    return readProductJson(
-      config,
-      `/api/v1/works/${encodeURIComponent(workId)}/runs/${encodeURIComponent(workRunId)}/session-transcripts`,
-      ProductSessionTranscriptsResponseSchema,
-    );
-  });
+  app.get(
+    '/api/works/:workId/runs/:workRunId/session-transcripts',
+    async (c) => {
+      const { workId, workRunId } = workParams(c.req.param());
+      if (!workId || !workRunId) return invalidProductRequest();
+      return readProductJson(
+        config,
+        `/api/v1/works/${encodeURIComponent(workId)}/runs/${encodeURIComponent(workRunId)}/session-transcripts`,
+        ProductSessionTranscriptsResponseSchema,
+      );
+    },
+  );
 
   app.get('/api/work-definition-versions/:versionId', async (c) => {
     const versionId = c.req.param('versionId');
@@ -312,7 +323,12 @@ export function registerBrowserWebRoutes(
     );
   });
   app.post('/api/work-definitions/validate', async (c) =>
-    writeWorkDefinition(config, c, 'validate', WorkDefinitionValidateSuccessSchema),
+    writeWorkDefinition(
+      config,
+      c,
+      'validate',
+      WorkDefinitionValidateSuccessSchema,
+    ),
   );
   app.post('/api/work-definitions/plan', async (c) =>
     writeWorkDefinition(config, c, 'plan', WorkDefinitionPlanResponseSchema),
@@ -359,7 +375,13 @@ async function readProductJson(
   path: string,
   schema: ZodType<unknown>,
 ): Promise<Response> {
-  return forwardDecoded(config, path, { method: 'GET' }, schema, ErrorResponseSchema);
+  return forwardDecoded(
+    config,
+    path,
+    { method: 'GET' },
+    schema,
+    ErrorResponseSchema,
+  );
 }
 
 async function writeProductJson(
@@ -486,7 +508,9 @@ function upstreamUrl(config: AppConfig, path: string): string {
 function browserServiceToken(config: AppConfig): string {
   const configured = process.env.AGENT_SERVER_SERVICE_TOKEN?.trim();
   if (configured) return configured;
-  const active = (config.serviceAccounts ?? []).filter((account) => !account.disabled);
+  const active = (config.serviceAccounts ?? []).filter(
+    (account) => !account.disabled,
+  );
   if (active.length === 1) return active[0]!.token;
   throw new Error('browser_web_service_token_missing');
 }
@@ -506,12 +530,19 @@ function isUuid(value: unknown): value is string {
 }
 
 function isId(value: unknown): value is string {
-  return typeof value === 'string' && value.trim().length > 0 && value.length <= 256;
+  return (
+    typeof value === 'string' && value.trim().length > 0 && value.length <= 256
+  );
 }
 
 function invalidRequest(): Response {
   return jsonResponse(
-    { error: { code: 'invalid_request', message: 'The browser request is invalid.' } },
+    {
+      error: {
+        code: 'invalid_request',
+        message: 'The browser request is invalid.',
+      },
+    },
     400,
   );
 }

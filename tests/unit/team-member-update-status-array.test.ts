@@ -30,20 +30,22 @@ describe('TeamMemberRunStatus array update logic', () => {
       },
     ];
 
-    testCases.forEach(({ name, expectedCurrentStatus, isArray, expectedSqlFragment }) => {
-      // Verify the detection logic
-      const actualIsArray = Array.isArray(expectedCurrentStatus);
-      expect(actualIsArray).toBe(isArray);
+    testCases.forEach(
+      ({ name, expectedCurrentStatus, isArray, expectedSqlFragment }) => {
+        // Verify the detection logic
+        const actualIsArray = Array.isArray(expectedCurrentStatus);
+        expect(actualIsArray).toBe(isArray);
 
-      // Verify SQL fragment selection
-      let actualSqlFragment: string;
-      if (Array.isArray(expectedCurrentStatus)) {
-        actualSqlFragment = `status = ANY($1)`;
-      } else {
-        actualSqlFragment = `status=$1`;
-      }
-      expect(actualSqlFragment).toBe(expectedSqlFragment);
-    });
+        // Verify SQL fragment selection
+        let actualSqlFragment: string;
+        if (Array.isArray(expectedCurrentStatus)) {
+          actualSqlFragment = `status = ANY($1)`;
+        } else {
+          actualSqlFragment = `status=$1`;
+        }
+        expect(actualSqlFragment).toBe(expectedSqlFragment);
+      },
+    );
   });
 
   it('demonstrates the bug scenario: new member with starting status', () => {
@@ -69,11 +71,11 @@ describe('TeamMemberRunStatus array update logic', () => {
 
     // The fixed WHERE clause should mirror this logic
     const isIdleStatusMap: Record<string, boolean> = {
-      'starting': true,   // isIdle returns true for 'starting'
-      'idle': true,       // isIdle returns true for 'idle'
-      'active': false,    // isIdle returns false for 'active'
-      'stopped': false,   // isIdle returns false for 'stopped'
-      'failed': false,    // isIdle returns false for 'failed'
+      starting: true, // isIdle returns true for 'starting'
+      idle: true, // isIdle returns true for 'idle'
+      active: false, // isIdle returns false for 'active'
+      stopped: false, // isIdle returns false for 'stopped'
+      failed: false, // isIdle returns false for 'failed'
     };
 
     const expectedStatusesInArray = ['starting', 'idle'];
@@ -89,7 +91,8 @@ describe('TeamMemberRunStatus array update logic', () => {
     // Scenario: Two concurrent attempts to activate same member
 
     // Member starts in 'starting' state
-    let memberStatus: 'starting' | 'idle' | 'active' | 'stopped' | 'failed' = 'starting';
+    let memberStatus: 'starting' | 'idle' | 'active' | 'stopped' | 'failed' =
+      'starting';
     const expectedCurrentStatus = ['starting', 'idle'];
 
     // First attempt: status matches, update succeeds

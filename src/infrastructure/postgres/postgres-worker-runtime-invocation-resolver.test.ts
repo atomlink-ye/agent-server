@@ -26,7 +26,9 @@ describe('PostgresWorkerRuntimeInvocationResolver', () => {
         },
       ],
     }));
-    const resolver = new PostgresWorkerRuntimeInvocationResolver({ query } as any);
+    const resolver = new PostgresWorkerRuntimeInvocationResolver({
+      query,
+    } as any);
 
     const resolved = await resolver.resolve('runtime-session-1');
 
@@ -47,7 +49,9 @@ describe('PostgresWorkerRuntimeInvocationResolver', () => {
       workRunId: 'work-run-1',
     });
     expect(resolved?.contextView?.kind).toBe('worker');
-    expect(resolved?.contextView?.mounts.map((mount) => mount.mountPath)).toEqual([
+    expect(
+      resolved?.contextView?.mounts.map((mount) => mount.mountPath),
+    ).toEqual([
       '/agent',
       '/organization',
       '/workspace',
@@ -85,7 +89,9 @@ describe('PostgresWorkerRuntimeInvocationResolver', () => {
         },
       ],
     }));
-    const resolver = new PostgresWorkerRuntimeInvocationResolver({ query } as any);
+    const resolver = new PostgresWorkerRuntimeInvocationResolver({
+      query,
+    } as any);
 
     await expect(resolver.resolve('chat-session-1')).resolves.toBeNull();
   });

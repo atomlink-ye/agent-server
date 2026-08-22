@@ -97,7 +97,9 @@ export class ProductWorkDefinitionApi {
   private readonly materializer: ProductWorkDefinitionMaterializer;
   private readonly query: ProductWorkDefinitionQuery;
 
-  public constructor(private readonly options: ProductWorkDefinitionApiOptions) {
+  public constructor(
+    private readonly options: ProductWorkDefinitionApiOptions,
+  ) {
     this.now = options.now ?? (() => new Date());
     this.inspector = new ProductWorkDefinitionInspector({
       agents: options.agents,
@@ -106,7 +108,9 @@ export class ProductWorkDefinitionApi {
     });
     this.materializer = new ProductWorkDefinitionMaterializer({
       invokables: options.invokables,
-      ...(options.agentRegistry ? { agentRegistry: options.agentRegistry } : {}),
+      ...(options.agentRegistry
+        ? { agentRegistry: options.agentRegistry }
+        : {}),
       ...(options.environmentRegistry
         ? { environmentRegistry: options.environmentRegistry }
         : {}),
@@ -182,7 +186,9 @@ export class ProductWorkDefinitionApi {
         this.options.repository.findProductVersion!(replay.versionId, owner),
       ]);
       if (!definition || !version)
-        throw new Error('Product Work Definition replay target is unavailable.');
+        throw new Error(
+          'Product Work Definition replay target is unavailable.',
+        );
       return { result: 'replayed', definition, version };
     }
 
@@ -193,12 +199,12 @@ export class ProductWorkDefinitionApi {
       `work-definition-version\0${definitionId}\0${parsed.fingerprint}`,
     );
 
-    const converged =
-      await this.options.repository.findProductVersionByAuthorFingerprint!({
-        definitionId,
-        owner,
-        authorFingerprint: parsed.fingerprint,
-      });
+    const converged = await this.options.repository
+      .findProductVersionByAuthorFingerprint!({
+      definitionId,
+      owner,
+      authorFingerprint: parsed.fingerprint,
+    });
     if (converged) {
       const definition = await this.options.repository.findDefinition(
         definitionId,
@@ -253,8 +259,9 @@ export class ProductWorkDefinitionApi {
       description: parsed.document.metadata.description ?? null,
       source: composition,
       fingerprint: internalFingerprint,
-      authorSource:
-        parsed.document as unknown as Readonly<Record<string, unknown>>,
+      authorSource: parsed.document as unknown as Readonly<
+        Record<string, unknown>
+      >,
       authorFingerprint: parsed.fingerprint,
       now,
     });
@@ -294,7 +301,9 @@ export class ProductWorkDefinitionApi {
     return this.query.listVersions(input);
   }
 
-  public getVersion(input: Parameters<ProductWorkDefinitionQuery['getVersion']>[0]) {
+  public getVersion(
+    input: Parameters<ProductWorkDefinitionQuery['getVersion']>[0],
+  ) {
     return this.query.getVersion(input);
   }
 
@@ -356,12 +365,8 @@ export class ProductWorkDefinitionIdempotencyConflictError extends Error {
   }
 }
 
-export {
-  ProductWorkDefinitionReferenceError,
-} from './product-work-definition-composition.js';
-export {
-  ProductWorkDefinitionNotFoundError,
-} from './product-work-definition-query.js';
+export { ProductWorkDefinitionReferenceError } from './product-work-definition-composition.js';
+export { ProductWorkDefinitionNotFoundError } from './product-work-definition-query.js';
 
 function assertIdempotencyKey(value: string): void {
   if (

@@ -38,7 +38,9 @@ export function createChatTurnContext(input: {
   readonly workEntitlementWorkspaceId?: string;
 }): ChatTurnContext {
   if (input.runtime.agentDefinitionId !== input.agentDefinitionId)
-    throw new Error('Chat runtime AgentDefinition does not match turn context.');
+    throw new Error(
+      'Chat runtime AgentDefinition does not match turn context.',
+    );
   if (input.runtime.tenantId !== input.productScope.tenantId)
     throw new Error('Chat runtime tenant does not match turn context.');
   return Object.freeze({

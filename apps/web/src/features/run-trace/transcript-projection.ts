@@ -37,7 +37,8 @@ export function projectTranscript(
     // Session transcripts concatenate multiple runs but do not carry run_id.
     // sequence restarts for each run, so a rollback is the available boundary
     // that keeps repeated provider-local activity ids from being coalesced.
-    if (previousSequence !== null && entry.sequence < previousSequence) runSegment += 1;
+    if (previousSequence !== null && entry.sequence < previousSequence)
+      runSegment += 1;
     previousSequence = entry.sequence;
 
     if (entry.kind === 'reasoning_progress') {
@@ -118,7 +119,10 @@ type MutableRow = {
   runSegment: number;
   children?: MutableRow[];
 };
-type ReasoningEntry = Extract<TranscriptEntry, { readonly kind: 'reasoning_progress' }>;
+type ReasoningEntry = Extract<
+  TranscriptEntry,
+  { readonly kind: 'reasoning_progress' }
+>;
 type ToolEntry = Extract<TranscriptEntry, { readonly kind: 'tool_status' }>;
 
 function makeRow(event: TranscriptEntry, runSegment: number): MutableRow {
@@ -129,10 +133,7 @@ function scopedActivityKey(runSegment: number, activityId: string): string {
   return `${runSegment}:${activityId}`;
 }
 
-function mergeToolEvent(
-  current: ToolEntry,
-  next: ToolEntry,
-): ToolEntry {
+function mergeToolEvent(current: ToolEntry, next: ToolEntry): ToolEntry {
   const currentPriority = terminalToolStatuses.get(current.status) ?? -1;
   const nextPriority = terminalToolStatuses.get(next.status) ?? -1;
   const winner = nextPriority >= currentPriority ? next : current;
@@ -153,10 +154,7 @@ function mergeAdjacentReasoning(rows: readonly MutableRow[]): MutableRow[] {
   const merged: MutableRow[] = [];
   let previousVisibleReasoning: MutableRow | null = null;
   for (const row of rows) {
-    if (
-      previousVisibleReasoning &&
-      row.event.kind === 'reasoning_progress'
-    ) {
+    if (previousVisibleReasoning && row.event.kind === 'reasoning_progress') {
       const previousEvent = previousVisibleReasoning.event as ReasoningEntry;
       const rowEvent = row.event as ReasoningEntry;
       previousVisibleReasoning.event = {
@@ -171,33 +169,48 @@ function mergeAdjacentReasoning(rows: readonly MutableRow[]): MutableRow[] {
     merged.push(row);
     // Usage is rendered into a footer rather than the primary stream, so it
     // does not visually separate two reasoning blocks. Every other row does.
-    previousVisibleReasoning = row.event.kind === 'reasoning_progress'
-      ? row
-      : row.event.kind === 'usage'
-        ? previousVisibleReasoning
-        : null;
+    previousVisibleReasoning =
+      row.event.kind === 'reasoning_progress'
+        ? row
+        : row.event.kind === 'usage'
+          ? previousVisibleReasoning
+          : null;
   }
   return merged;
 }
 
-function mergeReasoningText(previous: string | null, next: string | null): string | null {
+function mergeReasoningText(
+  previous: string | null,
+  next: string | null,
+): string | null {
   if (!previous) return next;
   if (!next || next.startsWith(previous)) return next ?? previous;
   if (previous.startsWith(next)) return previous;
   return `${previous}\n${next}`;
 }
 
-function nestChildren(rows: readonly MutableRow[]): readonly ProjectedTranscriptEntry[] {
+function nestChildren(
+  rows: readonly MutableRow[],
+): readonly ProjectedTranscriptEntry[] {
   const parents = new Map(
     rows.flatMap((row) =>
-      row.event.kind === 'tool_status' ? [[scopedActivityKey(row.runSegment, row.event.activity_id), row] as const] : [],
+      row.event.kind === 'tool_status'
+        ? [
+            [
+              scopedActivityKey(row.runSegment, row.event.activity_id),
+              row,
+            ] as const,
+          ]
+        : [],
     ),
   );
   const visible: MutableRow[] = [];
   for (const row of rows) {
     // Handle child_timeline_item (original logic)
     if (row.event.kind === 'child_timeline_item') {
-      const parent = parents.get(scopedActivityKey(row.runSegment, row.event.parent_activity_id));
+      const parent = parents.get(
+        scopedActivityKey(row.runSegment, row.event.parent_activity_id),
+      );
       if (!parent) {
         visible.push(row);
         continue;
@@ -209,8 +222,13 @@ function nestChildren(rows: readonly MutableRow[]): readonly ProjectedTranscript
     }
 
     // Handle tool_status with parent_activity_id
-    if (row.event.kind === 'tool_status' && row.event.parent_activity_id !== null) {
-      const parent = parents.get(scopedActivityKey(row.runSegment, row.event.parent_activity_id));
+    if (
+      row.event.kind === 'tool_status' &&
+      row.event.parent_activity_id !== null
+    ) {
+      const parent = parents.get(
+        scopedActivityKey(row.runSegment, row.event.parent_activity_id),
+      );
       if (parent && parent !== row) {
         parent.detailSourceOrdinals ??= [...parent.sourceOrdinals];
         (parent.children ??= []).push(row);

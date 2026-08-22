@@ -16,11 +16,11 @@ Use the repository's pnpm command surface:
 
 ```bash
 pnpm check
-pnpm test:real-pg
+pnpm test:pg
 pnpm eval:memory
 ```
 
-Use `pnpm smoke:runtime` only when the real Paseo/provider boundary is intentionally part of the canary verification. External provider availability is not a deterministic prerequisite.
+Use `pnpm canary:runtime` only when the real Paseo/provider boundary is intentionally part of the canary verification. External provider availability is not a deterministic prerequisite.
 
 A real PostgreSQL test lane can self-start a disposable database. For a manually operated canary, the application database remains an explicit operator-owned environment and must not be encoded as a developer-specific port in documentation.
 

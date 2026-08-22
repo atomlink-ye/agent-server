@@ -43,7 +43,9 @@ export interface WriteAgentHomeEntryInput {
 }
 
 export interface AgentHomeRepository {
-  list(input: ListAgentHomeEntriesInput): Promise<readonly AgentHomeEntryRow[] | null>;
+  list(
+    input: ListAgentHomeEntriesInput,
+  ): Promise<readonly AgentHomeEntryRow[] | null>;
   read(input: ReadAgentHomeEntryInput): Promise<AgentHomeEntryRow | null>;
   write(input: WriteAgentHomeEntryInput): Promise<AgentHomeEntryRow | null>;
 }

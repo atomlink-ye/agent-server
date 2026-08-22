@@ -898,9 +898,16 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
     status: TeamMemberRun['status'],
     runtimeSessionId?: string | null,
     owner?: OwnerScope,
-    expectedCurrentStatus?: TeamMemberRun['status'] | readonly TeamMemberRun['status'][],
+    expectedCurrentStatus?:
+      TeamMemberRun['status'] | readonly TeamMemberRun['status'][],
   ): Promise<TeamMemberRun> {
-    return this.updateMember(id, status, runtimeSessionId, owner, expectedCurrentStatus);
+    return this.updateMember(
+      id,
+      status,
+      runtimeSessionId,
+      owner,
+      expectedCurrentStatus,
+    );
   }
   public async updateMemberRuntimeSession(
     id: string,
@@ -2195,7 +2202,8 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
     status: TeamMemberRun['status'] | undefined,
     session: string | null | undefined,
     owner?: OwnerScope,
-    expectedCurrentStatus?: TeamMemberRun['status'] | readonly TeamMemberRun['status'][],
+    expectedCurrentStatus?:
+      TeamMemberRun['status'] | readonly TeamMemberRun['status'][],
   ): Promise<TeamMemberRun> {
     const vals: any[] = [];
     const sets: string[] = [];

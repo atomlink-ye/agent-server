@@ -6,6 +6,7 @@ import type { ListMemoryEntries } from '../../../application/memory/list-memory-
 import type { ListMemoryProposals } from '../../../application/memory/list-memory-proposals.js';
 import type { ReviewMemoryProposal } from '../../../application/memory/review-memory-proposal.js';
 import type { ExecutionRuntimeService } from '../../../application/runtime/execution-plane-runtime-facade.js';
+import { makeRuntimeSession } from '../../../../tests/fixtures/runtime-session.js';
 import type { GetRun } from '../../../application/runs/get-run.js';
 import type { SubmitRun } from '../../../application/runs/submit-run.js';
 import type { GetTask } from '../../../application/tasks/get-task.js';
@@ -137,6 +138,24 @@ describe('run routes', () => {
 
 function createRuntimeStub(): ExecutionRuntimeService {
   return {
+    async ensureAgentChatRuntimeSession(input) {
+      return makeRuntimeSession({
+        id: input.agentChatRuntimeId,
+        scope: {
+          kind: 'agent_chat',
+          agentChatRuntimeId: input.agentChatRuntimeId,
+          runtimeEpoch: input.runtimeEpoch,
+        },
+        scopeKind: 'agent_chat',
+        scopeId: `${input.agentChatRuntimeId}:${input.runtimeEpoch}`,
+        productSessionId: null,
+        environmentVersionId: null,
+        workspaceId: input.agentOwner.scope.workspaceId,
+        agentVersionId: input.agentVersionId,
+        resolvedSkills: input.resolvedSkills,
+        toolRefs: input.toolRefs,
+      });
+    },
     async ensureReady(): Promise<boolean> {
       return true;
     },

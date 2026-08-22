@@ -9,9 +9,10 @@ import type {
 } from '../ports/execution-plane.js';
 import type { RuntimeSession } from '../ports/runtime-session-repository.js';
 import { ExecutionSessionResolver } from './execution-session-resolver.js';
+import { makeRuntimeSession } from '../../../tests/fixtures/runtime-session.js';
 
 function unboundRuntimeSession(): RuntimeSession {
-  return {
+  return makeRuntimeSession({
     id: 'runtime-session-1',
     scope: {
       kind: 'product_session',
@@ -29,9 +30,7 @@ function unboundRuntimeSession(): RuntimeSession {
     toolRefs: [],
     workspaceBinding: null,
     sessionBinding: null,
-    createdAt: '2026-08-15T00:00:00.000Z',
-    updatedAt: '2026-08-15T00:00:00.000Z',
-  };
+  });
 }
 
 const spec = {
@@ -86,7 +85,11 @@ function fakePlane(calls: string[]): ExecutionPlanePort {
     },
     attachSession: async () => {
       calls.push('attach');
-      return createSessionHandle(calls);
+      return {
+        kind: 'reused',
+        session: createSessionHandle(calls),
+        appliedRevision: 1,
+      };
     },
     health: async () => ({ ready: true, plane: 'paseo', checks: [] }),
     close: async () => undefined,
@@ -98,6 +101,7 @@ describe('ExecutionSessionResolver', () => {
     const calls: string[] = [];
     const runtime = unboundRuntimeSession();
     const resolver = new ExecutionSessionResolver(fakePlane(calls), {
+      reconcileDesiredSpec: async () => runtime,
       bindExecution: async (binding) => {
         calls.push('persist');
         return {
@@ -106,6 +110,8 @@ describe('ExecutionSessionResolver', () => {
           sessionBinding: binding.sessionBinding,
         };
       },
+      replaceExecution: async () => runtime,
+      markUnavailable: async () => runtime,
     });
 
     const resolved = await resolver.resolve({ runtimeSession: runtime, spec });
@@ -118,10 +124,13 @@ describe('ExecutionSessionResolver', () => {
   it('never sends the first prompt when durable binding persistence fails', async () => {
     const calls: string[] = [];
     const resolver = new ExecutionSessionResolver(fakePlane(calls), {
+      reconcileDesiredSpec: async () => unboundRuntimeSession(),
       bindExecution: async () => {
         calls.push('persist');
         throw new Error('database unavailable');
       },
+      replaceExecution: async () => unboundRuntimeSession(),
+      markUnavailable: async () => unboundRuntimeSession(),
     });
 
     await expect(
@@ -135,6 +144,27 @@ describe('ExecutionSessionResolver', () => {
     const calls: string[] = [];
     const runtime: RuntimeSession = {
       ...unboundRuntimeSession(),
+      status: 'ready',
+      currentGeneration: {
+        id: 'generation-1',
+        runtimeSessionId: 'runtime-session-1',
+        generation: 1,
+        workspaceBinding: {
+          plane: 'paseo',
+          externalWorkspaceId: 'external-workspace-1',
+        },
+        sessionBinding: {
+          plane: 'paseo',
+          externalSessionId: 'external-session-1',
+        },
+        appliedRevision: 1,
+        appliedSpecDigest: null,
+        endpointEpoch: 'none',
+        extensionGrantId: null,
+        status: 'active',
+        createdAt: '2026-08-22T00:00:00.000Z',
+        supersededAt: null,
+      },
       workspaceBinding: {
         plane: 'paseo',
         externalWorkspaceId: 'external-workspace-1',
@@ -145,9 +175,19 @@ describe('ExecutionSessionResolver', () => {
       },
     };
     const resolver = new ExecutionSessionResolver(fakePlane(calls), {
+      reconcileDesiredSpec: async ({ digest }) => ({
+        ...runtime,
+        desiredSpecDigest: digest,
+        currentGeneration: {
+          ...runtime.currentGeneration!,
+          appliedSpecDigest: digest,
+        },
+      }),
       bindExecution: async () => {
         throw new Error('must not persist on attach');
       },
+      replaceExecution: async () => runtime,
+      markUnavailable: async () => runtime,
     });
 
     const resolved = await resolver.resolve({ runtimeSession: runtime, spec });

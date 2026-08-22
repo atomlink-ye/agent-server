@@ -12,7 +12,10 @@ import {
 import { PostgresAdmissionRepository } from '../../src/infrastructure/postgres/postgres-admission-repository.js';
 import { PostgresChannelRepository } from '../../src/infrastructure/postgres/postgres-channel-repository.js';
 import { PostgresInvokableRepository } from '../../src/infrastructure/postgres/postgres-invokable-repository.js';
-import { canonicalAgentResolver, seedCanonicalPublishedAgent } from '../fixtures/canonical-agent.js';
+import {
+  canonicalAgentResolver,
+  seedCanonicalPublishedAgent,
+} from '../fixtures/canonical-agent.js';
 import { PostgresTaskRepository } from '../../src/infrastructure/postgres/postgres-task-repository.js';
 import { PostgresSessionRepository } from '../../src/infrastructure/postgres/postgres-session-repository.js';
 import { ResolveLarkBinding } from '../../src/application/channels/resolve-lark-binding.js';

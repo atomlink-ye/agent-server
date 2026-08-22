@@ -2,7 +2,10 @@
 
 import { createHash, randomUUID } from 'node:crypto';
 import { loadRealProviderDefaults } from '../dev/real-provider-defaults.mjs';
-import { runCompositionSingleAgentSmoke, runCompositionSingleAgentInlineSmoke } from './composition-single-agent-phase.mjs';
+import {
+  runCompositionSingleAgentSmoke,
+  runCompositionSingleAgentInlineSmoke,
+} from './composition-single-agent.mjs';
 
 const realProviderDefaults = loadRealProviderDefaults();
 
@@ -13,9 +16,6 @@ const marker = `AGENT_SERVER_PROVIDER_SMOKE_${randomUUID()}`;
 const markerSha256 = sha256(marker);
 const startedAt = Date.now();
 const stageTimeouts = {
-  // Make completes dependency bootstrap before starting the stack, so this
-  // window only needs to remain outside the daemon's declared startup gate.
-  // It does not override any runtime timeout.
   readiness: 480_000,
   run: 480_000,
 };

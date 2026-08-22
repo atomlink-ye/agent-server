@@ -4,12 +4,12 @@
 
 The canonical browser route identities for the Golden Path are:
 
-| Route | Meaning |
-| --- | --- |
-| `/` | Compatibility entry; converges to an available Direct Chat when one exists. |
-| `/conversations/:conversationId` | Canonical selected Direct Chat. |
-| `/work` | Work list / no selected Work. |
-| `/work/:workId` | Selected Work detail. |
+| Route                                             | Meaning                                                                                         |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `/`                                               | Compatibility entry; converges to an available Direct Chat when one exists.                     |
+| `/conversations/:conversationId`                  | Canonical selected Direct Chat.                                                                 |
+| `/work`                                           | Work list / no selected Work.                                                                   |
+| `/work/:workId`                                   | Selected Work detail.                                                                           |
 | `/work/:workId?from_conversation=:conversationId` | Selected Work detail with a durable browser return relationship to the originating Direct Chat. |
 
 `from_conversation` is browser navigation context only. It does not authorize Conversation or Work access and is never forwarded as an effective principal or workspace.

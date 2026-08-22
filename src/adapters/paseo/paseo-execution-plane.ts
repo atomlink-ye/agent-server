@@ -4,11 +4,12 @@ import {
   ExecutionBindingUnavailableError,
   ExecutionPlaneUnavailableError,
   ProtocolViolationError,
+  type AttachExecutionSessionOutcome,
   type CreatedExecutionSession,
+  type ExecutionAppliedSessionSpec,
   type ExecutionPlaneCapabilities,
   type ExecutionPlaneHealth,
   type ExecutionPlanePort,
-  type ExecutionSession,
   type ExecutionSessionBinding,
   type ExecutionSessionSpec,
 } from '../../application/ports/execution-plane.js';
@@ -95,7 +96,7 @@ export class PaseoExecutionPlane implements ExecutionPlanePort {
     return PASEO_PLANE_CAPABILITIES;
   }
 
-  /** Idempotent eager connection hook used by process startup compatibility. */
+  /** Idempotent eager connection hook used by process startup. */
   public async initialize(): Promise<void> {
     try {
       await this.#connections.initialize();
@@ -201,6 +202,7 @@ export class PaseoExecutionPlane implements ExecutionPlanePort {
         agent.provider,
         agent.model,
         cwd,
+        Buffer.byteLength(spec.systemPrompt, 'utf8'),
       ),
     };
   }
@@ -208,7 +210,8 @@ export class PaseoExecutionPlane implements ExecutionPlanePort {
   public async attachSession(
     binding: ExecutionSessionBinding,
     spec: ExecutionSessionSpec,
-  ): Promise<ExecutionSession> {
+    applied?: ExecutionAppliedSessionSpec,
+  ): Promise<AttachExecutionSessionOutcome> {
     await this.initialize();
     if (
       binding.plane !== PASEO_EXECUTION_PLANE_ID ||
@@ -222,23 +225,46 @@ export class PaseoExecutionPlane implements ExecutionPlanePort {
         'A reusable Paseo session requires its workspace binding.',
       );
     this.#assertWorkspaceBinding(spec.workspace.binding.plane);
+
+    if (
+      applied &&
+      spec.endpointEpoch &&
+      applied.endpointEpoch !== spec.endpointEpoch
+    ) {
+      return { kind: 'replacement_required', reason: 'endpoint_epoch_changed' };
+    }
+    if (
+      applied &&
+      spec.bootstrapSpecDigest &&
+      applied.appliedSpecDigest !== spec.bootstrapSpecDigest
+    ) {
+      return {
+        kind: 'replacement_required',
+        reason: 'bootstrap_digest_changed',
+      };
+    }
+
     const { provider, model } = this.#resolveLaunch(spec);
     try {
       await this.#gateway.assertSessionAvailable(binding.externalSessionId);
-    } catch (error) {
-      throw new ExecutionBindingUnavailableError(
-        error instanceof Error
-          ? `The Paseo session binding cannot be attached: ${error.name}`
-          : 'The Paseo session binding cannot be attached.',
-      );
+    } catch {
+      return {
+        kind: 'replacement_required',
+        reason: 'provider_binding_stale',
+      };
     }
-    return this.#session(
-      binding,
-      spec.workspace.binding,
-      provider,
-      model,
-      spec.workspace.cwd,
-    );
+    return {
+      kind: 'reused',
+      appliedRevision: spec.desiredRevision ?? applied?.appliedRevision ?? 1,
+      session: this.#session(
+        binding,
+        spec.workspace.binding,
+        provider,
+        model,
+        spec.workspace.cwd,
+        Buffer.byteLength(spec.systemPrompt, 'utf8'),
+      ),
+    };
   }
 
   public async health(): Promise<ExecutionPlaneHealth> {
@@ -311,11 +337,12 @@ export class PaseoExecutionPlane implements ExecutionPlanePort {
     provider: string,
     model: string,
     cwd: string,
+    systemPromptBytes: number,
   ): PaseoExecutionSession {
     return new PaseoExecutionSession(
       binding,
       workspaceBinding,
-      { provider, model, cwd },
+      { provider, model, cwd, systemPromptBytes },
       this.#gateway,
       this.#runner,
     );

@@ -37,7 +37,10 @@ export function principalRef(input: {
   readonly principalType: string;
   readonly principalId: string;
 }): PrincipalRef {
-  if (input.principalType !== 'service_account' && input.principalType !== 'user')
+  if (
+    input.principalType !== 'service_account' &&
+    input.principalType !== 'user'
+  )
     throw new Error(`Unsupported principal type ${input.principalType}.`);
   if (!input.principalId) throw new Error('Principal id is required.');
   return Object.freeze({ type: input.principalType, id: input.principalId });

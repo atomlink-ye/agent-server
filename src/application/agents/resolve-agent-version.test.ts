@@ -32,11 +32,14 @@ function managed(
 
 describe('ResolveAgentVersion', () => {
   it('does not fall back when an owner-matching managed draft exists', async () => {
-    const findVersion = vi.fn(
-      async (_owner: unknown, _versionId: string) => managed('draft'),
+    const findVersion = vi.fn(async (_owner: unknown, _versionId: string) =>
+      managed('draft'),
     );
     const findVersionByTenant = vi.fn(
-      async (input: { readonly tenantId: string; readonly versionId: string }) =>
+      async (input: {
+        readonly tenantId: string;
+        readonly versionId: string;
+      }) =>
         findVersion(
           {
             tenantId: input.tenantId,

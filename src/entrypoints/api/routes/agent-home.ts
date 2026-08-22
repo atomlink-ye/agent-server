@@ -55,7 +55,8 @@ function scopeParamsFromQuery(c: {
   const workId = c.req.query('work_id');
   if (workId !== undefined) params.workId = workId;
   const runtimeSessionId = c.req.query('runtime_session_id');
-  if (runtimeSessionId !== undefined) params.runtimeSessionId = runtimeSessionId;
+  if (runtimeSessionId !== undefined)
+    params.runtimeSessionId = runtimeSessionId;
   return params;
 }
 
@@ -72,11 +73,7 @@ export function registerAgentHomeRoutes(
     const namespace = c.req.param('namespace') as AgentHomeNamespace;
 
     if (!isValidNamespace(namespace)) {
-      throw new HttpError(
-        400,
-        'invalid_request',
-        'The namespace is invalid.',
-      );
+      throw new HttpError(400, 'invalid_request', 'The namespace is invalid.');
     }
 
     try {
@@ -109,99 +106,85 @@ export function registerAgentHomeRoutes(
   });
 
   // GET - Read a single entry
-  app.get(
-    `${base}/:agentDefinitionId/home/:namespace/entries/*`,
-    async (c) => {
-      const agentDefinitionId = c.req.param('agentDefinitionId');
-      const namespace = c.req.param('namespace') as AgentHomeNamespace;
-      const path = extractPathFromRequest(c);
+  app.get(`${base}/:agentDefinitionId/home/:namespace/entries/*`, async (c) => {
+    const agentDefinitionId = c.req.param('agentDefinitionId');
+    const namespace = c.req.param('namespace') as AgentHomeNamespace;
+    const path = extractPathFromRequest(c);
 
-      if (!isValidNamespace(namespace)) {
-        throw new HttpError(
-          400,
-          'invalid_request',
-          'The namespace is invalid.',
-        );
-      }
+    if (!isValidNamespace(namespace)) {
+      throw new HttpError(400, 'invalid_request', 'The namespace is invalid.');
+    }
 
-      try {
-        const entry = await d.readAgentHomeEntry.execute({
-          accessContext: getAuthenticatedAccessContext(c),
-          agentDefinitionId,
-          namespace,
-          scopeParams: scopeParamsFromQuery(c),
-          path,
-        });
+    try {
+      const entry = await d.readAgentHomeEntry.execute({
+        accessContext: getAuthenticatedAccessContext(c),
+        agentDefinitionId,
+        namespace,
+        scopeParams: scopeParamsFromQuery(c),
+        path,
+      });
 
-        if (!entry) throw notFound();
-        return c.json({ entry: toEntry(entry) }, 200);
-      } catch (e) {
-        if (
-          e instanceof InvalidAgentHomePathError ||
-          e instanceof InvalidAgentHomeContentError
-        )
-          throw invalid();
-        if (e instanceof AgentHomeScopeRequiredError)
-          throw new HttpError(400, 'scope_required', e.message);
-        if (e instanceof AgentHomeNamespaceReadOnlyError)
-          throw new HttpError(403, 'namespace_read_only', e.message);
-        throw e;
-      }
-    },
-  );
+      if (!entry) throw notFound();
+      return c.json({ entry: toEntry(entry) }, 200);
+    } catch (e) {
+      if (
+        e instanceof InvalidAgentHomePathError ||
+        e instanceof InvalidAgentHomeContentError
+      )
+        throw invalid();
+      if (e instanceof AgentHomeScopeRequiredError)
+        throw new HttpError(400, 'scope_required', e.message);
+      if (e instanceof AgentHomeNamespaceReadOnlyError)
+        throw new HttpError(403, 'namespace_read_only', e.message);
+      throw e;
+    }
+  });
 
   // PUT - Write a single entry
-  app.put(
-    `${base}/:agentDefinitionId/home/:namespace/entries/*`,
-    async (c) => {
-      const agentDefinitionId = c.req.param('agentDefinitionId');
-      const namespace = c.req.param('namespace') as AgentHomeNamespace;
-      const path = extractPathFromRequest(c);
+  app.put(`${base}/:agentDefinitionId/home/:namespace/entries/*`, async (c) => {
+    const agentDefinitionId = c.req.param('agentDefinitionId');
+    const namespace = c.req.param('namespace') as AgentHomeNamespace;
+    const path = extractPathFromRequest(c);
 
-      if (!isValidNamespace(namespace)) {
-        throw new HttpError(
-          400,
-          'invalid_request',
-          'The namespace is invalid.',
-        );
-      }
+    if (!isValidNamespace(namespace)) {
+      throw new HttpError(400, 'invalid_request', 'The namespace is invalid.');
+    }
 
-      const parsed = z
-        .object({
-          content: z.string(),
-        })
-        .safeParse(
-          await readBoundedJson(c.req.raw, MAX_AGENT_HOME_REQUEST_BYTES),
-        );
+    const parsed = z
+      .object({
+        content: z.string(),
+      })
+      .safeParse(
+        await readBoundedJson(c.req.raw, MAX_AGENT_HOME_REQUEST_BYTES),
+      );
 
-      if (!parsed.success) throw invalid();
+    if (!parsed.success) throw invalid();
 
-      try {
-        const entry = await d.writeAgentHomeEntry.execute({
-          accessContext: getAuthenticatedAccessContext(c),
-          agentDefinitionId,
-          namespace,
-          scopeParams: scopeParamsFromQuery(c),
-          path,
-          content: parsed.data.content,
-        });
+    try {
+      const entry = await d.writeAgentHomeEntry.execute({
+        accessContext: getAuthenticatedAccessContext(c),
+        agentDefinitionId,
+        namespace,
+        scopeParams: scopeParamsFromQuery(c),
+        path,
+        content: parsed.data.content,
+      });
 
-        if (!entry) throw notFound();
-        return c.json({ entry: toEntry(entry) }, 201);
-      } catch (e) {
-        if (
-          e instanceof InvalidAgentHomePathError ||
-          e instanceof InvalidAgentHomeContentError
-        )
-          throw invalid();
-        if (e instanceof AgentHomeScopeRequiredError)
-          throw new HttpError(400, 'scope_required', e.message);
-        if (e instanceof AgentHomeNamespaceReadOnlyError)
-          throw new HttpError(403, 'namespace_read_only', e.message);
-        throw e;
-      }
-    },
-  );
+      if (!entry) throw notFound();
+      return c.json({ entry: toEntry(entry) }, 201);
+    } catch (e) {
+      if (
+        e instanceof InvalidAgentHomePathError ||
+        e instanceof InvalidAgentHomeContentError
+      )
+        throw invalid();
+      if (e instanceof AgentHomeScopeRequiredError)
+        throw new HttpError(400, 'scope_required', e.message);
+      if (e instanceof AgentHomeNamespaceReadOnlyError)
+        throw new HttpError(403, 'namespace_read_only', e.message);
+      throw e;
+    }
+  });
 }
 
 function isValidNamespace(namespace: unknown): namespace is AgentHomeNamespace {

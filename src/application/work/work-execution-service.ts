@@ -103,7 +103,10 @@ export class WorkExecutionService {
     const owner = WorkIdentityApi.ownerFromAccessContext(input.accessContext);
     const work = await this.identity.findWorkById(input.workId, owner);
     if (!work) throw new WorkNotFoundError();
-    const currentWorkRun = await this.identity.findLatestWorkRun(work.id, owner);
+    const currentWorkRun = await this.identity.findLatestWorkRun(
+      work.id,
+      owner,
+    );
     if (!currentWorkRun) {
       return Object.freeze({
         work,

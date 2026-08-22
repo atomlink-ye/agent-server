@@ -34,10 +34,14 @@ describe.skipIf(baseUrl === undefined)(
         const seeded = await seedProductWork();
         const browserOrigin = new URL(baseUrl!).origin;
         if (!new URL(baseUrl!).hostname.endsWith('.localhost'))
-          throw new Error('WEB_E2E_BASE_URL must use a trustworthy .localhost hostname.');
+          throw new Error(
+            'WEB_E2E_BASE_URL must use a trustworthy .localhost hostname.',
+          );
 
         browser = await chromium.launch({ headless: true });
-        const page = await (await browser.newContext({ baseURL: baseUrl! })).newPage();
+        const page = await (
+          await browser.newContext({ baseURL: baseUrl! })
+        ).newPage();
         const paths = captureSameOriginPaths(page, browserOrigin);
 
         progress('goto_start', { workId: seeded.workId });
@@ -46,10 +50,12 @@ describe.skipIf(baseUrl === undefined)(
           timeout: 60_000,
         });
         progress('goto_done');
-        await page.getByText('Product Work/Run reads', { exact: false }).waitFor({
-          state: 'visible',
-          timeout: 30_000,
-        });
+        await page
+          .getByText('Product Work/Run reads', { exact: false })
+          .waitFor({
+            state: 'visible',
+            timeout: 30_000,
+          });
 
         const startResponsePromise = page.waitForResponse(
           (response) =>
@@ -66,7 +72,9 @@ describe.skipIf(baseUrl === undefined)(
           work_run?: { id?: unknown; definition_version_id?: unknown };
         };
         if (typeof started.work_run?.id !== 'string')
-          throw new Error('Start Run response did not expose a Product WorkRun id.');
+          throw new Error(
+            'Start Run response did not expose a Product WorkRun id.',
+          );
         expect(started.work_run.definition_version_id).toBe(
           seeded.definitionVersionId,
         );
@@ -74,10 +82,10 @@ describe.skipIf(baseUrl === undefined)(
         progress('wait_run_start', { workRunId: started.work_run.id });
         await waitForCompleteWorkRun(page, seeded.workId, started.work_run.id);
         progress('wait_run_done');
-        await page.goto(
-          `/works/${seeded.workId}?run=${started.work_run.id}`,
-          { waitUntil: 'domcontentloaded', timeout: 30_000 },
-        );
+        await page.goto(`/works/${seeded.workId}?run=${started.work_run.id}`, {
+          waitUntil: 'domcontentloaded',
+          timeout: 30_000,
+        });
         await page.getByTestId('outcome-product-state').waitFor({
           state: 'visible',
           timeout: 30_000,
@@ -86,10 +94,11 @@ describe.skipIf(baseUrl === undefined)(
           state: 'visible',
           timeout: 30_000,
         });
-        expect(await page.getByTestId('mcp-only-warning').isVisible()).toBe(true);
+        expect(await page.getByTestId('mcp-only-warning').isVisible()).toBe(
+          true,
+        );
 
-        const exactDefinitionPath =
-          `/api/work-definition-versions/${seeded.definitionVersionId}`;
+        const exactDefinitionPath = `/api/work-definition-versions/${seeded.definitionVersionId}`;
         expect(paths.responses).toContain(exactDefinitionPath);
         expect(paths.requests).not.toContain(
           `/api/works/${seeded.workId}/definition`,
@@ -101,7 +110,9 @@ describe.skipIf(baseUrl === undefined)(
           timeout: 30_000,
         });
         expect(
-          await page.getByText(seeded.definitionName, { exact: true }).isVisible(),
+          await page
+            .getByText(seeded.definitionName, { exact: true })
+            .isVisible(),
         ).toBe(true);
       },
       testTimeout,
@@ -241,7 +252,9 @@ async function waitForCompleteWorkRun(
     }
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
-  throw new Error('Timed out waiting for the browser-started WorkRun to finish.');
+  throw new Error(
+    'Timed out waiting for the browser-started WorkRun to finish.',
+  );
 }
 
 function captureSameOriginPaths(page: Page, origin: string) {

@@ -94,7 +94,30 @@ describe('ProductProjection single-Agent Work', () => {
             responseObserved: null,
             createdAt: '2026-08-16T00:00:01.000Z',
           },
-          ...(mcpProvenance ? [{ id: '99999999-9999-4999-8999-999999999999', runId, sequence: 2, type: 'output' as const, payloadPresent: true, taskId: rootTaskId, rootTaskId, actorId: null, workItemId: null, activityId: 'activity-1', activityKind: 'tool_status' as const, activityCategory: 'other', activityStatus: 'completed', toolName: 'board_create', provenance: mcpProvenance, toolIdentityCaptureStatus: 'present' as const, responseObserved: false, createdAt: '2026-08-16T00:00:02.000Z' }] : []),
+          ...(mcpProvenance
+            ? [
+                {
+                  id: '99999999-9999-4999-8999-999999999999',
+                  runId,
+                  sequence: 2,
+                  type: 'output' as const,
+                  payloadPresent: true,
+                  taskId: rootTaskId,
+                  rootTaskId,
+                  actorId: null,
+                  workItemId: null,
+                  activityId: 'activity-1',
+                  activityKind: 'tool_status' as const,
+                  activityCategory: 'other',
+                  activityStatus: 'completed',
+                  toolName: 'board_create',
+                  provenance: mcpProvenance,
+                  toolIdentityCaptureStatus: 'present' as const,
+                  responseObserved: false,
+                  createdAt: '2026-08-16T00:00:02.000Z',
+                },
+              ]
+            : []),
         ],
       },
     });
@@ -133,14 +156,26 @@ describe('ProductProjection single-Agent Work', () => {
     expect(trace.mcp_activities).toEqual([]);
 
     mcpProvenance = SERVER_AUTHORIZED_TEAM_MCP_CATALOG;
-    const authorized = await projection.getRunTrace({ tenantId, workspaceId, workId, workRunId });
+    const authorized = await projection.getRunTrace({
+      tenantId,
+      workspaceId,
+      workId,
+      workRunId,
+    });
     if (!('projection_status' in authorized) || authorized.work_run === null)
       throw new Error('expected captured single-Agent Run Trace projection');
     expect(authorized.mcp_activities).toHaveLength(1);
-    expect(authorized.mcp_activities[0]?.provenance).toBe(SERVER_AUTHORIZED_TEAM_MCP_CATALOG);
+    expect(authorized.mcp_activities[0]?.provenance).toBe(
+      SERVER_AUTHORIZED_TEAM_MCP_CATALOG,
+    );
 
     mcpProvenance = `${SERVER_AUTHORIZED_TEAM_MCP_CATALOG}x`;
-    const rejected = await projection.getRunTrace({ tenantId, workspaceId, workId, workRunId });
+    const rejected = await projection.getRunTrace({
+      tenantId,
+      workspaceId,
+      workId,
+      workRunId,
+    });
     if (!('projection_status' in rejected) || rejected.work_run === null)
       throw new Error('expected captured single-Agent Run Trace projection');
     expect(rejected.mcp_activities).toEqual([]);

@@ -31,7 +31,9 @@ export class ContextFsFileStore implements FileStore {
     });
   }
 
-  public async readVerified(input: ReadVerifiedFileStoreInput): Promise<string> {
+  public async readVerified(
+    input: ReadVerifiedFileStoreInput,
+  ): Promise<string> {
     const scope = workspaceContextScope({
       tenantId: input.tenantId,
       workspaceId: input.workspaceId,

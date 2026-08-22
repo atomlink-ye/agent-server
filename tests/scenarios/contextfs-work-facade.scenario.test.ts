@@ -41,7 +41,7 @@ describe('ContextFS + WorkExecutionService host scenario', () => {
         ]),
       ),
     );
-    const grant = mcp.grants.issue({
+    const grant = await mcp.grants.issue({
       tenantId: world.owner.tenantId,
       workspaceId: world.owner.workspaceId,
       principalType: world.owner.principalType,
@@ -105,7 +105,9 @@ describe('ContextFS + WorkExecutionService host scenario', () => {
       agentDefinitionId: world.agent.definitionId,
       workId,
     });
-    expect(workerView.mounts.some((mount) => mount.mountPath === '/work')).toBe(true);
+    expect(workerView.mounts.some((mount) => mount.mountPath === '/work')).toBe(
+      true,
+    );
     expect(
       workerView.mounts.some((mount) => mount.mountPath === '/conversation'),
     ).toBe(false);

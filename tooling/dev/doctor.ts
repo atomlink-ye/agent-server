@@ -245,10 +245,7 @@ async function providerBinaryStatus(): Promise<string> {
   const statuses = await Promise.all(
     providerBinaryNames.map(async (name) => {
       try {
-        await access(
-          providerToolchainPaths[name],
-          constants.X_OK,
-        );
+        await access(providerToolchainPaths[name], constants.X_OK);
       } catch {
         return `${name}=absent`;
       }
@@ -282,7 +279,9 @@ async function providerConfigStatus(): Promise<string> {
 async function providerCheck(
   environment: NodeJS.ProcessEnv,
 ): Promise<DoctorCheck> {
-  const provider = (environment.PASEO_PROVIDER?.trim() || 'claude').toLowerCase();
+  const provider = (
+    environment.PASEO_PROVIDER?.trim() || 'claude'
+  ).toLowerCase();
   const keyByProvider: Readonly<Record<string, string>> = {
     opencode: 'OPENCODE_GO_API_KEY',
     claude: 'OPENCODE_GO_API_KEY',
@@ -328,16 +327,25 @@ export async function runDoctor(
   environment: NodeJS.ProcessEnv = process.env,
 ): Promise<readonly DoctorCheck[]> {
   const loaded = await loadLocalDotEnv(environment);
-  const nodeMajor = Number.parseInt(process.versions.node.split('.')[0] ?? '0', 10);
-  const [pnpmAvailable, psqlAvailable, apiPortFree, webPortFree, postgresPairResult, paseo] =
-    await Promise.all([
-      commandAvailable('pnpm'),
-      commandAvailable('psql'),
-      isPortFree(Number(loaded.PORT ?? 3000)),
-      isPortFree(3001),
-      postgresChecks(loaded),
-      paseoCheck(loaded),
-    ]);
+  const nodeMajor = Number.parseInt(
+    process.versions.node.split('.')[0] ?? '0',
+    10,
+  );
+  const [
+    pnpmAvailable,
+    psqlAvailable,
+    apiPortFree,
+    webPortFree,
+    postgresPairResult,
+    paseo,
+  ] = await Promise.all([
+    commandAvailable('pnpm'),
+    commandAvailable('psql'),
+    isPortFree(Number(loaded.PORT ?? 3000)),
+    isPortFree(3001),
+    postgresChecks(loaded),
+    paseoCheck(loaded),
+  ]);
   const { checks: postgresPair, backend } = postgresPairResult;
   const [postgres, migrations] = postgresPair;
   const checks: DoctorCheck[] = [
@@ -391,7 +399,8 @@ export async function runDoctor(
     (check) => check.status === 'fail' && check.requiredFor.includes('core'),
   );
   const scenarioReady = !checks.some(
-    (check) => check.status === 'fail' && check.requiredFor.includes('scenario'),
+    (check) =>
+      check.status === 'fail' && check.requiredFor.includes('scenario'),
   );
   const runtimeReady =
     coreReady &&
@@ -411,7 +420,8 @@ export async function runDoctor(
     migrations.status === 'ok';
 
   for (const check of checks) {
-    const icon = check.status === 'ok' ? '✓' : check.status === 'warn' ? '○' : '✗';
+    const icon =
+      check.status === 'ok' ? '✓' : check.status === 'warn' ? '○' : '✗';
     process.stdout.write(`${icon} ${check.name}: ${check.detail}\n`);
   }
   process.stdout.write(`\nready.core=${coreReady}\n`);

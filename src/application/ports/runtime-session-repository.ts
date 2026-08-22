@@ -5,10 +5,32 @@ import type {
   ExecutionWorkspaceBinding,
 } from './execution-plane.js';
 
+export type RuntimeSessionStatus =
+  | 'pending'
+  | 'ready'
+  | 'reconciling'
+  | 'replacement_required'
+  | 'unavailable'
+  | 'closed';
+
+export interface RuntimeSessionGeneration {
+  readonly id: string;
+  readonly runtimeSessionId: string;
+  readonly generation: number;
+  readonly workspaceBinding: ExecutionWorkspaceBinding;
+  readonly sessionBinding: ExecutionSessionBinding;
+  readonly appliedRevision: number;
+  readonly appliedSpecDigest: string | null;
+  readonly endpointEpoch: string;
+  readonly extensionGrantId: string | null;
+  readonly status: 'active' | 'superseded' | 'unavailable' | 'closed';
+  readonly createdAt: string;
+  readonly supersededAt: string | null;
+}
+
 export interface RuntimeSession {
   readonly id: string;
-  /** Canonical runtime identity. Optional only while legacy callers migrate. */
-  readonly scope?: RuntimeScope;
+  readonly scope: RuntimeScope;
   readonly scopeKind: RuntimeScope['kind'];
   readonly scopeId: string;
   readonly productSessionId: string | null;
@@ -23,6 +45,11 @@ export interface RuntimeSession {
     'ref' | 'digest'
   >[];
   readonly toolRefs: readonly string[];
+  readonly desiredRevision: number;
+  readonly desiredSpecDigest: string | null;
+  readonly status: RuntimeSessionStatus;
+  readonly currentGeneration: RuntimeSessionGeneration | null;
+  /** Convenience projections of currentGeneration; never independent facts. */
   readonly workspaceBinding: ExecutionWorkspaceBinding | null;
   readonly sessionBinding: ExecutionSessionBinding | null;
   readonly createdAt: string;
@@ -37,7 +64,7 @@ export interface RuntimeSessionLookup {
 }
 
 export interface RuntimeSessionRepository {
-  createOrGetForAgentChat?(input: {
+  createOrGetForAgentChat(input: {
     agentChatRuntimeId: string;
     runtimeEpoch: number;
     tenantId: string;
@@ -48,7 +75,7 @@ export interface RuntimeSessionRepository {
     resolvedSkills: readonly Pick<ResolvedSkillPackage, 'ref' | 'digest'>[];
     toolRefs: readonly string[];
   }): Promise<RuntimeSession>;
-  findByAgentChat?(input: {
+  findByAgentChat(input: {
     agentChatRuntimeId: string;
     runtimeEpoch: number;
     tenantId: string;
@@ -56,7 +83,7 @@ export interface RuntimeSessionRepository {
     principalType: string;
     principalId: string;
   }): Promise<RuntimeSession | null>;
-  createOrGetForTeamMember?(input: {
+  createOrGetForTeamMember(input: {
     teamMemberRunId: string;
     taskId: string;
     tenantId: string;
@@ -68,7 +95,7 @@ export interface RuntimeSessionRepository {
     resolvedSkills: readonly Pick<ResolvedSkillPackage, 'ref' | 'digest'>[];
     toolRefs: readonly string[];
   }): Promise<RuntimeSession>;
-  findByTeamMember?(input: {
+  findByTeamMember(input: {
     teamMemberRunId: string;
     tenantId: string;
     workspaceId: string;
@@ -109,14 +136,34 @@ export interface RuntimeSessionRepository {
     principalType: string;
     principalId: string;
   }): Promise<RuntimeSession | null>;
+
+  /** Establishes/updates the stable desired bootstrap identity for this session. */
+  reconcileDesiredSpec(input: {
+    readonly id: string;
+    readonly digest: string;
+  }): Promise<RuntimeSession>;
+
+  /** Creates generation 1 for an unbound RuntimeSession. */
   bindExecution(input: {
     readonly id: string;
     readonly workspaceBinding: ExecutionWorkspaceBinding;
     readonly sessionBinding: ExecutionSessionBinding;
+    readonly appliedRevision: number;
+    readonly appliedSpecDigest: string;
+    readonly endpointEpoch: string;
+    readonly extensionGrantId?: string;
   }): Promise<RuntimeSession>;
-  /**
-   * Clears a stale external provider binding while preserving the canonical
-   * RuntimeSession and its launch snapshot. Optional only for bounded fakes.
-   */
-  clearExecutionBinding?(id: string): Promise<RuntimeSession>;
+
+  /** Supersedes the active provider generation and atomically installs its replacement. */
+  replaceExecution(input: {
+    readonly id: string;
+    readonly workspaceBinding: ExecutionWorkspaceBinding;
+    readonly sessionBinding: ExecutionSessionBinding;
+    readonly appliedRevision: number;
+    readonly appliedSpecDigest: string;
+    readonly endpointEpoch: string;
+    readonly extensionGrantId?: string;
+  }): Promise<RuntimeSession>;
+
+  markUnavailable(id: string): Promise<RuntimeSession>;
 }

@@ -17,10 +17,7 @@ const DefinitionNameSchema = z
   .trim()
   .min(1)
   .max(80)
-  .regex(
-    /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
-    'must use lowercase kebab-case',
-  );
+  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'must use lowercase kebab-case');
 
 const ParticipantNameSchema = z
   .string()
@@ -33,17 +30,19 @@ const ParticipantNameSchema = z
   );
 
 const InlineSourceSchema = z
-  .object({ source: z.string().min(1).max(64 * 1024) })
+  .object({
+    source: z
+      .string()
+      .min(1)
+      .max(64 * 1024),
+  })
   .strict();
 
 const InputPropertyNameSchema = z
   .string()
   .min(1)
   .max(64)
-  .regex(
-    /^[A-Za-z_][A-Za-z0-9_-]*$/,
-    'must use a stable input property name',
-  );
+  .regex(/^[A-Za-z_][A-Za-z0-9_-]*$/, 'must use a stable input property name');
 
 const StringInputPropertySchema = z
   .object({
@@ -86,7 +85,9 @@ const NumberInputPropertySchema = z
       });
   });
 
-const BooleanInputPropertySchema = z.object({ type: z.literal('boolean') }).strict();
+const BooleanInputPropertySchema = z
+  .object({ type: z.literal('boolean') })
+  .strict();
 
 const ProductWorkInputPropertySchema = z.union([
   StringInputPropertySchema,
@@ -140,7 +141,11 @@ const CommonSpecFields = {
       const seen = new Set<string>();
       ids.forEach((id, i) => {
         if (seen.has(id))
-          ctx.addIssue({ code: z.ZodIssueCode.custom, path: [i], message: 'memory_version_ids must not contain duplicates' });
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [i],
+            message: 'memory_version_ids must not contain duplicates',
+          });
         seen.add(id);
       });
     }),
@@ -239,7 +244,9 @@ const ProductWorkDefinitionDocumentSchema = z
 export type ProductWorkDefinitionDocument = z.infer<
   typeof ProductWorkDefinitionDocumentSchema
 >;
-export type ProductWorkInputSchema = z.infer<typeof ProductWorkInputSchemaSchema>;
+export type ProductWorkInputSchema = z.infer<
+  typeof ProductWorkInputSchemaSchema
+>;
 export type ProductWorkInput = Readonly<Record<string, unknown>>;
 export type ProductWorkParticipantBinding = z.infer<typeof ParticipantSchema>;
 
@@ -329,7 +336,11 @@ export function validateProductWorkRunInput(
   value: unknown,
 ): ProductWorkInputValidationResult {
   if (!isPlainRecord(value))
-    return invalidInput('$.input', 'input_validation_failed', 'input must be a JSON object.');
+    return invalidInput(
+      '$.input',
+      'input_validation_failed',
+      'input must be a JSON object.',
+    );
   const keys = Object.keys(value);
   if (keys.length > 64)
     return invalidInput(
@@ -432,7 +443,8 @@ function validateInputProperty(
     if (typeof value !== 'boolean') pushType('boolean');
     return;
   }
-  if (typeof value !== 'number' || !Number.isFinite(value)) return pushType(property.type);
+  if (typeof value !== 'number' || !Number.isFinite(value))
+    return pushType(property.type);
   if (property.type === 'integer' && !Number.isInteger(value))
     diagnostics.push({
       path,
@@ -514,7 +526,8 @@ function sha256(value: string): string {
 function deepFreeze<T>(value: T): T {
   if (value && typeof value === 'object') {
     Object.freeze(value);
-    for (const child of Object.values(value as Record<string, unknown>)) deepFreeze(child);
+    for (const child of Object.values(value as Record<string, unknown>))
+      deepFreeze(child);
   }
   return value;
 }

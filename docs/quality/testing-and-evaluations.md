@@ -13,15 +13,15 @@ A developer should be able to identify which boundary failed. Do not use a live 
 
 ## Validation lanes
 
-| Lane | Default dependencies | Purpose | Canonical command |
-| --- | --- | --- | --- |
-| L0 Unit | none | pure logic/state/validation | `pnpm test:unit` |
-| L1 Integration | PGlite/fakes as appropriate | module/repository wiring | `pnpm test:integration` |
-| L2 Scenario | PGlite + scripted runtime decision | complete deterministic product journey | `pnpm test:scenario` |
-| L3 PostgreSQL semantic | dedicated local real PostgreSQL | PG-only locking/transaction/index behavior | `pnpm test:pg` |
-| L4 Runtime canary | Paseo + real provider | runtime/provider/tool compatibility | `pnpm canary:runtime` |
-| L5 Product canary | host-native API/Web/runtime/browser | representative user journey | `pnpm canary:golden-path` |
-| L6 Acceptance | production-like topology | milestone/release evidence | `pnpm acceptance:run` |
+| Lane                   | Default dependencies                | Purpose                                    | Canonical command         |
+| ---------------------- | ----------------------------------- | ------------------------------------------ | ------------------------- |
+| L0 Unit                | none                                | pure logic/state/validation                | `pnpm test:unit`          |
+| L1 Integration         | PGlite/fakes as appropriate         | module/repository wiring                   | `pnpm test:integration`   |
+| L2 Scenario            | PGlite + scripted runtime decision  | complete deterministic product journey     | `pnpm test:scenario`      |
+| L3 PostgreSQL semantic | dedicated local real PostgreSQL     | PG-only locking/transaction/index behavior | `pnpm test:pg`            |
+| L4 Runtime canary      | Paseo + real provider               | runtime/provider/tool compatibility        | `pnpm canary:runtime`     |
+| L5 Product canary      | host-native API/Web/runtime/browser | representative user journey                | `pnpm canary:golden-path` |
+| L6 Acceptance          | production-like topology            | milestone/release evidence                 | `pnpm acceptance:run`     |
 
 The normal `pnpm test` aggregate stops at deterministic lanes. Live provider/browser/acceptance work is explicit.
 
@@ -82,8 +82,6 @@ seed.goldenPath()
 
 over repeated table-shaped fixture SQL.
 
-`pnpm test:north-star` is a compatibility alias for this lane.
-
 ## Real PostgreSQL semantic tests
 
 Only use this lane for PostgreSQL behavior PGlite should not claim to prove:
@@ -114,8 +112,6 @@ The runner:
 6. passes the selected URL to the existing real-PG Vitest suite.
 
 The runner guard and `tests/harness/postgres.ts`'s `assertRealPostgresTestUrl` are independent protections: the harness guard requires a `test` database name and rejects production-flavored names before creating the real test pool. PGlite cannot substitute for this lane or prove L3 PostgreSQL-only behavior.
-
-`pnpm test:real-pg` is a compatibility alias.
 
 CI may supply PostgreSQL as a service container. The important boundary is that the test harness does not secretly own a Compose lifecycle.
 

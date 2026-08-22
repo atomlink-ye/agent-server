@@ -12,7 +12,10 @@ export interface AgentDefinition extends ManagedAgentOwner {
 }
 
 export function createManagedAgentDefinition(
-  options: Omit<AgentDefinition, 'id' | 'createdAt' | 'updatedAt' | 'roleLabel' | 'summary'> & {
+  options: Omit<
+    AgentDefinition,
+    'id' | 'createdAt' | 'updatedAt' | 'roleLabel' | 'summary'
+  > & {
     id?: string;
     now?: () => Date;
     roleLabel?: string | null;

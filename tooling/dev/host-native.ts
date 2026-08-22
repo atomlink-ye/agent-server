@@ -1,5 +1,11 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { access, mkdir, open as openFile, readFile, unlink } from 'node:fs/promises';
+import {
+  access,
+  mkdir,
+  open as openFile,
+  readFile,
+  unlink,
+} from 'node:fs/promises';
 import { chmodSync, closeSync, constants, mkdirSync, openSync } from 'node:fs';
 import { createWriteStream } from 'node:fs';
 import { userInfo } from 'node:os';
@@ -200,9 +206,7 @@ export function hostRuntimeEnvironment(
   };
 }
 
-export function hostWebEnvironment(
-  base: NodeJS.ProcessEnv,
-): NodeJS.ProcessEnv {
+export function hostWebEnvironment(base: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   return {
     ...base,
     AGENT_SERVER_BASE_URL:
@@ -253,7 +257,8 @@ export async function runCommand(
     child.once('error', reject);
     child.once('exit', (code, signal) => {
       if (code === 0) resolveRun();
-      else reject(new Error(`${command} exited ${code ?? signal ?? 'unknown'}`));
+      else
+        reject(new Error(`${command} exited ${code ?? signal ?? 'unknown'}`));
     });
   });
 }
@@ -261,7 +266,11 @@ export async function runCommand(
 export async function connectablePostgres(
   connectionString: string,
 ): Promise<{ ok: true } | { ok: false; error: unknown }> {
-  const pool = new Pool({ connectionString, max: 1, connectionTimeoutMillis: 1_500 });
+  const pool = new Pool({
+    connectionString,
+    max: 1,
+    connectionTimeoutMillis: 1_500,
+  });
   try {
     await pool.query('SELECT 1');
     return { ok: true };
@@ -293,7 +302,8 @@ export async function ensureDevelopmentDatabase(
   if (errorCode === '3D000' && (await commandAvailable('createdb'))) {
     const url = new URL(connectionString);
     const databaseName = decodeURIComponent(url.pathname.replace(/^\//, ''));
-    if (!databaseName) throw new Error('DATABASE_URL must include a database name.');
+    if (!databaseName)
+      throw new Error('DATABASE_URL must include a database name.');
     const args = [
       '-h',
       url.hostname,
@@ -325,7 +335,9 @@ function pglitePort(environment: NodeJS.ProcessEnv): number {
     10,
   );
   if (!Number.isInteger(port) || port < 1 || port > 65_535) {
-    throw new Error(`PGLITE_PORT must be between 1 and 65535 (received ${port})`);
+    throw new Error(
+      `PGLITE_PORT must be between 1 and 65535 (received ${port})`,
+    );
   }
   return port;
 }
@@ -393,7 +405,8 @@ async function waitForPGlite(
   child: ChildProcess,
   fallbackUrl: string,
 ): Promise<string> {
-  let exited: { code: number | null; signal: NodeJS.Signals | null } | undefined;
+  let exited:
+    { code: number | null; signal: NodeJS.Signals | null } | undefined;
   child.once('exit', (code, signal) => {
     exited = { code, signal };
   });
@@ -405,7 +418,11 @@ async function waitForPGlite(
       );
     }
     const state = await readPGliteState();
-    if (state && state.pid === child.pid && (await connectablePostgres(state.url)).ok) {
+    if (
+      state &&
+      state.pid === child.pid &&
+      (await connectablePostgres(state.url)).ok
+    ) {
       return state.url;
     }
     if ((await connectablePostgres(fallbackUrl)).ok) return fallbackUrl;
@@ -446,7 +463,11 @@ async function ensurePGliteDatabase(
   try {
     child = spawn(
       process.execPath,
-      ['--import', 'tsx', resolve(repositoryRoot, 'tooling/dev/pglite-server.ts')],
+      [
+        '--import',
+        'tsx',
+        resolve(repositoryRoot, 'tooling/dev/pglite-server.ts'),
+      ],
       {
         cwd: repositoryRoot,
         detached: true,
@@ -570,7 +591,10 @@ function runtimeSecretValues(environment: NodeJS.ProcessEnv): string[] {
     .sort((left, right) => right.length - left.length);
 }
 
-function redactRuntimeValues(content: string, values: readonly string[]): string {
+function redactRuntimeValues(
+  content: string,
+  values: readonly string[],
+): string {
   return values.reduce(
     (result, value) => result.replaceAll(value, '[redacted]'),
     content,
@@ -593,8 +617,7 @@ class RuntimeLogRedactor extends Writable {
     encoding: BufferEncoding,
     callback: (error?: Error | null) => void,
   ): void {
-    this.pending +=
-      typeof chunk === 'string' ? chunk : chunk.toString('utf8');
+    this.pending += typeof chunk === 'string' ? chunk : chunk.toString('utf8');
     const newline = this.pending.lastIndexOf('\n');
     if (newline < 0) {
       callback();
@@ -776,7 +799,7 @@ export async function waitForHttp(
         if (response.ok) {
           const childStopped = Boolean(
             lifecycle?.getOutcome() ||
-              (child && (child.exitCode !== null || child.signalCode !== null)),
+            (child && (child.exitCode !== null || child.signalCode !== null)),
           );
           if (childStopped) {
             diagnosticAttached = true;
@@ -874,7 +897,9 @@ export function spawnOwned(
   }
 }
 
-export async function stopOwned(children: readonly ChildProcess[]): Promise<void> {
+export async function stopOwned(
+  children: readonly ChildProcess[],
+): Promise<void> {
   await Promise.all(
     children.map(
       (child) =>
@@ -886,7 +911,7 @@ export async function stopOwned(children: readonly ChildProcess[]): Promise<void
           const timeout = setTimeout(() => {
             child.kill('SIGKILL');
             resolveStop();
-          // Allow with-paseo's 8s SIGTERM and 2s SIGKILL cleanup to finish.
+            // Allow with-paseo's 8s SIGTERM and 2s SIGKILL cleanup to finish.
           }, 11_000);
           timeout.unref?.();
           child.once('exit', () => {

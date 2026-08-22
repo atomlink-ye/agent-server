@@ -169,7 +169,7 @@ async function createMessageWakeFixture(
     ]),
   );
   servers.push(server);
-  const grant = server.grants.issue({
+  const grant = await server.grants.issue({
     ...owner,
     productSessionId: randomUUID(),
     taskId: leadTask.id,

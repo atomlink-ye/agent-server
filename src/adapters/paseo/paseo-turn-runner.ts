@@ -32,8 +32,11 @@ export class PaseoTurnRunner {
     readonly provider: string;
     readonly model: string;
     readonly cwd: string;
+    readonly systemPromptBytes?: number | null;
     readonly observer?: ExecutionObservationSink;
   }): Promise<ExecutionResult> {
+    const turnPromptBytes = Buffer.byteLength(input.run.prompt, 'utf8');
+    const systemPromptBytes = input.systemPromptBytes ?? null;
     const projector = new PaseoObservationProjector({
       agentId: input.agentId,
       provider: input.provider,
@@ -134,12 +137,15 @@ export class PaseoTurnRunner {
       });
 
       let finished;
+      let providerWaitStatus: string = 'unknown';
       try {
         finished = await this.gateway.wait(
           input.agentId,
           this.options.executionTimeoutMs,
         );
+        providerWaitStatus = finished.status;
       } catch (error) {
+        providerWaitStatus = 'error';
         this.logger.log('info', 'runtime.wait.completed', {
           run_id: input.run.runId,
           elapsed_ms: Date.now() - waitStartedAt,
@@ -150,6 +156,14 @@ export class PaseoTurnRunner {
             ? `Paseo turn settlement failed: ${error.name}`
             : 'Paseo turn settlement failed.',
         );
+      } finally {
+        this.logger.log('info', 'runtime.provider.wait.completed', {
+          run_id: input.run.runId,
+          provider_wait_ms: Date.now() - waitStartedAt,
+          system_prompt_bytes: systemPromptBytes,
+          turn_prompt_bytes: turnPromptBytes,
+          status: providerWaitStatus,
+        });
       }
       this.logger.log('info', 'runtime.wait.completed', {
         run_id: input.run.runId,
@@ -172,6 +186,16 @@ export class PaseoTurnRunner {
       const mapped = mapPaseoFinishStatus(finished.status);
       let result: ExecutionResult;
       if (mapped === 'timed_out') {
+        const finalEntry = finalTimeline?.entries.at(-1);
+        this.logger.log('warn', 'runtime.timeout.timeline_diagnostics', {
+          run_id: input.run.runId,
+          timeline_available: finalTimeline !== null,
+          timeline_entry_count: finalTimeline?.entries.length ?? 0,
+          timeline_start_seq: finalTimeline?.startCursor?.seq ?? null,
+          timeline_end_seq: finalTimeline?.endCursor?.seq ?? null,
+          timeline_last_item_type: finalEntry?.timelineItemType ?? null,
+          timeline_last_item_seq: finalEntry?.seqEnd ?? null,
+        });
         result = {
           status: 'failed',
           failure: {

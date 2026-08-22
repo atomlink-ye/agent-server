@@ -97,11 +97,7 @@ export class ChatDeliveryReconciler {
 
     const brain = await this.#resolveBrain.execute(context);
     const extensions = await this.#bindCapabilities.execute(context, brain);
-    const reply = await this.#executeTurn.execute(
-      context,
-      brain,
-      extensions,
-    );
+    const reply = await this.#executeTurn.execute(context, brain, extensions);
     const materialized = await this.#materialize.execute(context, reply);
 
     if (workerId) await this.completeCompatibilityClaim(dispatch, workerId);

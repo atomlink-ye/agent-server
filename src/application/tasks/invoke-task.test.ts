@@ -177,7 +177,6 @@ describe('InvokeTask', () => {
 });
 
 class PublishedInvokableRepository implements InvokableRepository {
-
   public async saveTeamDefinition(): Promise<void> {
     throw new Error('Not implemented in invoke-task tests');
   }

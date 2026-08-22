@@ -92,7 +92,9 @@ function upstreamUrl(config: AppConfig, path: string): string {
 function browserServiceToken(config: AppConfig): string {
   const configured = process.env.AGENT_SERVER_SERVICE_TOKEN?.trim();
   if (configured) return configured;
-  const active = (config.serviceAccounts ?? []).filter((account) => !account.disabled);
+  const active = (config.serviceAccounts ?? []).filter(
+    (account) => !account.disabled,
+  );
   if (active.length === 1) return active[0]!.token;
   throw new Error('browser_web_service_token_missing');
 }

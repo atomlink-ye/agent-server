@@ -29,7 +29,9 @@ export class EnsureCoworkerConversation {
     readonly definition: AgentDefinition;
   }): Promise<CoworkerConversationProvisioningResult> {
     if (input.definition.tenantId !== input.accessContext.tenantId) {
-      throw new Error('Coworker definition is outside the authenticated tenant.');
+      throw new Error(
+        'Coworker definition is outside the authenticated tenant.',
+      );
     }
 
     const conversation = await this.conversations.findOrCreateDirect({
@@ -51,7 +53,9 @@ export class EnsureCoworkerConversation {
       principalId: input.accessContext.principalId,
     });
     if (!entitlement) {
-      throw new Error('Same-owner coworker Work context could not be provisioned.');
+      throw new Error(
+        'Same-owner coworker Work context could not be provisioned.',
+      );
     }
     return { conversation, workEntitlement: entitlement };
   }

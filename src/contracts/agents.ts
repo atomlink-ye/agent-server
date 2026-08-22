@@ -63,10 +63,12 @@ export const AgentDefinitionResponseSchema = z
   })
   .strict();
 
-export const AgentCoworkerResponseSchema = AgentDefinitionResponseSchema.extend({
-  active_agent_version_id: AgentIdSchema,
-  runtime_status: z.enum(['available', 'draining', 'unavailable']),
-}).strict();
+export const AgentCoworkerResponseSchema = AgentDefinitionResponseSchema.extend(
+  {
+    active_agent_version_id: AgentIdSchema,
+    runtime_status: z.enum(['available', 'draining', 'unavailable']),
+  },
+).strict();
 
 export const AgentCoworkerListResponseSchema = z
   .object({

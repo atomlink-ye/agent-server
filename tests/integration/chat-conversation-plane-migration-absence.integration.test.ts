@@ -112,9 +112,7 @@ describe('Chat conversation plane migration absence (variant pair)', () => {
       const exists = result.rows?.[0]?.exists ?? false;
       expect(exists).toBe(true);
       if (!exists) {
-        throw new Error(
-          `Table ${tableName} should exist after migration 0038`,
-        );
+        throw new Error(`Table ${tableName} should exist after migration 0038`);
       }
     }
   });

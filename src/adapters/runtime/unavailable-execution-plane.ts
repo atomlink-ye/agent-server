@@ -1,9 +1,9 @@
 import {
   ExecutionPlaneUnavailableError,
+  type AttachExecutionSessionOutcome,
   type CreatedExecutionSession,
   type ExecutionPlaneCapabilities,
   type ExecutionPlanePort,
-  type ExecutionSession,
   type ExecutionSessionBinding,
   type ExecutionSessionSpec,
 } from '../../application/ports/execution-plane.js';
@@ -22,7 +22,7 @@ export class UnavailableExecutionPlane implements ExecutionPlanePort {
   public async attachSession(
     _binding: ExecutionSessionBinding,
     _spec: ExecutionSessionSpec,
-  ): Promise<ExecutionSession> {
+  ): Promise<AttachExecutionSessionOutcome> {
     throw new ExecutionPlaneUnavailableError();
   }
 

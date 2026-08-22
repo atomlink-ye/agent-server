@@ -122,7 +122,10 @@ describe('TeamDriver completion approval', () => {
     };
     const driver = futureDriver(executions);
     const task = { ...leadTask(team), teamTaskKind: 'direct_message' } as Task;
-    const run = { ...createRun('continue', { id: 'lead-direct-failed-run', now }), status: 'failed' } as Run;
+    const run = {
+      ...createRun('continue', { id: 'lead-direct-failed-run', now }),
+      status: 'failed',
+    } as Run;
 
     await driver.handleTerminalRun({ team, task, run });
 
@@ -142,7 +145,10 @@ describe('TeamDriver completion approval', () => {
       failTeamRunAtomically: vi.fn(async () => team),
     };
     const driver = futureDriver(executions);
-    const run = { ...createRun('continue', { id: 'lead-turn-failed-run', now }), status: 'failed' } as Run;
+    const run = {
+      ...createRun('continue', { id: 'lead-turn-failed-run', now }),
+      status: 'failed',
+    } as Run;
 
     await driver.handleTerminalRun({ team, task: leadTask(team), run });
 

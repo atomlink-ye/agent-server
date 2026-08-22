@@ -172,7 +172,15 @@ describe('runtime memory PostgreSQL materialization', () => {
       },
       systemPrompt: '',
     });
-    await secondSession.run({ runId: continuationRunId, prompt: 'second' });
+    if (secondSession.kind === 'replacement_required')
+      throw new Error(
+        `unexpected replacement_required: ${secondSession.reason}`,
+      );
+    const session = secondSession.session;
+    await session.run({
+      runId: continuationRunId,
+      prompt: 'second',
+    });
 
     expect(firstSession.sessionBinding.externalSessionId).toBe(
       'agent-session-1',

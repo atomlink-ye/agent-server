@@ -405,12 +405,16 @@ describe('task HTTP contracts', () => {
       }),
     });
     expect(secondary.status).toBe(202);
-    const secondaryBody = InvokeTaskResponseSchema.parse(await secondary.json());
+    const secondaryBody = InvokeTaskResponseSchema.parse(
+      await secondary.json(),
+    );
     const secondaryTask = await app.request(secondaryBody.links.self, {
       headers: { authorization: `Bearer ${secondaryServiceAccountToken}` },
     });
     expect(secondaryTask.status).toBe(200);
-    expect(GetTaskResponseSchema.parse(await secondaryTask.json()).invokable).toEqual({
+    expect(
+      GetTaskResponseSchema.parse(await secondaryTask.json()).invokable,
+    ).toEqual({
       kind: 'agent',
       version_id: versionId,
     });

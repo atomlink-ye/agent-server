@@ -18,7 +18,10 @@ describe('validateProductWorkDefinition', () => {
   it('returns a stable author-source fingerprint for equivalent YAML', () => {
     const first = validateProductWorkDefinition(SINGLE_AGENT);
     const second = validateProductWorkDefinition(
-      SINGLE_AGENT.replace('memory_version_ids: []', 'memory_version_ids:\n    []'),
+      SINGLE_AGENT.replace(
+        'memory_version_ids: []',
+        'memory_version_ids:\n    []',
+      ),
     );
 
     expect(first.valid).toBe(true);
@@ -49,7 +52,9 @@ describe('validateProductWorkDefinition', () => {
   });
 
   it('rejects duplicate YAML keys safely', () => {
-    const result = validateProductWorkDefinition(`${SINGLE_AGENT}\nkind: Other\n`);
+    const result = validateProductWorkDefinition(
+      `${SINGLE_AGENT}\nkind: Other\n`,
+    );
     expect(result.valid).toBe(false);
     if (result.valid) throw new Error('expected invalid source');
     expect(result.diagnostics[0]).toMatchObject({

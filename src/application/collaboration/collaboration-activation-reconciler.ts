@@ -282,9 +282,10 @@ export class CollaborationActivationReconciler implements CollaborationActivatio
           team_run_id: input.team.id,
           participant_id: input.member.id,
           dedupe_key: input.plan.activation.dedupeKey,
-          reason: error instanceof TeamExecutionError
-            ? 'member_already_active'
-            : 'work_item_dedup',
+          reason:
+            error instanceof TeamExecutionError
+              ? 'member_already_active'
+              : 'work_item_dedup',
         });
         return false;
       }

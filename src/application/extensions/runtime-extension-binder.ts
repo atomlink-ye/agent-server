@@ -1,6 +1,9 @@
 import type { ResolvedSkillPackage } from './skill-catalog.js';
 import type { ExecutionExtensionBinding } from '../ports/execution-plane.js';
-import type { RuntimeToolChatContext } from './runtime-tool-grant-service.js';
+import type {
+  RuntimeToolChatContext,
+  RuntimeToolGrant,
+} from './runtime-tool-grant-service.js';
 
 export interface RuntimeExtensionBinder {
   bind(input: {
@@ -34,20 +37,20 @@ export interface RuntimeExtensionBinder {
     readonly allowedTools: readonly string[];
     readonly contextEpoch: string;
     readonly ttlMs?: number;
-  }): import('./runtime-tool-grant-service.js').RuntimeToolGrant;
+  }): Promise<RuntimeToolGrant>;
 
   closeTeamMemberTurn?(input: {
     readonly grantId: string;
     readonly teamMemberRunId: string;
     readonly scopeId: string;
     readonly ttlMs?: number;
-  }): import('./runtime-tool-grant-service.js').RuntimeToolGrant;
+  }): Promise<RuntimeToolGrant>;
 
   getTeamMemberGrant?(input: {
     readonly teamMemberRunId: string;
     readonly scopeId: string;
-  }): import('./runtime-tool-grant-service.js').RuntimeToolGrant | null;
-  revoke?(grantId: string): void;
-  revokeForTeamRun?(teamRunId: string): void;
+  }): RuntimeToolGrant | null;
+  revoke?(grantId: string): Promise<void>;
+  revokeForTeamRun?(teamRunId: string): Promise<void>;
   activeToolCalls?(grantId: string): number;
 }

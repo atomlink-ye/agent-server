@@ -5,7 +5,7 @@ import type {
   ProductSessionListPage,
   SessionRepository,
   UserMessage,
-  Workspace,
+  ProductWorkspace,
 } from '../../application/ports/session-repository.js';
 import { RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID } from '../../domain/tasks/compatibility-invokable-version.js';
 import { encodeRootTaskRunRequestSnapshotRef } from '../../application/tasks/root-task-input.js';
@@ -25,7 +25,10 @@ interface Q {
 const iso = () => new Date().toISOString();
 export class PostgresSessionRepository implements SessionRepository {
   constructor(private readonly db: any) {}
-  async createWorkspace(name: string, o: AccessContext): Promise<Workspace> {
+  async createWorkspace(
+    name: string,
+    o: AccessContext,
+  ): Promise<ProductWorkspace> {
     const now = iso(),
       id = randomUUID();
     await this.db.query(
@@ -427,7 +430,7 @@ export class PostgresSessionRepository implements SessionRepository {
     return this.db.connect ? await this.db.connect() : this.db;
   }
 }
-function mapWorkspace(r: any): Workspace {
+function mapWorkspace(r: any): ProductWorkspace {
   return {
     id: r.id,
     tenantId: r.tenant_id,

@@ -3,7 +3,9 @@ import { fileURLToPath, URL } from 'node:url';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 
-const apiTarget = (process.env.AGENT_SERVER_BASE_URL || 'http://127.0.0.1:3000').replace(/\/$/u, '');
+const apiTarget = (
+  process.env.AGENT_SERVER_BASE_URL || 'http://127.0.0.1:3000'
+).replace(/\/$/u, '');
 
 export default defineConfig({
   plugins: [react()],

@@ -501,16 +501,14 @@ export class AgentRunExecutor {
         throw new Error('Lead runtime grant capabilities are unavailable.');
     }
 
-    let extensions;
-    if (
-      !priorExternalSessionId &&
-      (resolved.skills.length > 0 ||
-        runtimeToolRefs.length > 0 ||
-        (collaborativeTeam != null && member != null))
-    ) {
+    const requiresRuntimeExtensions =
+      resolved.skills.length > 0 ||
+      runtimeToolRefs.length > 0 ||
+      (collaborativeTeam != null && member != null);
+    const bindRuntimeExtensions = async () => {
       if (!this.runtimeExtensionBinder)
         throw new Error('Runtime extension binding is unavailable.');
-      extensions = await this.runtimeExtensionBinder.bind({
+      return this.runtimeExtensionBinder.bind({
         tenantId: task.tenantId,
         principalType: task.principalType,
         principalId: task.principalId,
@@ -532,7 +530,11 @@ export class AgentRunExecutor {
           collaborativeTeam && member ? domainToolRefs : runtimeToolRefs,
         ...(cellCwd ? { cellCwd } : {}),
       });
-    }
+    };
+    let extensions =
+      !priorExternalSessionId && requiresRuntimeExtensions
+        ? await bindRuntimeExtensions()
+        : undefined;
 
     const refreshableBinder = this.runtimeExtensionBinder as
       | (RuntimeExtensionBinder & {
@@ -613,7 +615,7 @@ export class AgentRunExecutor {
       collaborativeTeam &&
       refreshableBinder?.refreshForTeamMember
     ) {
-      const refreshed = refreshableBinder.refreshForTeamMember({
+      const refreshed = await refreshableBinder.refreshForTeamMember({
         ...(exactLeadGrantId ? { grantId: exactLeadGrantId } : {}),
         teamMemberRunId: member.id,
         scopeId: turnGrantScopeId,
@@ -637,6 +639,11 @@ export class AgentRunExecutor {
         task.sessionId ? sessionRuntime.toolRefs : [],
       );
 
+    if (priorExternalSessionId && requiresRuntimeExtensions)
+      extensions = await bindRuntimeExtensions();
+    if (member?.role === 'lead' && extensions?.grantId)
+      exactLeadGrantId = extensions.grantId;
+
     const runtimeObservationSink = this.events
       ? {
           emit: async (observation: ExecutionObservation) => {
@@ -657,6 +664,7 @@ export class AgentRunExecutor {
         {
           runId: claim.run.id,
           prompt: prompts.deliveredTurnPrompt,
+          recoveryPrompt: prompts.recoveryTurnPrompt,
           ...(sessionRuntime ? { runtimeSessionId: sessionRuntime.id } : {}),
           ...(cellCwd ? { cwd: cellCwd } : {}),
           ...(priorSessionBinding && !sessionRuntime
@@ -680,33 +688,29 @@ export class AgentRunExecutor {
                   : {}),
               }
             : {}),
-          ...(!priorExternalSessionId && runtimeModelPolicy
+          ...(runtimeModelPolicy
             ? {
                 provider: runtimeModelPolicy.provider,
                 model: runtimeModelPolicy.model,
               }
             : {}),
-          ...(!priorExternalSessionId
+          systemPrompt: prompts.systemPrompt,
+          ...(collaborativeTeam && !priorExternalSessionId
             ? {
-                systemPrompt: prompts.systemPrompt,
-                ...(collaborativeTeam
-                  ? {
-                      workspaceTitle: `Team ${collaborativeTeam.id.slice(0, 8)}`,
-                    }
-                  : {}),
-                ...(member
-                  ? {
-                      sessionTitle: `${member.name} (${member.role})`,
-                      labels: {
-                        team_run_id: member.teamRunId,
-                        member_name: member.name,
-                        role: member.role,
-                      },
-                    }
-                  : {}),
-                ...(extensions ? { extensions } : {}),
+                workspaceTitle: `Team ${collaborativeTeam.id.slice(0, 8)}`,
               }
             : {}),
+          ...(member && !priorExternalSessionId
+            ? {
+                sessionTitle: `${member.name} (${member.role})`,
+                labels: {
+                  team_run_id: member.teamRunId,
+                  member_name: member.name,
+                  role: member.role,
+                },
+              }
+            : {}),
+          ...(extensions ? { extensions } : {}),
           ...(resolved.proposalLimit > 0
             ? { proposalLimit: resolved.proposalLimit }
             : {}),
@@ -724,7 +728,7 @@ export class AgentRunExecutor {
         if (!exactLeadGrantId || !refreshableBinder?.closeTeamMemberTurn)
           throw new Error('Lead runtime grant could not be narrowed.');
         try {
-          const narrowed = refreshableBinder.closeTeamMemberTurn({
+          const narrowed = await refreshableBinder.closeTeamMemberTurn({
             grantId: exactLeadGrantId,
             teamMemberRunId: member.id,
             scopeId: turnGrantScopeId,
@@ -746,7 +750,7 @@ export class AgentRunExecutor {
         });
         if (grant) {
           try {
-            refreshableBinder.closeTeamMemberTurn({
+            await refreshableBinder.closeTeamMemberTurn({
               grantId: grant.grantId,
               teamMemberRunId: member.id,
               scopeId: turnGrantScopeId,

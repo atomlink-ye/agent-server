@@ -46,12 +46,8 @@ export function directPairKey(
 export function assertDirectConversationInvariant(
   members: readonly ConversationMember[],
 ): void {
-  const principals = members.filter(
-    (m) => m.memberType === 'principal',
-  );
-  const agents = members.filter(
-    (m) => m.memberType === 'agent_definition',
-  );
+  const principals = members.filter((m) => m.memberType === 'principal');
+  const agents = members.filter((m) => m.memberType === 'agent_definition');
   if (principals.length !== 1 || agents.length !== 1) {
     throw new Error(
       'Direct conversation must have exactly 1 principal member and 1 agent_definition member.',

@@ -106,7 +106,7 @@ pnpm test:repository
 pnpm test:scenario
 ```
 
-`test:scenario` runs the deterministic North Star product journey with real Agent Server handlers/repositories and a scripted runtime decision boundary. `test:north-star` remains a compatibility alias.
+`test:scenario` runs the deterministic North Star product journey with real Agent Server handlers/repositories and a scripted runtime decision boundary.
 
 Run the normal repository gate:
 
@@ -135,8 +135,6 @@ TEST_DATABASE_URL=postgresql://$USER@127.0.0.1:5432/agent_server_test pnpm test:
 ```
 
 If `TEST_DATABASE_URL` / `INTEGRATION_DATABASE_URL` is unset, `pnpm test:pg` prints a skip message and exits successfully. The runner refuses database names that do not contain `test` and refuses production-flavored names such as `prod`, `production`, `main`, or `live`.
-
-`pnpm test:real-pg` remains a compatibility alias for `pnpm test:pg`.
 
 ## Scenario harness
 

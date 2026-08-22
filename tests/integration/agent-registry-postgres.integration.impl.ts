@@ -8,7 +8,6 @@ import {
   applyDurableKernelMigrations,
   createPostgresPool,
 } from '../../src/infrastructure/postgres/postgres.js';
-import { createAgentDefinition } from '../../src/domain/invokables/agent-definition.js';
 import { PostgresInvokableRepository } from '../../src/infrastructure/postgres/postgres-invokable-repository.js';
 import { PostgresAgentRegistry } from '../../src/infrastructure/postgres/postgres-agent-registry.js';
 
@@ -1462,7 +1461,7 @@ describeRealPostgres(
       ]);
     });
 
-    it('hides another principal\'s managed agent within the same tenant', async () => {
+    it("hides another principal's managed agent within the same tenant", async () => {
       if (!pool) return;
       const tenant = 'real_registry_hidden';
       await reset(tenant);

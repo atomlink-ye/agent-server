@@ -207,16 +207,19 @@ spec:
 
   let response;
   try {
-    const fetchResponse = await fetch(`${baseUrl}/api/v1/work-definitions:apply`, {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${token}`,
-        'content-type': 'application/json',
-        'idempotency-key': 'web-bootstrap-single-agent-work-tools-apply-v1',
+    const fetchResponse = await fetch(
+      `${baseUrl}/api/v1/work-definitions:apply`,
+      {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${token}`,
+          'content-type': 'application/json',
+          'idempotency-key': 'web-bootstrap-single-agent-work-tools-apply-v1',
+        },
+        body: JSON.stringify({ source: workDefinitionSource }),
+        signal: AbortSignal.timeout(15_000),
       },
-      body: JSON.stringify({ source: workDefinitionSource }),
-      signal: AbortSignal.timeout(15_000),
-    });
+    );
     // :apply endpoint may return 200 (already exists) or 201 (newly created), both are success
     if (fetchResponse.status !== 200 && fetchResponse.status !== 201)
       fail(
@@ -230,7 +233,10 @@ spec:
   const definitionId = response.definition?.id;
   const definitionVersionId = response.version?.id;
 
-  if (typeof definitionId !== 'string' || typeof definitionVersionId !== 'string')
+  if (
+    typeof definitionId !== 'string' ||
+    typeof definitionVersionId !== 'string'
+  )
     fail('Work definition bootstrap returned no ids.');
 
   return { definitionId, definitionVersionId };
@@ -248,8 +254,7 @@ async function bootstrapWork(definitionId, definitionVersionId) {
   });
 
   const workId = response.work?.id;
-  if (typeof workId !== 'string')
-    fail('Work bootstrap returned no id.');
+  if (typeof workId !== 'string') fail('Work bootstrap returned no id.');
 
   return workId;
 }
@@ -265,7 +270,9 @@ async function bootstrapAgentWorkflowAssociation(agentVersionId, definitionId) {
   const databaseUrl =
     process.env.DATABASE_URL?.trim() || process.env.POSTGRES_URL?.trim();
   if (!databaseUrl)
-    fail('DATABASE_URL or POSTGRES_URL is required to bootstrap agent workflows.');
+    fail(
+      'DATABASE_URL or POSTGRES_URL is required to bootstrap agent workflows.',
+    );
 
   const pool = new Pool({ connectionString: databaseUrl, max: 1 });
   try {

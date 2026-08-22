@@ -15,23 +15,26 @@ const DetailEventBaseSchema = z
   })
   .strict();
 
-export const ProductExecutionLifecycleEventSchema = DetailEventBaseSchema.extend({
-  kind: z.literal('lifecycle'),
-  status: z.string().min(1).max(64),
-  /** Provider/run-event discriminator retained for unknown lifecycle kinds. */
-  raw_type: z.string().min(1).max(128).optional(),
-}).strict();
+export const ProductExecutionLifecycleEventSchema =
+  DetailEventBaseSchema.extend({
+    kind: z.literal('lifecycle'),
+    status: z.string().min(1).max(64),
+    /** Provider/run-event discriminator retained for unknown lifecycle kinds. */
+    raw_type: z.string().min(1).max(128).optional(),
+  }).strict();
 
-export const ProductExecutionAssistantTextEventSchema = DetailEventBaseSchema.extend({
-  kind: z.literal('assistant_text'),
-  text: z.string().max(32_000),
-}).strict();
+export const ProductExecutionAssistantTextEventSchema =
+  DetailEventBaseSchema.extend({
+    kind: z.literal('assistant_text'),
+    text: z.string().max(32_000),
+  }).strict();
 
-export const ProductExecutionReasoningEventSchema = DetailEventBaseSchema.extend({
-  kind: z.literal('reasoning_progress'),
-  status: z.enum(['started', 'completed']),
-  text: z.string().max(32_000).nullable(),
-}).strict();
+export const ProductExecutionReasoningEventSchema =
+  DetailEventBaseSchema.extend({
+    kind: z.literal('reasoning_progress'),
+    status: z.enum(['started', 'completed']),
+    text: z.string().max(32_000).nullable(),
+  }).strict();
 
 export const toolCategories = [
   'shell',
@@ -43,9 +46,27 @@ export const toolCategories = [
   'subagent',
   'other',
 ] as const;
-export const toolStatuses = ['running', 'completed', 'failed', 'cancelled'] as const;
-export const detailKinds = ['shell', 'read', 'write', 'edit', 'search', 'fetch'] as const;
-export const permissionCategories = ['tool', 'plan', 'question', 'mode', 'other'] as const;
+export const toolStatuses = [
+  'running',
+  'completed',
+  'failed',
+  'cancelled',
+] as const;
+export const detailKinds = [
+  'shell',
+  'read',
+  'write',
+  'edit',
+  'search',
+  'fetch',
+] as const;
+export const permissionCategories = [
+  'tool',
+  'plan',
+  'question',
+  'mode',
+  'other',
+] as const;
 
 export const ProductExecutionToolEventSchema = DetailEventBaseSchema.extend({
   kind: z.literal('tool_status'),
@@ -62,28 +83,30 @@ export const ProductExecutionToolEventSchema = DetailEventBaseSchema.extend({
   parent_activity_id: z.string().max(256).nullable(),
 }).strict();
 
-export const ProductExecutionChildActivityEventSchema = DetailEventBaseSchema.extend({
-  kind: z.literal('child_timeline_item'),
-  activity_id: z.string().min(1).max(256),
-  parent_activity_id: z.string().min(1).max(256),
-  item_kind: z.enum(['assistant', 'reasoning', 'tool']),
-  status: z.enum(toolStatuses),
-  label: z.string().max(120),
-  summary: z.string().max(2_000),
-  provider: z.string().max(64).nullable(),
-  detail_kind: z.enum(detailKinds).nullable(),
-  detail_text: z.string().max(12_000).nullable(),
-  exit_code: z.number().int().nullable(),
-}).strict();
+export const ProductExecutionChildActivityEventSchema =
+  DetailEventBaseSchema.extend({
+    kind: z.literal('child_timeline_item'),
+    activity_id: z.string().min(1).max(256),
+    parent_activity_id: z.string().min(1).max(256),
+    item_kind: z.enum(['assistant', 'reasoning', 'tool']),
+    status: z.enum(toolStatuses),
+    label: z.string().max(120),
+    summary: z.string().max(2_000),
+    provider: z.string().max(64).nullable(),
+    detail_kind: z.enum(detailKinds).nullable(),
+    detail_text: z.string().max(12_000).nullable(),
+    exit_code: z.number().int().nullable(),
+  }).strict();
 
-export const ProductExecutionPermissionEventSchema = DetailEventBaseSchema.extend({
-  kind: z.literal('permission'),
-  activity_id: z.string().min(1).max(256),
-  category: z.enum(permissionCategories),
-  status: z.enum(['requested', 'resolved']),
-  decision: z.enum(['allowed', 'denied']).nullable(),
-  summary: z.string().max(2_000),
-}).strict();
+export const ProductExecutionPermissionEventSchema =
+  DetailEventBaseSchema.extend({
+    kind: z.literal('permission'),
+    activity_id: z.string().min(1).max(256),
+    category: z.enum(permissionCategories),
+    status: z.enum(['requested', 'resolved']),
+    decision: z.enum(['allowed', 'denied']).nullable(),
+    summary: z.string().max(2_000),
+  }).strict();
 
 export const ProductExecutionUsageEventSchema = DetailEventBaseSchema.extend({
   kind: z.literal('usage'),

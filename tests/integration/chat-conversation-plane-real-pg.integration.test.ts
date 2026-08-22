@@ -129,10 +129,10 @@ describe('Chat conversation plane on real PostgreSQL', () => {
     // SA2's query above would return a row instead of null.
     const directConversationQuery = await pool.query<{
       id: string;
-    }>(
-      `SELECT id FROM conversations WHERE id=$1 AND tenant_id=$2`,
-      [conv.id, tenantId],
-    );
+    }>(`SELECT id FROM conversations WHERE id=$1 AND tenant_id=$2`, [
+      conv.id,
+      tenantId,
+    ]);
     expect(directConversationQuery.rows?.length).toBe(1);
     expect(directConversationQuery.rows?.[0]?.id).toBe(conv.id);
     // ^ This proves the conversation exists in the database; test 3b's null return

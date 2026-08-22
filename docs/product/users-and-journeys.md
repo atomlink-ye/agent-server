@@ -46,7 +46,7 @@ The current repository developer loop is pnpm-native and selects infrastructure 
 4. `pnpm setup:providers && pnpm dev:runtime` starts the current Paseo-backed host-native runtime when execution is required.
 5. `POST /api/v1/runs` remains a compatibility path that returns `202` and a stable Run URL; canonical product work uses Task admission.
 6. Workspace-memory proposal routes create, review, and list accepted records under authenticated owner scope.
-7. `pnpm smoke:runtime` is the explicit real-provider seam check and is not an ordinary deterministic prerequisite.
+7. `pnpm canary:runtime` is the explicit real-provider seam check and is not an ordinary deterministic prerequisite.
 
 For focused infrastructure-backed verification, prefer a self-starting
 host-native smoke command or an explicit native database URL over a scenario

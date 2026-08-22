@@ -18,7 +18,10 @@ interface Queryable {
   query<T = Record<string, unknown>>(
     sql: string,
     values?: readonly unknown[],
-  ): Promise<{ readonly rows?: readonly T[]; readonly rowCount?: number | null }>;
+  ): Promise<{
+    readonly rows?: readonly T[];
+    readonly rowCount?: number | null;
+  }>;
 }
 
 type MemoryRow = {
@@ -91,7 +94,10 @@ export class PostgresMemoryContextRepository implements MemoryContextRepository 
     return mapMemory(row);
   }
 
-  public async find(memoryId: string, tenantId: string): Promise<MemoryContextRecordRef | null> {
+  public async find(
+    memoryId: string,
+    tenantId: string,
+  ): Promise<MemoryContextRecordRef | null> {
     const result = await this.database.query<MemoryRow>(
       `SELECT memory_id,tenant_id,scope_json,logical_path,source_kind,
               source_id,pinned,created_at,updated_at
@@ -102,7 +108,9 @@ export class PostgresMemoryContextRepository implements MemoryContextRepository 
     return result.rows?.[0] ? mapMemory(result.rows[0]) : null;
   }
 
-  public async listByTenant(tenantId: string): Promise<readonly MemoryContextRecordRef[]> {
+  public async listByTenant(
+    tenantId: string,
+  ): Promise<readonly MemoryContextRecordRef[]> {
     const result = await this.database.query<MemoryRow>(
       `SELECT memory_id,tenant_id,scope_json,logical_path,source_kind,
               source_id,pinned,created_at,updated_at
@@ -120,8 +128,10 @@ export class PostgresContextTransitionRepository implements ContextTransitionRep
   public async record(
     input: Omit<ContextTransitionRecord, 'id'>,
   ): Promise<ContextTransitionRecord> {
-    if (contextScopeTenantId(input.sourceScope) !== input.tenantId ||
-        contextScopeTenantId(input.targetScope) !== input.tenantId) {
+    if (
+      contextScopeTenantId(input.sourceScope) !== input.tenantId ||
+      contextScopeTenantId(input.targetScope) !== input.tenantId
+    ) {
       throw new Error('Context transition cannot cross tenants.');
     }
     const id = randomUUID();
@@ -187,7 +197,11 @@ function mapMemory(row: MemoryRow): MemoryContextRecordRef {
 
 function parseScope(value: ContextScope | string): ContextScope {
   const scope = typeof value === 'string' ? JSON.parse(value) : value;
-  if (!scope || typeof scope !== 'object' || typeof (scope as any).kind !== 'string')
+  if (
+    !scope ||
+    typeof scope !== 'object' ||
+    typeof (scope as any).kind !== 'string'
+  )
     throw new Error('Persisted ContextScope is invalid.');
   return Object.freeze(scope as ContextScope);
 }

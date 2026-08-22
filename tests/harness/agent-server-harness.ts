@@ -73,10 +73,14 @@ export async function createAgentServerHarness() {
       },
     },
     async dispose() {
-      await Promise.allSettled(servers.splice(0).map((server) => server.stop()));
+      await Promise.allSettled(
+        servers.splice(0).map((server) => server.stop()),
+      );
       await database.dispose();
     },
   } as const;
 }
 
-export type AgentServerHarness = Awaited<ReturnType<typeof createAgentServerHarness>>;
+export type AgentServerHarness = Awaited<
+  ReturnType<typeof createAgentServerHarness>
+>;

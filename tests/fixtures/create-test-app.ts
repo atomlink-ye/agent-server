@@ -29,7 +29,10 @@ import { PostgresRunRepository } from '../../src/infrastructure/postgres/postgre
 import { PostgresTaskRepository } from '../../src/infrastructure/postgres/postgres-task-repository.js';
 import { PostgresWorkspaceMemoryRepository } from '../../src/infrastructure/postgres/postgres-workspace-memory-repository.js';
 import { PostgresAgentRegistry } from '../../src/infrastructure/postgres/postgres-agent-registry.js';
-import { canonicalAgentResolver, seedCanonicalPublishedAgent } from './canonical-agent.js';
+import {
+  canonicalAgentResolver,
+  seedCanonicalPublishedAgent,
+} from './canonical-agent.js';
 import { PostgresSessionRepository } from '../../src/infrastructure/postgres/postgres-session-repository.js';
 import { PostgresRunEventRepository } from '../../src/infrastructure/postgres/postgres-run-event-repository.js';
 import { createLogger } from '../../src/shared/observability/logger.js';

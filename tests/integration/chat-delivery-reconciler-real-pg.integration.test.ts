@@ -263,7 +263,7 @@ describe('Chat delivery reconciler on real PostgreSQL', () => {
     expect(dispatchesAfter).toBe(dispatchesBefore);
   });
 
-  it('3. D4 guard real-Postgres variant: Bob\'s conversation does not leak Alice\'s messages', async () => {
+  it("3. D4 guard real-Postgres variant: Bob's conversation does not leak Alice's messages", async () => {
     const saAlice = 'sa-delivery-alice-1';
     const saBob = 'sa-delivery-bob-1';
     const agentD = 'agent-def-delivery-d4-guard-1';

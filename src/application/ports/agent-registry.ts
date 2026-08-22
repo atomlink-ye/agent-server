@@ -45,8 +45,12 @@ export interface ManagedAgentDefinitionRead {
     readonly tenantId: string;
     readonly definitionId: string;
   }): Promise<AgentDefinition | null>;
-  /** Product-facing coworker roster: only definitions with a published chat runtime. */
-  listManagedDefinitionsByTenant(input: {
+  /**
+   * Product-facing Coworker roster. Optional on narrow historical test seams;
+   * production PostgresAgentRegistry implements it and the HTTP route fails
+   * closed when a fixture does not.
+   */
+  listManagedDefinitionsByTenant?(input: {
     readonly tenantId: string;
     readonly command: ListManagedAgentDefinitionsCommand;
   }): Promise<ManagedAgentCoworkerPage>;

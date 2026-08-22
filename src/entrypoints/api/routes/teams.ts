@@ -1,6 +1,7 @@
 import type { Hono } from 'hono';
 import { createHash } from 'node:crypto';
 import { ServiceAccountAuthenticator } from '../../../application/control-plane/service-account-authenticator.js';
+import type { AgentResolutionApi } from '../../../application/ports/agent-resolution-api.js';
 import type { InvokableRepository } from '../../../application/ports/invokable-repository.js';
 import type { EnvironmentRegistry } from '../../../application/ports/environment-registry.js';
 import { createTeamDefinition } from '../../../domain/invokables/team-definition.js';
@@ -32,6 +33,8 @@ import type { ApiEnvironment } from '../../../platform/http-types.js';
 export interface TeamRouteDependencies {
   readonly config: AppConfig;
   readonly invokableRepository: InvokableRepository;
+  /** Canonical Agent version resolution; Team persistence is Agent-agnostic. */
+  readonly agentResolution: AgentResolutionApi;
   readonly environmentRegistry: EnvironmentRegistry;
 }
 export function registerTeamRoutes(
@@ -300,15 +303,14 @@ export function registerTeamRoutes(
       version.spec.lead.agentVersionId,
       ...version.spec.roster.map((x) => x.agentVersionId),
     ]) {
-      const agent = await d.invokableRepository.findPublishedAgentVersionById(
-        ref,
-        owner,
-      );
+      const agent = await d.agentResolution.resolvePublished(ref, owner, {
+        resolveExtensions: false,
+      });
       if (!agent)
         throw new HttpError(
           400,
           'invalid_team_package',
-          'A referenced agent version is not published in this owner scope.',
+          'A referenced Agent version is not published or available in this tenant.',
         );
     }
     const environment = await d.environmentRegistry.findVersion(

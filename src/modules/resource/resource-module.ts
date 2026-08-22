@@ -80,14 +80,14 @@ export async function createResourceModule(
     options.database,
   );
   const skillCatalog = new LocalSkillCatalog(options.config.skillRegistryRoot);
+
+  // The managed Agent registry is the only production Agent source. The legacy
+  // invokable repository remains solely for Team compatibility.
   const agentResolutionApi = new ResolveAgentVersion(
     agentRegistry,
-    invokableRepository,
     skillCatalog,
   );
   const definitionReadApi: DefinitionReadApi = {
-    findPublishedAgentVersionById: (id, ownerScope) =>
-      invokableRepository.findPublishedAgentVersionById(id, ownerScope),
     findTeamDefinitionById: (id) =>
       invokableRepository.findTeamDefinitionById(id),
     findPublishedTeamVersionById: (id, ownerScope) =>
@@ -138,6 +138,7 @@ export async function createResourceModule(
       registerTeamRoutes(app, {
         config,
         invokableRepository,
+        agentResolution: agentResolutionApi,
         environmentRegistry,
       });
       registerEnvironmentRoutes(app, { config, environmentRegistry });

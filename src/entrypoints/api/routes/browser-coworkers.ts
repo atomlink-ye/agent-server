@@ -3,6 +3,7 @@ import type { Hono } from 'hono';
 import { AgentCoworkerListResponseSchema } from '../../../contracts/agents.js';
 import type { ApiEnvironment } from '../../../platform/http-types.js';
 import type { AppConfig } from '../../../shared/config.js';
+import { decodeProductResponse } from '../browser-product-decoder.js';
 
 const NO_STORE_HEADERS = {
   'cache-control': 'no-store',
@@ -32,7 +33,12 @@ export function registerBrowserCoworkerRoutes(
       });
     } catch {
       return jsonResponse(
-        { error: { code: 'service_unavailable', message: 'Coworkers could not be loaded.' } },
+        {
+          error: {
+            code: 'service_unavailable',
+            message: 'Coworkers could not be loaded.',
+          },
+        },
         503,
       );
     }
@@ -43,14 +49,19 @@ export function registerBrowserCoworkerRoutes(
       return jsonResponse(error, safeStatus(upstream.status));
     }
 
-    const parsed = AgentCoworkerListResponseSchema.safeParse(body);
-    if (!parsed.success) {
+    const decoded = decodeProductResponse(body, AgentCoworkerListResponseSchema);
+    if (!decoded.success) {
       return jsonResponse(
-        { error: { code: 'invalid_response', message: 'The service returned an invalid Coworker roster.' } },
+        {
+          error: {
+            code: 'invalid_response',
+            message: 'The service returned an invalid Coworker roster.',
+          },
+        },
         502,
       );
     }
-    return jsonResponse(parsed.data, upstream.status, {
+    return jsonResponse(decoded.data, upstream.status, {
       'x-agent-server-upstream': 'fetched',
     });
   });
@@ -70,13 +81,25 @@ function browserServiceToken(config: AppConfig): string {
   throw new Error('browser_web_service_token_missing');
 }
 
-function normalizeError(body: unknown): { readonly error: { readonly code: string; readonly message: string } } {
+function normalizeError(body: unknown): {
+  readonly error: { readonly code: string; readonly message: string };
+} {
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
-    return { error: { code: 'request_failed', message: 'Coworkers could not be loaded.' } };
+    return {
+      error: {
+        code: 'request_failed',
+        message: 'Coworkers could not be loaded.',
+      },
+    };
   }
   const candidate = (body as Record<string, unknown>).error;
   if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
-    return { error: { code: 'request_failed', message: 'Coworkers could not be loaded.' } };
+    return {
+      error: {
+        code: 'request_failed',
+        message: 'Coworkers could not be loaded.',
+      },
+    };
   }
   const record = candidate as Record<string, unknown>;
   return {

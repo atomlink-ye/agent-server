@@ -13,7 +13,7 @@ export async function enqueueChatDispatchForMessage(
     readonly latestMessageSequence: number;
     readonly latestMessageAuthorType: 'principal' | 'agent_definition';
     readonly latestMessageId?: string;
-    /** Zero/default keeps deterministic legacy callers immediate. */
+    /** Explicit zero is available to deterministic callers that bypass workers. */
     readonly debounceMs?: number;
   },
 ): Promise<boolean> {
@@ -34,7 +34,7 @@ export async function enqueueChatDispatchForMessage(
     dedupeKey: activation.dedupeKey,
     cause: durableCause,
     priority: activation.priority,
-    debounceMs: input.debounceMs ?? 0,
+    debounceMs: input.debounceMs ?? CHAT_ACTIVATION_BURST_DEBOUNCE_MS,
   });
   return result.enqueued;
 }

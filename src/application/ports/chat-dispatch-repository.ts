@@ -10,11 +10,11 @@ export interface ChatDispatch {
   readonly throughSequence: number;
   /** Durable identity of the event that first opened this activation. */
   readonly dedupeKey: string;
-  /** Stable Agent/Conversation key used to coalesce an unclaimed burst. */
-  readonly activationKey: string;
-  readonly priority: ChatActivationPriority;
-  readonly causes: readonly ChatActivationCause[];
-  readonly availableAt: string;
+  /** Additive while older bounded fixtures migrate; production rows always set these. */
+  readonly activationKey?: string;
+  readonly priority?: ChatActivationPriority;
+  readonly causes?: readonly ChatActivationCause[];
+  readonly availableAt?: string;
   readonly createdAt: string;
   readonly publishedAt: string | null;
 }
@@ -43,14 +43,14 @@ export interface ChatDispatchRepository {
   }): Promise<boolean>;
 
   /** Release a failed activation without publishing or consuming its causes. */
-  releaseClaim(input: {
+  releaseClaim?(input: {
     readonly id: string;
     readonly workerId: string;
   }): Promise<boolean>;
 
   markPublished(id: string, publishedAt: string): Promise<void>;
 
-  getRuntimeWatermark(input: {
+  getRuntimeWatermark?(input: {
     readonly agentChatRuntimeId: string;
     readonly runtimeEpoch: number;
     readonly tenantId: string;
@@ -58,7 +58,7 @@ export interface ChatDispatchRepository {
   }): Promise<number>;
 
   /** Monotonic; callers advance only after durable reply materialization. */
-  advanceRuntimeWatermark(input: {
+  advanceRuntimeWatermark?(input: {
     readonly agentChatRuntimeId: string;
     readonly runtimeEpoch: number;
     readonly tenantId: string;

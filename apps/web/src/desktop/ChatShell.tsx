@@ -11,7 +11,9 @@ import { ChatTranscript } from '../components/chat/ChatTranscript';
 import type { ChatCommands } from '../components/chat/contracts';
 import { NewWork } from '../components/work/new-work';
 import { WorkDetailShell } from '../components/work/work-shell';
+import { AgentsSurface } from './AgentsSurface';
 import { ConversationsPane } from './ConversationsPane';
+import { FilesSurface } from './FilesSurface';
 import Rail, { type DesktopTab } from './Rail';
 import TitleBar from './TitleBar';
 import { WorkPane } from './WorkPane';
@@ -22,6 +24,7 @@ import {
 } from '../stores/conversations';
 import { createMessagesStore, type MessagesStore } from '../stores/messages';
 import '../work-integration.css';
+import './n3-surfaces.css';
 
 export interface ChatShellProps {
   readonly commands: ChatCommands;
@@ -56,7 +59,11 @@ export function ChatShell({
   const navigate = useNavigate();
   const activeTab: DesktopTab = location.pathname.startsWith('/work')
     ? 'work'
-    : 'conversations';
+    : location.pathname.startsWith('/agents')
+      ? 'agents'
+      : location.pathname.startsWith('/files')
+        ? 'files'
+        : 'conversations';
   const [showNewWork, setShowNewWork] = useState(false);
   const appSelectionStore = useMemo(
     () => providedAppStore ?? createAppStore(),
@@ -356,6 +363,14 @@ export function ChatShell({
         );
         return;
       }
+      if (tab === 'agents') {
+        navigate('/agents');
+        return;
+      }
+      if (tab === 'files') {
+        navigate('/files');
+        return;
+      }
       const target = returnConversationId ?? conversationId;
       navigate(target ? conversationPath(target) : '/');
     },
@@ -377,6 +392,9 @@ export function ChatShell({
   return (
     <div className="app-shell">
       <Rail activeTab={activeTab} onSelectTab={handleSelectTab} />
+
+      {activeTab === 'agents' ? <AgentsSurface commands={commands} /> : null}
+      {activeTab === 'files' ? <FilesSurface commands={commands} /> : null}
 
       {activeTab === 'conversations' ? (
         <>
@@ -438,7 +456,9 @@ export function ChatShell({
             </section>
           </main>
         </>
-      ) : (
+      ) : null}
+
+      {activeTab === 'work' ? (
         <>
           <WorkPane
             commands={commands}
@@ -483,7 +503,7 @@ export function ChatShell({
             </section>
           </main>
         </>
-      )}
+      ) : null}
     </div>
   );
 }

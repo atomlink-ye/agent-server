@@ -75,6 +75,20 @@ export const AgentCoworkerListResponseSchema = z
   })
   .strict();
 
+export const AgentCoworkerProfileResponseSchema = z
+  .object({
+    agent: AgentCoworkerResponseSchema,
+    capabilities: z
+      .object({
+        model_policy_ref: z.string().min(1),
+        proposal_limit: z.number().int().nonnegative().nullable(),
+        tools: z.array(z.string().min(1)).max(32),
+        skills: z.array(z.string().min(1)).max(32),
+      })
+      .strict(),
+  })
+  .strict();
+
 export const AgentVersionResponseSchema = z
   .object({
     id: AgentIdSchema,
@@ -115,6 +129,9 @@ export type AgentDefinitionResponse = z.infer<
 export type AgentCoworkerResponse = z.infer<typeof AgentCoworkerResponseSchema>;
 export type AgentCoworkerListResponse = z.infer<
   typeof AgentCoworkerListResponseSchema
+>;
+export type AgentCoworkerProfileResponse = z.infer<
+  typeof AgentCoworkerProfileResponseSchema
 >;
 export type AgentVersionResponse = z.infer<typeof AgentVersionResponseSchema>;
 export type AgentVersionListResponse = z.infer<

@@ -308,7 +308,7 @@ export class PostgresAgentRegistry implements AgentRegistry {
               r.active_agent_version_id,r.status AS runtime_status
          FROM agent_definitions d
          JOIN agent_chat_runtimes r
-           ON r.tenant_id=d.tenant_id AND r.agent_definition_id=d.id
+           ON r.tenant_id=d.tenant_id AND r.agent_definition_id=d.id::text
         WHERE d.tenant_id=$1 AND d.managed_discriminator='managed_agent_v1'
           ${cursorSql}
         ORDER BY d.created_at ASC,d.id ASC LIMIT $2`,

@@ -11,7 +11,7 @@ import { PostgresConversationWorkEntitlementRepository } from '../../src/infrast
 import { applyDurableKernelMigrations } from '../../src/infrastructure/postgres/postgres.js';
 
 const tenantId = 'tenant_coworker_provisioning';
-const workspaceId = 'workspace_coworker_provisioning';
+const workspaceId = '81000000-0000-4000-8000-000000000101';
 const ownerPrincipalId = 'svc_coworker_owner';
 const sharedPrincipalId = 'svc_coworker_peer';
 const definitionId = '81000000-0000-4000-8000-000000000001';

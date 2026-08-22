@@ -19,7 +19,7 @@ if (!connectionString) {
 }
 
 const tenantId = 'tenant_runtime_chat_epoch';
-const workspaceId = 'workspace_runtime_chat_epoch';
+const workspaceId = '71000000-0000-4000-8000-000000000101';
 const principalType = 'service_account' as const;
 const principalId = 'principal_runtime_chat_epoch';
 const definitionId = '71000000-0000-4000-8000-000000000001';
@@ -217,7 +217,7 @@ async function importDraft(input: {
   const definition = createManagedAgentDefinition({
     ...owner,
     id: input.definitionId,
-    normalizedName: parsed.metadata.normalizedName,
+    normalizedName: parsed.normalizedName,
     displayName: 'Runtime Chat Epoch Agent',
     now: fixedTime,
   });

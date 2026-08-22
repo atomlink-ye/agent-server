@@ -1,0 +1,40 @@
+name: N1 Canonical Agent Fixture Migration
+
+on:
+  push:
+    branches: [refactor/final-agent-identity-harness-convergence]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: n1-agent-fixture-migration
+  cancel-in-progress: true
+
+jobs:
+  migrate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/final-agent-identity-harness-convergence
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: node scripts/dev/n1-migrate-tests.mjs
+      - run: pnpm typecheck
+      - name: Commit migration
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tests/fixtures/create-test-app.ts tests/integration/agent-registry-postgres.integration.impl.ts tests/integration/durable-kernel-postgres.integration.test.ts tests/integration/real-pg-pool.integration.impl.ts tests/integration/session-lane-postgres.integration.impl.ts
+          if git diff --cached --quiet; then
+            echo "No migration changes"
+            exit 0
+          fi
+          git commit -m "test: migrate legacy Agent fixtures to canonical managed path"
+          git push origin HEAD:refactor/final-agent-identity-harness-convergence

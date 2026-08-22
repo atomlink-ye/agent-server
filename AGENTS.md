@@ -1,6 +1,6 @@
 # Agent repository instructions
 
-This file is the mandatory entrypoint for every coding agent. Read it before changing code or documentation. It is a map: use the linked docs and `.agents/skills/` for detailed procedures.
+This file is the mandatory entrypoint for every coding agent. Read it before changing code or documentation. It is a map to the repository's detailed procedures.
 
 ## Repository purpose
 
@@ -18,7 +18,6 @@ Repository documentation must remain usable without private Drive access. Curren
 6. The relevant [Component](docs/components.md) and [Contract](docs/contracts.md).
 7. [Testing and evaluations](docs/quality/testing-and-evaluations.md) for verification/runtime setup.
 8. [Agent handbook](docs/agents.md) for implementation and handoff rules.
-9. The matching workflow under [`.agents/skills`](.agents/skills/) for review, simplification, runtime recovery, docs, browser evidence, or pre-push work.
 
 Never infer that a documented target is implemented. Current code and observed behavior are primary implementation facts; tests are supporting repeatable verification.
 
@@ -33,14 +32,6 @@ Never infer that a documented target is implemented. Current code and observed b
 - A public API, tenant/security/credential boundary, migration/durable-state contract, destructive behavior, or core dependency change is a Human Gate.
 - `apps/web` is the only browser application. It is React + Vite + React Router with the Cumora-inspired coworker shell. Do not reintroduce Next.js, `apps/web-vite`, a second product shell, or frontend-held service credentials.
 
-## Runtime recovery rule
-
-For RuntimeSession, ExecutionPlane, MCP, grant, process or worker lifecycle changes, use `.agents/skills/agent-server-runtime-recovery-review/SKILL.md`.
-
-A successful reusable-session attach must establish the current desired execution specification, including the Agent Server extension/tool plane. Proving only that an external provider session ID exists is insufficient. If the provider cannot apply the current desired spec, the application must explicitly replace/supersede the provider generation or fail with a safe recovery error; it must never return a stale-success session.
-
-Process-local maps, handles and active-call counters may accelerate live execution but are not durable authority.
-
 ## Repository hygiene — mandatory
 
 Git HEAD stores durable product/engineering truth, active execution plans, reusable Agent Skills, and repeatable verification. It does **not** store one-run evidence or completed implementation history.
@@ -51,8 +42,6 @@ Do not commit:
 - task-specific evidence ledgers, mutation outputs, manager/worker handoffs, or acceptance bundles that belong in CI/PR artifacts;
 - long-lived files/commands named after temporary development phases such as `phase-b`, `c3`, `e8`, `worker-c`, `lane-h`, or `n3` unless that term is literally a product concept;
 - scenario-specific setup runners created only because a test is inconvenient to start.
-
-Long-running cross-module work may use `docs/exec-plans/active/`; completed plans move out of `active` in the same change that writes final architecture/contracts.
 
 Generated test/runtime output belongs under ignored `.local/` paths and may be uploaded as a CI artifact. Git history and PR/Issue history are the archive for development choreography.
 
@@ -75,7 +64,7 @@ pnpm canary:golden-path
 pnpm canary:runtime-restart
 ```
 
-Use `.agents/skills/agent-server-pre-push-checks/SKILL.md` to select the smallest credible evidence for the outgoing diff. Report only commands that actually ran.
+Select the smallest credible evidence for the outgoing diff. Report only commands that actually ran.
 
 ## Developer/environment model
 
@@ -144,15 +133,12 @@ scripts/dev/                reusable runtime/bootstrap helpers
 scripts/quality/            repository mechanical gates
 scripts/smoke/              canonical real external main flows
 scripts/ops/                migrations/recovery/operator utilities
-.agents/skills/              reusable repository workflows
 docs/                       durable product/engineering authority
 ```
 
-During the active convergence refactor, some source files may still be migrating toward this target map. The active execution plan owns that migration and must not leave duplicate production ownership at completion.
-
 ## Current stage and current exception
 
-The product remains **Prove / MVE-first** for feature development. However, the user explicitly authorized one repository-wide convergence pass before additional features. While `docs/exec-plans/active/2026-08-22-deepseek-harness-repository-convergence.md` is active, its complete R0–R6 scope is authorized and is not constrained by the ordinary “bounded gardening only” rule.
+The product remains **Prove / MVE-first** for feature development. However, the user explicitly authorized one repository-wide convergence pass before additional features. Its complete R0–R6 scope is authorized and is not constrained by the ordinary “bounded gardening only” rule.
 
 After that plan is completed/archived, normal MVE-first cadence resumes:
 
@@ -175,7 +161,6 @@ A change is complete when:
 - the intended diff contains no credentials, debug residue, generated runtime evidence, or stale implementation-history artifacts;
 - temporary infrastructure is stopped or explicitly handed off;
 - current docs/contracts are updated;
-- any active execution plan touched by the work is updated or closed;
 - remaining risk is explicitly owned rather than hidden in a compatibility shim or TODO.
 
 ## Cloned dependency source

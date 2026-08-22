@@ -20,6 +20,7 @@ const forbiddenRoots = [
   'evidence/',
   'reports/',
   'docs/evidence/',
+  'docs/exec-plans/',
   'docs/superpowers/',
   'scripts/ci/',
   'scripts/e2e/',
@@ -44,23 +45,11 @@ describe('repository hygiene', () => {
     expect(tracked.some((path) => path.endsWith('.log'))).toBe(false);
   });
 
-  it('allows durable active execution plans but keeps run evidence outside them', () => {
-    const activePlans = tracked.filter((path) =>
-      path.startsWith('docs/exec-plans/active/'),
-    );
-    expect(activePlans.every((path) => path.endsWith('.md'))).toBe(true);
-    expect(
-      activePlans.some((path) => /(?:screenshot|capture|transcript|evidence)/i.test(path)),
-    ).toBe(false);
-  });
-
   it('keeps temporary phase and lane names out of long-lived source paths', () => {
     const candidates = tracked.filter(
       (path) =>
         !path.startsWith('src/infrastructure/postgres/migrations/') &&
-        !path.startsWith('docs/decisions/') &&
-        !path.startsWith('docs/exec-plans/') &&
-        !path.startsWith('.agents/'),
+        !path.startsWith('docs/decisions/'),
     );
     expect(candidates.filter((path) => temporaryName.test(path))).toEqual([]);
   });

@@ -609,6 +609,36 @@ export class AgentRunExecutor {
       if (otherActive) throw new Error('Team member has another active Task.');
     }
 
+    if (
+      priorExternalSessionId &&
+      member &&
+      collaborativeTeam &&
+      refreshableBinder?.refreshForTeamMember
+    ) {
+      const refreshed = await refreshableBinder.refreshForTeamMember({
+        ...(exactLeadGrantId ? { grantId: exactLeadGrantId } : {}),
+        teamMemberRunId: member.id,
+        scopeId: turnGrantScopeId,
+        taskId: task.id,
+        runId: claim.run.id,
+        allowedTools: runtimeToolRefs,
+        contextEpoch: deriveTeamContextEpoch(task.id, claim.run.id),
+      });
+      exactLeadGrantId = refreshed.grantId;
+    }
+
+    if (
+      priorExternalSessionId &&
+      !member &&
+      sessionRuntime &&
+      sessionRuntime.toolRefs.length > 0 &&
+      refreshableBinder?.refreshForSession
+    )
+      refreshableBinder.refreshForSession(
+        task.sessionId ?? task.id,
+        task.sessionId ? sessionRuntime.toolRefs : [],
+      );
+
     if (priorExternalSessionId && requiresRuntimeExtensions)
       extensions = await bindRuntimeExtensions();
     if (member?.role === 'lead' && extensions?.grantId)

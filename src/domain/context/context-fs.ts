@@ -1,4 +1,10 @@
 import type { PrincipalRef, ProductScope } from '../tenancy/product-context.js';
+import type { AgentHomeNamespace } from '../agents/agent-home.js';
+
+export type AgentHomeContextNamespace = Exclude<
+  AgentHomeNamespace,
+  'definition'
+>;
 
 /**
  * Canonical durable ownership for product-world files. Runtime views mount one
@@ -12,6 +18,13 @@ export type ContextScope =
       kind: 'agent';
       tenantId: string;
       agentDefinitionId: string;
+    }>
+  | Readonly<{
+      kind: 'agent_home';
+      tenantId: string;
+      agentDefinitionId: string;
+      namespace: AgentHomeContextNamespace;
+      scopeKey: string;
     }>
   | Readonly<{
       kind: 'agent_user';
@@ -73,6 +86,10 @@ export function contextScopeStorageKey(scope: ContextScope): string {
       return scope.workspaceId;
     case 'agent':
       return scope.agentDefinitionId;
+    case 'agent_home':
+      return [scope.agentDefinitionId, scope.namespace, scope.scopeKey]
+        .map(escapeScopePart)
+        .join(':');
     case 'agent_user':
       return [scope.agentDefinitionId, scope.principal.type, scope.principal.id]
         .map(escapeScopePart)
@@ -107,6 +124,15 @@ export function agentContextScope(input: {
   readonly agentDefinitionId: string;
 }): ContextScope {
   return Object.freeze({ kind: 'agent', ...input });
+}
+
+export function agentHomeContextScope(input: {
+  readonly tenantId: string;
+  readonly agentDefinitionId: string;
+  readonly namespace: AgentHomeContextNamespace;
+  readonly scopeKey: string;
+}): ContextScope {
+  return Object.freeze({ kind: 'agent_home', ...input });
 }
 
 export function agentUserContextScope(input: {

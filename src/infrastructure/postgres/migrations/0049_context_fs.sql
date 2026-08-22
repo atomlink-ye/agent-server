@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS context_entries (
       'organization',
       'workspace',
       'agent',
+      'agent_home',
       'agent_user',
       'conversation',
       'work',

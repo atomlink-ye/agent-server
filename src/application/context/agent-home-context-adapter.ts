@@ -6,18 +6,20 @@ import type {
   ReadAgentHomeEntryInput,
   WriteAgentHomeEntryInput,
 } from '../ports/agent-home-repository.js';
-import type { LogicalFileEntry, LogicalFileStore } from '../ports/logical-file-store.js';
+import type {
+  LogicalFileEntry,
+  LogicalFileStore,
+} from '../ports/logical-file-store.js';
 import {
+  agentHomeContextScope,
   agentContextScope,
   agentUserContextScope,
   conversationContextScope,
-  organizationContextScope,
   runtimeScratchContextScope,
   workContextScope,
-  workspaceContextScope,
   type ContextScope,
 } from '../../domain/context/context-fs.js';
-import { principalRef, productScope } from '../../domain/tenancy/product-context.js';
+import { principalRef } from '../../domain/tenancy/product-context.js';
 
 /**
  * Compatibility bridge: the public Agent Home contract remains stable while
@@ -37,7 +39,8 @@ export class AgentHomeContextAdapter implements AgentHomeRepository {
     const legacy = this.legacy ? await this.legacy.list(input) : null;
     const byPath = new Map<string, AgentHomeEntryRow>();
     for (const entry of legacy ?? []) byPath.set(entry.path, entry);
-    for (const entry of canonical) byPath.set(entry.path, toAgentHomeEntry(entry));
+    for (const entry of canonical)
+      byPath.set(entry.path, toAgentHomeEntry(entry));
     return [...byPath.values()].sort((left, right) =>
       left.path.localeCompare(right.path),
     );
@@ -46,7 +49,10 @@ export class AgentHomeContextAdapter implements AgentHomeRepository {
   public async read(
     input: ReadAgentHomeEntryInput,
   ): Promise<AgentHomeEntryRow | null> {
-    const canonical = await this.files.read(toContextScope(input.scope), input.path);
+    const canonical = await this.files.read(
+      toContextScope(input.scope),
+      input.path,
+    );
     if (canonical) return toAgentHomeEntry(canonical);
     return this.legacy ? this.legacy.read(input) : null;
   }
@@ -66,14 +72,19 @@ export class AgentHomeContextAdapter implements AgentHomeRepository {
 export function toContextScope(scope: AgentHomeScope): ContextScope {
   switch (scope.namespace) {
     case 'organization':
-      return organizationContextScope(scope.tenantId);
+      return agentHomeContextScope({
+        tenantId: scope.tenantId,
+        agentDefinitionId: scope.agentDefinitionId,
+        namespace: 'organization',
+        scopeKey: '',
+      });
     case 'space':
-      return workspaceContextScope(
-        productScope({
-          tenantId: scope.tenantId,
-          workspaceId: scope.workspaceId ?? scope.scopeKey,
-        }),
-      );
+      return agentHomeContextScope({
+        tenantId: scope.tenantId,
+        agentDefinitionId: scope.agentDefinitionId,
+        namespace: 'space',
+        scopeKey: scope.scopeKey,
+      });
     case 'agent-shared':
       return agentContextScope({
         tenantId: scope.tenantId,
@@ -109,7 +120,9 @@ export function toContextScope(scope: AgentHomeScope): ContextScope {
         runtimeSessionId: scope.scopeKey,
       });
     case 'definition':
-      throw new Error('Definition Agent Home entries are computed, not stored.');
+      throw new Error(
+        'Definition Agent Home entries are computed, not stored.',
+      );
   }
 }
 

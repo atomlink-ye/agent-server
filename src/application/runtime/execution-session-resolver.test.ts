@@ -85,7 +85,11 @@ function fakePlane(calls: string[]): ExecutionPlanePort {
     },
     attachSession: async () => {
       calls.push('attach');
-      return { kind: 'reused', session: createSessionHandle(calls), appliedRevision: 1 };
+      return {
+        kind: 'reused',
+        session: createSessionHandle(calls),
+        appliedRevision: 1,
+      };
     },
     health: async () => ({ ready: true, plane: 'paseo', checks: [] }),
     close: async () => undefined,

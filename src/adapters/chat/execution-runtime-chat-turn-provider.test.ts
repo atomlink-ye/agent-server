@@ -298,7 +298,11 @@ class RecordingExecutionPlane implements ExecutionPlanePort {
   ): Promise<AttachExecutionSessionOutcome> {
     this.attachedBindings.push(binding);
     this.attachedSpecs.push(spec);
-    return { kind: 'reused', session: recordingSession(this.runInputs), appliedRevision: spec.desiredRevision ?? 1 };
+    return {
+      kind: 'reused',
+      session: recordingSession(this.runInputs),
+      appliedRevision: spec.desiredRevision ?? 1,
+    };
   }
 
   public async health(): Promise<ExecutionPlaneHealth> {
@@ -368,11 +372,33 @@ class InMemoryRuntimeSessions
     return null;
   }
 
-  public async createOrGetForTeamMember() { return this.createOrGetForProductSession(); }
-  public async findByTeamMember(): Promise<RuntimeSession | null> { return null; }
-  public async reconcileDesiredSpec(input: { id: string; digest: string }) { const session = await this.findById(input.id); if (!session) throw new Error('runtime session missing'); return { ...session, desiredSpecDigest: input.digest, desiredRevision: session.desiredRevision + 1 }; }
-  public async replaceExecution(input: { id: string; workspaceBinding: ExecutionWorkspaceBinding; sessionBinding: ExecutionSessionBinding }) { return this.bindExecution(input); }
-  public async markUnavailable(id: string) { const session = await this.findById(id); if (!session) throw new Error('runtime session missing'); return { ...session, status: 'unavailable' as const }; }
+  public async createOrGetForTeamMember() {
+    return this.createOrGetForProductSession();
+  }
+  public async findByTeamMember(): Promise<RuntimeSession | null> {
+    return null;
+  }
+  public async reconcileDesiredSpec(input: { id: string; digest: string }) {
+    const session = await this.findById(input.id);
+    if (!session) throw new Error('runtime session missing');
+    return {
+      ...session,
+      desiredSpecDigest: input.digest,
+      desiredRevision: session.desiredRevision + 1,
+    };
+  }
+  public async replaceExecution(input: {
+    id: string;
+    workspaceBinding: ExecutionWorkspaceBinding;
+    sessionBinding: ExecutionSessionBinding;
+  }) {
+    return this.bindExecution(input);
+  }
+  public async markUnavailable(id: string) {
+    const session = await this.findById(id);
+    if (!session) throw new Error('runtime session missing');
+    return { ...session, status: 'unavailable' as const };
+  }
 
   public async findById(id: string): Promise<RuntimeSession | null> {
     return this.sessions.find((session) => session.id === id) ?? null;
@@ -409,7 +435,20 @@ class InMemoryRuntimeSessions
   }
 
   public async createOrGetForProductSession(): Promise<RuntimeSession> {
-    return this.sessions[0] ?? this.createOrGetForAgentChat({ agentChatRuntimeId: 'fallback', runtimeEpoch: 1, tenantId: 'tenant', principalType: 'service_account', principalId: 'principal', workspaceId: 'workspace', agentVersionId: 'agent', resolvedSkills: [], toolRefs: [] });
+    return (
+      this.sessions[0] ??
+      this.createOrGetForAgentChat({
+        agentChatRuntimeId: 'fallback',
+        runtimeEpoch: 1,
+        tenantId: 'tenant',
+        principalType: 'service_account',
+        principalId: 'principal',
+        workspaceId: 'workspace',
+        agentVersionId: 'agent',
+        resolvedSkills: [],
+        toolRefs: [],
+      })
+    );
   }
   public async createOrGetForTask(): Promise<RuntimeSession> {
     throw new Error('not used');

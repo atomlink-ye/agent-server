@@ -141,11 +141,19 @@ function createRuntimeStub(): ExecutionRuntimeService {
     async ensureAgentChatRuntimeSession(input) {
       return makeRuntimeSession({
         id: input.agentChatRuntimeId,
-        scope: { kind: 'agent_chat', agentChatRuntimeId: input.agentChatRuntimeId, runtimeEpoch: input.runtimeEpoch },
-        scopeKind: 'agent_chat', scopeId: `${input.agentChatRuntimeId}:${input.runtimeEpoch}`,
-        productSessionId: null, environmentVersionId: null,
-        workspaceId: input.agentOwner.scope.workspaceId, agentVersionId: input.agentVersionId,
-        resolvedSkills: input.resolvedSkills, toolRefs: input.toolRefs,
+        scope: {
+          kind: 'agent_chat',
+          agentChatRuntimeId: input.agentChatRuntimeId,
+          runtimeEpoch: input.runtimeEpoch,
+        },
+        scopeKind: 'agent_chat',
+        scopeId: `${input.agentChatRuntimeId}:${input.runtimeEpoch}`,
+        productSessionId: null,
+        environmentVersionId: null,
+        workspaceId: input.agentOwner.scope.workspaceId,
+        agentVersionId: input.agentVersionId,
+        resolvedSkills: input.resolvedSkills,
+        toolRefs: input.toolRefs,
       });
     },
     async ensureReady(): Promise<boolean> {

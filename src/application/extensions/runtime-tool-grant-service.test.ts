@@ -293,7 +293,8 @@ describe('RuntimeToolGrantService', () => {
       ).toBeNull();
 
     expect(
-      (await service.refreshForChatScope(refresh))?.chatContext?.triggerMessageId,
+      (await service.refreshForChatScope(refresh))?.chatContext
+        ?.triggerMessageId,
     ).toBe('trigger-2');
   });
 });

@@ -48,16 +48,155 @@ export class FakeRuntimeSessionRepository implements RuntimeSessionRepository {
     return session;
   }
 
-  public async createOrGetForAgentChat(input: Parameters<RuntimeSessionRepository['createOrGetForAgentChat']>[0]) { return this.save(makeRuntimeSession({ id: input.agentChatRuntimeId, scope: { kind: 'agent_chat', agentChatRuntimeId: input.agentChatRuntimeId, runtimeEpoch: input.runtimeEpoch }, scopeKind: 'agent_chat', scopeId: `${input.agentChatRuntimeId}:${input.runtimeEpoch}`, productSessionId: null, environmentVersionId: null, workspaceId: input.workspaceId, agentVersionId: input.agentVersionId, resolvedSkills: input.resolvedSkills, toolRefs: input.toolRefs })); }
-  public async findByAgentChat(input: Parameters<RuntimeSessionRepository['findByAgentChat']>[0]) { return this.sessions.find((item) => item.scope.kind === 'agent_chat' && item.scope.agentChatRuntimeId === input.agentChatRuntimeId && item.scope.runtimeEpoch === input.runtimeEpoch) ?? null; }
-  public async createOrGetForTeamMember(input: Parameters<RuntimeSessionRepository['createOrGetForTeamMember']>[0]) { return this.save(makeRuntimeSession({ id: input.teamMemberRunId, scope: { kind: 'team_member', teamMemberRunId: input.teamMemberRunId }, scopeKind: 'team_member', scopeId: input.teamMemberRunId, productSessionId: null, taskId: input.taskId, workspaceId: input.workspaceId, agentVersionId: input.agentVersionId, environmentVersionId: input.environmentVersionId, resolvedSkills: input.resolvedSkills, toolRefs: input.toolRefs })); }
-  public async findByTeamMember(input: Parameters<RuntimeSessionRepository['findByTeamMember']>[0]) { return this.sessions.find((item) => item.scope.kind === 'team_member' && item.scope.teamMemberRunId === input.teamMemberRunId) ?? null; }
-  public async createOrGetForProductSession(input: Parameters<RuntimeSessionRepository['createOrGetForProductSession']>[0]) { return this.save(makeRuntimeSession({ id: input.productSessionId, scope: { kind: 'product_session', productSessionId: input.productSessionId }, scopeId: input.productSessionId, productSessionId: input.productSessionId, workspaceId: input.workspaceId, agentVersionId: input.agentVersionId, environmentVersionId: input.environmentVersionId, resolvedSkills: input.resolvedSkills, toolRefs: input.toolRefs })); }
-  public async createOrGetForTask(input: Parameters<RuntimeSessionRepository['createOrGetForTask']>[0]) { return this.save(makeRuntimeSession({ id: input.taskId, scope: { kind: 'task', taskId: input.taskId }, scopeKind: 'task', scopeId: input.taskId, productSessionId: null, taskId: input.taskId, workspaceId: input.workspaceId, agentVersionId: input.agentVersionId, environmentVersionId: input.environmentVersionId, resolvedSkills: input.resolvedSkills, toolRefs: input.toolRefs })); }
-  public async findByProductSession(input: Parameters<RuntimeSessionRepository['findByProductSession']>[0]) { return this.sessions.find((item) => item.productSessionId === input.productSessionId) ?? null; }
-  public async findByTask(input: Parameters<RuntimeSessionRepository['findByTask']>[0]) { return this.sessions.find((item) => item.taskId === input.taskId) ?? null; }
-  public async reconcileDesiredSpec(input: Parameters<RuntimeSessionRepository['reconcileDesiredSpec']>[0]) { const current = this.find(input.id); return this.save({ ...current, desiredRevision: current.desiredSpecDigest === input.digest ? current.desiredRevision : current.desiredRevision + 1, desiredSpecDigest: input.digest, status: 'ready' }); }
-  public async bindExecution(input: Parameters<RuntimeSessionRepository['bindExecution']>[0]) { const current = this.find(input.id); return this.save({ ...current, workspaceBinding: input.workspaceBinding, sessionBinding: input.sessionBinding }); }
-  public async replaceExecution(input: Parameters<RuntimeSessionRepository['replaceExecution']>[0]) { return this.bindExecution(input); }
-  public async markUnavailable(id: string) { return this.save({ ...this.find(id), status: 'unavailable' }); }
+  public async createOrGetForAgentChat(
+    input: Parameters<RuntimeSessionRepository['createOrGetForAgentChat']>[0],
+  ) {
+    return this.save(
+      makeRuntimeSession({
+        id: input.agentChatRuntimeId,
+        scope: {
+          kind: 'agent_chat',
+          agentChatRuntimeId: input.agentChatRuntimeId,
+          runtimeEpoch: input.runtimeEpoch,
+        },
+        scopeKind: 'agent_chat',
+        scopeId: `${input.agentChatRuntimeId}:${input.runtimeEpoch}`,
+        productSessionId: null,
+        environmentVersionId: null,
+        workspaceId: input.workspaceId,
+        agentVersionId: input.agentVersionId,
+        resolvedSkills: input.resolvedSkills,
+        toolRefs: input.toolRefs,
+      }),
+    );
+  }
+  public async findByAgentChat(
+    input: Parameters<RuntimeSessionRepository['findByAgentChat']>[0],
+  ) {
+    return (
+      this.sessions.find(
+        (item) =>
+          item.scope.kind === 'agent_chat' &&
+          item.scope.agentChatRuntimeId === input.agentChatRuntimeId &&
+          item.scope.runtimeEpoch === input.runtimeEpoch,
+      ) ?? null
+    );
+  }
+  public async createOrGetForTeamMember(
+    input: Parameters<RuntimeSessionRepository['createOrGetForTeamMember']>[0],
+  ) {
+    return this.save(
+      makeRuntimeSession({
+        id: input.teamMemberRunId,
+        scope: { kind: 'team_member', teamMemberRunId: input.teamMemberRunId },
+        scopeKind: 'team_member',
+        scopeId: input.teamMemberRunId,
+        productSessionId: null,
+        taskId: input.taskId,
+        workspaceId: input.workspaceId,
+        agentVersionId: input.agentVersionId,
+        environmentVersionId: input.environmentVersionId,
+        resolvedSkills: input.resolvedSkills,
+        toolRefs: input.toolRefs,
+      }),
+    );
+  }
+  public async findByTeamMember(
+    input: Parameters<RuntimeSessionRepository['findByTeamMember']>[0],
+  ) {
+    return (
+      this.sessions.find(
+        (item) =>
+          item.scope.kind === 'team_member' &&
+          item.scope.teamMemberRunId === input.teamMemberRunId,
+      ) ?? null
+    );
+  }
+  public async createOrGetForProductSession(
+    input: Parameters<
+      RuntimeSessionRepository['createOrGetForProductSession']
+    >[0],
+  ) {
+    return this.save(
+      makeRuntimeSession({
+        id: input.productSessionId,
+        scope: {
+          kind: 'product_session',
+          productSessionId: input.productSessionId,
+        },
+        scopeId: input.productSessionId,
+        productSessionId: input.productSessionId,
+        workspaceId: input.workspaceId,
+        agentVersionId: input.agentVersionId,
+        environmentVersionId: input.environmentVersionId,
+        resolvedSkills: input.resolvedSkills,
+        toolRefs: input.toolRefs,
+      }),
+    );
+  }
+  public async createOrGetForTask(
+    input: Parameters<RuntimeSessionRepository['createOrGetForTask']>[0],
+  ) {
+    return this.save(
+      makeRuntimeSession({
+        id: input.taskId,
+        scope: { kind: 'task', taskId: input.taskId },
+        scopeKind: 'task',
+        scopeId: input.taskId,
+        productSessionId: null,
+        taskId: input.taskId,
+        workspaceId: input.workspaceId,
+        agentVersionId: input.agentVersionId,
+        environmentVersionId: input.environmentVersionId,
+        resolvedSkills: input.resolvedSkills,
+        toolRefs: input.toolRefs,
+      }),
+    );
+  }
+  public async findByProductSession(
+    input: Parameters<RuntimeSessionRepository['findByProductSession']>[0],
+  ) {
+    return (
+      this.sessions.find(
+        (item) => item.productSessionId === input.productSessionId,
+      ) ?? null
+    );
+  }
+  public async findByTask(
+    input: Parameters<RuntimeSessionRepository['findByTask']>[0],
+  ) {
+    return this.sessions.find((item) => item.taskId === input.taskId) ?? null;
+  }
+  public async reconcileDesiredSpec(
+    input: Parameters<RuntimeSessionRepository['reconcileDesiredSpec']>[0],
+  ) {
+    const current = this.find(input.id);
+    return this.save({
+      ...current,
+      desiredRevision:
+        current.desiredSpecDigest === input.digest
+          ? current.desiredRevision
+          : current.desiredRevision + 1,
+      desiredSpecDigest: input.digest,
+      status: 'ready',
+    });
+  }
+  public async bindExecution(
+    input: Parameters<RuntimeSessionRepository['bindExecution']>[0],
+  ) {
+    const current = this.find(input.id);
+    return this.save({
+      ...current,
+      workspaceBinding: input.workspaceBinding,
+      sessionBinding: input.sessionBinding,
+    });
+  }
+  public async replaceExecution(
+    input: Parameters<RuntimeSessionRepository['replaceExecution']>[0],
+  ) {
+    return this.bindExecution(input);
+  }
+  public async markUnavailable(id: string) {
+    return this.save({ ...this.find(id), status: 'unavailable' });
+  }
 }

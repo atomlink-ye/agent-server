@@ -49,6 +49,9 @@ export interface AgenticLeadState {
   readonly attempts: readonly TeamWorkItemAttempt[];
 }
 
+export const RUNTIME_RECOVERY_INSTRUCTION =
+  'RUNTIME RECOVERY: the external provider session was replaced because it no longer satisfied the current Agent Server runtime contract. Re-establish context from durable Work/Task state, the current workspace, pinned memory, Workboard/Mailbox and other granted read tools before relying on prior transient provider context. Do not repeat an external side effect merely because its previous provider context is unavailable.';
+
 /**
  * Pure/read-only context assembly for an Agent turn. Runtime placement,
  * extension grants, event writes and execution side effects live elsewhere.
@@ -235,7 +238,7 @@ export class RunPromptContext {
         : guidedTurnPrompt;
     const recoveryTurnPrompt = [
       deliveredTurnPrompt,
-      'RUNTIME RECOVERY: the external provider session was replaced because it no longer satisfied the current Agent Server runtime contract. Re-establish context from durable Work/Task state, the current workspace, pinned memory, Workboard/Mailbox and other granted read tools before relying on prior transient provider context. Do not repeat an external side effect merely because its previous provider context is unavailable.',
+      RUNTIME_RECOVERY_INSTRUCTION,
     ].join('\n\n');
     return { systemPrompt, deliveredTurnPrompt, recoveryTurnPrompt };
   }

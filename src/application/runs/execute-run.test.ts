@@ -26,6 +26,7 @@ import { TeamDriver } from '../teams/team-driver.js';
 import { encodeRootTaskRunRequestSnapshotRef } from '../tasks/root-task-input.js';
 import { CompleteRun } from './complete-run.js';
 import { ExecuteRun } from './execute-run.js';
+import { RUNTIME_RECOVERY_INSTRUCTION } from './run-prompt-context.js';
 import { FakeAgentRuntime } from '../../../tests/fixtures/fake-agent-runtime.js';
 import { collaborationToolRefsForRole } from '../../domain/collaboration/canonical-collaboration-tools.js';
 import type { CreateMemoryProposal } from '../memory/create-memory-proposal.js';
@@ -1002,14 +1003,16 @@ describe('ExecuteRun', () => {
         prompt: 'private prompt',
         systemPrompt:
           'Runtime contract: execute the supplied task input using the published agent instructions. Do not infer or access other session history.\n\nPublished AgentVersion instructions:\nmanaged instructions',
-        recoveryPrompt:
-          'private prompt\n\nRUNTIME RECOVERY: the external provider session was replaced because it no longer satisfied the current Agent Server runtime contract. Re-establish context from durable Work/Task state, the current workspace, pinned memory, Workboard/Mailbox and other granted read tools before relying on prior transient provider context. Do not repeat an external side effect merely because its previous provider context is unavailable.',
+        recoveryPrompt: `private prompt\n\n${RUNTIME_RECOVERY_INSTRUCTION}`,
       },
       undefined,
     );
-    expect(
-      JSON.stringify(vi.mocked(runtime.executeTurn).mock.calls[0]?.[0]),
-    ).not.toMatch(/package|modelPolicyRef|schema|template|completion|tools/);
+    const executionRequest = JSON.stringify(
+      vi.mocked(runtime.executeTurn).mock.calls[0]?.[0],
+    ).replace(RUNTIME_RECOVERY_INSTRUCTION, '');
+    expect(executionRequest).not.toMatch(
+      /package|modelPolicyRef|schema|template|completion|tools/,
+    );
     expect(completeRun.execute).toHaveBeenCalledTimes(1);
   });
 

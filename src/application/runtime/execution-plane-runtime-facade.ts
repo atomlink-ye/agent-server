@@ -48,6 +48,8 @@ export type ExecutionWorkspaceOwner =
 export interface ExecutionTurnRequest {
   readonly runId: string;
   readonly prompt: string;
+  /** Canonical snapshot prompt used when resolution replaces an unavailable durable provider session. */
+  readonly recoveryPrompt?: string;
   readonly runtimeSessionId?: string;
   readonly cwd?: string;
   readonly workspaceBinding?: ExecutionWorkspaceBinding;
@@ -72,6 +74,7 @@ export interface ExecutionTurnOutcome {
   readonly workspaceBinding: ExecutionWorkspaceBinding;
   readonly sessionBinding: ExecutionSessionBinding;
   readonly sessionResolution?: 'created' | 'reused' | 'reconfigured' | 'replaced';
+  readonly usedRecoveryPrompt?: boolean;
   readonly usage?: RunUsage;
   readonly memoryCandidates?: readonly RuntimeMemoryCandidate[];
 }
@@ -171,7 +174,10 @@ export class ExecutionPlaneRuntimeFacade implements ExecutionRuntimeService {
       cwd,
       proposalLimit: input.proposalLimit ?? 0,
     });
-    const prompt = candidateSession.decoratePrompt(input.prompt);
+    const normalPrompt = candidateSession.decoratePrompt(input.prompt);
+    const recoveryPrompt = input.recoveryPrompt
+      ? candidateSession.decoratePrompt(input.recoveryPrompt)
+      : undefined;
 
     let executionSession: ExecutionSession;
     let workspaceBinding: ExecutionWorkspaceBinding;
@@ -293,6 +299,11 @@ export class ExecutionPlaneRuntimeFacade implements ExecutionRuntimeService {
       });
     }
 
+    const useRecoveryPrompt = Boolean(
+      recoveryPrompt && sessionResolution === 'replaced',
+    );
+    const prompt = useRecoveryPrompt ? recoveryPrompt! : normalPrompt;
+
     try {
       const result = await this.runRegistry.run(
         executionSession,
@@ -314,6 +325,7 @@ export class ExecutionPlaneRuntimeFacade implements ExecutionRuntimeService {
         workspaceBinding,
         sessionBinding,
         ...(sessionResolution ? { sessionResolution } : {}),
+        ...(useRecoveryPrompt ? { usedRecoveryPrompt: true } : {}),
         ...(result.output.usage ? { usage: result.output.usage } : {}),
         ...(candidates.length > 0 ? { memoryCandidates: candidates } : {}),
       };

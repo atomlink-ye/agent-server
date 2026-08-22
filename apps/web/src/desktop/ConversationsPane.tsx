@@ -47,7 +47,9 @@ export function ConversationsPane({
       .filter((conversation) =>
         query.length === 0
           ? true
-          : (conversation.title ?? '').toLocaleLowerCase().includes(query),
+          : conversationSearchLabel(conversation)
+              .toLocaleLowerCase()
+              .includes(query),
       )
       .filter((conversation) =>
         filter === 'all' ? true : isRecentConversation(conversation),
@@ -95,13 +97,25 @@ export function ConversationsPane({
     }
   };
 
+  const openCoworker = (coworker: Coworker): void => {
+    const existing = existingDirectConversation(
+      conversationsStore.getSnapshot().conversations,
+      coworker.id,
+    );
+    if (existing) {
+      select(existing.id);
+      setCreateOpen(false);
+      setCreateError(null);
+      return;
+    }
+    void create(coworker.id);
+  };
+
   const toggleCreate = (): void => {
     const next = !createOpen;
     setCreateOpen(next);
     setCreateError(null);
-    if (next && coworkerStatus !== 'ready' && coworkerStatus !== 'pending') {
-      void loadCoworkers();
-    }
+    if (next) void loadCoworkers();
   };
 
   return (
@@ -138,9 +152,7 @@ export function ConversationsPane({
           }
         >
           <span className="eyebrow">Choose a coworker</span>
-          {coworkerStatus === 'pending' ? (
-            <p>Loading coworkers…</p>
-          ) : null}
+          {coworkerStatus === 'pending' ? <p>Loading coworkers…</p> : null}
           {coworkerStatus === 'ready' && coworkers.length === 0 ? (
             <p>No published coworkers are available yet.</p>
           ) : null}
@@ -149,9 +161,11 @@ export function ConversationsPane({
               {coworkers.map((coworker) => {
                 const available = coworker.runtimeStatus === 'available';
                 const secondary =
-                  coworker.roleLabel ??
-                  coworker.summary ??
-                  coworker.runtimeStatus;
+                  coworker.roleLabel ?? coworker.summary ?? coworker.runtimeStatus;
+                const existing = existingDirectConversation(
+                  state.conversations,
+                  coworker.id,
+                );
                 return (
                   <button
                     key={coworker.id}
@@ -159,12 +173,11 @@ export function ConversationsPane({
                     type="button"
                     disabled={createStatus === 'pending' || !available}
                     title={coworker.summary ?? coworker.displayName}
-                    onClick={() => {
-                      void create(coworker.id);
-                    }}
+                    onClick={() => openCoworker(coworker)}
                   >
                     {coworker.displayName}
                     {secondary ? ` · ${secondary}` : ''}
+                    {existing ? ' · Open' : ''}
                     {!available ? ` · ${coworker.runtimeStatus}` : ''}
                   </button>
                 );
@@ -248,6 +261,24 @@ export function ConversationsPane({
         />
       </div>
     </aside>
+  );
+}
+
+function conversationSearchLabel(conversation: Conversation): string {
+  if (conversation.kind === 'direct') {
+    return conversation.directAgent?.displayName?.trim() || 'Agent';
+  }
+  return conversation.title?.trim() || 'Conversation';
+}
+
+function existingDirectConversation(
+  conversations: readonly Conversation[],
+  agentDefinitionId: string,
+): Conversation | undefined {
+  return conversations.find(
+    (conversation) =>
+      conversation.kind === 'direct' &&
+      conversation.directAgent?.agentDefinitionId === agentDefinitionId,
   );
 }
 

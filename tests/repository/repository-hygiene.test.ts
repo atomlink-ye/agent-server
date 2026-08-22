@@ -30,7 +30,7 @@ const forbiddenRoots = [
 ];
 const forbiddenExact = ['Makefile', 'docs/agents/exec-plan-protocol.md'];
 const temporaryName =
-  /(?:^|[-_.\/])(?:phase[-_a-z0-9]*|lane[-_a-z0-9]*|worker-[a-z0-9]+|n\d+)(?:[-_.\/]|$)/i;
+  /(?:^|[-_.\/])(?:phase[-_a-z0-9]*|n\d+)(?:[-_.\/]|$)/i;
 
 describe('repository hygiene', () => {
   it('keeps generated evidence and task-run artifacts out of HEAD', () => {

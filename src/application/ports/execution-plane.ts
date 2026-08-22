@@ -120,6 +120,7 @@ export type AttachExecutionSessionOutcome =
       readonly kind: 'replacement_required';
       readonly reason:
         | 'extensions_changed'
+        | 'bootstrap_digest_changed'
         | 'endpoint_epoch_changed'
         | 'provider_binding_stale'
         | 'provider_cannot_reconfigure';

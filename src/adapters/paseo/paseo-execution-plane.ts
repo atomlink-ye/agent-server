@@ -238,7 +238,10 @@ export class PaseoExecutionPlane implements ExecutionPlanePort {
       spec.bootstrapSpecDigest &&
       applied.appliedSpecDigest !== spec.bootstrapSpecDigest
     ) {
-      return { kind: 'replacement_required', reason: 'extensions_changed' };
+      return {
+        kind: 'replacement_required',
+        reason: 'bootstrap_digest_changed',
+      };
     }
 
     const { provider, model } = this.#resolveLaunch(spec);

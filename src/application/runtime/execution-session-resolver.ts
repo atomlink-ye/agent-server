@@ -70,10 +70,12 @@ export class ExecutionSessionResolver {
     };
     const desiredDigest = executionBootstrapDigest(bootstrap);
     const components = executionBootstrapComponentFingerprints(bootstrap);
-    const runtime = await this.runtimeSessions.reconcileDesiredSpec({
-      id: initialRuntime.id,
-      digest: desiredDigest,
-    });
+    const runtime = effectiveWorkspaceBinding
+      ? await this.runtimeSessions.reconcileDesiredSpec({
+          id: initialRuntime.id,
+          digest: desiredDigest,
+        })
+      : initialRuntime;
     const endpointEpoch = input.spec.extensions?.endpointEpoch ?? 'none';
     const spec: ExecutionSessionSpec = {
       ...input.spec,
@@ -157,19 +159,18 @@ export class ExecutionSessionResolver {
         runtime,
         runId: input.runId,
         spec,
-        desiredDigest,
         endpointEpoch,
       });
       this.logResolution({
-        runtime,
+        runtime: replaced.resolved.runtimeSession,
         runId: input.runId,
         generation,
         resolution: 'replaced',
         reason: outcome.reason,
-        desiredDigest,
-        components,
+        desiredDigest: replaced.desiredDigest,
+        components: replaced.components,
       });
-      return replaced;
+      return replaced.resolved;
     }
 
     if (effectiveWorkspaceBinding)
@@ -177,30 +178,30 @@ export class ExecutionSessionResolver {
     const created = await this.createInitialGeneration({
       runtime,
       spec,
-      desiredDigest,
       endpointEpoch,
     });
     this.logResolution({
-      runtime,
+      runtime: created.resolved.runtimeSession,
       runId: input.runId,
       generation: null,
       resolution: 'created',
       reason: 'initial_generation',
-      desiredDigest,
-      components,
+      desiredDigest: created.desiredDigest,
+      components: created.components,
     });
-    return created;
+    return created.resolved;
   }
 
   private logResolution(input: {
     readonly runtime: RuntimeSession;
-    readonly runId?: string;
+    readonly runId?: string | undefined;
     readonly generation: RuntimeSessionGeneration | null;
     readonly resolution: ResolvedExecutionSession['resolution'];
     readonly reason:
       | 'initial_generation'
       | 'plane_reconfigured'
       | 'extensions_changed'
+      | 'bootstrap_digest_changed'
       | 'endpoint_epoch_changed'
       | 'provider_binding_stale'
       | 'provider_cannot_reconfigure'
@@ -217,7 +218,9 @@ export class ExecutionSessionResolver {
         ? {}
         : {
             reason: input.reason,
-            applied_spec_digest_prefix: prefix(input.generation?.appliedSpecDigest),
+            applied_spec_digest_prefix: prefix(
+              input.generation?.appliedSpecDigest,
+            ),
             applied_endpoint_epoch_prefix: prefix(
               input.generation?.endpointEpoch,
             ),
@@ -232,18 +235,27 @@ export class ExecutionSessionResolver {
   private async createInitialGeneration(input: {
     readonly runtime: RuntimeSession;
     readonly spec: ExecutionSessionSpec;
-    readonly desiredDigest: string;
     readonly endpointEpoch: string;
-  }): Promise<ResolvedExecutionSession> {
+  }): Promise<BootstrapResolution> {
     const created = await this.plane.createSession(input.spec);
+    const actualBootstrap = executionBootstrapForSpec(
+      input.spec,
+      created.workspaceBinding,
+    );
+    const appliedSpecDigest = executionBootstrapDigest(actualBootstrap);
+    const components = executionBootstrapComponentFingerprints(actualBootstrap);
     let bound: RuntimeSession;
     try {
-      bound = await this.runtimeSessions.bindExecution({
+      const runtime = await this.runtimeSessions.reconcileDesiredSpec({
         id: input.runtime.id,
+        digest: appliedSpecDigest,
+      });
+      bound = await this.runtimeSessions.bindExecution({
+        id: runtime.id,
         workspaceBinding: created.workspaceBinding,
         sessionBinding: created.sessionBinding,
-        appliedRevision: input.runtime.desiredRevision,
-        appliedSpecDigest: input.desiredDigest,
+        appliedRevision: runtime.desiredRevision,
+        appliedSpecDigest,
         endpointEpoch: input.endpointEpoch,
         ...(input.spec.extensions?.grantId
           ? { extensionGrantId: input.spec.extensions.grantId }
@@ -254,19 +266,22 @@ export class ExecutionSessionResolver {
       throw error;
     }
     return {
-      runtimeSession: bound,
-      session: created.session,
-      resolution: 'created',
+      resolved: {
+        runtimeSession: bound,
+        session: created.session,
+        resolution: 'created',
+      },
+      desiredDigest: appliedSpecDigest,
+      components,
     };
   }
 
   private async replaceGeneration(input: {
     readonly runtime: RuntimeSession;
-    readonly runId?: string;
+    readonly runId?: string | undefined;
     readonly spec: ExecutionSessionSpec;
-    readonly desiredDigest: string;
     readonly endpointEpoch: string;
-  }): Promise<ResolvedExecutionSession> {
+  }): Promise<BootstrapResolution> {
     let created: Awaited<ReturnType<ExecutionPlanePort['createSession']>>;
     try {
       created = await this.plane.createSession(input.spec);
@@ -275,30 +290,49 @@ export class ExecutionSessionResolver {
       throw error;
     }
     try {
+      const actualBootstrap = executionBootstrapForSpec(
+        input.spec,
+        created.workspaceBinding,
+      );
+      const appliedSpecDigest = executionBootstrapDigest(actualBootstrap);
+      const components =
+        executionBootstrapComponentFingerprints(actualBootstrap);
       const replaceStartedAt = Date.now();
       try {
-        const replaced = await this.runtimeSessions.replaceExecution({
+        const runtime = await this.runtimeSessions.reconcileDesiredSpec({
           id: input.runtime.id,
+          digest: appliedSpecDigest,
+        });
+        const replaced = await this.runtimeSessions.replaceExecution({
+          id: runtime.id,
           workspaceBinding: created.workspaceBinding,
           sessionBinding: created.sessionBinding,
-          appliedRevision: input.runtime.desiredRevision,
-          appliedSpecDigest: input.desiredDigest,
+          appliedRevision: runtime.desiredRevision,
+          appliedSpecDigest,
           endpointEpoch: input.endpointEpoch,
           ...(input.spec.extensions?.grantId
             ? { extensionGrantId: input.spec.extensions.grantId }
             : {}),
         });
         return {
-          runtimeSession: replaced,
-          session: created.session,
-          resolution: 'replaced',
+          resolved: {
+            runtimeSession: replaced,
+            session: created.session,
+            resolution: 'replaced',
+          },
+          desiredDigest: appliedSpecDigest,
+          components,
         };
       } finally {
-        this.logger?.log('info', 'runtime.session.replace_execution.completed', {
-          runtime_session_id: input.runtime.id,
-          run_id: input.runId ?? null,
-          duration_ms: Date.now() - replaceStartedAt,
-        });
+        this.logger?.log(
+          'info',
+          'runtime.session.replace_execution.completed',
+          {
+            runtime_session_id: input.runtime.id,
+            run_id: input.runId ?? null,
+            duration_ms: Date.now() - replaceStartedAt,
+          },
+        );
       }
     } catch (error) {
       await created.session.close().catch(() => undefined);
@@ -314,6 +348,26 @@ interface ExecutionBootstrap {
   readonly cwd: string;
   readonly workspaceBinding: ExecutionWorkspaceBinding | null;
   readonly extensions?: ExecutionExtensionBinding;
+}
+
+interface BootstrapResolution {
+  readonly resolved: ResolvedExecutionSession;
+  readonly desiredDigest: string;
+  readonly components: Readonly<Record<string, string | null>>;
+}
+
+function executionBootstrapForSpec(
+  spec: ExecutionSessionSpec,
+  workspaceBinding: ExecutionWorkspaceBinding | null,
+): ExecutionBootstrap {
+  return {
+    ...(spec.provider ? { provider: spec.provider } : {}),
+    ...(spec.model ? { model: spec.model } : {}),
+    systemPrompt: spec.systemPrompt,
+    cwd: spec.workspace.cwd,
+    workspaceBinding,
+    ...(spec.extensions ? { extensions: spec.extensions } : {}),
+  };
 }
 
 function executionBootstrapDigest(input: ExecutionBootstrap): string {

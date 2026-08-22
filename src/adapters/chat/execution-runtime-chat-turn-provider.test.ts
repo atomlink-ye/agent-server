@@ -5,6 +5,8 @@ import { ExecutionPlaneRuntimeFacade } from '../../application/runtime/execution
 import { ExecutionRunRegistry } from '../../application/runtime/execution-run-registry.js';
 import type {
   CreatedExecutionSession,
+  AttachExecutionSessionOutcome,
+  ExecutionAppliedSessionSpec,
   ExecutionPlaneCapabilities,
   ExecutionPlaneHealth,
   ExecutionPlanePort,
@@ -16,6 +18,7 @@ import type {
   ExecutionSessionSpec,
   ExecutionWorkspaceBinding,
 } from '../../application/ports/execution-plane.js';
+import { makeRuntimeSession } from '../../../tests/fixtures/runtime-session.js';
 import type { RuntimeMemoryCandidateCollector } from '../../application/ports/runtime-memory-candidate-collector.js';
 import type {
   RuntimeSession,
@@ -291,10 +294,11 @@ class RecordingExecutionPlane implements ExecutionPlanePort {
   public async attachSession(
     binding: ExecutionSessionBinding,
     spec: ExecutionSessionSpec,
-  ): Promise<ExecutionSession> {
+    _applied?: ExecutionAppliedSessionSpec,
+  ): Promise<AttachExecutionSessionOutcome> {
     this.attachedBindings.push(binding);
     this.attachedSpecs.push(spec);
-    return recordingSession(this.runInputs);
+    return { kind: 'reused', session: recordingSession(this.runInputs), appliedRevision: spec.desiredRevision ?? 1 };
   }
 
   public async health(): Promise<ExecutionPlaneHealth> {
@@ -336,7 +340,7 @@ class InMemoryRuntimeSessions
       );
     });
     if (found) return found;
-    const session: RuntimeSession = {
+    const session: RuntimeSession = makeRuntimeSession({
       id: `runtime-session-${this.sessions.length + 1}`,
       scope: {
         kind: 'agent_chat',
@@ -355,9 +359,7 @@ class InMemoryRuntimeSessions
       toolRefs: input.toolRefs,
       workspaceBinding: null,
       sessionBinding: null,
-      createdAt: '2026-08-21T00:00:00.000Z',
-      updatedAt: '2026-08-21T00:00:00.000Z',
-    };
+    });
     this.sessions.push(session);
     return session;
   }
@@ -365,6 +367,12 @@ class InMemoryRuntimeSessions
   public async findByAgentChat(): Promise<RuntimeSession | null> {
     return null;
   }
+
+  public async createOrGetForTeamMember() { return this.createOrGetForProductSession(); }
+  public async findByTeamMember(): Promise<RuntimeSession | null> { return null; }
+  public async reconcileDesiredSpec(input: { id: string; digest: string }) { const session = await this.findById(input.id); if (!session) throw new Error('runtime session missing'); return { ...session, desiredSpecDigest: input.digest, desiredRevision: session.desiredRevision + 1 }; }
+  public async replaceExecution(input: { id: string; workspaceBinding: ExecutionWorkspaceBinding; sessionBinding: ExecutionSessionBinding }) { return this.bindExecution(input); }
+  public async markUnavailable(id: string) { const session = await this.findById(id); if (!session) throw new Error('runtime session missing'); return { ...session, status: 'unavailable' as const }; }
 
   public async findById(id: string): Promise<RuntimeSession | null> {
     return this.sessions.find((session) => session.id === id) ?? null;
@@ -401,7 +409,7 @@ class InMemoryRuntimeSessions
   }
 
   public async createOrGetForProductSession(): Promise<RuntimeSession> {
-    throw new Error('not used');
+    return this.sessions[0] ?? this.createOrGetForAgentChat({ agentChatRuntimeId: 'fallback', runtimeEpoch: 1, tenantId: 'tenant', principalType: 'service_account', principalId: 'principal', workspaceId: 'workspace', agentVersionId: 'agent', resolvedSkills: [], toolRefs: [] });
   }
   public async createOrGetForTask(): Promise<RuntimeSession> {
     throw new Error('not used');

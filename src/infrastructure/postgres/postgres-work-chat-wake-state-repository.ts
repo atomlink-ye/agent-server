@@ -1,10 +1,12 @@
 import type { ChatWorkCard } from '../../application/product-projection/chat-work-card-projection.js';
+import type { ChatDispatchRepository } from '../../application/ports/chat-dispatch-repository.js';
 import type { WorkChatWakeDelivery } from '../../application/work-chat/work-chat-wake-delivery.js';
 import type {
   WorkChatWakeStateRepository,
   WorkChatWakeWorkKey,
 } from '../../application/work-chat/work-chat-wake-state-repository.js';
 import type { ProductState } from '../../contracts/product-projection/index.js';
+import { PostgresChatDispatchRepository } from './postgres-chat-dispatch-repository.js';
 
 interface Queryable {
   query<Row = Record<string, unknown>>(
@@ -48,7 +50,11 @@ type OutboxRow = {
 
 /** Durable transition checkpoint plus leaseable Chat wake outbox. */
 export class PostgresWorkChatWakeStateRepository implements WorkChatWakeStateRepository {
-  public constructor(private readonly database: WorkChatWakeDatabase) {}
+  readonly #chatActivations: PostgresChatDispatchRepository;
+
+  public constructor(private readonly database: WorkChatWakeDatabase) {
+    this.#chatActivations = new PostgresChatDispatchRepository(database);
+  }
 
   public async observe(input: {
     readonly key: WorkChatWakeWorkKey;
@@ -182,6 +188,12 @@ export class PostgresWorkChatWakeStateRepository implements WorkChatWakeStateRep
     );
     const row = result.rows?.[0];
     return row ? mapDelivery(row) : null;
+  }
+
+  public enqueueChatActivation(
+    input: Parameters<ChatDispatchRepository['enqueue']>[0],
+  ): ReturnType<ChatDispatchRepository['enqueue']> {
+    return this.#chatActivations.enqueue(input);
   }
 
   public async markDelivered(

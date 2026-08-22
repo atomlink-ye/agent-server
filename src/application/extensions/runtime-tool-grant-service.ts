@@ -22,16 +22,11 @@ export type RuntimeActiveTurn = Readonly<{
   readonly contextEpoch: string;
 }>;
 
-/** Trusted origin of a tool-capable Chat turn. */
 export type RuntimeToolChatContext = Readonly<{
   readonly conversationId: string;
   readonly triggerMessageId: string;
 }>;
 
-/**
- * Runtime bearer context. Plaintext tokens are never stored on this object or
- * in persistence; only their SHA-256 digest is durable.
- */
 export type RuntimeToolGrant = Readonly<{
   readonly grantId: string;
   readonly tenantId: string;
@@ -39,7 +34,6 @@ export type RuntimeToolGrant = Readonly<{
   readonly principalId: string;
   readonly workspaceId: string;
   readonly productSessionId?: string;
-  /** Runtime scope identity; chat grants use the agent_chat RuntimeSession id. */
   readonly scopeId?: string;
   readonly teamMemberRunId?: string;
   readonly teamRunId?: string;
@@ -72,12 +66,17 @@ type StoredGrant = RuntimeToolGrant & {
   readonly updatedAt: string;
 };
 
-/**
- * Runtime authorization service with a process-local read cache over an
- * optional durable store. Production supplies Postgres persistence; focused
- * unit tests may omit it. All mutations await durable persistence before the
- * cache publishes the new state.
- */
+export interface RuntimeToolGrantScopeQuery {
+  readonly tenantId: string;
+  readonly principalType: string;
+  readonly principalId: string;
+  readonly workspaceId: string;
+  readonly productSessionId?: string;
+  readonly scopeId?: string;
+  readonly teamMemberRunId?: string;
+  readonly teamRunId?: string;
+}
+
 export class RuntimeToolGrantService {
   readonly #grants = new Map<string, StoredGrant>();
   readonly #renewable = new Map<string, StoredGrant>();
@@ -99,9 +98,15 @@ export class RuntimeToolGrantService {
     this.#renewable.clear();
     for (const persisted of recoverable) {
       const grant = fromPersisted(persisted);
-      if (isRenewableChatGrant(grant) && Date.parse(grant.expiresAt) <= now.getTime())
+      if (
+        isRenewableChatGrant(grant) &&
+        Date.parse(grant.expiresAt) <= now.getTime()
+      )
         this.#renewable.set(grant.grantId, grant);
-      else if (Date.parse(grant.expiresAt) > now.getTime())
+      else if (
+        Date.parse(grant.expiresAt) > now.getTime() ||
+        grant.teamMemberRunId
+      )
         this.#grants.set(grant.grantId, grant);
     }
     this.#initialized = true;
@@ -113,7 +118,6 @@ export class RuntimeToolGrantService {
     readonly principalId: string;
     readonly workspaceId: string;
     readonly productSessionId?: string;
-    /** Chat/runtime scope id; required when productSessionId is absent. */
     readonly scopeId?: string;
     readonly taskId?: string;
     readonly runId?: string;
@@ -121,7 +125,6 @@ export class RuntimeToolGrantService {
     readonly teamRunId?: string;
     readonly allowedTools?: readonly string[];
     readonly catalogTools?: readonly string[];
-    /** Supplied only by the server-side Chat turn admission path. */
     readonly chatContext?: RuntimeToolChatContext;
     readonly contextEpoch?: string;
     readonly ttlMs?: number;
@@ -213,7 +216,6 @@ export class RuntimeToolGrantService {
     });
   }
 
-  /** Resolve is synchronous because RuntimeMcpServer hydrates the durable cache before listening. */
   public resolve(token: string): RuntimeToolGrant | null {
     this.requireInitialized();
     this.pruneMemory();
@@ -228,6 +230,31 @@ export class RuntimeToolGrantService {
       return publicGrant(grant);
     }
     return null;
+  }
+
+  public async findForScope(
+    input: RuntimeToolGrantScopeQuery,
+  ): Promise<RuntimeToolGrant | null> {
+    await this.initialize();
+    this.pruneMemory();
+    const scopeId = resolveScopeId(input);
+    const matches = [
+      ...this.#grants.values(),
+      ...this.#renewable.values(),
+    ].filter(
+      (grant) =>
+        grant.tenantId === input.tenantId &&
+        grant.principalType === input.principalType &&
+        grant.principalId === input.principalId &&
+        grant.workspaceId === input.workspaceId &&
+        grant.scopeId === scopeId &&
+        grant.productSessionId === input.productSessionId &&
+        grant.teamMemberRunId === input.teamMemberRunId &&
+        grant.teamRunId === input.teamRunId,
+    );
+    if (matches.length > 1)
+      throw new Error('Runtime grant scope is ambiguous.');
+    return matches[0] ? publicGrant(matches[0]) : null;
   }
 
   public async revoke(grantId: string): Promise<void> {
@@ -259,10 +286,15 @@ export class RuntimeToolGrantService {
     return this.#activeCalls.get(grantId) ?? 0;
   }
 
-  /** Authorization for user/domain tools only. */
   public isToolAllowed(grantId: string, toolRef: string): boolean {
-    const grant = this.get(grantId);
-    return Boolean(grant?.allowedTools.includes(toolRef));
+    this.requireInitialized();
+    this.pruneMemory();
+    const grant = this.#grants.get(grantId);
+    return Boolean(
+      grant &&
+        Date.parse(grant.expiresAt) > this.now().getTime() &&
+        grant.allowedTools.includes(toolRef),
+    );
   }
 
   public async refreshForSession(

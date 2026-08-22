@@ -190,9 +190,15 @@ export function registerContextFileRoutes(
     );
     const source = await resolveScope(dependencies.database, access, {
       kind: parsed.data.source.scope,
-      agentDefinitionId: parsed.data.source.agent_definition_id,
-      conversationId: parsed.data.source.conversation_id,
-      workId: parsed.data.source.work_id,
+      ...(parsed.data.source.agent_definition_id
+        ? { agentDefinitionId: parsed.data.source.agent_definition_id }
+        : {}),
+      ...(parsed.data.source.conversation_id
+        ? { conversationId: parsed.data.source.conversation_id }
+        : {}),
+      ...(parsed.data.source.work_id
+        ? { workId: parsed.data.source.work_id }
+        : {}),
     });
     const entry = await dependencies.promotions.pinMemoryToAgent({
       tenantId: access.tenantId,

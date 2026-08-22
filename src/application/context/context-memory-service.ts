@@ -53,8 +53,8 @@ export class ContextMemoryService {
   ): Promise<MemoryRecord | null> {
     const ref = await this.records.find(memoryId, context.tenantId);
     if (!ref) return null;
-    const provenance = provenance(ref);
-    if (!isMemoryVisible(provenance, context)) return null;
+    const recordProvenance = provenance(ref);
+    if (!isMemoryVisible(recordProvenance, context)) return null;
     const file = await this.files.read(ref.scope, ref.logicalPath);
     return file
       ? toRecord(ref, file.content, file.contentSha256, file.updatedAt)

@@ -16,13 +16,14 @@ type CanonicalDisplayFields = Pick<
 >;
 
 /**
- * Compatibility view for the old invokable API.
+ * Read-only compatibility projection for historical invokable fixtures.
  *
- * The managed/coworker AgentDefinition is the sole strict product identity.
- * Legacy callers still use name/description and may not yet project the newer
- * display fields, so those canonical aliases stay optional only on this adapter.
+ * The managed/coworker AgentDefinition in ../agents/managed-agent-definition.ts
+ * is the only strict product Agent identity. This shape exists only so old
+ * snapshots/tests can be decoded while callers migrate away from the invokable
+ * Agent surface. Production code must not use it as an Agent aggregate.
  */
-export type AgentDefinition = Readonly<
+export type LegacyAgentDefinitionProjection = Readonly<
   Omit<CanonicalAgentDefinition, keyof CanonicalDisplayFields> &
     Partial<CanonicalDisplayFields> & {
       readonly name: string;
@@ -30,22 +31,24 @@ export type AgentDefinition = Readonly<
     }
 >;
 
-export type AgentDefinitionSnapshot = AgentDefinition;
+export type LegacyAgentDefinitionSnapshot = LegacyAgentDefinitionProjection;
 
-export interface CreateAgentDefinitionOptions extends InvokableOwnerScope {
+export interface CreateLegacyAgentDefinitionProjectionOptions
+  extends InvokableOwnerScope {
   readonly id?: string;
   readonly name: string;
   readonly description?: string | null;
   readonly now?: () => Date;
 }
 
+/** @deprecated Test/legacy fixture helper. New Agent creation must use importAgent(). */
 export function createAgentDefinition(
-  options: CreateAgentDefinitionOptions,
-): AgentDefinition {
+  options: CreateLegacyAgentDefinitionProjectionOptions,
+): LegacyAgentDefinitionProjection {
   const timestamp = (options.now ?? (() => new Date()))().toISOString();
   const description = normalizeOptionalText(options.description);
 
-  return rehydrateAgentDefinition({
+  return rehydrateLegacyAgentDefinitionProjection({
     id: options.id ?? randomUUID(),
     tenantId: options.tenantId,
     workspaceId: options.workspaceId,
@@ -62,16 +65,23 @@ export function createAgentDefinition(
   });
 }
 
+/** @deprecated Compatibility decoder only. */
 export function rehydrateAgentDefinition(
-  snapshot: AgentDefinitionSnapshot,
-): AgentDefinition {
-  assertNonEmptyString('id', snapshot.id, 'Agent definition');
-  assertInvokableOwnerScope(snapshot, 'Agent definition');
-  assertNonEmptyString('name', snapshot.name, 'Agent definition');
+  snapshot: LegacyAgentDefinitionSnapshot,
+): LegacyAgentDefinitionProjection {
+  return rehydrateLegacyAgentDefinitionProjection(snapshot);
+}
+
+export function rehydrateLegacyAgentDefinitionProjection(
+  snapshot: LegacyAgentDefinitionSnapshot,
+): LegacyAgentDefinitionProjection {
+  assertNonEmptyString('id', snapshot.id, 'Legacy agent definition projection');
+  assertInvokableOwnerScope(snapshot, 'Legacy agent definition projection');
+  assertNonEmptyString('name', snapshot.name, 'Legacy agent definition projection');
   assertCreatedAndUpdatedAt(
     snapshot.createdAt,
     snapshot.updatedAt,
-    'Agent definition',
+    'Legacy agent definition projection',
   );
 
   const description = normalizeOptionalText(snapshot.description);

@@ -288,7 +288,7 @@ describe('task HTTP contracts', () => {
     );
   });
 
-  it('returns 404 when a different owner in the same tenant invokes a published version it does not own', async () => {
+  it('allows a different principal in the same tenant to invoke a published managed Agent version', async () => {
     const app = await createTestApp(new FakeAgentRuntime(), {
       startDispatcher: false,
     });
@@ -303,14 +303,21 @@ describe('task HTTP contracts', () => {
           kind: 'agent',
           version_id: defaultPublishedAgentVersionId,
         },
-        input: { text: 'missing shared acl' },
+        input: { text: 'same tenant shared Agent' },
       }),
     });
 
-    expect(response.status).toBe(404);
-    expect(ErrorResponseSchema.parse(await response.json()).error.code).toBe(
-      'invokable_not_found',
-    );
+    expect(response.status).toBe(202);
+    const body = InvokeTaskResponseSchema.parse(await response.json());
+    expect(body.status).toBe('queued');
+    const task = await app.request(body.links.self, {
+      headers: { authorization: `Bearer ${secondaryServiceAccountToken}` },
+    });
+    expect(task.status).toBe(200);
+    expect(GetTaskResponseSchema.parse(await task.json()).invokable).toEqual({
+      kind: 'agent',
+      version_id: defaultPublishedAgentVersionId,
+    });
   });
 
   it('admits the same explicit managed version only after it is published', async () => {

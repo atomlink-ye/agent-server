@@ -249,16 +249,16 @@ describe('ExecutionRuntimeChatTurnProvider', () => {
       'Agent definition ID: definition-alpha',
     );
     expect(alphaSystemPrompt).toContain('Always answer in terse Alpha format.');
-    expect(alphaSystemPrompt).toContain('alpha-calendar-capability');
-    expect(alphaSystemPrompt).toContain('Alpha persona home content.');
     expect(alphaSystemPrompt).not.toContain('definition-beta');
     expect(betaSystemPrompt).toContain('Agent definition ID: definition-beta');
     expect(betaSystemPrompt).toContain('Always answer in warm Beta format.');
-    expect(betaSystemPrompt).toContain('beta-calendar-capability');
-    expect(betaSystemPrompt).toContain('Beta persona home content.');
     expect(betaSystemPrompt).not.toContain('definition-alpha');
     expect(plane.runInputs[0]?.prompt).toContain('Alpha conversation context.');
+    expect(plane.runInputs[0]?.prompt).toContain('alpha-calendar-capability');
+    expect(plane.runInputs[0]?.prompt).toContain('Alpha persona home content.');
     expect(plane.runInputs[1]?.prompt).toContain('Beta conversation context.');
+    expect(plane.runInputs[1]?.prompt).toContain('beta-calendar-capability');
+    expect(plane.runInputs[1]?.prompt).toContain('Beta persona home content.');
   });
 });
 
@@ -294,12 +294,15 @@ class RecordingExecutionPlane implements ExecutionPlanePort {
   public async attachSession(
     binding: ExecutionSessionBinding,
     spec: ExecutionSessionSpec,
-    _applied?: ExecutionAppliedSessionSpec,
+    applied?: ExecutionAppliedSessionSpec,
   ): Promise<AttachExecutionSessionOutcome> {
     this.attachedBindings.push(binding);
     this.attachedSpecs.push(spec);
     return {
-      kind: 'reused',
+      kind:
+        applied && applied.appliedRevision !== spec.desiredRevision
+          ? 'reconfigured'
+          : 'reused',
       session: recordingSession(this.runInputs),
       appliedRevision: spec.desiredRevision ?? 1,
     };

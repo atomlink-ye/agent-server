@@ -53,20 +53,22 @@ export class MaterializeChatReply {
       deliveryId: `chat-reply:${context.dispatch.id}`,
     });
 
-    const watermark = await this.watermarks.advanceRuntimeWatermark({
-      agentChatRuntimeId: context.runtime.id,
-      runtimeEpoch: context.runtime.epoch,
-      tenantId: context.dispatch.tenantId,
-      conversationId: context.dispatch.conversationId,
-      throughSequence: context.dispatch.throughSequence,
-    });
+    const watermark = this.watermarks.advanceRuntimeWatermark
+      ? await this.watermarks.advanceRuntimeWatermark({
+          agentChatRuntimeId: context.runtime.id,
+          runtimeEpoch: context.runtime.epoch,
+          tenantId: context.dispatch.tenantId,
+          conversationId: context.dispatch.conversationId,
+          throughSequence: context.dispatch.throughSequence,
+        })
+      : context.dispatch.throughSequence;
     return { message, watermark };
   }
 
   private async resolveWorkRef(
     context: ResolvedChatTurnContext,
   ): Promise<string | null> {
-    const wakeRef = context.dispatch.causes
+    const wakeRef = (context.dispatch.causes ?? [])
       .filter((cause) => cause.type === 'work_wake')
       .at(-1);
     if (wakeRef?.type === 'work_wake') return wakeRef.workRef;

@@ -3,6 +3,7 @@ import type {
   ChatCommands,
   Conversation,
   ConversationId,
+  Coworker,
 } from '../components/chat/contracts';
 import { ConversationsList } from '../components/chat/ConversationsList';
 import type { AppStore } from '../stores/app';
@@ -16,6 +17,7 @@ export interface ConversationsPaneProps {
 }
 
 type ConversationFilter = 'all' | 'recent';
+type CoworkerLoadStatus = 'idle' | 'pending' | 'ready' | 'error';
 
 export function ConversationsPane({
   commands,
@@ -24,7 +26,9 @@ export function ConversationsPane({
   onSelectConversation,
 }: ConversationsPaneProps) {
   const [createOpen, setCreateOpen] = useState(false);
-  const [agentDefinitionId, setAgentDefinitionId] = useState('');
+  const [coworkers, setCoworkers] = useState<readonly Coworker[]>([]);
+  const [coworkerStatus, setCoworkerStatus] =
+    useState<CoworkerLoadStatus>('idle');
   const [createStatus, setCreateStatus] = useState<'idle' | 'pending'>('idle');
   const [createError, setCreateError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -56,15 +60,26 @@ export function ConversationsPane({
     onSelectConversation?.(conversationId);
   };
 
-  const create = async (): Promise<void> => {
-    const trimmedAgentDefinitionId = agentDefinitionId.trim();
-    if (!trimmedAgentDefinitionId || createStatus === 'pending') return;
+  const loadCoworkers = async (): Promise<void> => {
+    if (coworkerStatus === 'pending') return;
+    setCoworkerStatus('pending');
+    setCreateError(null);
+    try {
+      const loaded = await commands.loadCoworkers();
+      setCoworkers([...loaded].sort(compareCoworkers));
+      setCoworkerStatus('ready');
+    } catch (error) {
+      setCoworkerStatus('error');
+      setCreateError(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  const create = async (agentDefinitionId: string): Promise<void> => {
+    if (!agentDefinitionId || createStatus === 'pending') return;
     setCreateStatus('pending');
     setCreateError(null);
     try {
-      const conversation = await commands.createConversation(
-        trimmedAgentDefinitionId,
-      );
+      const conversation = await commands.createConversation(agentDefinitionId);
       conversationsStore.hydrate([
         ...conversationsStore
           .getSnapshot()
@@ -72,12 +87,20 @@ export function ConversationsPane({
         conversation,
       ]);
       select(conversation.id);
-      setAgentDefinitionId('');
       setCreateOpen(false);
     } catch (error) {
       setCreateError(error instanceof Error ? error.message : String(error));
     } finally {
       setCreateStatus('idle');
+    }
+  };
+
+  const toggleCreate = (): void => {
+    const next = !createOpen;
+    setCreateOpen(next);
+    setCreateError(null);
+    if (next && coworkerStatus !== 'ready' && coworkerStatus !== 'pending') {
+      void loadCoworkers();
     }
   };
 
@@ -88,7 +111,10 @@ export function ConversationsPane({
           <span className="eyebrow">Workspace</span>
           <h1>Conversations</h1>
         </div>
-        <span className="pane-count" aria-label={`${state.conversations.length} conversations`}>
+        <span
+          className="pane-count"
+          aria-label={`${state.conversations.length} conversations`}
+        >
           {state.conversations.length}
         </span>
       </div>
@@ -98,49 +124,71 @@ export function ConversationsPane({
         type="button"
         disabled={createStatus === 'pending'}
         aria-expanded={createOpen}
-        onClick={() => {
-          setCreateOpen((open) => !open);
-          setCreateError(null);
-        }}
+        onClick={toggleCreate}
       >
         <span aria-hidden="true">+</span>
         New conversation
       </button>
 
       {createOpen ? (
-        <form
+        <div
           className="new-conversation-form"
-          aria-busy={createStatus === 'pending'}
-          onSubmit={(event) => {
-            event.preventDefault();
-            void create();
-          }}
+          aria-busy={
+            coworkerStatus === 'pending' || createStatus === 'pending'
+          }
         >
-          <label htmlFor="new-conversation-agent-definition">
-            Agent definition ID
-          </label>
-          <input
-            id="new-conversation-agent-definition"
-            value={agentDefinitionId}
-            disabled={createStatus === 'pending'}
-            onChange={(event) => setAgentDefinitionId(event.target.value)}
-          />
+          <span className="eyebrow">Choose a coworker</span>
+          {coworkerStatus === 'pending' ? (
+            <p>Loading coworkers…</p>
+          ) : null}
+          {coworkerStatus === 'ready' && coworkers.length === 0 ? (
+            <p>No published coworkers are available yet.</p>
+          ) : null}
+          {coworkerStatus === 'ready' ? (
+            <div className="new-conversation-actions" role="list">
+              {coworkers.map((coworker) => {
+                const available = coworker.runtimeStatus === 'available';
+                const secondary =
+                  coworker.roleLabel ??
+                  coworker.summary ??
+                  coworker.runtimeStatus;
+                return (
+                  <button
+                    key={coworker.id}
+                    className="filter-chip"
+                    type="button"
+                    role="listitem"
+                    disabled={createStatus === 'pending' || !available}
+                    title={coworker.summary ?? coworker.displayName}
+                    onClick={() => {
+                      void create(coworker.id);
+                    }}
+                  >
+                    {coworker.displayName}
+                    {secondary ? ` · ${secondary}` : ''}
+                    {!available ? ` · ${coworker.runtimeStatus}` : ''}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
           <div className="new-conversation-actions">
-            <button
-              type="submit"
-              disabled={
-                createStatus === 'pending' ||
-                agentDefinitionId.trim().length === 0
-              }
-            >
-              {createStatus === 'pending' ? 'Creating…' : 'Create'}
-            </button>
+            {coworkerStatus === 'error' ? (
+              <button
+                type="button"
+                disabled={createStatus === 'pending'}
+                onClick={() => {
+                  void loadCoworkers();
+                }}
+              >
+                Retry
+              </button>
+            ) : null}
             <button
               type="button"
               disabled={createStatus === 'pending'}
               onClick={() => {
                 setCreateOpen(false);
-                setAgentDefinitionId('');
                 setCreateError(null);
               }}
             >
@@ -148,7 +196,7 @@ export function ConversationsPane({
             </button>
           </div>
           {createError !== null ? <p role="alert">{createError}</p> : null}
-        </form>
+        </div>
       ) : null}
 
       <div className="conversation-tools">
@@ -163,7 +211,11 @@ export function ConversationsPane({
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
-        <div className="conversation-filters" role="group" aria-label="Conversation filters">
+        <div
+          className="conversation-filters"
+          role="group"
+          aria-label="Conversation filters"
+        >
           <button
             className="filter-chip"
             type="button"
@@ -210,6 +262,10 @@ function compareUpdatedAt(left: Conversation, right: Conversation): number {
     (Date.parse(right.updatedAt) || 0) - (Date.parse(left.updatedAt) || 0) ||
     left.id.localeCompare(right.id)
   );
+}
+
+function compareCoworkers(left: Coworker, right: Coworker): number {
+  return left.displayName.localeCompare(right.displayName) || left.id.localeCompare(right.id);
 }
 
 export default ConversationsPane;

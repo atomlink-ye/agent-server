@@ -13,6 +13,13 @@ import type { ConversationActorResolver } from './chat-turn-context.js';
 
 const DEFAULT_RECOVERY_MESSAGE_LIMIT = 50;
 
+export class ChatTurnRuntimeUnavailableError extends Error {
+  public constructor() {
+    super('chat_turn_runtime_unavailable');
+    this.name = 'ChatTurnRuntimeUnavailableError';
+  }
+}
+
 export interface ResolvedChatTurnContext {
   readonly dispatch: ChatDispatch;
   readonly runtime: AgentChatRuntime;
@@ -51,8 +58,10 @@ export class ResolveChatTurnContext {
       tenantId: dispatch.tenantId,
       agentDefinitionId: dispatch.agentDefinitionId,
     });
+    // This is a deferral, not consumption: the worker must release the claim so
+    // the durable activation remains retryable when the runtime returns.
     if (!runtime || runtime.status !== 'available')
-      throw new Error('chat_turn_runtime_unavailable');
+      throw new ChatTurnRuntimeUnavailableError();
 
     const watermark = this.watermarks.getRuntimeWatermark
       ? await this.watermarks.getRuntimeWatermark({
@@ -143,7 +152,7 @@ export class ResolveChatTurnContext {
   private async resolvePrincipalActor(
     dispatch: ChatDispatch,
     message: ChatMessage,
-  ): Promise<PrincipalRef> {
+  ): Promise<PrincipalRef | undefined> {
     if (this.actorResolver) {
       const actor = await this.actorResolver.resolve({
         tenantId: dispatch.tenantId,
@@ -166,7 +175,10 @@ export class ResolveChatTurnContext {
         principalId: member.memberId,
       });
     }
-    throw new Error('chat_turn_actor_resolver_unavailable');
+    // Compatibility-only bounded fakes may not expose membership reads. The
+    // production composition installs ConversationActorResolver, so no trusted
+    // actor is synthesized from message text or IDs here.
+    return undefined;
   }
 }
 

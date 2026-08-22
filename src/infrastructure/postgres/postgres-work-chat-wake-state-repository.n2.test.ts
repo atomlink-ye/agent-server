@@ -17,7 +17,19 @@ describe('PostgresWorkChatWakeStateRepository N2 wake identity', () => {
        VALUES($1,'tenant-n2','direct','direct:work-wake-n2',1,$2,$2)`,
       [conversationId, now],
     );
-    const repository = new PostgresWorkChatWakeStateRepository(db as any);
+    // The production repository uses pg.Pool.connect() to pin BEGIN/COMMIT to
+    // one connection. PGlite is a single embedded connection, so this adapter
+    // gives it the same shape without changing the repository semantics.
+    const database = {
+      query: db.query.bind(db),
+      async connect() {
+        return {
+          query: db.query.bind(db),
+          release() {},
+        };
+      },
+    };
+    const repository = new PostgresWorkChatWakeStateRepository(database as any);
     const key = {
       tenantId: 'tenant-n2',
       workspaceId: '00000000-0000-4000-8000-00000000e301',

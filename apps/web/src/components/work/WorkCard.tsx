@@ -7,6 +7,8 @@ export interface WorkCardProps {
   readonly onOpen: (workId: string) => void;
 }
 
+const workCardRefreshIntervalMs = 3000;
+
 export function WorkCard({ workRef, onOpen }: WorkCardProps) {
   const [state, setState] = useState<
     | { readonly status: 'loading' }
@@ -16,17 +18,63 @@ export function WorkCard({ workRef, onOpen }: WorkCardProps) {
 
   useEffect(() => {
     if (!isUuid(workRef)) return;
+
     let active = true;
-    setState({ status: 'loading' });
-    void loadWorkCard(workRef)
-      .then((card) => {
-        if (active) setState({ status: 'ready', card });
-      })
-      .catch(() => {
+    let refreshInFlight = false;
+    let keepRefreshing = true;
+    let intervalId: number | null = null;
+
+    const stopPolling = (): void => {
+      if (intervalId === null) return;
+      window.clearInterval(intervalId);
+      intervalId = null;
+    };
+
+    const refresh = async (showLoading: boolean): Promise<void> => {
+      if (!active || refreshInFlight) return;
+      refreshInFlight = true;
+      if (showLoading) setState({ status: 'loading' });
+      try {
+        const card = await loadWorkCard(workRef);
+        if (!active) return;
+        keepRefreshing = shouldRefresh(card);
+        setState({ status: 'ready', card });
+        if (!keepRefreshing) stopPolling();
+      } catch {
         if (active) setState({ status: 'error' });
-      });
+      } finally {
+        refreshInFlight = false;
+      }
+    };
+
+    const startPolling = (): void => {
+      if (
+        !active ||
+        !keepRefreshing ||
+        document.visibilityState !== 'visible'
+      ) {
+        return;
+      }
+      stopPolling();
+      intervalId = window.setInterval(() => {
+        if (document.visibilityState === 'visible') void refresh(false);
+      }, workCardRefreshIntervalMs);
+    };
+
+    const handleVisibilityChange = (): void => {
+      stopPolling();
+      if (document.visibilityState === 'visible' && keepRefreshing) {
+        void refresh(false).finally(startPolling);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    void refresh(true).finally(startPolling);
+
     return () => {
       active = false;
+      stopPolling();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [workRef]);
 
@@ -50,6 +98,13 @@ export function WorkCard({ workRef, onOpen }: WorkCardProps) {
   );
 }
 
+function shouldRefresh(card: WorkChatCard): boolean {
+  return (
+    card.availability === 'available' &&
+    (card.productState === 'running' || card.productState === 'needs_you')
+  );
+}
+
 function WorkCardContent({
   card,
   onOpen,
@@ -66,9 +121,7 @@ function WorkCardContent({
     <>
       <div className="work-card-heading">
         <span className="eyebrow">Work</span>
-        <span className={`work-status ${statusClass}`}>
-          {status}
-        </span>
+        <span className={`work-status ${statusClass}`}>{status}</span>
       </div>
       <h3>{card.title}</h3>
       <p className="work-card-result">{resultText(card)}</p>
@@ -97,10 +150,14 @@ function resultText(card: WorkChatCard): string {
   if (card.resultSummary && card.resultCaptureStatus === 'present') {
     return card.resultSummary;
   }
-  if (card.availability === 'unavailable' || card.resultCaptureStatus === 'not_captured') {
+  if (
+    card.availability === 'unavailable' ||
+    card.resultCaptureStatus === 'not_captured'
+  ) {
     return 'The latest result is not available here.';
   }
-  if (card.resultCaptureStatus === 'redacted') return 'The result is unavailable here.';
+  if (card.resultCaptureStatus === 'redacted')
+    return 'The result is unavailable here.';
   if (card.resultSummary) return card.resultSummary;
   return 'No result is available yet.';
 }

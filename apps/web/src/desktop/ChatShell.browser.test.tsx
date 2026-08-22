@@ -1,6 +1,12 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { MemoryRouter } from 'react-router-dom';
+import {
+  MemoryRouter,
+  Route,
+  Routes,
+  useLocation,
+  useParams,
+} from 'react-router-dom';
 import { expect, it, vi } from 'vitest';
 
 import { ChatShell } from './ChatShell';
@@ -20,7 +26,7 @@ import { createMessagesStore } from '../stores/messages';
   }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-it('refreshes the selected transcript on its interval and stops when selection changes or clears', async () => {
+it('refreshes the selected transcript on its interval and stops transcript polling when selection clears', async () => {
   vi.useFakeTimers();
   const conversationA = conversation('conversation-a');
   const conversationB = conversation('conversation-b');
@@ -108,7 +114,8 @@ it('refreshes the selected transcript on its interval and stops when selection c
       appStore.clearSelection();
       await Promise.resolve();
     });
-    expect(vi.getTimerCount()).toBe(0);
+    // Conversation-list convergence remains active while the Conversations tab is visible.
+    expect(vi.getTimerCount()).toBe(1);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(6000);
@@ -118,6 +125,69 @@ it('refreshes the selected transcript on its interval and stops when selection c
     await act(async () => root.unmount());
     host.remove();
     vi.useRealTimers();
+  }
+});
+
+it('keeps Direct Chat identity and Work origin in refresh-safe URLs', async () => {
+  const conversationA = conversation('conversation-a');
+  const conversationB = conversation('conversation-b');
+  const commands: ChatCommands = {
+    loadCoworkers: async () => [],
+    loadConversations: async () => [conversationA, conversationB],
+    createConversation: async () => conversationA,
+    loadWorks: async () => [],
+    loadMessages: async () => [],
+    sendMessage: async () => message('conversation-a', 'message-a', 1, 'hello'),
+  };
+
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(
+        <MemoryRouter initialEntries={['/']}>
+          <Routes>
+            <Route path="/" element={<RoutedShell commands={commands} />} />
+            <Route
+              path="/conversations/:conversationId"
+              element={<RoutedShell commands={commands} />}
+            />
+            <Route path="/work" element={<RoutedShell commands={commands} />} />
+            <Route
+              path="/work/:workId"
+              element={<RoutedShell commands={commands} />}
+            />
+          </Routes>
+        </MemoryRouter>,
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(locationText(host)).toBe('/conversations/conversation-a');
+
+    await act(async () => {
+      findButton(host, 'conversation-b').click();
+      await Promise.resolve();
+    });
+    expect(locationText(host)).toBe('/conversations/conversation-b');
+
+    await act(async () => {
+      findButton(host, 'Work').click();
+      await Promise.resolve();
+    });
+    expect(locationText(host)).toBe('/work?from_conversation=conversation-b');
+
+    await act(async () => {
+      findButton(host, 'Conversations').click();
+      await Promise.resolve();
+    });
+    expect(locationText(host)).toBe('/conversations/conversation-b');
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
   }
 });
 
@@ -168,6 +238,47 @@ it('renders Work as a sibling tab inside the same Cumora-style shell', async () 
     host.remove();
   }
 });
+
+function RoutedShell({ commands }: { readonly commands: ChatCommands }) {
+  const location = useLocation();
+  const { conversationId, workId } = useParams<{
+    conversationId?: string;
+    workId?: string;
+  }>();
+  const query = new URLSearchParams(location.search);
+  return (
+    <>
+      <ChatShell
+        commands={commands}
+        routeConversationId={conversationId ?? null}
+        returnConversationId={query.get('from_conversation')}
+        selectedWorkId={workId ?? null}
+      />
+      <output data-testid="location">
+        {location.pathname}
+        {location.search}
+      </output>
+    </>
+  );
+}
+
+function findButton(host: HTMLElement, label: string): HTMLButtonElement {
+  const button = [...host.querySelectorAll('button')].find((candidate) =>
+    candidate.textContent?.includes(label),
+  );
+  if (!(button instanceof HTMLButtonElement)) {
+    throw new Error(`Button not found: ${label}`);
+  }
+  return button;
+}
+
+function locationText(host: HTMLElement): string {
+  const output = host.querySelector('[data-testid="location"]');
+  if (!(output instanceof HTMLOutputElement)) {
+    throw new Error('location output missing');
+  }
+  return output.textContent ?? '';
+}
 
 function conversation(id: ConversationId): Conversation {
   return {

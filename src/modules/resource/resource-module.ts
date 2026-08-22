@@ -7,6 +7,7 @@ import {
   AGENT_SERVER_MEMORY_READ_TOOL_REF,
 } from '../../application/agents/built-in-skills.js';
 import { EnsureCoworkerConversation } from '../../application/chat/ensure-coworker-conversation.js';
+import { ReconcileCoworkerConversations } from '../../application/chat/reconcile-coworker-conversations.js';
 import type { AgentResolutionApi } from '../../application/ports/agent-resolution-api.js';
 import type { ManagedAgentDefinitionRead } from '../../application/ports/agent-registry.js';
 import type { DefinitionReadApi } from '../../application/ports/definition-read-api.js';
@@ -94,13 +95,9 @@ export async function createResourceModule(
 
   // The managed Agent registry is the only production Agent source. The legacy
   // invokable repository remains solely for Team compatibility.
-  const agentResolutionApi = new ResolveAgentVersion(
-    agentRegistry,
-    skillCatalog,
-  );
+  const agentResolutionApi = new ResolveAgentVersion(agentRegistry, skillCatalog);
   const definitionReadApi: DefinitionReadApi = {
-    findTeamDefinitionById: (id) =>
-      invokableRepository.findTeamDefinitionById(id),
+    findTeamDefinitionById: (id) => invokableRepository.findTeamDefinitionById(id),
     findPublishedTeamVersionById: (id, ownerScope) =>
       invokableRepository.findPublishedTeamVersionById(id, ownerScope),
   };
@@ -130,11 +127,40 @@ export async function createResourceModule(
     environmentRegistry,
     memories: memoryVersionReadApi,
   });
-  const conversationRepository = new PostgresConversationRepository(
-    options.database,
-  );
+
+  const directChatEnabled = options.config.directChatPlane !== 'absent';
+  const productWorkEnabled = options.config.productWorkPlane !== 'absent';
+  const conversationRepository = directChatEnabled
+    ? new PostgresConversationRepository(options.database)
+    : undefined;
   const workEntitlementRepository =
-    new PostgresConversationWorkEntitlementRepository(options.database);
+    directChatEnabled && productWorkEnabled
+      ? new PostgresConversationWorkEntitlementRepository(options.database)
+      : undefined;
+  const defaultCoworkerProvisioning = conversationRepository
+    ? new EnsureCoworkerConversation(
+        conversationRepository,
+        workEntitlementRepository,
+      )
+    : undefined;
+
+  if (defaultCoworkerProvisioning) {
+    const reconciliation = new ReconcileCoworkerConversations(
+      agentRegistry,
+      defaultCoworkerProvisioning,
+    );
+    for (const account of options.config.serviceAccounts ?? []) {
+      if (account.disabled) continue;
+      await reconciliation.execute({
+        tenantId: account.tenantId,
+        workspaceId: account.workspaceId,
+        principalType: 'service_account',
+        principalId: account.serviceAccountId,
+        serviceAccountId: account.serviceAccountId,
+        policySnapshotVersion: account.policyVersion,
+      });
+    }
+  }
 
   return {
     managedAgentDefinitions: agentRegistry,
@@ -151,15 +177,7 @@ export async function createResourceModule(
         definitions: productWorkDefinitions,
       });
       const configuredCoworkerProvisioning =
-        httpOptions?.coworkerProvisioning ??
-        (config.directChatPlane !== 'absent'
-          ? new EnsureCoworkerConversation(
-              conversationRepository,
-              config.productWorkPlane !== 'absent'
-                ? workEntitlementRepository
-                : undefined,
-            )
-          : undefined);
+        httpOptions?.coworkerProvisioning ?? defaultCoworkerProvisioning;
       registerAgentRoutes(app, {
         config,
         agentRegistry,

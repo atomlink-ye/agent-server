@@ -19,7 +19,6 @@ import { InvokeTask } from '../../src/application/tasks/invoke-task.js';
 import { transitionRun } from '../../src/domain/runs/run.js';
 import { createRootTask } from '../../src/domain/tasks/task.js';
 import { createMemoryProposal } from '../../src/domain/workspace-memory/memory-proposal.js';
-import { createAgentDefinition } from '../../src/domain/invokables/agent-definition.js';
 import { createTeamDefinition } from '../../src/domain/invokables/team-definition.js';
 import {
   createDraftTeamVersion,

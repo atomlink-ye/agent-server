@@ -8,7 +8,6 @@ import {
   applyDurableKernelMigrations,
   createPostgresPool,
 } from '../../src/infrastructure/postgres/postgres.js';
-import { createAgentDefinition } from '../../src/domain/invokables/agent-definition.js';
 import { PostgresInvokableRepository } from '../../src/infrastructure/postgres/postgres-invokable-repository.js';
 import { PostgresAgentRegistry } from '../../src/infrastructure/postgres/postgres-agent-registry.js';
 

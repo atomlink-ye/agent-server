@@ -31,27 +31,27 @@ function issue(
 describe('RuntimeToolGrantService', () => {
   afterEach(() => vi.useRealTimers());
 
-  it('replaces a team-member grant and invalidates the old bearer', () => {
+  it('replaces a team-member grant and invalidates the old bearer', async () => {
     const service = new RuntimeToolGrantService();
-    const first = issue(service, { runId: 'run-1' });
-    const second = issue(service, { runId: 'run-2' });
+    const first = await issue(service, { runId: 'run-1' });
+    const second = await issue(service, { runId: 'run-2' });
 
     expect(service.resolve(first.token)).toBeNull();
     expect(service.resolve(second.token)?.activeTurn?.runId).toBe('run-2');
   });
 
-  it('keeps grants for different scopes independent', () => {
+  it('keeps grants for different scopes independent', async () => {
     const service = new RuntimeToolGrantService();
-    const first = issue(service, { productSessionId: 'member-1' });
-    const second = issue(service, { productSessionId: 'member-2' });
+    const first = await issue(service, { productSessionId: 'member-1' });
+    const second = await issue(service, { productSessionId: 'member-2' });
 
     expect(service.resolve(first.token)?.productSessionId).toBe('member-1');
     expect(service.resolve(second.token)?.productSessionId).toBe('member-2');
   });
 
-  it('fences replacement while the old grant has active calls', () => {
+  it('fences replacement while the old grant has active calls', async () => {
     const service = new RuntimeToolGrantService();
-    const first = issue(service);
+    const first = await issue(service);
     service.beginToolCall(first.receipt.grantId);
 
     expect(() => issue(service, { runId: 'run-2' })).toThrow(
@@ -60,16 +60,16 @@ describe('RuntimeToolGrantService', () => {
     expect(service.activeToolCalls(first.receipt.grantId)).toBe(1);
   });
 
-  it('revokes every grant in a TeamRun without erasing active-call accounting', () => {
+  it('revokes every grant in a TeamRun without erasing active-call accounting', async () => {
     const service = new RuntimeToolGrantService();
-    const active = issue(service);
-    const other = issue(service, {
+    const active = await issue(service);
+    const other = await issue(service, {
       productSessionId: 'member-2',
       teamMemberRunId: 'member-2',
       teamRunId: 'team-2',
     });
     service.beginToolCall(active.receipt.grantId);
-    service.revokeForTeamRun('team-1');
+    await service.revokeForTeamRun('team-1');
 
     expect(service.resolve(active.token)).toBeNull();
     expect(service.resolve(other.token)?.teamRunId).toBe('team-2');
@@ -78,16 +78,16 @@ describe('RuntimeToolGrantService', () => {
     expect(service.activeToolCalls(active.receipt.grantId)).toBe(0);
   });
 
-  it('prunes expired idle grants and retains expired active grants until their call ends', () => {
+  it('prunes expired idle grants and retains expired active grants until their call ends', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-08-06T00:00:00.000Z'));
     const service = new RuntimeToolGrantService();
-    const idle = service.issue({
+    const idle = await await service.issue({
       ...base,
       productSessionId: 'idle',
       ttlMs: 10,
     });
-    const active = service.issue({
+    const active = await service.issue({
       ...base,
       productSessionId: 'active',
       ttlMs: 10,
@@ -106,7 +106,7 @@ describe('RuntimeToolGrantService', () => {
     expect(service.get(active.receipt.grantId)).toBeNull();
   });
 
-  it('reports a missing Team grant scope distinctly from ambiguity', () => {
+  it('reports a missing Team grant scope distinctly from ambiguity', async () => {
     const service = new RuntimeToolGrantService();
 
     expect(() =>
@@ -122,17 +122,17 @@ describe('RuntimeToolGrantService', () => {
     ).toThrow('Runtime grant scope not found.');
   });
 
-  it('retains an expired narrowed Team lead bearer for the next turn refresh', () => {
+  it('retains an expired narrowed Team lead bearer for the next turn refresh', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-08-06T00:00:00.000Z'));
     const service = new RuntimeToolGrantService();
-    const first = issue(service, {
+    const first = await issue(service, {
       taskId: 'task-1',
       runId: 'run-1',
       contextEpoch: 'epoch-1',
       ttlMs: 100,
     });
-    const turnOne = service.refreshForTeamMember({
+    const turnOne = await service.refreshForTeamMember({
       grantId: first.receipt.grantId,
       teamMemberRunId: 'member-1',
       scopeId: 'member-1',
@@ -146,7 +146,7 @@ describe('RuntimeToolGrantService', () => {
     vi.advanceTimersByTime(20);
     expect(service.resolve(first.token)).toBeNull();
 
-    const turnTwo = service.refreshForTeamMember({
+    const turnTwo = await service.refreshForTeamMember({
       grantId: first.receipt.grantId,
       teamMemberRunId: 'member-1',
       scopeId: 'member-1',
@@ -168,9 +168,9 @@ describe('RuntimeToolGrantService', () => {
     });
   });
 
-  it('closes a Team turn explicitly and fences active calls', () => {
+  it('closes a Team turn explicitly and fences active calls', async () => {
     const service = new RuntimeToolGrantService();
-    const grant = issue(service, {
+    const grant = await issue(service, {
       taskId: 'task-1',
       runId: 'run-1',
       contextEpoch: 'epoch-1',
@@ -196,11 +196,11 @@ describe('RuntimeToolGrantService', () => {
     expect(service.resolve(grant.token)?.activeTurn).toBeNull();
   });
 
-  it('deletes an expired Team tombstone when its TeamRun is revoked', () => {
+  it('deletes an expired Team tombstone when its TeamRun is revoked', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-08-06T00:00:00.000Z'));
     const service = new RuntimeToolGrantService();
-    const grant = issue(service, { ttlMs: 10 });
+    const grant = await issue(service, { ttlMs: 10 });
     vi.advanceTimersByTime(20);
 
     expect(service.resolve(grant.token)).toBeNull();
@@ -211,7 +211,7 @@ describe('RuntimeToolGrantService', () => {
         scopeId: 'member-1',
       }),
     ).not.toBeNull();
-    service.revokeForTeamRun('team-1');
+    await service.revokeForTeamRun('team-1');
     expect(service.get(grant.receipt.grantId)).toBeNull();
     expect(
       service.getForTeamMember({
@@ -222,11 +222,11 @@ describe('RuntimeToolGrantService', () => {
     expect(service.resolve(grant.token)).toBeNull();
   });
 
-  it('keeps an expired chat bearer unavailable until its trusted scope refreshes it', () => {
+  it('keeps an expired chat bearer unavailable until its trusted scope refreshes it', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-08-06T00:00:00.000Z'));
     const service = new RuntimeToolGrantService();
-    const grant = service.issue({
+    const grant = await service.issue({
       ...base,
       scopeId: 'chat-scope',
       ttlMs: 10,
@@ -262,7 +262,7 @@ describe('RuntimeToolGrantService', () => {
     expect(service.resolve(grant.token)?.grantId).toBe(grant.receipt.grantId);
   });
 
-  it('rejects a chat-grant refresh unless every identity and scope field matches', () => {
+  it('rejects a chat-grant refresh unless every identity and scope field matches', async () => {
     const service = new RuntimeToolGrantService();
     service.issue({
       ...base,

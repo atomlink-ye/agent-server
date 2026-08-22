@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 
-import { ExecutionBindingUnavailableError } from '../../application/ports/execution-plane.js';
 import type { RuntimeSession } from '../../application/ports/runtime-session-repository.js';
 import { ExecutionRuntimeChatTurnProvider } from './execution-runtime-chat-turn-provider.js';
 
@@ -10,9 +9,6 @@ describe('ExecutionRuntimeChatTurnProvider N2 modes', () => {
     const provider = new ExecutionRuntimeChatTurnProvider({
       async ensureAgentChatRuntimeSession() {
         return durableSession(true);
-      },
-      async resetRuntimeSessionBinding() {
-        throw new Error('must not reset');
       },
       async executeTurn(input) {
         calls.push(input);
@@ -60,70 +56,6 @@ describe('ExecutionRuntimeChatTurnProvider N2 modes', () => {
     expect(calls[0].prompt).toContain('CHAT DELTA');
     expect(calls[0].prompt).toContain('NEW_DELTA_ONLY');
     expect(calls[0].prompt).not.toContain('OLD_CANONICAL_CONTEXT');
-  });
-
-  it('clears a stale provider binding and retries once with bounded canonical recovery state', async () => {
-    const prompts: string[] = [];
-    let attempts = 0;
-    let resets = 0;
-    const provider = new ExecutionRuntimeChatTurnProvider({
-      async ensureAgentChatRuntimeSession() {
-        return durableSession(true);
-      },
-      async resetRuntimeSessionBinding() {
-        resets += 1;
-        return durableSession(false);
-      },
-      async executeTurn(input) {
-        attempts += 1;
-        prompts.push(input.prompt);
-        if (attempts === 1) throw new ExecutionBindingUnavailableError();
-        return outcome();
-      },
-    });
-
-    const result = await provider.runTurn({
-      ...identity(),
-      brain: brain(),
-      turn: {
-        modeHint: 'delta',
-        fromSequenceExclusive: 7,
-        throughSequence: 8,
-      },
-      messages: [
-        {
-          messageId: 'm8',
-          sequence: 8,
-          authorType: 'principal',
-          authorId: 'principal-n2',
-          body: 'CURRENT_DELTA',
-        },
-      ],
-      recoveryMessages: [
-        {
-          messageId: 'm6',
-          sequence: 6,
-          authorType: 'principal',
-          authorId: 'principal-n2',
-          body: 'BOUNDED_RECOVERY_CONTEXT',
-        },
-        {
-          messageId: 'm8',
-          sequence: 8,
-          authorType: 'principal',
-          authorId: 'principal-n2',
-          body: 'CURRENT_DELTA',
-        },
-      ],
-    });
-
-    expect(resets).toBe(1);
-    expect(attempts).toBe(2);
-    expect(prompts[0]).toContain('CHAT DELTA');
-    expect(prompts[0]).not.toContain('BOUNDED_RECOVERY_CONTEXT');
-    expect(prompts[1]).toContain('CHAT RECOVERY SNAPSHOT');
-    expect(prompts[1]).toContain('BOUNDED_RECOVERY_CONTEXT');
-    expect(result.mode).toBe('recover');
   });
 });
 

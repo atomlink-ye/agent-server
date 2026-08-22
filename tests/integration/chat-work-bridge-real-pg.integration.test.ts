@@ -217,7 +217,7 @@ describe('Chat-Work Bridge integration on real PostgreSQL', () => {
       },
     });
     const grants = new RuntimeToolGrantService();
-    const grantIssue = grants.issue({
+    const grantIssue = await grants.issue({
       tenantId,
       principalType: access.principalType,
       principalId: access.principalId,

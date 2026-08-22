@@ -172,7 +172,7 @@ describe('runtime memory PostgreSQL materialization', () => {
       },
       systemPrompt: '',
     });
-    await secondSession.run({ runId: continuationRunId, prompt: 'second' });
+    await secondSession.session.run({ runId: continuationRunId, prompt: 'second' });
 
     expect(firstSession.sessionBinding.externalSessionId).toBe(
       'agent-session-1',

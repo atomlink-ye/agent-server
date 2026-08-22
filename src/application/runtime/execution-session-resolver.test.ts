@@ -97,6 +97,7 @@ describe('ExecutionSessionResolver', () => {
     const calls: string[] = [];
     const runtime = unboundRuntimeSession();
     const resolver = new ExecutionSessionResolver(fakePlane(calls), {
+      reconcileDesiredSpec: async () => runtime,
       bindExecution: async (binding) => {
         calls.push('persist');
         return {
@@ -105,6 +106,8 @@ describe('ExecutionSessionResolver', () => {
           sessionBinding: binding.sessionBinding,
         };
       },
+      replaceExecution: async () => runtime,
+      markUnavailable: async () => runtime,
     });
 
     const resolved = await resolver.resolve({ runtimeSession: runtime, spec });
@@ -117,10 +120,13 @@ describe('ExecutionSessionResolver', () => {
   it('never sends the first prompt when durable binding persistence fails', async () => {
     const calls: string[] = [];
     const resolver = new ExecutionSessionResolver(fakePlane(calls), {
+      reconcileDesiredSpec: async () => unboundRuntimeSession(),
       bindExecution: async () => {
         calls.push('persist');
         throw new Error('database unavailable');
       },
+      replaceExecution: async () => unboundRuntimeSession(),
+      markUnavailable: async () => unboundRuntimeSession(),
     });
 
     await expect(
@@ -144,9 +150,12 @@ describe('ExecutionSessionResolver', () => {
       },
     };
     const resolver = new ExecutionSessionResolver(fakePlane(calls), {
+      reconcileDesiredSpec: async () => runtime,
       bindExecution: async () => {
         throw new Error('must not persist on attach');
       },
+      replaceExecution: async () => runtime,
+      markUnavailable: async () => runtime,
     });
 
     const resolved = await resolver.resolve({ runtimeSession: runtime, spec });

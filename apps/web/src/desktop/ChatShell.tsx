@@ -28,6 +28,7 @@ export interface ChatShellProps {
   readonly appStore?: AppStore;
   readonly conversationsStore?: ConversationsStore;
   readonly messagesStore?: MessagesStore;
+  readonly routeConversationId?: string | null;
   readonly returnConversationId?: string | null;
   readonly selectedWorkId?: string | null;
   readonly workTab?: string | null;
@@ -37,12 +38,14 @@ export interface ChatShellProps {
 
 const sendFailureMessage = 'Unable to send this message. Please try again.';
 const messageRefreshIntervalMs = 3000;
+const conversationRefreshIntervalMs = 5000;
 
 export function ChatShell({
   commands,
   appStore: providedAppStore,
   conversationsStore: providedConversationsStore,
   messagesStore: providedMessagesStore,
+  routeConversationId = null,
   returnConversationId = null,
   selectedWorkId = null,
   workTab = null,
@@ -84,7 +87,8 @@ export function ChatShell({
   );
   const conversationId = selection.selectedConversationId;
   const messageState = conversationId
-    ? (allMessageStates[conversationId] ?? messageStore.getConversation(conversationId))
+    ? (allMessageStates[conversationId] ??
+      messageStore.getConversation(conversationId))
     : null;
   const selectedConversation = conversationId
     ? conversationState.conversations.find(({ id }) => id === conversationId)
@@ -95,26 +99,98 @@ export function ChatShell({
   }, [commands.loadConversations, conversationListStore]);
 
   useEffect(() => {
-    if (conversationState.status !== 'ready') return;
-    const returnedConversation = returnConversationId
-      ? conversationState.conversations.some(({ id }) => id === returnConversationId)
+    if (activeTab !== 'conversations') return;
+
+    let disposed = false;
+    let refreshInFlight = false;
+    let intervalId: number | null = null;
+
+    const stopPolling = (): void => {
+      if (intervalId === null) return;
+      window.clearInterval(intervalId);
+      intervalId = null;
+    };
+    const refresh = (): void => {
+      if (
+        disposed ||
+        refreshInFlight ||
+        document.visibilityState !== 'visible'
+      ) {
+        return;
+      }
+      refreshInFlight = true;
+      void conversationListStore.load(commands.loadConversations).finally(() => {
+        refreshInFlight = false;
+      });
+    };
+    const startPolling = (): void => {
+      if (disposed || document.visibilityState !== 'visible') return;
+      stopPolling();
+      intervalId = window.setInterval(refresh, conversationRefreshIntervalMs);
+    };
+    const handleVisibilityChange = (): void => {
+      stopPolling();
+      if (document.visibilityState === 'visible') {
+        refresh();
+        startPolling();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    startPolling();
+    return () => {
+      disposed = true;
+      stopPolling();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [activeTab, commands.loadConversations, conversationListStore]);
+
+  useEffect(() => {
+    if (activeTab !== 'conversations' || conversationState.status !== 'ready')
+      return;
+
+    const conversations = conversationState.conversations;
+    const routeExists = routeConversationId
+      ? conversations.some(({ id }) => id === routeConversationId)
       : false;
-    const selected = appSelectionStore.getSnapshot().selectedConversationId;
-    if (returnedConversation) {
+    if (routeConversationId) {
+      if (routeExists) appSelectionStore.select(routeConversationId);
+      else appSelectionStore.clearSelection();
+      return;
+    }
+
+    const returnedConversation = returnConversationId
+      ? conversations.some(({ id }) => id === returnConversationId)
+      : false;
+    if (returnedConversation && returnConversationId) {
       appSelectionStore.select(returnConversationId);
-    } else if (returnConversationId || !conversationState.conversations.length) {
+      navigate(conversationPath(returnConversationId), { replace: true });
+      return;
+    }
+
+    if (!conversations.length) {
       appSelectionStore.clearSelection();
-    } else if (
-      selected === null ||
-      !conversationState.conversations.some(({ id }) => id === selected)
-    ) {
-      appSelectionStore.select(conversationState.conversations[0].id);
+      return;
+    }
+
+    const selected = appSelectionStore.getSnapshot().selectedConversationId;
+    const selectedExists = selected
+      ? conversations.some(({ id }) => id === selected)
+      : false;
+    const nextConversationId = selectedExists ? selected! : conversations[0]!.id;
+    appSelectionStore.select(nextConversationId);
+    if (location.pathname === '/') {
+      navigate(conversationPath(nextConversationId), { replace: true });
     }
   }, [
+    activeTab,
     appSelectionStore,
     conversationState.conversations,
     conversationState.status,
+    location.pathname,
+    navigate,
     returnConversationId,
+    routeConversationId,
   ]);
 
   useEffect(() => {
@@ -178,7 +254,10 @@ export function ChatShell({
     const handleVisibilityChange = (): void => {
       visibilityGeneration += 1;
       stopPolling();
-      if (document.visibilityState === 'visible') startPolling();
+      if (document.visibilityState === 'visible') {
+        refresh();
+        startPolling();
+      }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -243,9 +322,7 @@ export function ChatShell({
   const openWork = useCallback(
     (workId: string, originatingConversationId: string): void => {
       setShowNewWork(false);
-      navigate(`/work/${encodeURIComponent(workId)}`, {
-        state: { returnConversationId: originatingConversationId },
-      });
+      navigate(workPath(workId, originatingConversationId));
     },
     [navigate],
   );
@@ -253,36 +330,48 @@ export function ChatShell({
   const openWorkFromPane = useCallback(
     (workId: string): void => {
       setShowNewWork(false);
-      navigate(`/work/${encodeURIComponent(workId)}`);
+      navigate(workPath(workId, returnConversationId));
     },
-    [navigate],
+    [navigate, returnConversationId],
   );
 
   const handleSelect = useCallback(
     (selectedConversationId: string): void => {
       appSelectionStore.select(selectedConversationId);
+      navigate(conversationPath(selectedConversationId));
     },
-    [appSelectionStore],
+    [appSelectionStore, navigate],
   );
 
   const handleSelectTab = useCallback(
     (tab: DesktopTab): void => {
       setShowNewWork(false);
       if (tab === 'work') {
-        navigate(selectedWorkId ? `/work/${encodeURIComponent(selectedWorkId)}` : '/work');
+        const origin =
+          activeTab === 'conversations' ? conversationId : returnConversationId;
+        navigate(
+          selectedWorkId
+            ? workPath(selectedWorkId, origin)
+            : workRootPath(origin),
+        );
         return;
       }
-      navigate('/', {
-        state: returnConversationId ? { returnConversationId } : undefined,
-      });
+      const target = returnConversationId ?? conversationId;
+      navigate(target ? conversationPath(target) : '/');
     },
-    [navigate, returnConversationId, selectedWorkId],
+    [
+      activeTab,
+      conversationId,
+      navigate,
+      returnConversationId,
+      selectedWorkId,
+    ],
   );
 
   const respondInChat = useCallback((): void => {
-    navigate('/', {
-      state: returnConversationId ? { returnConversationId } : undefined,
-    });
+    navigate(
+      returnConversationId ? conversationPath(returnConversationId) : '/',
+    );
   }, [navigate, returnConversationId]);
 
   return (
@@ -354,7 +443,7 @@ export function ChatShell({
           <WorkPane
             commands={commands}
             onCreateNew={() => {
-              navigate('/work');
+              navigate(workRootPath(returnConversationId));
               setShowNewWork(true);
             }}
             onOpenWork={openWorkFromPane}
@@ -397,6 +486,23 @@ export function ChatShell({
       )}
     </div>
   );
+}
+
+function conversationPath(conversationId: string): string {
+  return `/conversations/${encodeURIComponent(conversationId)}`;
+}
+
+function workRootPath(originConversationId: string | null): string {
+  return originConversationId
+    ? `/work?from_conversation=${encodeURIComponent(originConversationId)}`
+    : '/work';
+}
+
+function workPath(workId: string, originConversationId: string | null): string {
+  const base = `/work/${encodeURIComponent(workId)}`;
+  return originConversationId
+    ? `${base}?from_conversation=${encodeURIComponent(originConversationId)}`
+    : base;
 }
 
 function conversationDisplayName(conversation: {

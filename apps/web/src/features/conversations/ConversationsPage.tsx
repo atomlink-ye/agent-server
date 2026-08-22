@@ -155,6 +155,7 @@ export function ConversationsPage({
     }
 
     const selected = appSelectionStore.getSnapshot().selectedConversationId;
+    if (!selected && location.pathname !== '/') return;
     const selectedExists = selected
       ? conversations.some(({ id }) => id === selected)
       : false;

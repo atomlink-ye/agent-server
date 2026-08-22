@@ -1,6 +1,7 @@
 import type { AgentDefinition } from '../../domain/agents/managed-agent-definition.js';
 import type { ManagedAgentOwner } from '../../domain/agents/managed-agent-owner.js';
 import type { ManagedAgentVersion } from '../../domain/agents/managed-agent-version.js';
+import type { AgentChatRuntimeStatus } from '../../domain/chat/agent-chat-runtime.js';
 
 export interface AgentRegistry {
   /** The repository atomically converges idempotency, definition, and version creation. */
@@ -44,6 +45,11 @@ export interface ManagedAgentDefinitionRead {
     readonly tenantId: string;
     readonly definitionId: string;
   }): Promise<AgentDefinition | null>;
+  /** Product-facing coworker roster: only definitions with a published chat runtime. */
+  listManagedDefinitionsByTenant(input: {
+    readonly tenantId: string;
+    readonly command: ListManagedAgentDefinitionsCommand;
+  }): Promise<ManagedAgentCoworkerPage>;
   /** Internal delivery seam: tenant-scoped managed version read. */
   findVersionByTenant(input: {
     readonly tenantId: string;
@@ -54,6 +60,22 @@ export interface ManagedAgentDefinitionRead {
     readonly tenantId: string;
     readonly command: ListAgentVersionsCommand;
   }): Promise<ManagedAgentVersionPage | null>;
+}
+
+export interface ListManagedAgentDefinitionsCommand {
+  readonly cursor: string | null;
+  readonly limit: number;
+}
+
+export interface ManagedAgentCoworkerSummary {
+  readonly definition: AgentDefinition;
+  readonly activeAgentVersionId: string;
+  readonly runtimeStatus: AgentChatRuntimeStatus;
+}
+
+export interface ManagedAgentCoworkerPage {
+  readonly items: readonly ManagedAgentCoworkerSummary[];
+  readonly nextCursor: string | null;
 }
 
 export interface ListAgentVersionsCommand {

@@ -898,7 +898,7 @@ describeRealPostgres('real PostgreSQL admission pool', () => {
 });
 
 function barrierAgentResolver(
-  database: NonNullable<typeof readerPool>,
+  database: Parameters<typeof canonicalAgentResolver>[0],
   arrive: () => Promise<void>,
 ) {
   const resolver = canonicalAgentResolver(database);

@@ -6,6 +6,7 @@ import {
   AGENT_SERVER_MEMORY_API_SKILL_REF,
   AGENT_SERVER_MEMORY_READ_TOOL_REF,
 } from '../../application/agents/built-in-skills.js';
+import type { EnsureCoworkerConversation } from '../../application/chat/ensure-coworker-conversation.js';
 import type { AgentResolutionApi } from '../../application/ports/agent-resolution-api.js';
 import type { ManagedAgentDefinitionRead } from '../../application/ports/agent-registry.js';
 import type { DefinitionReadApi } from '../../application/ports/definition-read-api.js';
@@ -37,6 +38,10 @@ export interface ResourceModuleDatabase {
   ): Promise<{ rows?: readonly Row[]; rowCount?: number | null }>;
 }
 
+export interface ResourceModuleHttpOptions {
+  readonly coworkerProvisioning?: Pick<EnsureCoworkerConversation, 'execute'>;
+}
+
 export interface ResourceModule {
   readonly managedAgentDefinitions: ManagedAgentDefinitionRead;
   readonly agentResolutionApi: AgentResolutionApi;
@@ -46,7 +51,11 @@ export interface ResourceModule {
   readonly workDefinitionSources: WorkDefinitionSourceRepository;
   readonly workDefinitionResolution: WorkDefinitionResolutionPort;
   readonly productWorkDefinitions: ProductWorkDefinitionApi;
-  installHttp(app: Hono<ApiEnvironment>, config: AppConfig): void;
+  installHttp(
+    app: Hono<ApiEnvironment>,
+    config: AppConfig,
+    options?: ResourceModuleHttpOptions,
+  ): void;
 }
 
 export interface CreateResourceModuleOptions {
@@ -129,12 +138,18 @@ export async function createResourceModule(
     workDefinitionSources,
     workDefinitionResolution,
     productWorkDefinitions,
-    installHttp(app, config) {
+    installHttp(app, config, httpOptions) {
       registerProductWorkDefinitionRoutes(app, {
         config,
         definitions: productWorkDefinitions,
       });
-      registerAgentRoutes(app, { config, agentRegistry });
+      registerAgentRoutes(app, {
+        config,
+        agentRegistry,
+        ...(httpOptions?.coworkerProvisioning
+          ? { coworkerProvisioning: httpOptions.coworkerProvisioning }
+          : {}),
+      });
       registerTeamRoutes(app, {
         config,
         invokableRepository,

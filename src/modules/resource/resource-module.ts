@@ -6,7 +6,7 @@ import {
   AGENT_SERVER_MEMORY_API_SKILL_REF,
   AGENT_SERVER_MEMORY_READ_TOOL_REF,
 } from '../../application/agents/built-in-skills.js';
-import type { EnsureCoworkerConversation } from '../../application/chat/ensure-coworker-conversation.js';
+import { EnsureCoworkerConversation } from '../../application/chat/ensure-coworker-conversation.js';
 import type { AgentResolutionApi } from '../../application/ports/agent-resolution-api.js';
 import type { ManagedAgentDefinitionRead } from '../../application/ports/agent-registry.js';
 import type { DefinitionReadApi } from '../../application/ports/definition-read-api.js';
@@ -24,6 +24,8 @@ import { registerProductWorkDefinitionRoutes } from '../../entrypoints/api/route
 import { registerTeamRoutes } from '../../entrypoints/api/routes/teams.js';
 import { LocalSkillCatalog } from '../../infrastructure/filesystem/local-skill-catalog.js';
 import { PostgresAgentRegistry } from '../../infrastructure/postgres/postgres-agent-registry.js';
+import { PostgresConversationRepository } from '../../infrastructure/postgres/postgres-conversation-repository.js';
+import { PostgresConversationWorkEntitlementRepository } from '../../infrastructure/postgres/postgres-conversation-work-entitlement-repository.js';
 import { PostgresEnvironmentRegistry } from '../../infrastructure/postgres/postgres-environment-registry.js';
 import { PostgresInvokableRepository } from '../../infrastructure/postgres/postgres-invokable-repository.js';
 import { PostgresMemoryVersionReadApi } from '../../infrastructure/postgres/postgres-memory-version-read-api.js';
@@ -128,6 +130,10 @@ export async function createResourceModule(
     environmentRegistry,
     memories: memoryVersionReadApi,
   });
+  const defaultCoworkerProvisioning = new EnsureCoworkerConversation(
+    new PostgresConversationRepository(options.database),
+    new PostgresConversationWorkEntitlementRepository(options.database),
+  );
 
   return {
     managedAgentDefinitions: agentRegistry,
@@ -146,9 +152,8 @@ export async function createResourceModule(
       registerAgentRoutes(app, {
         config,
         agentRegistry,
-        ...(httpOptions?.coworkerProvisioning
-          ? { coworkerProvisioning: httpOptions.coworkerProvisioning }
-          : {}),
+        coworkerProvisioning:
+          httpOptions?.coworkerProvisioning ?? defaultCoworkerProvisioning,
       });
       registerTeamRoutes(app, {
         config,

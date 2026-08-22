@@ -386,6 +386,7 @@ export async function createTestApp(
     listMemoryEntries,
     managedMemory,
     agentRegistry,
+    agentResolution: resolveAgentVersion,
     sessions,
     events,
     cancelTask,

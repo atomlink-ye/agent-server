@@ -5,11 +5,6 @@ import type { ChannelOutboxInput } from '../../src/domain/channels/channel-deliv
 import type { ChannelIngressInput } from '../../src/domain/channels/channel-event.js';
 import { GetTask } from '../../src/application/tasks/get-task.js';
 import { InvokeTask } from '../../src/application/tasks/invoke-task.js';
-import { createAgentDefinition } from '../../src/domain/invokables/agent-definition.js';
-import {
-  createDraftAgentVersion,
-  publishAgentVersion,
-} from '../../src/domain/invokables/agent-version.js';
 import {
   applyDurableKernelMigrations,
   createPostgresPool,
@@ -59,6 +54,7 @@ describeRealPostgres('real PostgreSQL admission pool', () => {
         // Keep the pre-admission published-version lookup off the two
         // transaction connections used by the admission pool.
         new PostgresInvokableRepository(readerPool!),
+        canonicalAgentResolver(readerPool!),
         () => new Date('2026-07-23T12:00:00.000Z'),
       )
     : null;
@@ -69,28 +65,14 @@ describeRealPostgres('real PostgreSQL admission pool', () => {
     await applyDurableKernelMigrations(pool);
     await cleanTestRows(pool);
 
-    const definition = createAgentDefinition({
-      id: agentDefinitionId,
-      ...owner,
+    await seedCanonicalPublishedAgent(pool, owner, {
+      definitionId: agentDefinitionId,
+      versionId: agentVersionId,
       name: 'Real PostgreSQL admission agent',
       description: 'Admission integration fixture',
-      now: () => new Date('2026-07-23T11:00:00.000Z'),
+      instructions: 'Return the input unchanged.',
+      now: new Date('2026-07-23T11:00:00.000Z'),
     });
-    const version = publishAgentVersion(
-      createDraftAgentVersion({
-        id: agentVersionId,
-        definitionId: definition.id,
-        ...owner,
-        name: 'Real PostgreSQL admission agent v1',
-        description: 'Published admission integration fixture',
-        instructions: 'Return the input unchanged.',
-        now: () => new Date('2026-07-23T11:00:00.000Z'),
-      }),
-      () => new Date('2026-07-23T11:05:00.000Z'),
-    );
-    const invokables = new PostgresInvokableRepository(pool);
-    await invokables.saveAgentDefinition(definition);
-    await invokables.saveAgentVersion(version);
   });
 
   afterAll(async () => {
@@ -754,32 +736,12 @@ describeRealPostgres('real PostgreSQL admission pool', () => {
       owner,
     );
     const sessionOwner = { ...owner, workspaceId: workspace.id };
-    const definition = createAgentDefinition({
-      id: crypto.randomUUID(),
-      ...sessionOwner,
+    const { version } = await seedCanonicalPublishedAgent(pool!, sessionOwner, {
+      definitionId: crypto.randomUUID(),
+      versionId: crypto.randomUUID(),
       name: 'Task 6 real PG agent',
       description: 'Task 6 fixture',
-      now: () => new Date('2026-07-23T11:00:00.000Z'),
-    });
-    const version = publishAgentVersion(
-      createDraftAgentVersion({
-        id: crypto.randomUUID(),
-        definitionId: definition.id,
-        ...sessionOwner,
-        name: 'Task 6 real PG agent v1',
-        description: 'Task 6 fixture',
-        instructions: 'Return the input unchanged.',
-        now: () => new Date('2026-07-23T11:00:00.000Z'),
-      }),
-      () => new Date('2026-07-23T11:05:00.000Z'),
-    );
-    const invokables = new PostgresInvokableRepository(pool!);
-    await seedCanonicalPublishedAgent(pool!, sessionOwner, {
-      definitionId: definition.id,
-      versionId: version.id,
-      name: definition.name,
-      description: definition.description ?? 'Canonical fixture',
-      instructions: version.instructions,
+      instructions: 'Return the input unchanged.',
       now: new Date('2026-07-23T11:00:00.000Z'),
     });
     const channel = new PostgresChannelRepository(pool!);

@@ -10,36 +10,6 @@ permissions:
   contents: read
 
 jobs:
-  n1-final-patch:
-    if: github.event_name == 'pull_request' && github.head_ref == 'refactor/final-agent-identity-harness-convergence' && github.actor != 'github-actions[bot]'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: refactor/final-agent-identity-harness-convergence
-          fetch-depth: 0
-      - name: Patch stale type reference
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          path = Path('tests/integration/real-pg-pool.integration.impl.ts')
-          text = path.read_text()
-          old = '  database: NonNullable<typeof readerPool>,\n'
-          new = '  database: Parameters<typeof canonicalAgentResolver>[0],\n'
-          if old not in text:
-              raise SystemExit('stale barrier resolver type not found')
-          path.write_text(text.replace(old, new, 1))
-          PY
-      - name: Commit patch
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add tests/integration/real-pg-pool.integration.impl.ts
-          git commit -m "test: type barrier resolver through canonical Agent seam"
-          git push origin HEAD:refactor/final-agent-identity-harness-convergence
-
   deterministic:
     runs-on: ubuntu-latest
     timeout-minutes: 30

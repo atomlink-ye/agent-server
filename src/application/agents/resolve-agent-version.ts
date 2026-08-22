@@ -108,7 +108,9 @@ function readModelPolicyRef(version: {
 function validateToolRefs(refs: readonly string[]): void {
   const seen = new Set<string>();
   for (const ref of refs) {
-    if (seen.has(ref) || !SUPPORTED_MANAGED_AGENT_TOOL_REFS.has(ref))
+    if (seen.has(ref))
+      throw new Error('The managed Agent references a Tool more than once.');
+    if (!SUPPORTED_MANAGED_AGENT_TOOL_REFS.has(ref))
       throw new Error('The managed Agent references an unsupported Tool.');
     seen.add(ref);
   }

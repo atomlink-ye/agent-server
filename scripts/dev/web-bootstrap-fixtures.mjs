@@ -65,23 +65,13 @@ function mixedTeamInstructions(name) {
 }
 
 export function mixedTeamAgentYaml(name) {
-  const refs =
-    name === 'lead'
-      ? [
-          'collaboration-state',
-          'board-list',
-          'board-create',
-          'board-accept',
-          'board-request-changes',
-          'collaboration-finish',
-        ]
-      : [
-          'collaboration-state',
-          'board-list',
-          'board-checkpoint',
-          'board-submit',
-        ];
-  return `apiVersion: agent-server/v1alpha1\nkind: ManagedAgent\nmetadata:\n  name: ${name}\nspec:\n  description: Mixed-provider TeamRun proof role\n  instructions: ${JSON.stringify(mixedTeamInstructions(name))}\n  runtime:\n    provider: paseo\n    modelPolicyRef: ${mixedTeamModelPolicies[name]}\n    mode: isolated\n  tools:\n${refs.map((ref) => `    - ref: agent-server/${ref}\n      kind: tool`).join('\n')}\n  skills: []\n  input:\n    schema:\n      type: object\n      properties: {}\n      additionalProperties: false\n    prompt: "Execute exactly the next legal Team transition for your role."\n  session:\n    invocation: fresh_per_invocation\n    followUps: queued\n    binding: reusable\n  memory:\n    policy: workspace_snapshot\n    proposalLimit: 0\n  permissions:\n    network: read_only\n    filesystem: workspace_read\n  completion:\n    type: executable\n    command: "done"\n`;
+  // Team collaboration is composed by the runtime, not declared by the author:
+  // agent-run-executor strips collaboration refs out of a member's declared
+  // tools, and SUPPORTED_MANAGED_AGENT_TOOL_REFS deliberately excludes them.
+  // Declaring them here produced Agents that published successfully and then
+  // failed to resolve in Chat.
+  const refs = [];
+  return `apiVersion: agent-server/v1alpha1\nkind: ManagedAgent\nmetadata:\n  name: ${name}\nspec:\n  description: Mixed-provider TeamRun proof role\n  instructions: ${JSON.stringify(mixedTeamInstructions(name))}\n  runtime:\n    provider: paseo\n    modelPolicyRef: ${mixedTeamModelPolicies[name]}\n    mode: isolated\n  tools:${refs.length ? `\n${refs.map((ref) => `    - ref: agent-server/${ref}\n      kind: tool`).join('\n')}` : ' []'}\n  skills: []\n  input:\n    schema:\n      type: object\n      properties: {}\n      additionalProperties: false\n    prompt: "Execute exactly the next legal Team transition for your role."\n  session:\n    invocation: fresh_per_invocation\n    followUps: queued\n    binding: reusable\n  memory:\n    policy: workspace_snapshot\n    proposalLimit: 0\n  permissions:\n    network: read_only\n    filesystem: workspace_read\n  completion:\n    type: executable\n    command: "done"\n`;
 }
 
 export function mixedTeamEnvironmentYaml() {

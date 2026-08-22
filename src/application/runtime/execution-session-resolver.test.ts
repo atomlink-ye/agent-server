@@ -9,9 +9,10 @@ import type {
 } from '../ports/execution-plane.js';
 import type { RuntimeSession } from '../ports/runtime-session-repository.js';
 import { ExecutionSessionResolver } from './execution-session-resolver.js';
+import { makeRuntimeSession } from '../../../tests/fixtures/runtime-session.js';
 
 function unboundRuntimeSession(): RuntimeSession {
-  return {
+  return makeRuntimeSession({
     id: 'runtime-session-1',
     scope: {
       kind: 'product_session',
@@ -29,9 +30,7 @@ function unboundRuntimeSession(): RuntimeSession {
     toolRefs: [],
     workspaceBinding: null,
     sessionBinding: null,
-    createdAt: '2026-08-15T00:00:00.000Z',
-    updatedAt: '2026-08-15T00:00:00.000Z',
-  };
+  });
 }
 
 const spec = {
@@ -86,7 +85,7 @@ function fakePlane(calls: string[]): ExecutionPlanePort {
     },
     attachSession: async () => {
       calls.push('attach');
-      return createSessionHandle(calls);
+      return { kind: 'reused', session: createSessionHandle(calls), appliedRevision: 1 };
     },
     health: async () => ({ ready: true, plane: 'paseo', checks: [] }),
     close: async () => undefined,

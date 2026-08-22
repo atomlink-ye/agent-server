@@ -22,7 +22,7 @@ export function makeRuntimeSession(
     toolRefs: [],
     desiredRevision: 1,
     desiredSpecDigest: null,
-    status: 'ready',
+    status: 'pending',
     currentGeneration: null,
     workspaceBinding: null,
     sessionBinding: null,

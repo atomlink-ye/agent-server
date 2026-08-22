@@ -89,6 +89,8 @@ export interface ExecutionRuntimeService {
     }[];
     readonly toolRefs: readonly string[];
   }): Promise<RuntimeSession>;
+  /** Clears only an external provider binding; the canonical session survives. */
+  resetRuntimeSessionBinding?(runtimeSessionId: string): Promise<RuntimeSession>;
   executeTurn(
     input: ExecutionTurnRequest,
     observer?: ExecutionObservationSink,
@@ -158,6 +160,16 @@ export class ExecutionPlaneRuntimeFacade implements ExecutionRuntimeService {
       resolvedSkills: input.resolvedSkills,
       toolRefs: input.toolRefs,
     });
+  }
+
+  public async resetRuntimeSessionBinding(
+    runtimeSessionId: string,
+  ): Promise<RuntimeSession> {
+    if (!this.runtimeSessions.clearExecutionBinding)
+      throw new RuntimeExecutionError(
+        'Runtime session binding recovery is unavailable.',
+      );
+    return this.runtimeSessions.clearExecutionBinding(runtimeSessionId);
   }
 
   public async executeTurn(

@@ -1,15 +1,13 @@
-import type { AgentHomeRepository } from '../../application/ports/agent-home-repository.js';
+import type {
+  AgentHomeRepository,
+  ListAgentHomeEntriesInput,
+  ReadAgentHomeEntryInput,
+  WriteAgentHomeEntryInput,
+} from '../../application/ports/agent-home-repository.js';
 import { AgentHomeContextAdapter } from '../../application/context/agent-home-context-adapter.js';
 import { PostgresLogicalFileStore } from './postgres-logical-file-store.js';
 
-interface Queryable {
-  query<T = Record<string, unknown>>(
-    sql: string,
-    values?: readonly unknown[],
-  ): Promise<{ rows?: readonly T[]; rowCount?: number | null }>;
-}
-
-type Database = Queryable;
+type Database = ConstructorParameters<typeof PostgresLogicalFileStore>[0];
 
 export class PostgresAgentHomeRepository implements AgentHomeRepository {
   private readonly adapter: AgentHomeContextAdapter;

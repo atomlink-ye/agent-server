@@ -177,6 +177,7 @@ export class RunPromptContext {
 
   public async buildTurnPrompts(input: {
     readonly resolved: ResolvedRunPrompt;
+    readonly priorExternalSessionId: string | null;
     readonly team: TeamRun | null;
     readonly member: TeamMemberRun | null;
     readonly teamMembers: readonly TeamMemberRun[];

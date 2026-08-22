@@ -613,7 +613,7 @@ export class AgentRunExecutor {
       collaborativeTeam &&
       refreshableBinder?.refreshForTeamMember
     ) {
-      const refreshed = refreshableBinder.refreshForTeamMember({
+      const refreshed = await refreshableBinder.refreshForTeamMember({
         ...(exactLeadGrantId ? { grantId: exactLeadGrantId } : {}),
         teamMemberRunId: member.id,
         scopeId: turnGrantScopeId,
@@ -724,7 +724,7 @@ export class AgentRunExecutor {
         if (!exactLeadGrantId || !refreshableBinder?.closeTeamMemberTurn)
           throw new Error('Lead runtime grant could not be narrowed.');
         try {
-          const narrowed = refreshableBinder.closeTeamMemberTurn({
+          const narrowed = await refreshableBinder.closeTeamMemberTurn({
             grantId: exactLeadGrantId,
             teamMemberRunId: member.id,
             scopeId: turnGrantScopeId,
@@ -746,7 +746,7 @@ export class AgentRunExecutor {
         });
         if (grant) {
           try {
-            refreshableBinder.closeTeamMemberTurn({
+            await refreshableBinder.closeTeamMemberTurn({
               grantId: grant.grantId,
               teamMemberRunId: member.id,
               scopeId: turnGrantScopeId,

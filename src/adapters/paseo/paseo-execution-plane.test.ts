@@ -143,7 +143,9 @@ describe('PaseoExecutionPlane', () => {
     );
 
     expect(client.createCalls).toBe(0);
-    await attached.run({ runId: 'run-2', prompt: 'continue' });
+    if (attached.kind === 'replacement_required')
+      throw new Error('Expected the existing session to remain attachable.');
+    await attached.session.run({ runId: 'run-2', prompt: 'continue' });
     expect(client.sendCalls).toEqual([
       { agentId: 'existing-agent', text: 'continue' },
     ]);

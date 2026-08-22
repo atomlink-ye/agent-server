@@ -57,12 +57,12 @@ export class ExecutionSessionResolver {
       input.workspaceBinding ??
       null;
     const desiredDigest = executionBootstrapDigest({
-      provider: input.spec.provider,
-      model: input.spec.model,
+      ...(input.spec.provider ? { provider: input.spec.provider } : {}),
+      ...(input.spec.model ? { model: input.spec.model } : {}),
       systemPrompt: input.spec.systemPrompt,
       cwd: input.spec.workspace.cwd,
       workspaceBinding: effectiveWorkspaceBinding,
-      extensions: input.spec.extensions,
+      ...(input.spec.extensions ? { extensions: input.spec.extensions } : {}),
     });
     const runtime = await this.runtimeSessions.reconcileDesiredSpec({
       id: initialRuntime.id,

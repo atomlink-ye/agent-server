@@ -6,9 +6,10 @@ import type {
   ProductRunTrace,
 } from '@atomlink-ye/agent-server/product-contract';
 
-import { AssistantMarkdown } from '@/components/chat/assistant-markdown';
+import { AssistantMarkdown } from '@/features/conversations/components/assistant-markdown';
 import { ActivityRow } from './activity-row';
 import { projectTranscript } from './transcript-projection';
+import { loadExecutionDetail, RunTraceReadError } from './run-trace-gateway';
 import './execution-transcript.css';
 
 type Trace = Extract<
@@ -25,26 +26,13 @@ type AttemptEntry = {
 
 type DetailState =
   | { readonly status: 'idle' | 'loading' }
-  | {
-      readonly status: 'ready';
-      readonly detail: ProductExecutionDetailResponse;
-    }
+  | { readonly status: 'ready'; readonly detail: ProductExecutionDetailResponse }
   | { readonly status: 'unavailable'; readonly statusCode?: number };
 
-export function ExecutionTranscript({
-  live,
-  trace,
-}: {
-  readonly live?: boolean;
-  readonly trace: Trace;
-}) {
+export function ExecutionTranscript({ live, trace }: { readonly live?: boolean; readonly trace: Trace }) {
   const attempts = useMemo(() => attemptEntries(trace), [trace]);
-  const [selectedAttemptId, setSelectedAttemptId] = useState<string | null>(
-    null,
-  );
-  const [detailState, setDetailState] = useState<DetailState>({
-    status: 'idle',
-  });
+  const [selectedAttemptId, setSelectedAttemptId] = useState<string | null>(null);
+  const [detailState, setDetailState] = useState<DetailState>({ status: 'idle' });
   const lastAttemptIdRef = useRef<string | null>(null);
   const selected =
     attempts.find((attempt) => attempt.attemptId === selectedAttemptId) ?? null;
@@ -68,28 +56,17 @@ export function ExecutionTranscript({
       lastAttemptIdRef.current = selectedAttemptId;
       setDetailState({ status: 'loading' });
     }
-    void fetch(
-      `/api/works/${encodeURIComponent(trace.work.id)}/runs/${encodeURIComponent(trace.work_run.id)}/execution-detail?attempt_id=${encodeURIComponent(selectedAttemptId)}`,
-      {
-        method: 'GET',
-        cache: 'no-store',
-        headers: { accept: 'application/json' },
-      },
-    )
-      .then(async (response) => {
-        const body = await response.json().catch(() => undefined);
-        if (!active) return;
-        if (!response.ok || !isExecutionDetail(body)) {
+    void loadExecutionDetail(trace.work.id, trace.work_run.id, selectedAttemptId)
+      .then((detail) => {
+        if (active) setDetailState({ status: 'ready', detail });
+      })
+      .catch((error: unknown) => {
+        if (active) {
           setDetailState({
             status: 'unavailable',
-            statusCode: response.status,
+            statusCode: error instanceof RunTraceReadError ? error.status : undefined,
           });
-          return;
         }
-        setDetailState({ status: 'ready', detail: body });
-      })
-      .catch(() => {
-        if (active) setDetailState({ status: 'unavailable' });
       });
     return () => {
       active = false;
@@ -98,81 +75,44 @@ export function ExecutionTranscript({
 
   // Polling effect: when live=true, refetch every 2-3 seconds without resetting UI state
   useEffect(() => {
-    if (
-      !live ||
-      !selectedAttemptId ||
-      detailState.status === 'idle' ||
-      detailState.status === 'loading'
-    )
-      return;
+    if (!live || !selectedAttemptId || detailState.status === 'idle' || detailState.status === 'loading') return;
     const timer = setInterval(() => {
-      void fetch(
-        `/api/works/${encodeURIComponent(trace.work.id)}/runs/${encodeURIComponent(trace.work_run.id)}/execution-detail?attempt_id=${encodeURIComponent(selectedAttemptId)}`,
-        {
-          method: 'GET',
-          cache: 'no-store',
-          headers: { accept: 'application/json' },
-        },
-      )
-        .then(async (response) => {
-          const body = await response.json().catch(() => undefined);
-          if (!response.ok || !isExecutionDetail(body)) {
-            setDetailState({
-              status: 'unavailable',
-              statusCode: response.status,
-            });
-            return;
-          }
+      void loadExecutionDetail(trace.work.id, trace.work_run.id, selectedAttemptId)
+        .then((detail) => {
           // Update data without resetting selectedAttemptId or state
-          setDetailState({ status: 'ready', detail: body });
+          setDetailState({ status: 'ready', detail });
         })
         .catch(() => {
           // On error, keep existing state
         });
     }, 2500);
     return () => clearInterval(timer);
-  }, [
-    live,
-    selectedAttemptId,
-    trace.work.id,
-    trace.work_run.id,
-    detailState.status,
-  ]);
+  }, [live, selectedAttemptId, trace.work.id, trace.work_run.id, detailState.status]);
 
   if (!attempts.length)
     return (
       <section className="execution-transcript execution-transcript--empty">
         <p className="work-shell-kicker">Agent execution</p>
         <h2>No participant Attempt is available for transcript detail.</h2>
-        <p>
-          Single-Agent or uncaptured collaboration identity may not expose Work
-          Item Attempts yet.
-        </p>
+        <p>Single-Agent or uncaptured collaboration identity may not expose Work Item Attempts yet.</p>
       </section>
     );
 
   return (
-    <section
-      className="execution-transcript"
-      data-testid="execution-transcript"
-    >
+    <section className="execution-transcript" data-testid="execution-transcript">
       <div className="execution-transcript__heading">
         <div>
           <p className="work-shell-kicker">Agent execution</p>
           <h2>Open a role and inspect what actually happened</h2>
           <p>
-            Full provider output is read through a Product-scoped Attempt detail
-            endpoint. Technical Run, TeamRun and RuntimeSession identities stay
-            behind the server boundary.
+            Full provider output is read through a Product-scoped Attempt detail endpoint. Technical Run,
+            TeamRun and RuntimeSession identities stay behind the server boundary.
           </p>
         </div>
         <span>Safe run-event detail</span>
       </div>
       <div className="execution-transcript__body">
-        <nav
-          className="execution-transcript__attempts"
-          aria-label="Agent Attempts"
-        >
+        <nav className="execution-transcript__attempts" aria-label="Agent Attempts">
           {attempts.map((attempt) => (
             <button
               aria-pressed={attempt.attemptId === selectedAttemptId}
@@ -191,34 +131,21 @@ export function ExecutionTranscript({
             <header>
               <div>
                 <strong>{selected.actorName}</strong>
-                <span>
-                  {selected.workItemSubject} · Attempt {selected.attemptNo}
-                </span>
+                <span>{selected.workItemSubject} · Attempt {selected.attemptNo}</span>
               </div>
-              <span>
-                {detailState.status === 'ready'
-                  ? `${detailState.detail.events.length} events`
-                  : ''}
-              </span>
+              <span>{detailState.status === 'ready' ? `${detailState.detail.events.length} events` : ''}</span>
             </header>
           ) : null}
           {detailState.status === 'loading' || detailState.status === 'idle' ? (
-            <p className="execution-transcript__notice">
-              Loading captured execution detail…
-            </p>
+            <p className="execution-transcript__notice">Loading captured execution detail…</p>
           ) : null}
           {detailState.status === 'unavailable' ? (
             <p className="execution-transcript__notice">
-              Safe execution detail is unavailable for this Attempt. The Run
-              Trace summaries remain the durable fallback.
+              Safe execution detail is unavailable for this Attempt. The Run Trace summaries remain the durable fallback.
             </p>
           ) : null}
           {detailState.status === 'ready' ? (
-            <ExecutionEvents
-              detail={detailState.detail}
-              trace={trace}
-              selected={selected}
-            />
+            <ExecutionEvents detail={detailState.detail} trace={trace} selected={selected} />
           ) : null}
         </div>
       </div>
@@ -243,10 +170,7 @@ function ExecutionEvents({
   );
   const activityEntries = projectTranscript(
     detail.events.map((event, index) => ({ ...event, ordinal: index + 1 })),
-  ).filter(
-    (entry) =>
-      entry.event.kind !== 'assistant_text' && entry.event.kind !== 'usage',
-  );
+  ).filter((entry) => entry.event.kind !== 'assistant_text' && entry.event.kind !== 'usage');
   return (
     <div className="execution-transcript__events">
       {messages.length ? (
@@ -259,9 +183,7 @@ function ExecutionEvents({
                 <span>→ {message.recipient}</span>
               </div>
               <p>{message.summary}</p>
-              <time dateTime={message.createdAt}>
-                {formatTimestamp(message.createdAt)}
-              </time>
+              <time dateTime={message.createdAt}>{formatTimestamp(message.createdAt)}</time>
             </article>
           ))}
         </section>
@@ -273,9 +195,7 @@ function ExecutionEvents({
             event.kind === 'assistant_text' ? (
               <article key={`${event.sequence}:${index}`}>
                 <AssistantMarkdown text={event.text} />
-                <time dateTime={event.created_at}>
-                  {formatTimestamp(event.created_at)}
-                </time>
+                <time dateTime={event.created_at}>{formatTimestamp(event.created_at)}</time>
               </article>
             ) : null,
           )}
@@ -288,22 +208,18 @@ function ExecutionEvents({
         ))}
       </section>
       {!detail.events.length ? (
-        <p className="execution-transcript__notice">
-          No safe run events were captured for this Attempt.
-        </p>
+        <p className="execution-transcript__notice">No safe run events were captured for this Attempt.</p>
       ) : null}
     </div>
   );
 }
 
 function attemptEntries(trace: Trace): readonly AttemptEntry[] {
-  const actors = new Map(
-    trace.actors.map((actor) => [actor.id, actor.name ?? 'Name not captured']),
-  );
+  const actors = new Map(trace.actors.map((actor) => [actor.id, actor.name ?? 'Name not captured']));
   return trace.work_items.flatMap((workItem) =>
     workItem.attempts.map((attempt) => ({
       actorName: workItem.actor_id
-        ? (actors.get(workItem.actor_id) ?? 'Name not captured')
+        ? actors.get(workItem.actor_id) ?? 'Name not captured'
         : 'Unassigned',
       workItemId: workItem.id,
       workItemSubject: workItem.subject,
@@ -314,12 +230,9 @@ function attemptEntries(trace: Trace): readonly AttemptEntry[] {
 }
 
 function collaborationMessages(trace: Trace, workItemId: string) {
-  const messages = new Map(
-    trace.messages.map((message) => [message.id, message]),
-  );
+  const messages = new Map(trace.messages.map((message) => [message.id, message]));
   return trace.edges.flatMap((edge) => {
-    if (edge.kind !== 'observed_message' || edge.work_item_id !== workItemId)
-      return [];
+    if (edge.kind !== 'observed_message' || edge.work_item_id !== workItemId) return [];
     const message = messages.get(edge.message_id);
     return [
       {
@@ -333,19 +246,5 @@ function collaborationMessages(trace: Trace, workItemId: string) {
   });
 }
 
-function isExecutionDetail(
-  value: unknown,
-): value is ProductExecutionDetailResponse {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-  const record = value as Record<string, unknown>;
-  return (
-    record.capture_scope === 'safe_run_events' && Array.isArray(record.events)
-  );
-}
-
-function humanize(value: string) {
-  return value.replaceAll('_', ' ');
-}
-function formatTimestamp(value: string) {
-  return `${value.replace('T', ' ').slice(0, 19)} UTC`;
-}
+function humanize(value: string) { return value.replaceAll('_', ' '); }
+function formatTimestamp(value: string) { return `${value.replace('T', ' ').slice(0, 19)} UTC`; }

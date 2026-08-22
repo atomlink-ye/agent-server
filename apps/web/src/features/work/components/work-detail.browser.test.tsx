@@ -8,7 +8,7 @@ import {
   ProductWorkDefinitionVersionSchema,
   ProductWorkRunSuccessSchema,
 } from '@atomlink-ye/agent-server/product-contract';
-import { WorkDetailShell } from '@/components/work/work-shell';
+import { WorkDetailShell } from '@/features/work/components/work-shell';
 import reworkRecording from '@/lib/__fixtures__/product-recordings/rework-once.json';
 import {
   projectWorkList,

@@ -5,7 +5,7 @@ import type {
   Conversation,
   Coworker,
   WorkListItem,
-} from '../components/chat/contracts';
+} from '../conversations/components/contracts';
 import {
   admitConversationToWork,
   loadContextFile,
@@ -15,8 +15,8 @@ import {
   type ContextFileDetail,
   type ContextFileListing,
   type ContextScopeRequest,
-} from '../api/context';
-import TitleBar from './TitleBar';
+} from './files-gateway';
+import TitleBar from '../../app/shell/TitleBar';
 
 type ScopeChoice = Readonly<{
   key: string;
@@ -28,7 +28,7 @@ type ScopeChoice = Readonly<{
   agent?: Coworker;
 }>;
 
-export function FilesSurface({ commands }: { readonly commands: ChatCommands }) {
+export function FilesPage({ commands }: { readonly commands: ChatCommands }) {
   const [coworkers, setCoworkers] = useState<readonly Coworker[]>([]);
   const [conversations, setConversations] = useState<readonly Conversation[]>([]);
   const [works, setWorks] = useState<readonly WorkListItem[]>([]);
@@ -254,4 +254,4 @@ function shortHash(value: string): string {
   return value.startsWith('sha256:') ? `${value.slice(0, 15)}…` : `${value.slice(0, 12)}…`;
 }
 
-export default FilesSurface;
+export default FilesPage;

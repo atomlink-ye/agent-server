@@ -1,4 +1,5 @@
-import type { Coworker } from '../components/chat/contracts';
+import type { Coworker } from '../conversations/components/contracts';
+import { apiTransport } from '../../api/transport';
 
 export interface CoworkerProfile {
   readonly agent: Coworker;
@@ -11,12 +12,9 @@ export interface CoworkerProfile {
 }
 
 export async function loadCoworkerProfile(agentId: string): Promise<CoworkerProfile> {
-  const response = await fetch(`/api/agents/${encodeURIComponent(agentId)}/profile`, {
-    credentials: 'same-origin',
-    headers: { accept: 'application/json' },
-  });
-  const payload = await response.json().catch(() => null);
-  if (!response.ok) throw new Error(errorMessage(payload, 'Coworker profile could not be loaded.'));
+  const payload = await apiTransport.request<unknown>(
+    `/api/agents/${encodeURIComponent(agentId)}/profile`,
+  );
   const root = record(payload);
   const agent = record(root?.agent);
   const capabilities = record(root?.capabilities);
@@ -63,8 +61,4 @@ function integer(value: unknown): number {
 function runtimeStatus(value: unknown): Coworker['runtimeStatus'] {
   if (value === 'available' || value === 'draining' || value === 'unavailable') return value;
   throw new Error('Invalid Coworker runtime status.');
-}
-function errorMessage(payload: unknown, fallback: string): string {
-  const error = record(record(payload)?.error);
-  return typeof error?.message === 'string' && error.message.trim() ? error.message : fallback;
 }

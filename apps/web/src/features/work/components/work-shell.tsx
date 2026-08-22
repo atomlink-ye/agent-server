@@ -3,18 +3,12 @@
 import { useEffect, useState, type ReactNode } from 'react';
 
 import type {
-  ProductRunTrace,
   ProductWorkDefinitionVersionResponse,
-  ProductWorkRun,
   WorkListItem,
-  WorkListResponse,
-  WorkResponse,
-  WorkRunListResponse,
-  WorkRunSummary,
 } from '@atomlink-ye/agent-server/product-contract';
 
-import { DefinitionPanel } from '@/components/work/definition-panel';
-import { NewWork } from '@/components/work/new-work';
+import { DefinitionPanel } from '@/features/work/components/definition-panel';
+import { NewWork } from '@/features/work/components/new-work';
 import {
   WORK_TABS,
   formatTimestamp,
@@ -24,22 +18,25 @@ import {
   resultCaptureLabel,
   workTabHref,
   type WorkTab,
-} from '@/components/work/work-presentation';
+} from '@/features/work/components/work-presentation';
 import { ExecutionTranscript } from '@/features/run-trace/execution-transcript';
 import { MapView, RunTrace, type TraceView } from '@/features/run-trace/run-trace';
 import { SessionTranscripts } from '@/features/run-trace/session-transcripts';
+import {
+  loadRunRoleSummaries,
+  loadWorkDetail,
+  loadWorks,
+  ProductReadError,
+  startWorkRun,
+  type AnchoredRun,
+  type AnchoredTrace,
+  type RoleSummary,
+  type WorkDetailData,
+} from '@/features/work/work-gateway';
 import './work-shell.css';
-import './work-shell-mve.css';
+import './work-shell-overrides.css';
 
 type LoadState = 'loading' | 'available' | 'error' | 'starting';
-type AnchoredRun = Extract<
-  ProductWorkRun,
-  { projection_status: 'internally_anchored' }
->;
-type AnchoredTrace = Extract<
-  ProductRunTrace,
-  { projection_status: 'internally_anchored' }
->;
 
 export function WorkListShell() {
   const [state, setState] = useState<LoadState>('loading');
@@ -48,7 +45,7 @@ export function WorkListShell() {
 
   useEffect(() => {
     let active = true;
-    void readJson<WorkListResponse>('/api/works')
+    void loadWorks()
       .then((response) => {
         if (!active) return;
         setWorks(response.works);
@@ -355,27 +352,15 @@ function WorkTabs({
   );
 }
 
-type RoleSummary = {
-  readonly label: { readonly name: string; readonly role: string; readonly status: string };
-  readonly summary: {
-    readonly entry_count: number;
-    readonly last_meaningful: { readonly action: string | null } | null;
-  };
-};
-
 function RunRoleCards({ trace, workId, runId }: { readonly trace: AnchoredTrace; readonly workId: string; readonly runId: string }) {
   const [sessions, setSessions] = useState<readonly RoleSummary[] | null>(null);
 
   useEffect(() => {
     let active = true;
-    fetch(`/api/works/${encodeURIComponent(workId)}/runs/${encodeURIComponent(runId)}/session-transcripts`, {
-      cache: 'no-store',
-      headers: { accept: 'application/json' },
-    })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((body) => {
+    loadRunRoleSummaries(workId, runId)
+      .then((next) => {
         if (!active) return;
-        setSessions(body?.sessions ?? []);
+        setSessions(next);
       })
       .catch(() => {
         if (active) setSessions([]);
@@ -768,69 +753,6 @@ function ArtifactsUnavailable() {
   );
 }
 
-type WorkDetailData = {
-  readonly work: WorkResponse;
-  readonly runs: readonly WorkRunSummary[];
-  readonly run: AnchoredRun | null;
-  readonly trace: AnchoredTrace | null;
-  readonly selectedDefinitionVersionId: string;
-  readonly definitionVersion: ProductWorkDefinitionVersionResponse | null;
-};
-
-async function loadWorkDetail(
-  workId: string,
-  selectedRunId: string | undefined,
-  preferCurrentDefinition: boolean,
-): Promise<WorkDetailData> {
-  const encodedId = encodeURIComponent(workId);
-  const [workResponse, runsResponse] = await Promise.all([
-    readJson<{ work: WorkResponse }>(`/api/works/${encodedId}`),
-    readJson<WorkRunListResponse>(`/api/works/${encodedId}/runs`),
-  ]);
-  const runs = runsResponse.work_runs;
-  const selectedSummary = selectedRunId
-    ? runs.find((run) => run.id === selectedRunId)
-    : runs[0];
-  if (selectedRunId && !selectedSummary)
-    throw new Error('The selected Product WorkRun is not available.');
-
-  const selectedDefinitionVersionId = preferCurrentDefinition
-    ? workResponse.work.definition_version_id
-    : (selectedSummary?.definition_version_id ??
-      workResponse.work.definition_version_id);
-  const definitionPromise = readOptionalJson<{
-    version: ProductWorkDefinitionVersionResponse;
-  }>(
-    `/api/work-definition-versions/${encodeURIComponent(selectedDefinitionVersionId)}`,
-  );
-  if (!selectedSummary)
-    return {
-      work: workResponse.work,
-      runs,
-      run: null,
-      trace: null,
-      selectedDefinitionVersionId,
-      definitionVersion: (await definitionPromise)?.version ?? null,
-    };
-
-  const runPath = `/api/works/${encodedId}/runs/${encodeURIComponent(selectedSummary.id)}`;
-  const [run, trace, definitionResponse] = await Promise.all([
-    readJson<ProductWorkRun>(runPath),
-    readJson<ProductRunTrace>(`${runPath}/trace`),
-    definitionPromise,
-  ]);
-  if (!isAnchoredRun(run) || !isAnchoredTrace(trace))
-    throw new Error('The Product WorkRun projection was not captured.');
-  return {
-    work: workResponse.work,
-    runs,
-    run,
-    trace,
-    selectedDefinitionVersionId,
-    definitionVersion: definitionResponse?.version ?? null,
-  };
-}
-
 function definitionName(
   version: ProductWorkDefinitionVersionResponse,
 ): string | null {
@@ -841,20 +763,6 @@ function definitionName(
   return typeof name === 'string' && name.length > 0 ? name : null;
 }
 
-function isAnchoredRun(value: ProductWorkRun): value is AnchoredRun {
-  return (
-    'projection_status' in value &&
-    value.projection_status === 'internally_anchored'
-  );
-}
-
-function isAnchoredTrace(value: ProductRunTrace): value is AnchoredTrace {
-  return (
-    'projection_status' in value &&
-    value.projection_status === 'internally_anchored'
-  );
-}
-
 function RunTrigger({ workId }: { readonly workId: string }) {
   const [state, setState] = useState<'idle' | 'starting' | 'error'>('idle');
   const [errorDetail, setErrorDetail] = useState<string | null>(null);
@@ -862,23 +770,13 @@ function RunTrigger({ workId }: { readonly workId: string }) {
   async function handleRun() {
     setState('starting');
     setErrorDetail(null);
-    const response = await fetch(`/api/works/${encodeURIComponent(workId)}/runs`, {
-      method: 'POST',
-      cache: 'no-store',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ trigger_kind: 'manual' }),
-    }).catch(() => null);
-    const body = response
-      ? await response.json().catch(() => undefined)
-      : undefined;
-    const runId = runIdFromStart(body);
-    if (!response?.ok || !runId) {
-      const errorMsg = formatStartRunError(body);
-      setErrorDetail(errorMsg);
+    try {
+      const runId = await startWorkRun(workId);
+      window.location.assign(workTabHref(workId, 'overview', runId));
+    } catch (error) {
+      setErrorDetail(error instanceof Error ? error.message : 'Please try again.');
       setState('error');
-      return;
     }
-    window.location.assign(workTabHref(workId, 'overview', runId));
   }
 
   return (
@@ -903,37 +801,6 @@ function RunTrigger({ workId }: { readonly workId: string }) {
   );
 }
 
-function formatStartRunError(body: unknown): string {
-  if (!body || typeof body !== 'object' || Array.isArray(body)) {
-    return 'Please try again.';
-  }
-  const record = body as Record<string, unknown>;
-  const error = record.error;
-  if (!error || typeof error !== 'object' || Array.isArray(error)) {
-    return 'Please try again.';
-  }
-  const errorRecord = error as Record<string, unknown>;
-  const path = errorRecord.path;
-  const message = errorRecord.message;
-  const code = errorRecord.code;
-
-  if (typeof path === 'string' && path.length > 0) {
-    const codePart = typeof code === 'string' && code.length > 0 ? `${code}: ` : '';
-    return `${codePart}${path} — ${message}`;
-  }
-  if (typeof code === 'string' && code.length > 0) {
-    return `${code}: ${message}`;
-  }
-  return typeof message === 'string' ? message : 'Please try again.';
-}
-
-function runIdFromStart(value: unknown): string | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const run = (value as Record<string, unknown>).work_run;
-  if (!run || typeof run !== 'object' || Array.isArray(run)) return null;
-  const id = (run as Record<string, unknown>).id;
-  return typeof id === 'string' ? id : null;
-}
 
 function WorkListLoading() {
   return (
@@ -994,30 +861,4 @@ function WorkListEmpty({ showNewWork, onNewWork }: {
       </button>
     </section>
   );
-}
-
-class ProductReadError extends Error {
-  constructor(message: string, readonly status: number) {
-    super(message);
-  }
-}
-
-async function readJson<T>(path: string): Promise<T> {
-  const response = await fetch(path, {
-    method: 'GET',
-    cache: 'no-store',
-    headers: { accept: 'application/json' },
-  });
-  if (!response.ok) throw new ProductReadError('Product read failed.', response.status);
-  return (await response.json()) as T;
-}
-
-async function readOptionalJson<T>(path: string): Promise<T | null> {
-  const response = await fetch(path, {
-    method: 'GET',
-    cache: 'no-store',
-    headers: { accept: 'application/json' },
-  });
-  if (!response.ok) return null;
-  return (await response.json()) as T;
 }

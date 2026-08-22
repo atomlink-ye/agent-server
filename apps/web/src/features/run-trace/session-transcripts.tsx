@@ -1,43 +1,22 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { ProductExecutionDetailEvent, ProductRunTrace } from '@atomlink-ye/agent-server/product-contract';
+import type { ProductRunTrace } from '@atomlink-ye/agent-server/product-contract';
 
-import { AssistantMarkdown } from '@/components/chat/assistant-markdown';
+import { AssistantMarkdown } from '@/features/conversations/components/assistant-markdown';
 import { ActivityRow } from './activity-row';
 import { projectTranscript, type ProjectedTranscriptEntry, type TranscriptEntry } from './transcript-projection';
+import {
+  loadSessionTranscripts,
+  RunTraceReadError,
+  type SessionEntry,
+  type SessionSummary,
+  type SessionTranscriptsResponse,
+} from './run-trace-gateway';
 import './execution-transcript.css';
 import './transcript-stream.css';
 
 type Trace = Extract<ProductRunTrace, { projection_status: 'internally_anchored' }>;
-
-type SessionLabel = { readonly name: string; readonly role: string; readonly status: string };
-type SessionMeaningful = {
-  readonly kind: string;
-  readonly timestamp: string;
-  readonly action: string | null;
-  readonly result: string | null;
-};
-type SessionSummary = {
-  readonly status: string;
-  readonly entry_count: number;
-  readonly last_timestamp: string | null;
-  readonly last_meaningful: SessionMeaningful | null;
-  readonly work_refs: readonly string[];
-  readonly truncated: boolean;
-};
-type SessionEntry = ProductExecutionDetailEvent & { readonly ordinal: number };
-type Session = {
-  readonly label: SessionLabel;
-  readonly summary: SessionSummary;
-  readonly entries: readonly SessionEntry[];
-};
-type SessionTranscriptsResponse = {
-  readonly work_id: string;
-  readonly work_run_id: string;
-  readonly capture_scope: string;
-  readonly sessions: readonly Session[];
-};
 
 // One member per status literal. Collapsing 'idle' | 'loading' into a single
 // member breaks discriminated-union narrowing: the negative branch of
@@ -65,24 +44,21 @@ export function SessionTranscripts({ live, trace, initialSelectedIndex }: { read
     if (state.status === 'idle') {
       setState({ status: 'loading' });
     }
-    void fetch(
-      `/api/works/${encodeURIComponent(trace.work.id)}/runs/${encodeURIComponent(trace.work_run.id)}/session-transcripts`,
-      { method: 'GET', cache: 'no-store', headers: { accept: 'application/json' } },
-    )
-      .then(async (response) => {
-        const body = await response.json().catch(() => undefined);
+    void loadSessionTranscripts(trace.work.id, trace.work_run.id)
+      .then((data) => {
         if (!active) return;
-        if (!response.ok || !isSessionTranscripts(body)) {
-          setState({ status: 'unavailable', statusCode: response.status });
-          return;
-        }
-        setState({ status: 'ready', data: body });
-        if (body.sessions.length && selectedIndex === null) {
+        setState({ status: 'ready', data });
+        if (data.sessions.length && selectedIndex === null) {
           setSelectedIndex(0);
         }
       })
-      .catch(() => {
-        if (active) setState({ status: 'unavailable' });
+      .catch((error: unknown) => {
+        if (active) {
+          setState({
+            status: 'unavailable',
+            statusCode: error instanceof RunTraceReadError ? error.status : undefined,
+          });
+        }
       });
     return () => { active = false; };
   }, [trace.work.id, trace.work_run.id]);
@@ -98,18 +74,10 @@ export function SessionTranscripts({ live, trace, initialSelectedIndex }: { read
   useEffect(() => {
     if (!live || state.status === 'idle' || state.status === 'loading') return;
     const timer = setInterval(() => {
-      void fetch(
-        `/api/works/${encodeURIComponent(trace.work.id)}/runs/${encodeURIComponent(trace.work_run.id)}/session-transcripts`,
-        { method: 'GET', cache: 'no-store', headers: { accept: 'application/json' } },
-      )
-        .then(async (response) => {
-          const body = await response.json().catch(() => undefined);
-          if (!response.ok || !isSessionTranscripts(body)) {
-            setState({ status: 'unavailable', statusCode: response.status });
-            return;
-          }
+      void loadSessionTranscripts(trace.work.id, trace.work_run.id)
+        .then((data) => {
           // Update data without resetting selectedIndex or state
-          setState({ status: 'ready', data: body });
+          setState({ status: 'ready', data });
         })
         .catch(() => {
           // On error, keep existing state
@@ -344,12 +312,6 @@ function SessionSummaryBlock({ summary, platformToolCount }: { readonly summary:
       ) : null}
     </div>
   );
-}
-
-function isSessionTranscripts(value: unknown): value is SessionTranscriptsResponse {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-  const record = value as Record<string, unknown>;
-  return record.capture_scope === 'safe_run_events' && Array.isArray(record.sessions);
 }
 
 function humanize(value: string) { return value.replaceAll('_', ' '); }

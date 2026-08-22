@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import type { ConversationId, ChatMessage } from './contracts';
-import type { ConversationMessagesState } from '../../stores/messages';
-import { WorkCard } from '../work/WorkCard';
+import type { ConversationMessagesState } from '../../../stores/messages';
+import { WorkCard } from '../../work/components/WorkCard';
 
 export interface ChatTranscriptProps {
   readonly conversationId: ConversationId | null;

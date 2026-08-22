@@ -1,4 +1,4 @@
-import type { ConversationId } from '../components/chat/contracts';
+import type { ConversationId } from '../features/conversations/components/contracts';
 
 export interface AppSelectionState {
   readonly selectedConversationId: ConversationId | null;

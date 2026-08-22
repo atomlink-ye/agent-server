@@ -6,7 +6,7 @@ import type {
   WorkListItem,
   WorkListResponse,
 } from '@atomlink-ye/agent-server/product-contract';
-import { WorkListShell } from '@/components/work/work-shell';
+import { WorkListShell } from '@/features/work/components/work-shell';
 import parallelRecording from '@/lib/__fixtures__/product-recordings/parallel-success.json';
 import { projectWorkList } from '@/lib/product-recording-projections';
 

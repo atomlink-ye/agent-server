@@ -2,69 +2,45 @@ import {
   useCallback,
   useEffect,
   useMemo,
-  useState,
   useSyncExternalStore,
 } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ChatComposer } from '../components/chat/ChatComposer';
-import { ChatTranscript } from '../components/chat/ChatTranscript';
-import type { ChatCommands } from '../components/chat/contracts';
-import { NewWork } from '../components/work/new-work';
-import { WorkDetailShell } from '../components/work/work-shell';
-import { AgentsSurface } from './AgentsSurface';
+import { ChatComposer } from './components/ChatComposer';
+import { ChatTranscript } from './components/ChatTranscript';
+import type { ChatCommands } from './components/contracts';
 import { ConversationsPane } from './ConversationsPane';
-import { FilesSurface } from './FilesSurface';
-import Rail, { type DesktopTab } from './Rail';
-import TitleBar from './TitleBar';
-import { WorkPane } from './WorkPane';
-import { createAppStore, type AppStore } from '../stores/app';
+import TitleBar from '../../app/shell/TitleBar';
+import { createAppStore, type AppStore } from '../../stores/app';
 import {
   createConversationsStore,
   type ConversationsStore,
-} from '../stores/conversations';
-import { createMessagesStore, type MessagesStore } from '../stores/messages';
-import '../work-integration.css';
-import './workspace-surfaces.css';
+} from '../../stores/conversations';
+import { createMessagesStore, type MessagesStore } from '../../stores/messages';
+import { conversationPath, workPath } from '../../app/routes';
 
-export interface ChatShellProps {
+export interface ConversationsPageProps {
   readonly commands: ChatCommands;
   readonly appStore?: AppStore;
   readonly conversationsStore?: ConversationsStore;
   readonly messagesStore?: MessagesStore;
   readonly routeConversationId?: string | null;
   readonly returnConversationId?: string | null;
-  readonly selectedWorkId?: string | null;
-  readonly workTab?: string | null;
-  readonly selectedRunId?: string | null;
-  readonly selectedSessionIndex?: string | null;
 }
 
 const sendFailureMessage = 'Unable to send this message. Please try again.';
 const messageRefreshIntervalMs = 3000;
 const conversationRefreshIntervalMs = 5000;
 
-export function ChatShell({
+export function ConversationsPage({
   commands,
   appStore: providedAppStore,
   conversationsStore: providedConversationsStore,
   messagesStore: providedMessagesStore,
   routeConversationId = null,
   returnConversationId = null,
-  selectedWorkId = null,
-  workTab = null,
-  selectedRunId = null,
-  selectedSessionIndex = null,
-}: ChatShellProps) {
+}: ConversationsPageProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const activeTab: DesktopTab = location.pathname.startsWith('/work')
-    ? 'work'
-    : location.pathname.startsWith('/agents')
-      ? 'agents'
-      : location.pathname.startsWith('/files')
-        ? 'files'
-        : 'conversations';
-  const [showNewWork, setShowNewWork] = useState(false);
   const appSelectionStore = useMemo(
     () => providedAppStore ?? createAppStore(),
     [providedAppStore],
@@ -106,8 +82,6 @@ export function ChatShell({
   }, [commands.loadConversations, conversationListStore]);
 
   useEffect(() => {
-    if (activeTab !== 'conversations') return;
-
     let disposed = false;
     let refreshInFlight = false;
     let intervalId: number | null = null;
@@ -150,10 +124,10 @@ export function ChatShell({
       stopPolling();
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [activeTab, commands.loadConversations, conversationListStore]);
+  }, [commands.loadConversations, conversationListStore]);
 
   useEffect(() => {
-    if (activeTab !== 'conversations' || conversationState.status !== 'ready')
+    if (conversationState.status !== 'ready')
       return;
 
     const conversations = conversationState.conversations;
@@ -190,7 +164,6 @@ export function ChatShell({
       navigate(conversationPath(nextConversationId), { replace: true });
     }
   }, [
-    activeTab,
     appSelectionStore,
     conversationState.conversations,
     conversationState.status,
@@ -206,11 +179,7 @@ export function ChatShell({
   }, [commands.loadMessages, conversationId, messageStore]);
 
   useEffect(() => {
-    if (selectedWorkId) setShowNewWork(false);
-  }, [selectedWorkId]);
-
-  useEffect(() => {
-    if (activeTab !== 'conversations' || !conversationId) return;
+    if (!conversationId) return;
 
     let disposed = false;
     let visibilityGeneration = 0;
@@ -276,7 +245,7 @@ export function ChatShell({
       stopPolling();
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [activeTab, commands.loadMessages, conversationId, messageStore]);
+  }, [commands.loadMessages, conversationId, messageStore]);
 
   const send = useCallback(
     async (body: string): Promise<void> => {
@@ -328,18 +297,9 @@ export function ChatShell({
 
   const openWork = useCallback(
     (workId: string, originatingConversationId: string): void => {
-      setShowNewWork(false);
       navigate(workPath(workId, originatingConversationId));
     },
     [navigate],
-  );
-
-  const openWorkFromPane = useCallback(
-    (workId: string): void => {
-      setShowNewWork(false);
-      navigate(workPath(workId, returnConversationId));
-    },
-    [navigate, returnConversationId],
   );
 
   const handleSelect = useCallback(
@@ -350,54 +310,8 @@ export function ChatShell({
     [appSelectionStore, navigate],
   );
 
-  const handleSelectTab = useCallback(
-    (tab: DesktopTab): void => {
-      setShowNewWork(false);
-      if (tab === 'work') {
-        const origin =
-          activeTab === 'conversations' ? conversationId : returnConversationId;
-        navigate(
-          selectedWorkId
-            ? workPath(selectedWorkId, origin)
-            : workRootPath(origin),
-        );
-        return;
-      }
-      if (tab === 'agents') {
-        navigate('/agents');
-        return;
-      }
-      if (tab === 'files') {
-        navigate('/files');
-        return;
-      }
-      const target = returnConversationId ?? conversationId;
-      navigate(target ? conversationPath(target) : '/');
-    },
-    [
-      activeTab,
-      conversationId,
-      navigate,
-      returnConversationId,
-      selectedWorkId,
-    ],
-  );
-
-  const respondInChat = useCallback((): void => {
-    navigate(
-      returnConversationId ? conversationPath(returnConversationId) : '/',
-    );
-  }, [navigate, returnConversationId]);
-
   return (
-    <div className="app-shell">
-      <Rail activeTab={activeTab} onSelectTab={handleSelectTab} />
-
-      {activeTab === 'agents' ? <AgentsSurface commands={commands} /> : null}
-      {activeTab === 'files' ? <FilesSurface commands={commands} /> : null}
-
-      {activeTab === 'conversations' ? (
-        <>
+    <>
           <ConversationsPane
             commands={commands}
             appStore={appSelectionStore}
@@ -455,74 +369,8 @@ export function ChatShell({
               />
             </section>
           </main>
-        </>
-      ) : null}
-
-      {activeTab === 'work' ? (
-        <>
-          <WorkPane
-            commands={commands}
-            onCreateNew={() => {
-              navigate(workRootPath(returnConversationId));
-              setShowNewWork(true);
-            }}
-            onOpenWork={openWorkFromPane}
-            selectedWorkId={selectedWorkId}
-          />
-          <main className="chat-panel work-main">
-            <TitleBar section="Work" />
-            <section className="work-main-content" aria-label="Work overview">
-              {returnConversationId && selectedWorkId ? (
-                <div className="work-return-bar">
-                  <button type="button" onClick={respondInChat}>
-                    ← Respond in conversation
-                  </button>
-                </div>
-              ) : null}
-              {showNewWork ? <NewWork /> : null}
-              {!showNewWork && selectedWorkId ? (
-                <WorkDetailShell
-                  workId={selectedWorkId}
-                  tab={workTab ?? undefined}
-                  selectedRunId={selectedRunId ?? undefined}
-                  selectedSessionIndex={selectedSessionIndex ?? undefined}
-                />
-              ) : null}
-              {!showNewWork && !selectedWorkId ? (
-                <div className="work-main-empty">
-                  <span className="work-main-icon" aria-hidden="true">
-                    ✓
-                  </span>
-                  <h1>Choose a Work item</h1>
-                  <p>Select a real Work item from the pane, or create a new Work.</p>
-                  <button type="button" onClick={() => setShowNewWork(true)}>
-                    New Work
-                  </button>
-                </div>
-              ) : null}
-            </section>
-          </main>
-        </>
-      ) : null}
-    </div>
+    </>
   );
-}
-
-function conversationPath(conversationId: string): string {
-  return `/conversations/${encodeURIComponent(conversationId)}`;
-}
-
-function workRootPath(originConversationId: string | null): string {
-  return originConversationId
-    ? `/work?from_conversation=${encodeURIComponent(originConversationId)}`
-    : '/work';
-}
-
-function workPath(workId: string, originConversationId: string | null): string {
-  const base = `/work/${encodeURIComponent(workId)}`;
-  return originConversationId
-    ? `${base}?from_conversation=${encodeURIComponent(originConversationId)}`
-    : base;
 }
 
 function conversationDisplayName(conversation: {
@@ -536,4 +384,4 @@ function conversationDisplayName(conversation: {
   return conversation.title ?? 'Conversation';
 }
 
-export default ChatShell;
+export default ConversationsPage;

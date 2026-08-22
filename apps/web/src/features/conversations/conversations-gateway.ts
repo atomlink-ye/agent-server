@@ -6,7 +6,8 @@ import type {
   Coworker,
   WorkListItem,
   WorkListProductState,
-} from '../components/chat/contracts';
+} from './components/contracts';
+import { apiTransport, ApiTransportError } from '../../api/transport';
 
 export type WorkProductState = 'running' | 'needs_you' | 'complete' | 'problem';
 
@@ -28,78 +29,21 @@ export interface WorkChatCard {
   readonly resultCaptureStatus: WorkResultCaptureStatus;
 }
 
-export class ChatApiError extends Error {
-  readonly status: number;
-  readonly code: string;
-
-  constructor(status: number, code: string, message: string) {
-    super(message);
-    this.name = 'ChatApiError';
-    this.status = status;
-    this.code = code;
-  }
-}
-
 export const isUuid = (value: unknown): value is string =>
   typeof value === 'string' &&
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
     value,
   );
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  let response: Response;
-  try {
-    response = await fetch(path, {
-      ...init,
-      credentials: 'same-origin',
-      headers: {
-        accept: 'application/json',
-        ...(init.body === undefined
-          ? {}
-          : { 'content-type': 'application/json' }),
-        ...init.headers,
-      },
-    });
-  } catch {
-    throw new ChatApiError(0, 'network_error', 'The service is unavailable.');
-  }
-
-  let payload: unknown = null;
-  try {
-    payload = await response.json();
-  } catch {
-    payload = null;
-  }
-
-  if (!response.ok) {
-    const error = asRecord(payload)?.error;
-    const details = asRecord(error);
-    throw new ChatApiError(
-      response.status,
-      stringValue(details?.code) ?? 'request_failed',
-      stringValue(details?.message) ?? 'The request could not be completed.',
-    );
-  }
-
-  if (payload === null) {
-    throw new ChatApiError(
-      502,
-      'invalid_response',
-      'The service returned an invalid response.',
-    );
-  }
-  return payload as T;
-}
-
 export async function loadCoworkers(): Promise<readonly Coworker[]> {
-  const payload = asRecord(await request<unknown>('/api/agents'));
+  const payload = asRecord(await apiTransport.request<unknown>('/api/agents'));
   const values = payload?.items;
   if (!Array.isArray(values)) throw invalidResponse();
   return values.map(normalizeCoworker);
 }
 
 export async function loadConversations(): Promise<readonly Conversation[]> {
-  const payload = asRecord(await request<unknown>('/api/conversations'));
+  const payload = asRecord(await apiTransport.request<unknown>('/api/conversations'));
   const values = payload?.conversations;
   if (!Array.isArray(values)) throw invalidResponse();
   return values.map(normalizeConversation);
@@ -109,7 +53,7 @@ export async function createConversation(
   agentDefinitionId: string,
 ): Promise<Conversation> {
   const payload = asRecord(
-    await request<unknown>('/api/conversations', {
+    await apiTransport.request<unknown>('/api/conversations', {
       method: 'POST',
       body: JSON.stringify({ agent_definition_id: agentDefinitionId }),
     }),
@@ -120,7 +64,7 @@ export async function createConversation(
 }
 
 export async function loadWorks(): Promise<readonly WorkListItem[]> {
-  const payload = asRecord(await request<unknown>('/api/works'));
+  const payload = asRecord(await apiTransport.request<unknown>('/api/works'));
   const values = payload?.works;
   if (!Array.isArray(values)) throw invalidResponse();
   return values.map(normalizeWorkListItem);
@@ -130,7 +74,7 @@ export async function loadMessages(
   conversationId: ConversationId,
 ): Promise<readonly ChatMessage[]> {
   const payload = asRecord(
-    await request<unknown>(
+    await apiTransport.request<unknown>(
       `/api/conversations/${encodeURIComponent(conversationId)}/messages`,
     ),
   );
@@ -148,7 +92,7 @@ export async function sendMessage(
   body: string,
 ): Promise<ChatMessage> {
   const payload = asRecord(
-    await request<unknown>(
+    await apiTransport.request<unknown>(
       `/api/conversations/${encodeURIComponent(conversationId)}/messages`,
       {
         method: 'POST',
@@ -163,9 +107,9 @@ export async function sendMessage(
 
 export async function loadWorkCard(workId: string): Promise<WorkChatCard> {
   if (!isUuid(workId))
-    throw new ChatApiError(400, 'invalid_request', 'This Work is unavailable.');
+    throw new ApiTransportError(400, 'invalid_request', 'This Work is unavailable.');
   const card = asRecord(
-    await request<unknown>(
+    await apiTransport.request<unknown>(
       `/api/works/${encodeURIComponent(workId)}/chat-card`,
     ),
   );
@@ -298,8 +242,8 @@ function compareMessages(left: ChatMessage, right: ChatMessage): number {
   return left.sequence - right.sequence || left.id.localeCompare(right.id);
 }
 
-function invalidResponse(): ChatApiError {
-  return new ChatApiError(
+function invalidResponse(): ApiTransportError {
+  return new ApiTransportError(
     502,
     'invalid_response',
     'The service returned an invalid response.',

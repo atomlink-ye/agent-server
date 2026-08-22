@@ -4,35 +4,17 @@ import { useEffect, useMemo, useState } from 'react';
 import { stringify } from 'yaml';
 import type { ProductWorkDefinitionVersionResponse } from '@atomlink-ye/agent-server/product-contract';
 
-import { humanize, workTabHref } from '@/components/work/work-presentation';
-
-type Diagnostic = {
-  readonly path: string;
-  readonly code: string;
-  readonly message: string;
-};
-
-type Plan = {
-  readonly fingerprint: string;
-  readonly resolved: {
-    readonly kind: 'single_agent' | 'collaboration';
-    readonly participants: readonly {
-      readonly name: string;
-      readonly role: 'primary' | 'lead' | 'member';
-      readonly source: 'referenced' | 'inline';
-      readonly agent_version_id: string | null;
-      readonly skills: readonly string[];
-      readonly tools: readonly string[];
-    }[];
-    readonly environment: {
-      readonly source: 'referenced' | 'inline';
-      readonly environment_version_id: string | null;
-    };
-    readonly memory_version_ids: readonly string[];
-    readonly required_runtime_capabilities: readonly string[];
-    readonly platform_capabilities: readonly string[];
-  };
-};
+import { humanize, workTabHref } from '@/features/work/components/work-presentation';
+import { ApiTransportError } from '@/api/transport';
+import {
+  applyWorkDefinition,
+  pinWorkDefinition,
+  planWorkDefinition,
+  startWorkRun,
+  validateWorkDefinition,
+  type DefinitionDiagnostics,
+  type DefinitionPlan as Plan,
+} from '@/features/work/work-gateway';
 
 type AuthoringState =
   | 'idle'
@@ -64,7 +46,7 @@ export function DefinitionPanel({
   );
   const [source, setSource] = useState(normalizedSource);
   const [state, setState] = useState<AuthoringState>('idle');
-  const [diagnostics, setDiagnostics] = useState<readonly Diagnostic[]>([]);
+  const [diagnostics, setDiagnostics] = useState<DefinitionDiagnostics>([]);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
@@ -107,9 +89,13 @@ export function DefinitionPanel({
     setDiagnostics([]);
     setPlan(null);
     setStatusMessage(null);
-    const validation = await authoringRequest('/api/work-definitions/validate', source);
-    if (!validation.ok || !isValidSuccess(validation.body)) {
-      const nextDiagnostics = diagnosticsFrom(validation.body);
+    let validation;
+    try {
+      validation = await validateWorkDefinition(source);
+    } catch (error) {
+      const nextDiagnostics = diagnosticsFrom(
+        error instanceof ApiTransportError ? error.payload : undefined,
+      );
       setDiagnostics(nextDiagnostics);
       setStatusMessage(
         nextDiagnostics.length
@@ -119,9 +105,13 @@ export function DefinitionPanel({
       setState('error');
       return null;
     }
-    const planned = await authoringRequest('/api/work-definitions/plan', source);
-    if (!planned.ok || !isPlan(planned.body)) {
-      const nextDiagnostics = diagnosticsFrom(planned.body);
+    let planned;
+    try {
+      planned = await planWorkDefinition(source);
+    } catch (error) {
+      const nextDiagnostics = diagnosticsFrom(
+        error instanceof ApiTransportError ? error.payload : undefined,
+      );
       setDiagnostics(nextDiagnostics);
       setStatusMessage('The Definition validated, but its resource plan failed.');
       setState('error');
@@ -137,44 +127,27 @@ export function DefinitionPanel({
     const resolvedPlan = await validateAndPlan();
     if (!resolvedPlan) return;
     setState('applying');
-    const response = await fetch('/api/work-definitions/apply', {
-      method: 'POST',
-      cache: 'no-store',
-      headers: {
-        'content-type': 'application/json',
-        'idempotency-key': crypto.randomUUID(),
-      },
-      body: JSON.stringify({ source }),
-    }).catch(() => null);
-    if (!response) {
+    let applied;
+    try {
+      applied = await applyWorkDefinition(source);
+    } catch (error) {
+      setDiagnostics(
+        diagnosticsFrom(error instanceof ApiTransportError ? error.payload : undefined),
+      );
       setState('error');
-      setStatusMessage('The Definition apply request could not reach Agent Server.');
+      setStatusMessage(error instanceof Error ? error.message : 'The Definition was not applied.');
       return;
     }
-    const body = await response.json().catch(() => undefined);
-    if (!response.ok || !isApply(body)) {
-      setDiagnostics(diagnosticsFrom(body));
-      setState('error');
-      setStatusMessage('The Definition was not applied.');
-      return;
-    }
-    if (body.definition.id !== workDefinitionId) {
+    if (applied.definitionId !== workDefinitionId) {
       setState('error');
       setStatusMessage(
         'Apply produced a different Definition lineage. Keep metadata.name on the current Work lineage before applying here.',
       );
       return;
     }
-    const pinResponse = await fetch(
-      `/api/works/${encodeURIComponent(workId)}/definition-version`,
-      {
-        method: 'POST',
-        cache: 'no-store',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ definition_version_id: body.version.id }),
-      },
-    ).catch(() => null);
-    if (!pinResponse?.ok) {
+    try {
+      await pinWorkDefinition(workId, applied.versionId);
+    } catch {
       setState('error');
       setStatusMessage(
         'A new immutable version was created, but this Work could not advance to it.',
@@ -190,21 +163,14 @@ export function DefinitionPanel({
     if (!isCurrentVersion) return;
     setState('running');
     setStatusMessage(null);
-    const response = await fetch(`/api/works/${encodeURIComponent(workId)}/runs`, {
-      method: 'POST',
-      cache: 'no-store',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ trigger_kind: 'manual' }),
-    }).catch(() => null);
-    const body = response ? await response.json().catch(() => undefined) : undefined;
-    const runId = runIdFromStart(body);
-    if (!response?.ok || !runId) {
+    try {
+      const runId = await startWorkRun(workId);
+      window.location.assign(workTabHref(workId, 'overview', runId));
+    } catch (error) {
       setState('error');
-      const errorDetail = formatStartRunError(body);
+      const errorDetail = error instanceof Error ? error.message : 'Please try again.';
       setStatusMessage(`The current Definition version could not be started: ${errorDetail}`);
-      return;
     }
-    window.location.assign(workTabHref(workId, 'overview', runId));
   }
 
   return (
@@ -488,47 +454,7 @@ function resourceBinding(
   return { label: 'Not captured', code: false };
 }
 
-async function authoringRequest(path: string, source: string) {
-  const response = await fetch(path, {
-    method: 'POST',
-    cache: 'no-store',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ source }),
-  }).catch(() => null);
-  if (!response) return { ok: false, body: undefined } as const;
-  return {
-    ok: response.ok,
-    body: await response.json().catch(() => undefined),
-  } as const;
-}
-
-function isValidSuccess(value: unknown): value is { readonly valid: true } {
-  const record = asRecord(value);
-  return record?.valid === true;
-}
-
-function isPlan(value: unknown): value is Plan {
-  const record = asRecord(value);
-  const resolved = asRecord(record?.resolved);
-  return (
-    record?.valid === true &&
-    typeof record.fingerprint === 'string' &&
-    (resolved?.kind === 'single_agent' || resolved?.kind === 'collaboration') &&
-    Array.isArray(resolved.participants)
-  );
-}
-
-function isApply(value: unknown): value is {
-  readonly definition: { readonly id: string };
-  readonly version: { readonly id: string };
-} {
-  const record = asRecord(value);
-  const definition = asRecord(record?.definition);
-  const version = asRecord(record?.version);
-  return typeof definition?.id === 'string' && typeof version?.id === 'string';
-}
-
-export function diagnosticsFrom(value: unknown): readonly Diagnostic[] {
+export function diagnosticsFrom(value: unknown): DefinitionDiagnostics {
   const record = asRecord(value);
   if (!Array.isArray(record?.diagnostics)) return [];
   return record.diagnostics.flatMap((item) => {
@@ -545,36 +471,6 @@ export function diagnosticsFrom(value: unknown): readonly Diagnostic[] {
         ]
       : [];
   });
-}
-
-function formatStartRunError(body: unknown): string {
-  if (!body || typeof body !== 'object' || Array.isArray(body)) {
-    return 'Please try again.';
-  }
-  const record = body as Record<string, unknown>;
-  const error = record.error;
-  if (!error || typeof error !== 'object' || Array.isArray(error)) {
-    return 'Please try again.';
-  }
-  const errorRecord = error as Record<string, unknown>;
-  const path = errorRecord.path;
-  const message = errorRecord.message;
-  const code = errorRecord.code;
-
-  if (typeof path === 'string' && path.length > 0) {
-    const codePart = typeof code === 'string' && code.length > 0 ? `${code}: ` : '';
-    return `${codePart}${path} — ${message}`;
-  }
-  if (typeof code === 'string' && code.length > 0) {
-    return `${code}: ${message}`;
-  }
-  return typeof message === 'string' ? message : 'Please try again.';
-}
-
-function runIdFromStart(value: unknown): string | null {
-  const record = asRecord(value);
-  const run = asRecord(record?.work_run);
-  return typeof run?.id === 'string' ? run.id : null;
 }
 
 function asRecord(value: unknown): Readonly<Record<string, unknown>> | null {

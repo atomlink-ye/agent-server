@@ -9,16 +9,16 @@ import {
 } from 'react-router-dom';
 import { expect, it, vi } from 'vitest';
 
-import { ChatShell } from './ChatShell';
+import { AppShell } from '../../app/shell/AppShell';
 import type {
   ChatCommands,
   ChatMessage,
   Conversation,
   ConversationId,
-} from '../components/chat/contracts';
-import { createAppStore } from '../stores/app';
-import { createConversationsStore } from '../stores/conversations';
-import { createMessagesStore } from '../stores/messages';
+} from './components/contracts';
+import { createAppStore } from '../../stores/app';
+import { createConversationsStore } from '../../stores/conversations';
+import { createMessagesStore } from '../../stores/messages';
 
 (
   globalThis as typeof globalThis & {
@@ -65,7 +65,7 @@ it('refreshes the selected transcript on its interval and stops transcript polli
     await act(async () => {
       root.render(
         <MemoryRouter>
-          <ChatShell
+          <AppShell
             commands={commands}
             appStore={appStore}
             conversationsStore={conversationsStore}
@@ -217,7 +217,7 @@ it('renders Work as a sibling tab inside the same Cumora-style shell', async () 
     await act(async () => {
       root.render(
         <MemoryRouter initialEntries={['/work']}>
-          <ChatShell commands={commands} />
+          <AppShell commands={commands} />
         </MemoryRouter>,
       );
       await Promise.resolve();
@@ -248,7 +248,7 @@ function RoutedShell({ commands }: { readonly commands: ChatCommands }) {
   const query = new URLSearchParams(location.search);
   return (
     <>
-      <ChatShell
+      <AppShell
         commands={commands}
         routeConversationId={conversationId ?? null}
         returnConversationId={query.get('from_conversation')}

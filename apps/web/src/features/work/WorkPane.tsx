@@ -3,7 +3,7 @@ import type {
   ChatCommands,
   WorkListItem,
   WorkListProductState,
-} from '../components/chat/contracts';
+} from '../conversations/components/contracts';
 
 export interface WorkPaneProps {
   readonly commands: ChatCommands;

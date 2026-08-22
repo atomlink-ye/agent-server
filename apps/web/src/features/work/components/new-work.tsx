@@ -1,18 +1,17 @@
 'use client';
 
 import { useState } from 'react';
-import { diagnosticsFrom } from '@/components/work/definition-panel';
-import { workTabHref } from '@/components/work/work-presentation';
-
-type Diagnostic = {
-  readonly path: string;
-  readonly code: string;
-  readonly message: string;
-};
-
-type Plan = {
-  readonly fingerprint: string;
-};
+import { diagnosticsFrom } from '@/features/work/components/definition-panel';
+import { workTabHref } from '@/features/work/components/work-presentation';
+import {
+  applyWorkDefinition,
+  createWork as createWorkRequest,
+  planWorkDefinition,
+  validateWorkDefinition,
+  type DefinitionDiagnostics,
+  type DefinitionPlan,
+} from '@/features/work/work-gateway';
+import { ApiTransportError } from '@/api/transport';
 
 type AuthoringState =
   | 'idle'
@@ -22,39 +21,27 @@ type AuthoringState =
   | 'applied'
   | 'error';
 
-function extractErrorMessage(value: unknown): string | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const record = value as Record<string, unknown>;
-  if (!record.error || typeof record.error !== 'object' || Array.isArray(record.error)) return null;
-  const error = record.error as Record<string, unknown>;
-  return typeof error.message === 'string' ? error.message : null;
-}
-
 export function NewWork() {
   const [source, setSource] = useState('');
   const [title, setTitle] = useState('');
   const [state, setState] = useState<AuthoringState>('idle');
-  const [diagnostics, setDiagnostics] = useState<readonly Diagnostic[]>([]);
-  const [plan, setPlan] = useState<Plan | null>(null);
+  const [diagnostics, setDiagnostics] = useState<DefinitionDiagnostics>([]);
+  const [plan, setPlan] = useState<DefinitionPlan | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
-  async function validateAndPlan(): Promise<Plan | null> {
+  async function validateAndPlan(): Promise<DefinitionPlan | null> {
     setState('validating');
     setDiagnostics([]);
     setPlan(null);
     setStatusMessage(null);
 
-    const validation = await fetch('/api/work-definitions/validate', {
-      method: 'POST',
-      cache: 'no-store',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ source }),
-    }).catch(() => null);
-
-    const validationBody = validation ? await validation.json().catch(() => undefined) : undefined;
-
-    if (!validation?.ok) {
-      const nextDiagnostics = diagnosticsFrom(validationBody);
+    let validation;
+    try {
+      validation = await validateWorkDefinition(source);
+    } catch (error) {
+      const nextDiagnostics = diagnosticsFrom(
+        error instanceof ApiTransportError ? error.payload : undefined,
+      );
       setDiagnostics(nextDiagnostics);
       setState('error');
       setStatusMessage(
@@ -64,37 +51,29 @@ export function NewWork() {
       );
       return null;
     }
-
-    if (!validationBody?.fingerprint) {
+    if (!validation.fingerprint) {
+      setState('error');
       setStatusMessage('The Definition could not be validated.');
-      setState('error');
       return null;
     }
 
-    const planned = await fetch('/api/work-definitions/plan', {
-      method: 'POST',
-      cache: 'no-store',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ source }),
-    }).catch(() => null);
-
-    if (!planned?.ok) {
-      setState('error');
-      setStatusMessage('The Definition validated, but its resource plan failed.');
-      return null;
-    }
-
-    const plannedBody = await planned.json().catch(() => undefined);
-    if (!plannedBody?.fingerprint) {
+    let planned;
+    try {
+      planned = await planWorkDefinition(source);
+    } catch (error) {
+      const nextDiagnostics = diagnosticsFrom(
+        error instanceof ApiTransportError ? error.payload : undefined,
+      );
+      setDiagnostics(nextDiagnostics);
       setState('error');
       setStatusMessage('The Definition validated, but its resource plan failed.');
       return null;
     }
 
-    setPlan(plannedBody);
+    setPlan(planned);
     setState('valid');
     setStatusMessage('Definition is valid and its resource plan resolved.');
-    return plannedBody;
+    return planned;
   }
 
   async function applyDefinition() {
@@ -103,71 +82,27 @@ export function NewWork() {
 
     setState('applying');
 
-    const response = await fetch('/api/work-definitions/apply', {
-      method: 'POST',
-      cache: 'no-store',
-      headers: {
-        'content-type': 'application/json',
-        'idempotency-key': crypto.randomUUID(),
-      },
-      body: JSON.stringify({ source }),
-    }).catch(() => null);
-
-    if (!response) {
+    try {
+      const applied = await applyWorkDefinition(source);
+      setState('applied');
+      await createWork(applied.definitionId, applied.versionId);
+    } catch (error) {
+      setDiagnostics(
+        diagnosticsFrom(error instanceof ApiTransportError ? error.payload : undefined),
+      );
       setState('error');
-      setStatusMessage('The Definition apply request could not reach Agent Server.');
-      return;
+      setStatusMessage(error instanceof Error ? error.message : 'The Definition was not applied.');
     }
-
-    const body = await response.json().catch(() => undefined);
-
-    if (!response.ok) {
-      setDiagnostics(diagnosticsFrom(body));
-      setState('error');
-      const errorMessage = extractErrorMessage(body);
-      setStatusMessage(errorMessage || 'The Definition was not applied.');
-      return;
-    }
-
-    if (!body?.definition?.id || !body?.version?.id) {
-      setState('error');
-      setStatusMessage('The Definition was not applied.');
-      return;
-    }
-
-    setState('applied');
-
-    await createWork(body.definition.id, body.version.id);
   }
 
   async function createWork(definitionId: string, versionId: string) {
-    const response = await fetch('/api/works', {
-      method: 'POST',
-      cache: 'no-store',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        definition_id: definitionId,
-        definition_version_id: versionId,
-        title,
-      }),
-    }).catch(() => null);
-
-    if (!response?.ok) {
-      const body = response ? await response.json().catch(() => undefined) : undefined;
+    try {
+      const created = await createWorkRequest(definitionId, versionId, title);
+      window.location.assign(workTabHref(created.workId, 'definition'));
+    } catch (error) {
       setState('error');
-      const errorMessage = extractErrorMessage(body);
-      setStatusMessage(errorMessage || 'The Work could not be created.');
-      return;
+      setStatusMessage(error instanceof Error ? error.message : 'The Work could not be created.');
     }
-
-    const body = await response.json().catch(() => undefined);
-    if (!body?.work?.id) {
-      setState('error');
-      setStatusMessage('The Work was created but response was invalid.');
-      return;
-    }
-
-    window.location.assign(workTabHref(body.work.id, 'definition'));
   }
 
   return (

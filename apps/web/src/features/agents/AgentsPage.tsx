@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
-import type { ChatCommands, Coworker } from '../components/chat/contracts';
-import { loadCoworkerProfile, type CoworkerProfile } from '../api/agents';
-import TitleBar from './TitleBar';
+import type { ChatCommands, Coworker } from '../conversations/components/contracts';
+import { loadCoworkerProfile, type CoworkerProfile } from './agents-gateway';
+import TitleBar from '../../app/shell/TitleBar';
 
-export function AgentsSurface({ commands }: { readonly commands: ChatCommands }) {
+export function AgentsPage({ commands }: { readonly commands: ChatCommands }) {
   const location = useLocation();
   const navigate = useNavigate();
   const selectedAgentId = useMemo(() => {
@@ -140,4 +140,4 @@ export function AgentsSurface({ commands }: { readonly commands: ChatCommands })
   );
 }
 
-export default AgentsSurface;
+export default AgentsPage;

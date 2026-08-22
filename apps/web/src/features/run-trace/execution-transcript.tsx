@@ -6,9 +6,10 @@ import type {
   ProductRunTrace,
 } from '@atomlink-ye/agent-server/product-contract';
 
-import { AssistantMarkdown } from '@/components/chat/assistant-markdown';
+import { AssistantMarkdown } from '@/features/conversations/components/assistant-markdown';
 import { ActivityRow } from './activity-row';
 import { projectTranscript } from './transcript-projection';
+import { loadExecutionDetail, RunTraceReadError } from './run-trace-gateway';
 import './execution-transcript.css';
 
 type Trace = Extract<
@@ -55,21 +56,17 @@ export function ExecutionTranscript({ live, trace }: { readonly live?: boolean; 
       lastAttemptIdRef.current = selectedAttemptId;
       setDetailState({ status: 'loading' });
     }
-    void fetch(
-      `/api/works/${encodeURIComponent(trace.work.id)}/runs/${encodeURIComponent(trace.work_run.id)}/execution-detail?attempt_id=${encodeURIComponent(selectedAttemptId)}`,
-      { method: 'GET', cache: 'no-store', headers: { accept: 'application/json' } },
-    )
-      .then(async (response) => {
-        const body = await response.json().catch(() => undefined);
-        if (!active) return;
-        if (!response.ok || !isExecutionDetail(body)) {
-          setDetailState({ status: 'unavailable', statusCode: response.status });
-          return;
-        }
-        setDetailState({ status: 'ready', detail: body });
+    void loadExecutionDetail(trace.work.id, trace.work_run.id, selectedAttemptId)
+      .then((detail) => {
+        if (active) setDetailState({ status: 'ready', detail });
       })
-      .catch(() => {
-        if (active) setDetailState({ status: 'unavailable' });
+      .catch((error: unknown) => {
+        if (active) {
+          setDetailState({
+            status: 'unavailable',
+            statusCode: error instanceof RunTraceReadError ? error.status : undefined,
+          });
+        }
       });
     return () => {
       active = false;
@@ -80,18 +77,10 @@ export function ExecutionTranscript({ live, trace }: { readonly live?: boolean; 
   useEffect(() => {
     if (!live || !selectedAttemptId || detailState.status === 'idle' || detailState.status === 'loading') return;
     const timer = setInterval(() => {
-      void fetch(
-        `/api/works/${encodeURIComponent(trace.work.id)}/runs/${encodeURIComponent(trace.work_run.id)}/execution-detail?attempt_id=${encodeURIComponent(selectedAttemptId)}`,
-        { method: 'GET', cache: 'no-store', headers: { accept: 'application/json' } },
-      )
-        .then(async (response) => {
-          const body = await response.json().catch(() => undefined);
-          if (!response.ok || !isExecutionDetail(body)) {
-            setDetailState({ status: 'unavailable', statusCode: response.status });
-            return;
-          }
+      void loadExecutionDetail(trace.work.id, trace.work_run.id, selectedAttemptId)
+        .then((detail) => {
           // Update data without resetting selectedAttemptId or state
-          setDetailState({ status: 'ready', detail: body });
+          setDetailState({ status: 'ready', detail });
         })
         .catch(() => {
           // On error, keep existing state
@@ -255,12 +244,6 @@ function collaborationMessages(trace: Trace, workItemId: string) {
       },
     ];
   });
-}
-
-function isExecutionDetail(value: unknown): value is ProductExecutionDetailResponse {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-  const record = value as Record<string, unknown>;
-  return record.capture_scope === 'safe_run_events' && Array.isArray(record.events);
 }
 
 function humanize(value: string) { return value.replaceAll('_', ' '); }

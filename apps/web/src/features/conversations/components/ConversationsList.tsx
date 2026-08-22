@@ -1,5 +1,5 @@
 import type { Conversation, ConversationId } from './contracts';
-import type { ConversationListState } from '../../stores/conversations';
+import type { ConversationListState } from '../../../stores/conversations';
 
 export interface ConversationsListProps {
   readonly state: ConversationListState;

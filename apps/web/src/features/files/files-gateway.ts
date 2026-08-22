@@ -1,3 +1,5 @@
+import { apiTransport } from '../../api/transport';
+
 export type ContextScopeKind =
   | 'organization'
   | 'workspace'
@@ -38,10 +40,17 @@ export async function loadContextFiles(
   const payload = await json(`/api/context/files?${scopeParams(request)}`);
   const root = record(payload);
   const entries = root?.entries;
-  if (!Array.isArray(entries)) throw new Error('Invalid Files response.');
+  if (
+    !Array.isArray(entries) ||
+    (root?.access !== 'read_only' && root?.access !== 'read_write')
+  ) {
+    throw new Error('Invalid Files response.');
+  }
+  const scope = record(root.scope);
+  if (!scope) throw new Error('Invalid Files response.');
   return {
-    access: root?.access === 'read_only' ? 'read_only' : 'read_write',
-    scope: record(root?.scope) ?? {},
+    access: root.access,
+    scope,
     entries: entries.map(fileSummary),
   };
 }
@@ -102,22 +111,7 @@ async function post(path: string, body: Record<string, unknown>): Promise<unknow
   return json(path, { method: 'POST', body: JSON.stringify(body) });
 }
 async function json(path: string, init: RequestInit = {}): Promise<unknown> {
-  const response = await fetch(path, {
-    ...init,
-    credentials: 'same-origin',
-    headers: {
-      accept: 'application/json',
-      ...(init.body ? { 'content-type': 'application/json' } : {}),
-    },
-  });
-  const payload = await response.json().catch(() => null);
-  if (!response.ok) {
-    const error = record(record(payload)?.error);
-    throw new Error(
-      typeof error?.message === 'string' ? error.message : 'Context request failed.',
-    );
-  }
-  return payload;
+  return apiTransport.request<unknown>(path, init);
 }
 function scopeParams(request: ContextScopeRequest): string {
   const params = new URLSearchParams({ scope: request.scope });

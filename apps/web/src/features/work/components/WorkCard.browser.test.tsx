@@ -2,7 +2,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
 
-import * as chatApi from '../../api/chat';
+import * as chatApi from '../../conversations/conversations-gateway';
 import { WorkCard } from './WorkCard';
 
 (

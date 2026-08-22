@@ -10,14 +10,17 @@ export type ChatDeliveryWorkerOptions = {
   readonly leaseMs: number;
   readonly pollIntervalMs?: number;
   readonly onError?: (failure: {
-    readonly phase: 'claim' | 'deliver' | 'loop';
+    readonly phase: 'claim' | 'deliver' | 'complete' | 'loop';
     readonly errorName: string;
     readonly error: unknown;
   }) => void;
 };
 
+type ChatWorkerRepository = Pick<ChatDispatchRepository, 'claimNext'> &
+  Partial<Pick<ChatDispatchRepository, 'completeClaim' | 'releaseClaim'>>;
+
 export class ChatDeliveryWorker implements StepWorker {
-  readonly #repository: Pick<ChatDispatchRepository, 'claimNext'>;
+  readonly #repository: ChatWorkerRepository;
   readonly #reconciler: Pick<ChatDeliveryReconciler, 'reconcile'>;
   readonly #options: Required<
     Pick<ChatDeliveryWorkerOptions, 'workerId' | 'leaseMs'>
@@ -30,7 +33,7 @@ export class ChatDeliveryWorker implements StepWorker {
   #resolveDelay: (() => void) | null = null;
 
   public constructor(
-    repository: Pick<ChatDispatchRepository, 'claimNext'>,
+    repository: ChatWorkerRepository,
     reconciler: Pick<ChatDeliveryReconciler, 'reconcile'>,
     options: ChatDeliveryWorkerOptions,
   ) {
@@ -62,7 +65,7 @@ export class ChatDeliveryWorker implements StepWorker {
     this.#loop = null;
   }
 
-  /** Claim and reconcile at most one durable chat dispatch. */
+  /** Claim and reconcile at most one durable Chat activation. */
   public async step(): Promise<WorkerStepResult> {
     let dispatch;
     try {
@@ -76,10 +79,42 @@ export class ChatDeliveryWorker implements StepWorker {
     }
     if (!dispatch) return { kind: 'idle' };
 
+    const ownsClaimOutcome = Boolean(
+      this.#repository.completeClaim && this.#repository.releaseClaim,
+    );
     try {
-      await this.#reconciler.reconcile(dispatch, this.#options.workerId);
+      await this.#reconciler.reconcile(
+        dispatch,
+        ownsClaimOutcome ? undefined : this.#options.workerId,
+      );
     } catch (error: unknown) {
-      this.fail('deliver', error);
+      if (ownsClaimOutcome) {
+        try {
+          await this.#repository.releaseClaim!({
+            id: dispatch.id,
+            workerId: this.#options.workerId,
+          });
+        } catch (releaseError: unknown) {
+          this.report('complete', releaseError);
+        }
+      }
+      // One provider/materialization failure must not kill the long-lived Chat
+      // worker. The durable activation remains retryable.
+      this.report('deliver', error);
+      return { kind: 'processed', value: dispatch };
+    }
+
+    if (ownsClaimOutcome) {
+      try {
+        const completed = await this.#repository.completeClaim!({
+          id: dispatch.id,
+          workerId: this.#options.workerId,
+          publishedAt: new Date().toISOString(),
+        });
+        if (!completed) throw new Error('Chat activation delivery lease was lost.');
+      } catch (error: unknown) {
+        this.report('complete', error);
+      }
     }
     return { kind: 'processed', value: dispatch };
   }
@@ -93,7 +128,7 @@ export class ChatDeliveryWorker implements StepWorker {
   }
 
   private fail(
-    phase: 'claim' | 'deliver' | 'loop',
+    phase: 'claim' | 'deliver' | 'complete' | 'loop',
     error: unknown,
   ): void {
     this.#stopping = true;
@@ -102,7 +137,7 @@ export class ChatDeliveryWorker implements StepWorker {
   }
 
   private report(
-    phase: 'claim' | 'deliver' | 'loop',
+    phase: 'claim' | 'deliver' | 'complete' | 'loop',
     error: unknown,
   ): void {
     try {

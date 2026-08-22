@@ -3,9 +3,6 @@ import type {
   ChatMessage,
   Conversation,
   ConversationId,
-  Coworker,
-  WorkListItem,
-  WorkListProductState,
 } from './contracts';
 import { apiTransport, ApiTransportError } from '../../api/transport';
 
@@ -35,13 +32,6 @@ export const isUuid = (value: unknown): value is string =>
     value,
   );
 
-export async function loadCoworkers(): Promise<readonly Coworker[]> {
-  const payload = asRecord(await apiTransport.request('/api/agents'));
-  const values = payload?.items;
-  if (!Array.isArray(values)) throw invalidResponse();
-  return values.map(normalizeCoworker);
-}
-
 export async function loadConversations(): Promise<readonly Conversation[]> {
   const payload = asRecord(await apiTransport.request('/api/conversations'));
   const values = payload?.conversations;
@@ -61,13 +51,6 @@ export async function createConversation(
   const conversation = payload?.conversation;
   if (!conversation) throw invalidResponse();
   return normalizeConversation(conversation);
-}
-
-export async function loadWorks(): Promise<readonly WorkListItem[]> {
-  const payload = asRecord(await apiTransport.request('/api/works'));
-  const values = payload?.works;
-  if (!Array.isArray(values)) throw invalidResponse();
-  return values.map(normalizeWorkListItem);
 }
 
 export async function loadMessages(
@@ -121,25 +104,11 @@ export async function loadWorkCard(workId: string): Promise<WorkChatCard> {
 }
 
 export const chatCommands: ChatCommands = {
-  loadCoworkers,
   loadConversations,
   createConversation,
-  loadWorks,
   loadMessages,
   sendMessage,
 };
-
-function normalizeCoworker(value: unknown): Coworker {
-  const record = asRecord(value);
-  return {
-    id: requiredString(record?.id),
-    displayName: requiredString(record?.display_name),
-    roleLabel: nullableString(record?.role_label),
-    summary: nullableString(record?.summary),
-    activeAgentVersionId: requiredString(record?.active_agent_version_id),
-    runtimeStatus: requiredCoworkerRuntimeStatus(record?.runtime_status),
-  };
-}
 
 function normalizeConversation(value: unknown): Conversation {
   const record = asRecord(value);
@@ -162,30 +131,6 @@ function normalizeDirectAgent(value: unknown): Conversation['directAgent'] {
   };
 }
 
-function normalizeWorkListItem(value: unknown): WorkListItem {
-  const record = asRecord(value);
-  return {
-    id: requiredString(record?.id),
-    title: requiredString(record?.title),
-    productState: requiredWorkListProductState(record?.product_state),
-    updatedAt: requiredString(record?.updated_at),
-    latestRunSummary: normalizeLatestRunSummary(record?.latest_run_summary),
-  };
-}
-
-function normalizeLatestRunSummary(
-  value: unknown,
-): WorkListItem['latestRunSummary'] {
-  if (value === null || value === undefined) return null;
-  const record = asRecord(value);
-  if (!record) throw invalidResponse();
-  return {
-    id: requiredString(record.id),
-    updatedAt: requiredString(record.updated_at),
-    resultSummary: nullableString(record.result_summary),
-    resultCaptureStatus: requiredString(record.result_capture_status),
-  };
-}
 
 function normalizeMessage(value: unknown): ChatMessage {
   const record = asRecord(value);
@@ -278,18 +223,6 @@ function nullableString(value: unknown): string | null {
   throw invalidResponse();
 }
 
-function requiredCoworkerRuntimeStatus(
-  value: unknown,
-): Coworker['runtimeStatus'] {
-  if (
-    value === 'available' ||
-    value === 'draining' ||
-    value === 'unavailable'
-  ) {
-    return value;
-  }
-  throw invalidResponse();
-}
 
 function requiredAuthorType(value: unknown): ChatMessage['authorType'] {
   if (value === 'principal' || value === 'agent_definition') return value;
@@ -301,18 +234,6 @@ function requiredConversationKind(value: unknown): Conversation['kind'] {
   throw invalidResponse();
 }
 
-function requiredWorkListProductState(value: unknown): WorkListProductState {
-  if (
-    value === 'running' ||
-    value === 'needs_you' ||
-    value === 'complete' ||
-    value === 'problem' ||
-    value === 'not_captured'
-  ) {
-    return value;
-  }
-  throw invalidResponse();
-}
 
 function nullableEnum<T extends string>(
   value: unknown,

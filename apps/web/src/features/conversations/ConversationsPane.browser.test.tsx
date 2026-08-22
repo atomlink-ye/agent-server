@@ -6,8 +6,8 @@ import { ConversationsPane } from './ConversationsPane';
 import type {
   ChatCommands,
   Conversation,
-  Coworker,
 } from './contracts';
+import type { Coworker } from '../agents/contracts';
 import { createAppStore } from './stores/app';
 import { createConversationsStore } from './stores/conversations';
 
@@ -159,7 +159,6 @@ function commandsFor(
     createConversation: async () => {
       throw new Error('unexpected create');
     },
-    loadWorks: async () => [],
     loadMessages: async () => [],
     sendMessage: async () => {
       throw new Error('not used');

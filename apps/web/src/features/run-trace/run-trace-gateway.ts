@@ -46,11 +46,14 @@ export async function loadExecutionDetail(
   runId: string,
   attemptId: string,
 ): Promise<ProductExecutionDetailResponse> {
-  const value = await request<unknown>(
+  const value = await request(
     `/api/works/${encodeURIComponent(workId)}/runs/${encodeURIComponent(runId)}/execution-detail?attempt_id=${encodeURIComponent(attemptId)}`,
   );
   try {
-    return ProductExecutionDetailResponseSchema.parse(value);
+    const detail = ProductExecutionDetailResponseSchema.parse(value);
+    if (detail.work_id !== workId || detail.work_run_id !== runId || detail.attempt_id !== attemptId)
+      throw new Error('identity mismatch');
+    return detail;
   } catch {
     throw new RunTraceReadError('Captured execution detail was invalid.', 502);
   }
@@ -60,11 +63,14 @@ export async function loadSessionTranscripts(
   workId: string,
   runId: string,
 ): Promise<SessionTranscriptsResponse> {
-  const value = await request<unknown>(
+  const value = await request(
     `/api/works/${encodeURIComponent(workId)}/runs/${encodeURIComponent(runId)}/session-transcripts`,
   );
   try {
-    return ProductSessionTranscriptsResponseSchema.parse(value);
+    const transcripts = ProductSessionTranscriptsResponseSchema.parse(value);
+    if (transcripts.work_id !== workId || transcripts.work_run_id !== runId)
+      throw new Error('identity mismatch');
+    return transcripts;
   } catch {
     throw new RunTraceReadError('Captured session transcripts were invalid.', 502);
   }

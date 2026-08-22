@@ -122,6 +122,9 @@ export async function loadWorkDetail(
   ]);
   const workResponse = parseProduct(GetWorkResponseSchema, workValue);
   const runsResponse = parseProduct(WorkRunListResponseSchema, runsValue);
+  if (workResponse.work.id !== workId || runsResponse.work_runs.some((run) => run.work_id !== workId)) {
+    throw new ProductReadError('The Product Work response did not match the requested Work.', 502);
+  }
   const runs = runsResponse.work_runs;
   const selectedSummary = selectedRunId
     ? runs.find((run) => run.id === selectedRunId)
@@ -158,6 +161,18 @@ export async function loadWorkDetail(
   ]);
   const run = parseProduct(ProductWorkRunResponseSchema, runValue);
   const trace = parseProduct(ProductRunTraceResponseSchema, traceValue);
+  if (
+    run.projection_status === 'internally_anchored' &&
+    (run.work?.id !== workId || run.work_run?.id !== selectedSummary.id)
+  ) {
+    throw new ProductReadError('The Product Run response did not match the requested Work.', 502);
+  }
+  if (
+    trace.projection_status === 'internally_anchored' &&
+    (trace.work?.id !== workId || trace.work_run?.id !== selectedSummary.id)
+  ) {
+    throw new ProductReadError('The Product Trace response did not match the requested Run.', 502);
+  }
   if (!isAnchoredRun(run) || !isAnchoredTrace(trace)) {
     throw new Error('The Product WorkRun projection was not captured.');
   }
@@ -181,6 +196,9 @@ export async function loadRunRoleSummaries(
     `/api/works/${encodeURIComponent(workId)}/runs/${encodeURIComponent(runId)}/session-transcripts`,
     ),
   );
+  if (body.work_id !== workId || body.work_run_id !== runId) {
+    throw new ProductReadError('The session transcript response did not match the requested Run.', 502);
+  }
   return body.sessions.map((session) => ({
     label: session.label,
     summary: {

@@ -53,7 +53,6 @@ it('refreshes the selected transcript on its interval and stops transcript polli
     loadCoworkers: async () => [],
     loadConversations: async () => [conversationA, conversationB],
     createConversation: async () => conversationA,
-    loadWorks: async () => [],
     loadMessages,
     sendMessage: async () => initialA,
   };
@@ -135,7 +134,6 @@ it('keeps Direct Chat identity and Work origin in refresh-safe URLs', async () =
     loadCoworkers: async () => [],
     loadConversations: async () => [conversationA, conversationB],
     createConversation: async () => conversationA,
-    loadWorks: async () => [],
     loadMessages: async () => [],
     sendMessage: async () => message('conversation-a', 'message-a', 1, 'hello'),
   };
@@ -197,15 +195,6 @@ it('renders Work as a sibling tab inside the same Cumora-style shell', async () 
     loadCoworkers: async () => [],
     loadConversations: async () => [],
     createConversation: async () => conversation('conversation-a'),
-    loadWorks: async () => [
-      {
-        id: workId,
-        title: 'Competitor Research',
-        productState: 'running',
-        updatedAt: '2026-08-21T00:00:00.000Z',
-        latestRunSummary: null,
-      },
-    ],
     loadMessages: async () => [],
     sendMessage: async () => message('conversation-a', 'message-a', 1, 'hello'),
   };

@@ -1,6 +1,7 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
 
 import { chatCommands } from '../../features/conversations/conversations-gateway';
+import { loadCoworkers } from '../../features/agents/agents-gateway';
 import type { ChatCommands } from '../../features/conversations/contracts';
 import { createAppStore, type AppStore } from '../../features/conversations/stores/app';
 import {
@@ -20,7 +21,7 @@ const AppRuntimeContext = createContext<AppRuntime | null>(null);
 
 export function AppProviders({
   children,
-  commands = chatCommands,
+  commands = { ...chatCommands, loadCoworkers },
 }: {
   readonly children: ReactNode;
   readonly commands?: ChatCommands;

@@ -3,8 +3,8 @@ import type {
   ChatCommands,
   Conversation,
   ConversationId,
-  Coworker,
 } from './contracts';
+import type { Coworker } from '../agents/contracts';
 import { ConversationsList } from './components/ConversationsList';
 import type { AppStore } from './stores/app';
 import type { ConversationsStore } from './stores/conversations';

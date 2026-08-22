@@ -145,7 +145,7 @@ export function ConversationsPane({
             <p>No published coworkers are available yet.</p>
           ) : null}
           {coworkerStatus === 'ready' ? (
-            <div className="new-conversation-actions" role="list">
+            <div className="new-conversation-actions">
               {coworkers.map((coworker) => {
                 const available = coworker.runtimeStatus === 'available';
                 const secondary =
@@ -157,7 +157,6 @@ export function ConversationsPane({
                     key={coworker.id}
                     className="filter-chip"
                     type="button"
-                    role="listitem"
                     disabled={createStatus === 'pending' || !available}
                     title={coworker.summary ?? coworker.displayName}
                     onClick={() => {
@@ -265,7 +264,10 @@ function compareUpdatedAt(left: Conversation, right: Conversation): number {
 }
 
 function compareCoworkers(left: Coworker, right: Coworker): number {
-  return left.displayName.localeCompare(right.displayName) || left.id.localeCompare(right.id);
+  return (
+    left.displayName.localeCompare(right.displayName) ||
+    left.id.localeCompare(right.id)
+  );
 }
 
 export default ConversationsPane;

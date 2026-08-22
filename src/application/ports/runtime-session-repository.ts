@@ -116,8 +116,7 @@ export interface RuntimeSessionRepository {
   }): Promise<RuntimeSession>;
   /**
    * Clears a stale external provider binding while preserving the canonical
-   * RuntimeSession and its launch snapshot. The next resolve creates a fresh
-   * provider session for bounded recovery.
+   * RuntimeSession and its launch snapshot. Optional only for bounded fakes.
    */
-  clearExecutionBinding(id: string): Promise<RuntimeSession>;
+  clearExecutionBinding?(id: string): Promise<RuntimeSession>;
 }

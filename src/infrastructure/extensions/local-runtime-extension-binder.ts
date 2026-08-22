@@ -14,24 +14,28 @@ import {
   AGENT_SERVER_EXECUTION_MCP_SERVER_NAME,
   type ExecutionExtensionBinding,
 } from '../../application/ports/execution-plane.js';
-import type { RuntimeToolGrantService } from '../../application/extensions/runtime-tool-grant-service.js';
+import type {
+  RuntimeToolGrant,
+  RuntimeToolGrantScopeQuery,
+  RuntimeToolGrantService,
+} from '../../application/extensions/runtime-tool-grant-service.js';
 import type { Logger } from '../../shared/observability/logger.js';
 import { materializeOpenCodeSkill } from '../filesystem/opencode-skill-materializer.js';
 import { RuntimeMcpServer } from './runtime-mcp-server.js';
 
-type CachedChatBinding = Readonly<{
+type CachedBinding = Readonly<{
   readonly grantId: string;
   readonly binding: ExecutionExtensionBinding;
 }>;
 
-const MAX_CHAT_BINDINGS = 256;
+const MAX_BINDINGS = 512;
 
 export class LocalRuntimeExtensionBinder implements RuntimeExtensionBinder {
   readonly #agentCwd: string;
   readonly #registryRoot: string;
   readonly #mcp: RuntimeMcpServer;
   /** Plaintext bearer cache only. Durable authorization lives in Postgres. */
-  readonly #chatBindings = new Map<string, CachedChatBinding>();
+  readonly #bindings = new Map<string, CachedBinding>();
   readonly #logger: Logger | undefined;
 
   public constructor(
@@ -50,21 +54,6 @@ export class LocalRuntimeExtensionBinder implements RuntimeExtensionBinder {
     input: Parameters<RuntimeExtensionBinder['bind']>[0],
   ): Promise<ExecutionExtensionBinding | undefined> {
     const platformCollaboration = Boolean(input.teamMemberRunId);
-    const isChatScope = Boolean(
-      input.chatContext &&
-        input.scopeId &&
-        !input.productSessionId &&
-        !platformCollaboration,
-    );
-    const chatKey = isChatScope
-      ? chatBindingKey({
-          tenantId: input.tenantId,
-          workspaceId: input.workspaceId,
-          principalType: input.principalType,
-          principalId: input.principalId,
-          scopeId: input.scopeId!,
-        })
-      : undefined;
     if (
       !input.skills.length &&
       !input.toolRefs.length &&
@@ -84,14 +73,48 @@ export class LocalRuntimeExtensionBinder implements RuntimeExtensionBinder {
         skill,
       });
 
-    // Skills without tools do not require MCP unless this RuntimeSession is a
-    // Team participant. Collaboration MCP is platform-owned and auto-mounted.
     if (!input.toolRefs.length && !platformCollaboration) return {};
-
     if (!input.productSessionId && !input.scopeId)
       throw new Error('Runtime extension scope is unavailable.');
 
-    if (chatKey && input.chatContext) {
+    const scope = grantScope(input);
+    const key = bindingKey(scope);
+    const existing = await this.#mcp.grants.findForScope(scope);
+    if (existing) {
+      const cached = this.#bindings.get(key);
+      if (cached?.grantId === existing.grantId) {
+        const refreshed = await this.refreshExisting(input, existing);
+        if (refreshed.grantId !== cached.grantId)
+          throw new Error('Runtime grant identity changed during refresh.');
+        this.touchBinding(key, cached);
+        return cached.binding;
+      }
+
+      if (this.#mcp.grants.activeToolCalls(existing.grantId) > 0)
+        throw new Error('Runtime grant replacement fence is active.');
+      await this.#mcp.grants.revoke(existing.grantId);
+      this.#bindings.delete(key);
+      this.#logger?.log('info', 'runtime.grant.reissued_after_restart', {
+        previous_grant_id_prefix: `${existing.grantId.slice(0, 8)}…`,
+        scope_id: input.scopeId ?? input.productSessionId,
+        scope_kind: input.chatContext
+          ? 'agent_chat'
+          : input.teamMemberRunId
+            ? 'team_member'
+            : input.productSessionId
+              ? 'product_session'
+              : 'task',
+      });
+    }
+
+    return this.issueBinding({ input, runtimeRoot, key });
+  }
+
+  private async refreshExisting(
+    input: Parameters<RuntimeExtensionBinder['bind']>[0],
+    existing: RuntimeToolGrant,
+  ): Promise<RuntimeToolGrant> {
+    if (input.chatContext) {
       const refreshed = await this.#mcp.grants.refreshForChatScope({
         tenantId: input.tenantId,
         principalType: input.principalType,
@@ -101,41 +124,45 @@ export class LocalRuntimeExtensionBinder implements RuntimeExtensionBinder {
         allowedTools: input.toolRefs,
         chatContext: input.chatContext,
       });
-      if (refreshed) {
-        const cached = this.#chatBindings.get(chatKey);
-        if (cached && cached.grantId === refreshed.grantId) {
-          this.#logger?.log('info', 'runtime.chat_grant.refreshed', {
-            grant_id_prefix: `${refreshed.grantId.slice(0, 8)}…`,
-            scope_id: input.scopeId,
-          });
-          return cached.binding;
-        }
-
-        // The durable grant survived a process restart, but its plaintext
-        // bearer intentionally did not. Revoke it and issue a fresh bearer.
-        // The new grantId enters the extension digest, forcing the runtime
-        // resolver to replace a provider generation that still holds the old
-        // bearer while preserving the stable Agent Server RuntimeSession.
-        await this.#mcp.grants.revoke(refreshed.grantId);
-        this.#logger?.log('info', 'runtime.chat_grant.reissued_after_restart', {
-          previous_grant_id_prefix: `${refreshed.grantId.slice(0, 8)}…`,
-          scope_id: input.scopeId,
-        });
-      }
-      this.#chatBindings.delete(chatKey);
+      if (!refreshed)
+        throw new Error('Runtime Chat grant disappeared during refresh.');
+      return refreshed;
     }
 
-    return this.issueBinding({
-      input,
-      runtimeRoot,
-      chatKey,
-    });
+    if (input.teamMemberRunId) {
+      if (!input.taskId || !input.runId || !input.contextEpoch || !input.scopeId)
+        throw new Error('Team runtime extension requires an active turn context.');
+      return this.#mcp.grants.refreshForTeamMember({
+        grantId: existing.grantId,
+        teamMemberRunId: input.teamMemberRunId,
+        scopeId: input.scopeId,
+        taskId: input.taskId,
+        runId: input.runId,
+        allowedTools: input.toolRefs,
+        contextEpoch: input.contextEpoch,
+      });
+    }
+
+    if (input.productSessionId) {
+      await this.#mcp.grants.refreshForSession(
+        input.productSessionId,
+        input.toolRefs,
+      );
+      const refreshed = await this.#mcp.grants.findForScope(grantScope(input));
+      if (!refreshed)
+        throw new Error('Product Session runtime grant disappeared during refresh.');
+      return refreshed;
+    }
+
+    if (!sameToolRefs(existing.allowedTools, input.toolRefs))
+      throw new Error('Task runtime grant tool set changed unexpectedly.');
+    return existing;
   }
 
   private async issueBinding(input: {
     readonly input: Parameters<RuntimeExtensionBinder['bind']>[0];
     readonly runtimeRoot: string;
-    readonly chatKey?: string;
+    readonly key: string;
   }): Promise<ExecutionExtensionBinding> {
     const receipt = await this.#mcp.grants.issue({
       tenantId: input.input.tenantId,
@@ -205,11 +232,10 @@ export class LocalRuntimeExtensionBinder implements RuntimeExtensionBinder {
         digest,
         grantId: receipt.receipt.grantId,
       };
-      if (input.chatKey)
-        this.cacheChatBinding(input.chatKey, {
-          grantId: receipt.receipt.grantId,
-          binding,
-        });
+      this.cacheBinding(input.key, {
+        grantId: receipt.receipt.grantId,
+        binding,
+      });
       return binding;
     } catch (error) {
       await this.#mcp.grants.revoke(receipt.receipt.grantId).catch(() => undefined);
@@ -267,13 +293,17 @@ export class LocalRuntimeExtensionBinder implements RuntimeExtensionBinder {
   }
 
   public async revoke(grantId: string): Promise<void> {
-    for (const [key, cached] of this.#chatBindings) {
-      if (cached.grantId === grantId) this.#chatBindings.delete(key);
+    for (const [key, cached] of this.#bindings) {
+      if (cached.grantId === grantId) this.#bindings.delete(key);
     }
     await this.#mcp.grants.revoke(grantId);
   }
 
   public revokeForTeamRun(teamRunId: string): Promise<void> {
+    for (const [key, cached] of this.#bindings) {
+      const scope = JSON.parse(key) as readonly unknown[];
+      if (scope.at(-1) === teamRunId) this.#bindings.delete(key);
+    }
     return this.#mcp.grants.revokeForTeamRun(teamRunId);
   }
 
@@ -281,18 +311,54 @@ export class LocalRuntimeExtensionBinder implements RuntimeExtensionBinder {
     return this.#mcp.grants.activeToolCalls(grantId);
   }
 
-  private cacheChatBinding(
-    key: string,
-    value: CachedChatBinding,
-  ): void {
-    this.#chatBindings.delete(key);
-    this.#chatBindings.set(key, value);
-    while (this.#chatBindings.size > MAX_CHAT_BINDINGS) {
-      const oldest = this.#chatBindings.keys().next().value;
+  private cacheBinding(key: string, value: CachedBinding): void {
+    this.#bindings.delete(key);
+    this.#bindings.set(key, value);
+    while (this.#bindings.size > MAX_BINDINGS) {
+      const oldest = this.#bindings.keys().next().value;
       if (typeof oldest !== 'string') break;
-      this.#chatBindings.delete(oldest);
+      this.#bindings.delete(oldest);
     }
   }
+
+  private touchBinding(key: string, value: CachedBinding): void {
+    this.#bindings.delete(key);
+    this.#bindings.set(key, value);
+  }
+}
+
+function grantScope(
+  input: Parameters<RuntimeExtensionBinder['bind']>[0],
+): RuntimeToolGrantScopeQuery {
+  return {
+    tenantId: input.tenantId,
+    principalType: input.principalType,
+    principalId: input.principalId,
+    workspaceId: input.workspaceId,
+    ...(input.productSessionId
+      ? { productSessionId: input.productSessionId }
+      : {}),
+    ...(!input.productSessionId && input.scopeId
+      ? { scopeId: input.scopeId }
+      : {}),
+    ...(input.teamMemberRunId
+      ? { teamMemberRunId: input.teamMemberRunId }
+      : {}),
+    ...(input.teamRunId ? { teamRunId: input.teamRunId } : {}),
+  };
+}
+
+function bindingKey(scope: RuntimeToolGrantScopeQuery): string {
+  return JSON.stringify([
+    scope.tenantId,
+    scope.workspaceId,
+    scope.principalType,
+    scope.principalId,
+    scope.productSessionId ?? null,
+    scope.scopeId ?? scope.productSessionId ?? null,
+    scope.teamMemberRunId ?? null,
+    scope.teamRunId ?? null,
+  ]);
 }
 
 function extensionDigest(input: {
@@ -311,20 +377,10 @@ function extensionDigest(input: {
     .digest('hex');
 }
 
-function chatBindingKey(input: {
-  readonly tenantId: string;
-  readonly workspaceId: string;
-  readonly principalType: string;
-  readonly principalId: string;
-  readonly scopeId: string;
-}): string {
-  return JSON.stringify([
-    input.tenantId,
-    input.workspaceId,
-    input.principalType,
-    input.principalId,
-    input.scopeId,
-  ]);
+function sameToolRefs(left: readonly string[], right: readonly string[]): boolean {
+  if (left.length !== right.length) return false;
+  const rightSet = new Set(right);
+  return new Set(left).size === left.length && left.every((ref) => rightSet.has(ref));
 }
 
 async function ensureSafeDirectoryPath(path: string): Promise<void> {

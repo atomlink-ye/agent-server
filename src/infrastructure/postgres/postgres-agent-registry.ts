@@ -2,6 +2,8 @@ import type {
   AgentRegistry,
   ImportAgentAtomicCommand,
   ListAgentVersionsCommand,
+  ListManagedAgentDefinitionsCommand,
+  ManagedAgentCoworkerPage,
   ManagedAgentVersionPage,
   PublishAgentAtomicCommand,
 } from '../../application/ports/agent-registry.js';
@@ -19,6 +21,7 @@ import {
   type ManagedAgentPackage,
 } from '../../domain/agents/managed-agent-package.js';
 import type { ManagedAgentVersion } from '../../domain/agents/managed-agent-version.js';
+import type { AgentChatRuntimeStatus } from '../../domain/chat/agent-chat-runtime.js';
 
 export interface PostgresQueryable {
   query<Row = Record<string, unknown>>(
@@ -48,6 +51,10 @@ type DefinitionRow = {
   updated_at: string | Date;
   role_label: string | null;
   summary: string | null;
+};
+type CoworkerRow = DefinitionRow & {
+  active_agent_version_id: string;
+  runtime_status: AgentChatRuntimeStatus;
 };
 type VersionRow = DefinitionRow & {
   definition_id: string;
@@ -276,6 +283,51 @@ export class PostgresAgentRegistry implements AgentRegistry {
       [input.definitionId, input.tenantId],
     );
     return result.rows?.[0] ? mapDefinition(result.rows[0]) : null;
+  }
+
+  public async listManagedDefinitionsByTenant(input: {
+    readonly tenantId: string;
+    readonly command: ListManagedAgentDefinitionsCommand;
+  }): Promise<ManagedAgentCoworkerPage> {
+    const { command } = input;
+    if (
+      !Number.isInteger(command.limit) ||
+      command.limit < 1 ||
+      command.limit > 100
+    )
+      throw new InvalidAgentListLimitError();
+    const cursor = command.cursor ? decodeCursor(command.cursor) : null;
+    const values: unknown[] = [input.tenantId, command.limit + 1];
+    const cursorSql = cursor
+      ? ` AND (d.created_at,d.id) > ($3::timestamptz,$4::uuid)`
+      : '';
+    if (cursor) values.push(cursor.createdAt, cursor.id);
+    const result = await this.database.query<CoworkerRow>(
+      `SELECT d.id,d.tenant_id,d.workspace_id,d.principal_type,d.principal_id,
+              d.name,d.normalized_name,d.role_label,d.summary,d.created_at,d.updated_at,
+              r.active_agent_version_id,r.status AS runtime_status
+         FROM agent_definitions d
+         JOIN agent_chat_runtimes r
+           ON r.tenant_id=d.tenant_id AND r.agent_definition_id=d.id
+        WHERE d.tenant_id=$1 AND d.managed_discriminator='managed_agent_v1'
+          ${cursorSql}
+        ORDER BY d.created_at ASC,d.id ASC LIMIT $2`,
+      values,
+    );
+    const rows = [...(result.rows ?? [])];
+    const hasNext = rows.length > command.limit;
+    const emitted = rows.slice(0, command.limit);
+    const items = emitted.map((row) => ({
+      definition: mapDefinition(row),
+      activeAgentVersionId: row.active_agent_version_id,
+      runtimeStatus: row.runtime_status,
+    }));
+    const last = emitted[emitted.length - 1];
+    return {
+      items,
+      nextCursor:
+        hasNext && last ? encodeCursor(iso(last.created_at), last.id) : null,
+    };
   }
 
   public async findVersion(

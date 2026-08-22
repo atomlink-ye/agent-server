@@ -71,14 +71,14 @@ export interface ExecutionTurnOutcome {
   readonly text: string;
   readonly workspaceBinding: ExecutionWorkspaceBinding;
   readonly sessionBinding: ExecutionSessionBinding;
+  readonly sessionResolution?: 'created' | 'reused' | 'reconfigured' | 'replaced';
   readonly usage?: RunUsage;
   readonly memoryCandidates?: readonly RuntimeMemoryCandidate[];
 }
 
 export interface ExecutionRuntimeService {
   ensureReady(): Promise<boolean>;
-  /** Optional during migration so focused/debug runtimes can stay minimal. */
-  ensureAgentChatRuntimeSession?(input: {
+  ensureAgentChatRuntimeSession(input: {
     readonly agentChatRuntimeId: string;
     readonly runtimeEpoch: number;
     readonly agentOwner: ResourceOwner;
@@ -89,8 +89,6 @@ export interface ExecutionRuntimeService {
     }[];
     readonly toolRefs: readonly string[];
   }): Promise<RuntimeSession>;
-  /** Clears only an external provider binding; the canonical session survives. */
-  resetRuntimeSessionBinding?(runtimeSessionId: string): Promise<RuntimeSession>;
   executeTurn(
     input: ExecutionTurnRequest,
     observer?: ExecutionObservationSink,
@@ -134,7 +132,7 @@ export class ExecutionPlaneRuntimeFacade implements ExecutionRuntimeService {
     }
   }
 
-  public async ensureAgentChatRuntimeSession(input: {
+  public ensureAgentChatRuntimeSession(input: {
     readonly agentChatRuntimeId: string;
     readonly runtimeEpoch: number;
     readonly agentOwner: ResourceOwner;
@@ -145,10 +143,6 @@ export class ExecutionPlaneRuntimeFacade implements ExecutionRuntimeService {
     }[];
     readonly toolRefs: readonly string[];
   }): Promise<RuntimeSession> {
-    if (!this.runtimeSessions.createOrGetForAgentChat)
-      throw new RuntimeExecutionError(
-        'Agent chat RuntimeSession persistence is unavailable.',
-      );
     return this.runtimeSessions.createOrGetForAgentChat({
       agentChatRuntimeId: input.agentChatRuntimeId,
       runtimeEpoch: input.runtimeEpoch,
@@ -160,16 +154,6 @@ export class ExecutionPlaneRuntimeFacade implements ExecutionRuntimeService {
       resolvedSkills: input.resolvedSkills,
       toolRefs: input.toolRefs,
     });
-  }
-
-  public async resetRuntimeSessionBinding(
-    runtimeSessionId: string,
-  ): Promise<RuntimeSession> {
-    if (!this.runtimeSessions.clearExecutionBinding)
-      throw new RuntimeExecutionError(
-        'Runtime session binding recovery is unavailable.',
-      );
-    return this.runtimeSessions.clearExecutionBinding(runtimeSessionId);
   }
 
   public async executeTurn(
@@ -192,6 +176,7 @@ export class ExecutionPlaneRuntimeFacade implements ExecutionRuntimeService {
     let executionSession: ExecutionSession;
     let workspaceBinding: ExecutionWorkspaceBinding;
     let sessionBinding: ExecutionSessionBinding;
+    let sessionResolution: ExecutionTurnOutcome['sessionResolution'];
     let closeAfterTurn = false;
 
     if (input.runtimeSessionId) {
@@ -221,16 +206,15 @@ export class ExecutionPlaneRuntimeFacade implements ExecutionRuntimeService {
         },
         workspaceBinding: ownerWorkspaceBinding,
       });
-      if (
-        !resolved.runtimeSession.workspaceBinding ||
-        !resolved.runtimeSession.sessionBinding
-      )
+      const generation = resolved.runtimeSession.currentGeneration;
+      if (!generation)
         throw new RuntimeExecutionError(
-          'Runtime session resolved without complete execution bindings.',
+          'Runtime session resolved without an active provider generation.',
         );
       executionSession = resolved.session;
-      workspaceBinding = resolved.runtimeSession.workspaceBinding;
-      sessionBinding = resolved.runtimeSession.sessionBinding;
+      workspaceBinding = generation.workspaceBinding;
+      sessionBinding = generation.sessionBinding;
+      sessionResolution = resolved.resolution;
       closeAfterTurn = true;
     } else if (input.compatibilitySessionBinding) {
       const durable =
@@ -247,23 +231,23 @@ export class ExecutionPlaneRuntimeFacade implements ExecutionRuntimeService {
             },
             ...(input.provider ? { provider: input.provider } : {}),
             ...(input.model ? { model: input.model } : {}),
-            systemPrompt: '',
+            systemPrompt: input.systemPrompt ?? '',
+            ...(input.extensions ? { extensions: input.extensions } : {}),
             ...(input.invocationContext
               ? { invocationContext: input.invocationContext }
               : {}),
           },
           workspaceBinding: ownerWorkspaceBinding,
         });
-        if (
-          !resolved.runtimeSession.workspaceBinding ||
-          !resolved.runtimeSession.sessionBinding
-        )
+        const generation = resolved.runtimeSession.currentGeneration;
+        if (!generation)
           throw new RuntimeExecutionError(
-            'Durable compatibility session resolved without complete execution bindings.',
+            'Durable execution session resolved without an active provider generation.',
           );
         executionSession = resolved.session;
-        workspaceBinding = resolved.runtimeSession.workspaceBinding;
-        sessionBinding = resolved.runtimeSession.sessionBinding;
+        workspaceBinding = generation.workspaceBinding;
+        sessionBinding = generation.sessionBinding;
+        sessionResolution = resolved.resolution;
         closeAfterTurn = true;
       } else {
         const cached = this.#freshSessions.get(
@@ -271,7 +255,7 @@ export class ExecutionPlaneRuntimeFacade implements ExecutionRuntimeService {
         );
         if (!cached)
           throw new RuntimeExecutionError(
-            'The compatibility session binding is unavailable.',
+            'The execution session binding is unavailable.',
           );
         executionSession = cached.session;
         workspaceBinding = cached.workspaceBinding;
@@ -329,6 +313,7 @@ export class ExecutionPlaneRuntimeFacade implements ExecutionRuntimeService {
         text: result.output.text,
         workspaceBinding,
         sessionBinding,
+        ...(sessionResolution ? { sessionResolution } : {}),
         ...(result.output.usage ? { usage: result.output.usage } : {}),
         ...(candidates.length > 0 ? { memoryCandidates: candidates } : {}),
       };

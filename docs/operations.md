@@ -28,7 +28,7 @@ Never place prompts, assistant bodies, service tokens, provider/call/child IDs, 
 Real Paseo/provider behavior is an explicit smoke boundary, not an ordinary deterministic PR prerequisite:
 
 ```bash
-pnpm smoke:runtime
+pnpm canary:runtime
 pnpm smoke:agent-team
 ```
 

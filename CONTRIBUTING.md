@@ -37,9 +37,9 @@ pnpm test:repository
 pnpm test:unit
 pnpm test:contract
 pnpm test:integration
-pnpm test:real-pg
+pnpm test:pg
 pnpm test:e2e
-pnpm smoke:runtime
+pnpm canary:runtime
 ```
 
 External smokes are opt-in and may require credentials. Deterministic tests must not require live model availability.

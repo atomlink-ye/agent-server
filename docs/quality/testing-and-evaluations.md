@@ -82,7 +82,6 @@ seed.goldenPath()
 
 over repeated table-shaped fixture SQL.
 
-`pnpm test:north-star` is a compatibility alias for this lane.
 
 ## Real PostgreSQL semantic tests
 
@@ -115,7 +114,6 @@ The runner:
 
 The runner guard and `tests/harness/postgres.ts`'s `assertRealPostgresTestUrl` are independent protections: the harness guard requires a `test` database name and rejects production-flavored names before creating the real test pool. PGlite cannot substitute for this lane or prove L3 PostgreSQL-only behavior.
 
-`pnpm test:real-pg` is a compatibility alias.
 
 CI may supply PostgreSQL as a service container. The important boundary is that the test harness does not secretly own a Compose lifecycle.
 

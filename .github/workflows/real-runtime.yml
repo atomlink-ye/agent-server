@@ -156,7 +156,7 @@ jobs:
 
       - name: Real-provider runtime main flow
         if: steps.credentials.outputs.available == 'true'
-        run: pnpm smoke:runtime
+        run: pnpm canary:runtime
 
       # The 300s default was calibrated before the Team collaboration flow grew
       # its message/checkpoint round-trips, each of which is a real provider

@@ -62,7 +62,7 @@ Load provider credentials from an external file/secret source, never the reposit
 
 ```bash
 set -a; . /path/to/provider.env; set +a
-pnpm smoke:runtime
+pnpm canary:runtime
 ```
 
 The real Team path is:

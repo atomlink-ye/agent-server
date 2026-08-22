@@ -24,7 +24,7 @@ Inspect the named readiness checks and separate control-plane health from execut
 Use the canonical external runtime smoke only when real provider behavior is the boundary under investigation:
 
 ```bash
-pnpm smoke:runtime
+pnpm canary:runtime
 ```
 
 Real provider/model availability is external state. Never weaken the deterministic gate or silently choose a paid model because a free provider is temporarily unavailable.
@@ -68,7 +68,7 @@ Use a fresh ProductSession for product-flow verification. Keep the service beare
 PGlite remains the default for integration behavior that does not require PostgreSQL-specific semantics. Transaction/lock/concurrency/migration/PostgreSQL-specific behavior uses:
 
 ```bash
-pnpm test:real-pg
+pnpm test:pg
 ```
 
 The test lane starts a disposable PostgreSQL topology automatically when no external database URL is supplied. A focused real-Postgres test can also self-start when invoked directly. Do not replace a required real-Postgres boundary with PGlite merely to obtain a pass.
@@ -117,7 +117,7 @@ Stop the isolated owned processes, revoke any real credential, and inspect local
 
 ## CI and external verification
 
-`pnpm run verify` is the main deterministic aggregate. `pnpm test:real-pg` is the PostgreSQL-specific lane. Real provider smokes are opt-in/scheduled external checks. Report only commands that actually ran and their actual outcomes.
+`pnpm run verify` is the main deterministic aggregate. `pnpm test:pg` is the PostgreSQL-specific lane. Real provider smokes are opt-in/scheduled external checks. Report only commands that actually ran and their actual outcomes.
 
 ## Generated diagnostics and cleanup
 

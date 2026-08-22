@@ -15,6 +15,7 @@ interface Queryable {
   ): Promise<{
     readonly rows?: readonly Row[];
     readonly rowCount?: number | null;
+    readonly affectedRows?: number | null;
   }>;
 }
 
@@ -114,7 +115,7 @@ export class PostgresWorkChatWakeStateRepository implements WorkChatWakeStateRep
             input.observedAt,
           ],
         );
-        if ((updated.rowCount ?? 0) !== 1)
+        if ((updated.rowCount ?? updated.affectedRows ?? 0) !== 1)
           throw new Error('Work Chat wake state disappeared during admission.');
       }
 
@@ -206,7 +207,7 @@ export class PostgresWorkChatWakeStateRepository implements WorkChatWakeStateRep
        WHERE id=$1 AND claimed_by=$2 AND delivered_at IS NULL`,
       [deliveryId, workerId],
     );
-    if ((result.rowCount ?? 0) !== 1)
+    if ((result.rowCount ?? result.affectedRows ?? 0) !== 1)
       throw new Error('Work Chat wake delivery lease was lost.');
   }
 

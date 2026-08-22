@@ -72,6 +72,9 @@ describe('Work Chat wake on real PostgreSQL', () => {
       [tenantId, workspaceId, workId],
     );
     if (conversationId) {
+      await pool.query('DELETE FROM chat_dispatches WHERE conversation_id=$1', [
+        conversationId,
+      ]);
       await pool.query('DELETE FROM chat_messages WHERE conversation_id=$1', [
         conversationId,
       ]);

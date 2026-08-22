@@ -20,11 +20,21 @@ describe('PostgresWorkChatWakeStateRepository N2 wake identity', () => {
     // The production repository uses pg.Pool.connect() to pin BEGIN/COMMIT to
     // one connection. PGlite is a single embedded connection, so this adapter
     // gives it the same shape without changing the repository semantics.
+    // PGlite exposes affectedRows (rather than pg's rowCount). Keep this
+    // adapter deliberately rowCount-free so both scoped UPDATE mutations use
+    // the compatibility guard exercised by this identity-pair assertion.
+    const query = async <Row = Record<string, unknown>>(
+      sql: string,
+      values?: readonly unknown[],
+    ) => {
+      const result = await db.query<Row>(sql, values as unknown[] | undefined);
+      return { rows: result.rows, affectedRows: result.affectedRows };
+    };
     const database = {
-      query: db.query.bind(db),
+      query,
       async connect() {
         return {
-          query: db.query.bind(db),
+          query,
           release() {},
         };
       },
@@ -61,7 +71,10 @@ describe('PostgresWorkChatWakeStateRepository N2 wake identity', () => {
       }),
     ).resolves.toBe('queued');
 
-    const rows = await db.query<{ transition_no: number; product_state: string }>(
+    const rows = await db.query<{
+      transition_no: number;
+      product_state: string;
+    }>(
       `SELECT transition_no::int, product_state
        FROM work_chat_wake_outbox
        WHERE tenant_id='tenant-n2'
@@ -71,8 +84,25 @@ describe('PostgresWorkChatWakeStateRepository N2 wake identity', () => {
       { transition_no: 1, product_state: 'needs_you' },
       { transition_no: 3, product_state: 'needs_you' },
     ]);
+    const state = await db.query<{
+      last_observed_state: string;
+      transition_no: number;
+    }>(
+      `SELECT last_observed_state, transition_no::int
+       FROM work_chat_wake_states
+       WHERE tenant_id='tenant-n2' AND workspace_id=$1 AND work_id=$2`,
+      [key.workspaceId, key.workId],
+    );
+    expect(state.rows).toEqual([
+      { last_observed_state: 'needs_you', transition_no: 3 },
+    ]);
+    const delivery = await repository.claimPending('n2-test-worker', 60_000);
+    expect(delivery).not.toBeNull();
+    await expect(
+      repository.markDelivered(delivery!.deliveryId, 'n2-test-worker'),
+    ).resolves.toBeUndefined();
     await db.close();
-  });
+  }, 15_000);
 });
 
 function card(productState: 'running' | 'needs_you') {

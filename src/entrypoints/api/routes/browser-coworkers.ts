@@ -1,6 +1,10 @@
 import type { Hono } from 'hono';
 
-import { AgentCoworkerListResponseSchema } from '../../../contracts/agents.js';
+import {
+  AgentCoworkerListResponseSchema,
+  AgentCoworkerProfileResponseSchema,
+  AgentIdSchema,
+} from '../../../contracts/agents.js';
 import type { ApiEnvironment } from '../../../platform/http-types.js';
 import type { AppConfig } from '../../../shared/config.js';
 import { decodeProductResponse } from '../browser-product-decoder.js';
@@ -10,60 +14,73 @@ const NO_STORE_HEADERS = {
   'content-type': 'application/json; charset=utf-8',
 } as const;
 
-/**
- * Browser-safe Coworker roster facade for the Vite client.
- *
- * The browser never receives the service-account credential. This route
- * forwards the bounded AgentDefinition roster read to the authenticated
- * control-plane API and validates the response against the public contract.
- */
+/** Browser-safe canonical Agent roster/profile facade for the Vite client. */
 export function registerBrowserCoworkerRoutes(
   app: Hono<ApiEnvironment>,
   config: AppConfig,
 ): void {
   app.get('/api/agents', async () => {
-    let upstream: Response;
-    try {
-      upstream = await fetch(upstreamUrl(config, '/api/v1/agents?limit=100'), {
-        method: 'GET',
-        headers: {
-          accept: 'application/json',
-          authorization: `Bearer ${browserServiceToken(config)}`,
-        },
-      });
-    } catch {
+    return forwardValidated(
+      config,
+      '/api/v1/agents?limit=100',
+      AgentCoworkerListResponseSchema,
+      'Coworkers could not be loaded.',
+      'The service returned an invalid Coworker roster.',
+    );
+  });
+
+  app.get('/api/agents/:agentId/profile', async (c) => {
+    const agentId = c.req.param('agentId');
+    if (!AgentIdSchema.safeParse(agentId).success) {
       return jsonResponse(
-        {
-          error: {
-            code: 'service_unavailable',
-            message: 'Coworkers could not be loaded.',
-          },
-        },
-        503,
+        { error: { code: 'invalid_request', message: 'The Agent id is invalid.' } },
+        400,
       );
     }
+    return forwardValidated(
+      config,
+      `/api/v1/agents/${agentId}/profile`,
+      AgentCoworkerProfileResponseSchema,
+      'The Coworker profile could not be loaded.',
+      'The service returned an invalid Coworker profile.',
+    );
+  });
+}
 
-    const body = await upstream.json().catch(() => undefined);
-    if (!upstream.ok) {
-      const error = normalizeError(body);
-      return jsonResponse(error, safeStatus(upstream.status));
-    }
-
-    const decoded = decodeProductResponse(body, AgentCoworkerListResponseSchema);
-    if (!decoded.success) {
-      return jsonResponse(
-        {
-          error: {
-            code: 'invalid_response',
-            message: 'The service returned an invalid Coworker roster.',
-          },
-        },
-        502,
-      );
-    }
-    return jsonResponse(decoded.data, upstream.status, {
-      'x-agent-server-upstream': 'fetched',
+async function forwardValidated(
+  config: AppConfig,
+  path: string,
+  schema: { safeParse(value: unknown): { success: boolean; data?: unknown } },
+  requestFailure: string,
+  invalidResponse: string,
+): Promise<Response> {
+  let upstream: Response;
+  try {
+    upstream = await fetch(upstreamUrl(config, path), {
+      method: 'GET',
+      headers: {
+        accept: 'application/json',
+        authorization: `Bearer ${browserServiceToken(config)}`,
+      },
     });
+  } catch {
+    return jsonResponse(
+      { error: { code: 'service_unavailable', message: requestFailure } },
+      503,
+    );
+  }
+
+  const body = await upstream.json().catch(() => undefined);
+  if (!upstream.ok) return jsonResponse(normalizeError(body, requestFailure), safeStatus(upstream.status));
+  const decoded = schema.safeParse(body);
+  if (!decoded.success) {
+    return jsonResponse(
+      { error: { code: 'invalid_response', message: invalidResponse } },
+      502,
+    );
+  }
+  return jsonResponse(decoded.data, upstream.status, {
+    'x-agent-server-upstream': 'fetched',
   });
 }
 
@@ -81,26 +98,15 @@ function browserServiceToken(config: AppConfig): string {
   throw new Error('browser_web_service_token_missing');
 }
 
-function normalizeError(body: unknown): {
-  readonly error: { readonly code: string; readonly message: string };
-} {
-  if (!body || typeof body !== 'object' || Array.isArray(body)) {
-    return {
-      error: {
-        code: 'request_failed',
-        message: 'Coworkers could not be loaded.',
-      },
-    };
-  }
+function normalizeError(
+  body: unknown,
+  fallback: string,
+): { readonly error: { readonly code: string; readonly message: string } } {
+  if (!body || typeof body !== 'object' || Array.isArray(body))
+    return { error: { code: 'request_failed', message: fallback } };
   const candidate = (body as Record<string, unknown>).error;
-  if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
-    return {
-      error: {
-        code: 'request_failed',
-        message: 'Coworkers could not be loaded.',
-      },
-    };
-  }
+  if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate))
+    return { error: { code: 'request_failed', message: fallback } };
   const record = candidate as Record<string, unknown>;
   return {
     error: {
@@ -111,7 +117,7 @@ function normalizeError(body: unknown): {
       message:
         typeof record.message === 'string' && record.message.length > 0
           ? record.message
-          : 'Coworkers could not be loaded.',
+          : fallback,
     },
   };
 }

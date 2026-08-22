@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import {
   chmod,
@@ -29,6 +30,7 @@ export class LocalRuntimeExtensionBinder implements RuntimeExtensionBinder {
   readonly #agentCwd: string;
   readonly #registryRoot: string;
   readonly #mcp: RuntimeMcpServer;
+  /** Plaintext bearer cache only. Durable authorization lives in Postgres. */
   readonly #chatBindings = new Map<string, CachedChatBinding>();
   readonly #logger: Logger | undefined;
 
@@ -88,8 +90,9 @@ export class LocalRuntimeExtensionBinder implements RuntimeExtensionBinder {
 
     if (!input.productSessionId && !input.scopeId)
       throw new Error('Runtime extension scope is unavailable.');
+
     if (chatKey && input.chatContext) {
-      const refreshed = this.#mcp.grants.refreshForChatScope({
+      const refreshed = await this.#mcp.grants.refreshForChatScope({
         tenantId: input.tenantId,
         principalType: input.principalType,
         principalId: input.principalId,
@@ -100,50 +103,68 @@ export class LocalRuntimeExtensionBinder implements RuntimeExtensionBinder {
       });
       if (refreshed) {
         const cached = this.#chatBindings.get(chatKey);
-        if (!cached)
-          throw new Error('Runtime Chat extension binding is unavailable.');
-        this.#logger?.log('info', 'runtime.chat_grant.refreshed', {
-          grant_id_prefix: `${refreshed.grantId.slice(0, 8)}…`,
+        if (cached && cached.grantId === refreshed.grantId) {
+          this.#logger?.log('info', 'runtime.chat_grant.refreshed', {
+            grant_id_prefix: `${refreshed.grantId.slice(0, 8)}…`,
+            scope_id: input.scopeId,
+          });
+          return cached.binding;
+        }
+
+        // The durable grant survived a process restart, but its plaintext
+        // bearer intentionally did not. Revoke it and issue a fresh bearer.
+        // The new grantId enters the extension digest, forcing the runtime
+        // resolver to replace a provider generation that still holds the old
+        // bearer while preserving the stable Agent Server RuntimeSession.
+        await this.#mcp.grants.revoke(refreshed.grantId);
+        this.#logger?.log('info', 'runtime.chat_grant.reissued_after_restart', {
+          previous_grant_id_prefix: `${refreshed.grantId.slice(0, 8)}…`,
           scope_id: input.scopeId,
         });
-        return cached.binding;
       }
-      const stale = this.#chatBindings.get(chatKey);
-      if (stale) {
-        this.#logger?.log('warn', 'runtime.chat_binding.stale', {
-          grant_id_prefix: `${stale.grantId.slice(0, 8)}…`,
-          scope_id: input.scopeId,
-        });
-        this.#chatBindings.delete(chatKey);
-        throw new Error('Runtime Chat extension binding is stale.');
-      }
+      this.#chatBindings.delete(chatKey);
     }
-    const receipt = this.#mcp.grants.issue({
-      tenantId: input.tenantId,
-      principalType: input.principalType,
-      principalId: input.principalId,
-      workspaceId: input.workspaceId,
-      ...(input.productSessionId
-        ? { productSessionId: input.productSessionId }
+
+    return this.issueBinding({
+      input,
+      runtimeRoot,
+      chatKey,
+    });
+  }
+
+  private async issueBinding(input: {
+    readonly input: Parameters<RuntimeExtensionBinder['bind']>[0];
+    readonly runtimeRoot: string;
+    readonly chatKey?: string;
+  }): Promise<ExecutionExtensionBinding> {
+    const receipt = await this.#mcp.grants.issue({
+      tenantId: input.input.tenantId,
+      principalType: input.input.principalType,
+      principalId: input.input.principalId,
+      workspaceId: input.input.workspaceId,
+      ...(input.input.productSessionId
+        ? { productSessionId: input.input.productSessionId }
         : {}),
-      ...(input.scopeId ? { scopeId: input.scopeId } : {}),
-      ...(input.taskId ? { taskId: input.taskId } : {}),
-      ...(input.runId ? { runId: input.runId } : {}),
-      ...(input.teamMemberRunId
-        ? { teamMemberRunId: input.teamMemberRunId }
+      ...(input.input.scopeId ? { scopeId: input.input.scopeId } : {}),
+      ...(input.input.taskId ? { taskId: input.input.taskId } : {}),
+      ...(input.input.runId ? { runId: input.input.runId } : {}),
+      ...(input.input.teamMemberRunId
+        ? { teamMemberRunId: input.input.teamMemberRunId }
         : {}),
-      ...(input.teamRunId ? { teamRunId: input.teamRunId } : {}),
-      ...(input.contextEpoch ? { contextEpoch: input.contextEpoch } : {}),
-      ...(input.chatContext ? { chatContext: input.chatContext } : {}),
-      // These are intentionally user/domain tools only. Collaboration tool
-      // visibility is supplied by the platform contributor, not by the grant.
-      allowedTools: input.toolRefs,
-      catalogTools: input.catalogTools ?? input.toolRefs,
+      ...(input.input.teamRunId ? { teamRunId: input.input.teamRunId } : {}),
+      ...(input.input.contextEpoch
+        ? { contextEpoch: input.input.contextEpoch }
+        : {}),
+      ...(input.input.chatContext
+        ? { chatContext: input.input.chatContext }
+        : {}),
+      allowedTools: input.input.toolRefs,
+      catalogTools: input.input.catalogTools ?? input.input.toolRefs,
     });
     let ownedReceipt = false;
     let receiptPath: string | undefined;
     try {
-      const runtimeRealRoot = await realpath(runtimeRoot);
+      const runtimeRealRoot = await realpath(input.runtimeRoot);
       const receiptParent = join(runtimeRealRoot, 'skill-receipts', 'grants');
       await ensureSafeDirectoryPath(runtimeRealRoot);
       await ensureSafeParents(runtimeRealRoot, receiptParent);
@@ -165,24 +186,33 @@ export class LocalRuntimeExtensionBinder implements RuntimeExtensionBinder {
       }
       await chmod(receiptPath, 0o444);
       await validateGrantReceipt(receiptPath, content);
-      const url = await this.#mcp.start();
+
+      const endpoint = await this.#mcp.startEndpoint();
+      const digest = extensionDigest({
+        endpointEpoch: endpoint.epoch,
+        grantId: receipt.receipt.grantId,
+        catalogTools: input.input.catalogTools ?? input.input.toolRefs,
+      });
       const binding: ExecutionExtensionBinding = {
         mcpServers: [
           {
             name: AGENT_SERVER_EXECUTION_MCP_SERVER_NAME,
-            url,
+            url: endpoint.url,
             headers: { Authorization: `Bearer ${receipt.token}` },
           },
         ],
+        endpointEpoch: endpoint.epoch,
+        digest,
+        grantId: receipt.receipt.grantId,
       };
-      if (chatKey)
-        this.cacheChatBinding(chatKey, {
+      if (input.chatKey)
+        this.cacheChatBinding(input.chatKey, {
           grantId: receipt.receipt.grantId,
           binding,
         });
       return binding;
     } catch (error) {
-      this.#mcp.grants.revoke(receipt.receipt.grantId);
+      await this.#mcp.grants.revoke(receipt.receipt.grantId).catch(() => undefined);
       if (ownedReceipt && receiptPath) {
         try {
           const stat = await lstat(receiptPath);
@@ -198,7 +228,7 @@ export class LocalRuntimeExtensionBinder implements RuntimeExtensionBinder {
             await rm(receiptPath, { force: false });
           }
         } catch {
-          // Rollback is best-effort and never masks the original failure.
+          // Receipt rollback is best-effort and never masks the owning failure.
         }
       }
       throw error;
@@ -209,8 +239,12 @@ export class LocalRuntimeExtensionBinder implements RuntimeExtensionBinder {
     productSessionId: string,
     allowedTools: readonly string[],
     ttlMs?: number,
-  ): void {
-    this.#mcp.grants.refreshForSession(productSessionId, allowedTools, ttlMs);
+  ): Promise<void> {
+    return this.#mcp.grants.refreshForSession(
+      productSessionId,
+      allowedTools,
+      ttlMs,
+    );
   }
 
   public refreshForTeamMember(
@@ -232,15 +266,15 @@ export class LocalRuntimeExtensionBinder implements RuntimeExtensionBinder {
     return this.#mcp.grants.getForTeamMember(input);
   }
 
-  public revoke(grantId: string): void {
+  public async revoke(grantId: string): Promise<void> {
     for (const [key, cached] of this.#chatBindings) {
       if (cached.grantId === grantId) this.#chatBindings.delete(key);
     }
-    this.#mcp.grants.revoke(grantId);
+    await this.#mcp.grants.revoke(grantId);
   }
 
-  public revokeForTeamRun(teamRunId: string): void {
-    this.#mcp.grants.revokeForTeamRun(teamRunId);
+  public revokeForTeamRun(teamRunId: string): Promise<void> {
+    return this.#mcp.grants.revokeForTeamRun(teamRunId);
   }
 
   public activeToolCalls(grantId: string): number {
@@ -259,6 +293,22 @@ export class LocalRuntimeExtensionBinder implements RuntimeExtensionBinder {
       this.#chatBindings.delete(oldest);
     }
   }
+}
+
+function extensionDigest(input: {
+  readonly endpointEpoch: string;
+  readonly grantId: string;
+  readonly catalogTools: readonly string[];
+}): string {
+  return createHash('sha256')
+    .update(
+      JSON.stringify({
+        endpointEpoch: input.endpointEpoch,
+        grantId: input.grantId,
+        catalogTools: [...input.catalogTools].sort(),
+      }),
+    )
+    .digest('hex');
 }
 
 function chatBindingKey(input: {

@@ -1,4 +1,5 @@
 import type { RuntimeMemoryCandidateCategory } from '../../src/application/ports/runtime-memory-candidate-collector.js';
+import type { RuntimeSession } from '../../src/application/ports/runtime-session-repository.js';
 import type {
   ExecutionExtensionBinding,
   ExecutionObservationSink,
@@ -128,6 +129,26 @@ export class FakeAgentRuntime implements ExecutionRuntimeService {
     } catch {
       return false;
     }
+  }
+
+  public async ensureAgentChatRuntimeSession(input: {
+    readonly agentChatRuntimeId: string;
+    readonly runtimeEpoch: number;
+    readonly agentOwner: { readonly scope: { readonly workspaceId: string } };
+    readonly agentVersionId: string;
+    readonly resolvedSkills: readonly { readonly ref: string; readonly digest: string }[];
+    readonly toolRefs: readonly string[];
+  }): Promise<RuntimeSession> {
+    const now = new Date(0).toISOString();
+    return {
+      id: input.agentChatRuntimeId,
+      scope: { kind: 'agent_chat', agentChatRuntimeId: input.agentChatRuntimeId, runtimeEpoch: input.runtimeEpoch },
+      scopeKind: 'agent_chat', scopeId: input.agentChatRuntimeId, productSessionId: null, taskId: null,
+      launchSnapshotId: `fake-launch-${input.agentChatRuntimeId}`, workspaceId: input.agentOwner.scope.workspaceId,
+      agentVersionId: input.agentVersionId, environmentVersionId: null, resolvedSkills: input.resolvedSkills,
+      toolRefs: input.toolRefs, desiredRevision: 1, desiredSpecDigest: null, status: 'ready',
+      currentGeneration: null, workspaceBinding: null, sessionBinding: null, createdAt: now, updatedAt: now,
+    };
   }
 
   public async execute(

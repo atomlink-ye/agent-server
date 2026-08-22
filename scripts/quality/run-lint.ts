@@ -6,7 +6,9 @@ const root = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 
 function run(script: string): number {
   process.stdout.write(`> pnpm ${script}\n`);
-  return spawnSync('pnpm', [script], { cwd: root, stdio: 'inherit' }).status ?? 1;
+  return (
+    spawnSync('pnpm', [script], { cwd: root, stdio: 'inherit' }).status ?? 1
+  );
 }
 
 const format = run('format:check');

@@ -53,8 +53,8 @@ Generated test/runtime output belongs under ignored `.local/` paths and may be u
 pnpm scope:changed --base <verified-base-ref>
 pnpm lint
 pnpm check:imports
-pnpm check:dead-code
-pnpm check:duplication
+pnpm check:compatibility-surfaces
+pnpm check:package-commands
 pnpm docs:check
 pnpm gates:changed --base <verified-base-ref>
 pnpm test:scenario

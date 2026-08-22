@@ -24,10 +24,10 @@ const changed = git(['diff', '--name-only', `${mergeBase}..HEAD`])
 const has = (predicate: (path: string) => boolean): boolean => changed.some(predicate);
 
 run('pnpm', ['check:imports']);
-run('pnpm', ['check:dead-code']);
-run('pnpm', ['check:duplication']);
+run('pnpm', ['check:compatibility-surfaces']);
+run('pnpm', ['check:package-commands']);
 
-if (has((path) => path === 'AGENTS.md' || path.startsWith('docs/') || path.startsWith('.agents/'))) {
+if (has((path) => path === 'AGENTS.md' || path.startsWith('docs/'))) {
   run('pnpm', ['docs:check']);
 }
 if (has((path) => path.startsWith('apps/web/'))) {

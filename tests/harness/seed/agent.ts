@@ -33,11 +33,10 @@ export async function seedPublishedAgentVersion(
     policySnapshotVersion: 'harness-policy-v1',
   };
   const registry = new PostgresAgentRegistry(db);
-  const source = managedAgentSource(name, instructions);
   const imported = await importAgent(registry, {
     accessContext,
     idempotencyKey: `harness-agent-import:${definitionId}`,
-    source,
+    source: managedAgentSource(name, instructions),
     now: () => new Date(now),
     idFactory: () => {
       const id = ids.shift();
@@ -57,42 +56,37 @@ export async function seedPublishedAgentVersion(
 }
 
 function managedAgentSource(name: string, instructions: string): string {
-  return [
-    'apiVersion: agent-server/v1alpha1',
-    'kind: ManagedAgent',
-    'metadata:',
-    `  name: ${JSON.stringify(name)}`,
-    'spec:',
-    '  description: Deterministic Agent Server harness fixture.',
-    `  instructions: ${JSON.stringify(instructions)}`,
-    '  runtime:',
-    '    provider: paseo',
-    '    modelPolicyRef: free-only',
-    '    mode: isolated',
-    '  tools: []',
-    '  skills: []',
-    '  input:',
-    '    schema:',
-    '      type: object',
-    '      properties:',
-    '        text:',
-    '          type: string',
-    '      required: [text]',
-    '      additionalProperties: false',
-    '    prompt: Handle {{input.text}}.',
-    '  session:',
-    '    invocation: fresh_per_invocation',
-    '    followUps: queued',
-    '    binding: reusable',
-    '  memory:',
-    '    policy: workspace_snapshot',
-    '    proposalLimit: 0',
-    '  permissions:',
-    '    network: none',
-    '    filesystem: workspace_read',
-    '  completion:',
-    '    type: executable',
-    '    command: done',
-    '',
-  ].join('\n');
+  return `apiVersion: agent-server/v1alpha1
+kind: ManagedAgent
+metadata:
+  name: ${name}
+spec:
+  description: Deterministic Agent Server harness fixture.
+  instructions: ${instructions}
+  runtime:
+    provider: paseo
+    modelPolicyRef: free-only
+    mode: isolated
+  tools: []
+  skills: []
+  input:
+    schema:
+      type: object
+      additionalProperties: false
+      properties: {}
+    prompt: hello
+  session:
+    invocation: fresh_per_invocation
+    followUps: queued
+    binding: reusable
+  memory:
+    policy: workspace_snapshot
+    proposalLimit: 1
+  permissions:
+    network: none
+    filesystem: none
+  completion:
+    type: executable
+    command: done
+`;
 }

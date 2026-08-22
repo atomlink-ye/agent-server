@@ -1,21 +1,44 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const sourceFilePattern = /\.(?:ts|tsx|mts|cts)$/u;
-const legacyAgentImports = [
-  'domain/invokables/agent-definition',
-  'domain/invokables/agent-version',
-];
-const allowedLegacyReaders = new Set([
+const legacyAgentModules = new Set([
   'src/domain/invokables/agent-definition.ts',
   'src/domain/invokables/agent-version.ts',
-  'src/application/agents/resolve-agent-version.ts',
 ]);
+// Only a legacy projection module itself may reference its own path. Entries for
+// modules that no longer exist are removed with them: a deleted path left here
+// would let the duplicate model return at that exact path while this guard
+// stayed green.
+const allowedLegacyReaders = new Set(['src/domain/invokables/agent-definition.ts']);
+const importSpecifier = /(?:from|import)\s*\(?\s*['"]([^'"]+)['"]/gu;
+
+/**
+ * Resolve every import specifier against the importing file so that a relative
+ * specifier such as './agent-definition.js' is judged by what it actually
+ * targets. Matching raw substrings would miss exactly the sibling-relative
+ * import a restored duplicate model would use.
+ */
+function importsLegacyAgentModule(path: string, source: string): boolean {
+  const fromDirectory = dirname(path);
+  for (const match of source.matchAll(importSpecifier)) {
+    const specifier = match[1];
+    if (!specifier) continue;
+    const target = specifier.startsWith('.')
+      ? join(fromDirectory, specifier)
+      : specifier;
+    const normalized = target.replace(/\.js$/u, '.ts');
+    for (const legacy of legacyAgentModules)
+      if (normalized === legacy || normalized === legacy.replace(/\.ts$/u, ''))
+        return true;
+  }
+  return false;
+}
 
 function productionSources(): string[] {
   return execFileSync('git', ['ls-files', 'src'], {
@@ -35,8 +58,7 @@ describe('canonical Agent identity boundary', () => {
     for (const path of productionSources()) {
       if (allowedLegacyReaders.has(path)) continue;
       const source = readFileSync(resolve(root, path), 'utf8');
-      if (legacyAgentImports.some((needle) => source.includes(needle)))
-        violations.push(path);
+      if (importsLegacyAgentModule(path, source)) violations.push(path);
     }
     expect(violations).toEqual([]);
   });

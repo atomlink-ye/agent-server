@@ -54,7 +54,7 @@ describe('RuntimeToolGrantService', () => {
     const first = await issue(service);
     service.beginToolCall(first.receipt.grantId);
 
-    expect(() => issue(service, { runId: 'run-2' })).toThrow(
+    await expect(issue(service, { runId: 'run-2' })).rejects.toThrow(
       'Runtime grant replacement fence is active.',
     );
     expect(service.activeToolCalls(first.receipt.grantId)).toBe(1);
@@ -109,7 +109,7 @@ describe('RuntimeToolGrantService', () => {
   it('reports a missing Team grant scope distinctly from ambiguity', async () => {
     const service = new RuntimeToolGrantService();
 
-    expect(() =>
+    await expect(
       service.refreshForTeamMember({
         grantId: 'missing',
         teamMemberRunId: 'member-1',
@@ -119,7 +119,7 @@ describe('RuntimeToolGrantService', () => {
         allowedTools: [],
         contextEpoch: 'epoch-1',
       }),
-    ).toThrow('Runtime grant scope not found.');
+    ).rejects.toThrow('Runtime grant scope not found.');
   });
 
   it('retains an expired narrowed Team lead bearer for the next turn refresh', async () => {
@@ -177,13 +177,13 @@ describe('RuntimeToolGrantService', () => {
     });
 
     service.beginToolCall(grant.receipt.grantId);
-    expect(() =>
+    await expect(
       service.closeTeamMemberTurn({
         grantId: grant.receipt.grantId,
         teamMemberRunId: 'member-1',
         scopeId: 'member-1',
       }),
-    ).toThrow('Runtime turn close fence is active.');
+    ).rejects.toThrow('Runtime turn close fence is active.');
     service.endToolCall(grant.receipt.grantId);
 
     const closed = await service.closeTeamMemberTurn({

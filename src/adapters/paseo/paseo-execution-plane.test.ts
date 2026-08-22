@@ -156,21 +156,23 @@ describe('PaseoExecutionPlane', () => {
     client.timelineError = new Error('missing agent');
     const plane = createPlane(client);
 
-    await expect(
-      plane.attachSession(
-        { plane: 'paseo', externalSessionId: 'missing-agent' },
-        {
-          ...sessionSpec,
-          workspace: {
-            cwd: '/tmp/execution-plane-test/cell-1',
-            binding: {
-              plane: 'paseo',
-              externalWorkspaceId: 'existing-workspace',
-            },
+    const outcome = await plane.attachSession(
+      { plane: 'paseo', externalSessionId: 'missing-agent' },
+      {
+        ...sessionSpec,
+        workspace: {
+          cwd: '/tmp/execution-plane-test/cell-1',
+          binding: {
+            plane: 'paseo',
+            externalWorkspaceId: 'existing-workspace',
           },
         },
-      ),
-    ).rejects.toBeInstanceOf(ExecutionBindingUnavailableError);
+      },
+    );
+    expect(outcome).toEqual({
+      kind: 'replacement_required',
+      reason: 'provider_binding_stale',
+    });
     expect(client.createCalls).toBe(0);
     expect(client.sendCalls).toEqual([]);
   });

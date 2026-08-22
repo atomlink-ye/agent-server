@@ -10,6 +10,7 @@ export async function enqueueChatDispatchForMessage(
     readonly lastReadSequence: number;
     readonly latestMessageSequence: number;
     readonly latestMessageAuthorType: 'principal' | 'agent_definition';
+    readonly latestMessageId?: string;
   },
 ): Promise<boolean> {
   const planner = new ChatActivationPlanner();
@@ -17,12 +18,18 @@ export async function enqueueChatDispatchForMessage(
   if (!activation) return false;
   const cause = activation.causes[0];
   if (!cause) return false;
+  const durableCause =
+    cause.type === 'unread_message' && input.latestMessageId
+      ? { ...cause, messageId: input.latestMessageId }
+      : cause;
   const result = await dispatches.enqueue({
     tenantId: input.tenantId,
     agentDefinitionId: input.agentDefinitionId,
     conversationId: input.conversationId,
     throughSequence: cause.throughSequence,
     dedupeKey: activation.dedupeKey,
+    cause: durableCause,
+    priority: activation.priority,
   });
   return result.enqueued;
 }

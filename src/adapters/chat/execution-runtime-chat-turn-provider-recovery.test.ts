@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { RuntimeSession } from '../../application/ports/runtime-session-repository.js';
+import { makeRuntimeSession } from '../../../tests/fixtures/runtime-session.js';
 import { ExecutionRuntimeChatTurnProvider } from './execution-runtime-chat-turn-provider.js';
 
 describe('ExecutionRuntimeChatTurnProvider N2 modes', () => {
@@ -108,7 +109,7 @@ function brain() {
 }
 
 function durableSession(bound: boolean): RuntimeSession {
-  return {
+  return makeRuntimeSession({
     id: 'runtime-session-n2',
     scope: {
       kind: 'agent_chat',
@@ -131,9 +132,7 @@ function durableSession(bound: boolean): RuntimeSession {
     sessionBinding: bound
       ? { plane: 'paseo', externalSessionId: 'session-provider-n2' }
       : null,
-    createdAt: '2026-08-22T00:00:00.000Z',
-    updatedAt: '2026-08-22T00:00:00.000Z',
-  };
+  });
 }
 
 function outcome() {

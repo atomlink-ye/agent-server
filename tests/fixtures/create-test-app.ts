@@ -3,7 +3,6 @@ import { randomUUID } from 'node:crypto';
 import { PGlite } from '@electric-sql/pglite';
 
 import { RuntimeReadinessProbe } from '../../src/application/health/readiness.js';
-import { ResolveAgentVersion } from '../../src/application/agents/resolve-agent-version.js';
 import { CreateMemoryProposal } from '../../src/application/memory/create-memory-proposal.js';
 import { ListMemoryEntries } from '../../src/application/memory/list-memory-entries.js';
 import { ListMemoryProposals } from '../../src/application/memory/list-memory-proposals.js';
@@ -21,11 +20,6 @@ import { GetTaskTree } from '../../src/application/tasks/get-task-tree.js';
 import { ExecuteTeamTask } from '../../src/application/tasks/execute-team-task.js';
 import { InvokeTask } from '../../src/application/tasks/invoke-task.js';
 import { CancelTask } from '../../src/application/tasks/cancel-task.js';
-import { createAgentDefinition } from '../../src/domain/invokables/agent-definition.js';
-import {
-  createDraftAgentVersion,
-  publishAgentVersion,
-} from '../../src/domain/invokables/agent-version.js';
 import { createApp } from '../../src/entrypoints/api/app.js';
 import { PostgresAdmissionRepository } from '../../src/infrastructure/postgres/postgres-admission-repository.js';
 import { PostgresInvokableRepository } from '../../src/infrastructure/postgres/postgres-invokable-repository.js';
@@ -35,16 +29,11 @@ import { PostgresRunRepository } from '../../src/infrastructure/postgres/postgre
 import { PostgresTaskRepository } from '../../src/infrastructure/postgres/postgres-task-repository.js';
 import { PostgresWorkspaceMemoryRepository } from '../../src/infrastructure/postgres/postgres-workspace-memory-repository.js';
 import { PostgresAgentRegistry } from '../../src/infrastructure/postgres/postgres-agent-registry.js';
+import { canonicalAgentResolver, seedCanonicalPublishedAgent } from './canonical-agent.js';
 import { PostgresSessionRepository } from '../../src/infrastructure/postgres/postgres-session-repository.js';
 import { PostgresRunEventRepository } from '../../src/infrastructure/postgres/postgres-run-event-repository.js';
 import { createLogger } from '../../src/shared/observability/logger.js';
 import type { PublishMemoryReviewSurface } from '../../src/application/channels/publish-memory-review-surface.js';
-import { createManagedAgentDefinition } from '../../src/domain/agents/managed-agent-definition.js';
-import { parseManagedAgentPackage } from '../../src/domain/agents/managed-agent-package.js';
-import {
-  createManagedAgentDraft,
-  publishManagedAgentVersion,
-} from '../../src/domain/agents/managed-agent-version.js';
 
 export const primaryServiceAccountToken = 'token-enabled';
 export const secondaryServiceAccountToken = 'token-other-owner';
@@ -235,11 +224,7 @@ export async function createTestApp(
   const invokableRepository = new PostgresInvokableRepository(
     repositoryDatabase,
   );
-  const resolveAgentVersion = new ResolveAgentVersion(
-    agentRegistry,
-    invokableRepository,
-    { resolve: async () => null },
-  );
+  const resolveAgentVersion = canonicalAgentResolver(repositoryDatabase);
   const workspaceMemoryRepository = new PostgresWorkspaceMemoryRepository(
     repositoryDatabase,
   );
@@ -264,18 +249,11 @@ export async function createTestApp(
   if (options.memoryReviewControl) {
     options.memoryReviewControl.managedMemory = managedMemory;
   }
-  if (options.seedManagedAgent)
-    await seedDefaultManagedPublishedAgent(
-      agentRegistry,
-      options.workspaceId ?? testConfig.serviceAccounts[0].workspaceId,
-      options.publishedAgentVersionId,
-    );
-  else
-    await seedDefaultPublishedAgent(
-      invokableRepository,
-      options.workspaceId ?? testConfig.serviceAccounts[0].workspaceId,
-      options.publishedAgentVersionId,
-    );
+  await seedDefaultPublishedAgent(
+    repositoryDatabase,
+    options.workspaceId ?? testConfig.serviceAccounts[0].workspaceId,
+    options.publishedAgentVersionId,
+  );
   const logger = createLogger({
     service: testConfig.serviceName,
     minimumLevel: 'error',
@@ -415,110 +393,29 @@ export async function createTestApp(
 }
 
 async function seedDefaultPublishedAgent(
-  invokables: PostgresInvokableRepository,
+  database: TestDatabase,
   workspaceId: string,
   versionId = defaultPublishedAgentVersionId,
 ): Promise<void> {
-  const createdAt = () => new Date('2026-07-22T12:00:00.000Z');
-  const publishedAt = () => new Date('2026-07-22T12:05:00.000Z');
-  const definition = createAgentDefinition({
-    id:
-      versionId === defaultPublishedAgentVersionId
-        ? '00000000-0000-4000-8000-0000000a0001'
-        : randomUUID(),
-    tenantId: 'tenant_alpha',
-    workspaceId,
-    principalType: 'service_account',
-    principalId: 'svc_enabled',
-    name: 'Default Task Agent',
-    description: 'Seeded test invokable',
-    now: createdAt,
-  });
-  const version = publishAgentVersion(
-    createDraftAgentVersion({
-      id: versionId,
-      definitionId: definition.id,
-      tenantId: definition.tenantId,
-      workspaceId: definition.workspaceId,
-      principalType: definition.principalType,
-      principalId: definition.principalId,
-      name: 'Default Task Agent v1',
-      description: 'Seeded test invokable',
+  await seedCanonicalPublishedAgent(
+    database as any,
+    {
+      tenantId: 'tenant_alpha',
+      workspaceId,
+      principalType: 'service_account',
+      principalId: 'svc_enabled',
+      policySnapshotVersion: 'policy-2026-07-22',
+    },
+    {
+      definitionId:
+        versionId === defaultPublishedAgentVersionId
+          ? '00000000-0000-4000-8000-0000000a0001'
+          : randomUUID(),
+      versionId,
+      name: 'Default Task Agent',
+      description: 'Seeded canonical managed test Agent',
       instructions: 'Do the task.',
-      now: createdAt,
-    }),
-    publishedAt,
+      now: new Date('2026-07-22T12:00:00.000Z'),
+    },
   );
-
-  await invokables.saveAgentDefinition(definition);
-  await invokables.saveAgentVersion(version);
-}
-
-async function seedDefaultManagedPublishedAgent(
-  registry: PostgresAgentRegistry,
-  workspaceId: string,
-  versionId = defaultPublishedAgentVersionId,
-): Promise<void> {
-  const now = () => new Date('2026-07-22T12:00:00.000Z');
-  const owner = {
-    tenantId: 'tenant_alpha',
-    workspaceId,
-    principalType: 'service_account' as const,
-    principalId: 'svc_enabled',
-  };
-  const definition = createManagedAgentDefinition({
-    ...owner,
-    id:
-      versionId === defaultPublishedAgentVersionId
-        ? '00000000-0000-4000-8000-0000000a0001'
-        : randomUUID(),
-    normalizedName: 'default-task-agent',
-    displayName: 'Default Task Agent',
-    now,
-  });
-  const parsed = parseManagedAgentPackage(`apiVersion: agent-server/v1alpha1
-kind: ManagedAgent
-metadata:
-  name: Default Task Agent
-spec:
-  description: Seeded managed test invokable
-  instructions: Do the task.
-  runtime:
-    provider: paseo
-    modelPolicyRef: free-only
-    mode: isolated
-  tools: []
-  skills: []
-  input:
-    schema: { type: object, additionalProperties: false, properties: {} }
-    prompt: input
-  session: { invocation: fresh_per_invocation, followUps: queued, binding: reusable }
-  memory: { policy: workspace_snapshot, proposalLimit: 2 }
-  permissions: { network: none, filesystem: none }
-  completion: { type: executable, command: done }
-`);
-  const version = publishManagedAgentVersion(
-    createManagedAgentDraft({
-      definition,
-      parsed,
-      id: versionId,
-      now,
-    }),
-    now,
-  );
-  await registry.importAgent({
-    owner,
-    compatibilityWorkspaceId: workspaceId,
-    idempotencyKey: 'seed-default-managed-agent',
-    requestFingerprint: parsed.fingerprint,
-    normalizedName: definition.normalizedName,
-    definition,
-    version,
-  });
-  await registry.publishAgentVersion({
-    owner,
-    idempotencyKey: 'publish-default-managed-agent',
-    requestFingerprint: version.fingerprint,
-    versionId: version.id,
-  });
 }

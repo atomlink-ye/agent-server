@@ -17,6 +17,7 @@ import {
 import { PostgresAdmissionRepository } from '../../src/infrastructure/postgres/postgres-admission-repository.js';
 import { PostgresChannelRepository } from '../../src/infrastructure/postgres/postgres-channel-repository.js';
 import { PostgresInvokableRepository } from '../../src/infrastructure/postgres/postgres-invokable-repository.js';
+import { canonicalAgentResolver, seedCanonicalPublishedAgent } from '../fixtures/canonical-agent.js';
 import { PostgresTaskRepository } from '../../src/infrastructure/postgres/postgres-task-repository.js';
 import { PostgresSessionRepository } from '../../src/infrastructure/postgres/postgres-session-repository.js';
 import { ResolveLarkBinding } from '../../src/application/channels/resolve-lark-binding.js';
@@ -492,7 +493,8 @@ describeRealPostgres('real PostgreSQL admission pool', () => {
   it('settles concurrent same-key calls to one committed task and run without rollback leakage', async () => {
     const concurrentInvoke = new InvokeTask(
       new PostgresAdmissionRepository(pool!),
-      new BarrierInvokableRepository(readerPool!, createTwoPartyBarrier()),
+      new PostgresInvokableRepository(readerPool!),
+      barrierAgentResolver(readerPool!, createTwoPartyBarrier()),
       () => new Date('2026-07-23T12:00:00.000Z'),
     );
     const request = {
@@ -772,8 +774,14 @@ describeRealPostgres('real PostgreSQL admission pool', () => {
       () => new Date('2026-07-23T11:05:00.000Z'),
     );
     const invokables = new PostgresInvokableRepository(pool!);
-    await invokables.saveAgentDefinition(definition);
-    await invokables.saveAgentVersion(version);
+    await seedCanonicalPublishedAgent(pool!, sessionOwner, {
+      definitionId: definition.id,
+      versionId: version.id,
+      name: definition.name,
+      description: definition.description ?? 'Canonical fixture',
+      instructions: version.instructions,
+      now: new Date('2026-07-23T11:00:00.000Z'),
+    });
     const channel = new PostgresChannelRepository(pool!);
     const input = {
       id: crypto.randomUUID(),
@@ -927,23 +935,20 @@ describeRealPostgres('real PostgreSQL admission pool', () => {
   });
 });
 
-class BarrierInvokableRepository extends PostgresInvokableRepository {
-  public constructor(
-    database: ConstructorParameters<typeof PostgresInvokableRepository>[0],
-    private readonly arrive: () => Promise<void>,
-  ) {
-    super(database);
-  }
-
-  public override async findPublishedAgentVersionById(
-    ...args: Parameters<
-      PostgresInvokableRepository['findPublishedAgentVersionById']
-    >
-  ) {
-    const version = await super.findPublishedAgentVersionById(...args);
-    await this.arrive();
-    return version;
-  }
+function barrierAgentResolver(
+  database: NonNullable<typeof readerPool>,
+  arrive: () => Promise<void>,
+) {
+  const resolver = canonicalAgentResolver(database);
+  return {
+    async resolvePublished(
+      ...args: Parameters<typeof resolver.resolvePublished>
+    ) {
+      const value = await resolver.resolvePublished(...args);
+      await arrive();
+      return value;
+    },
+  };
 }
 
 function createTwoPartyBarrier(): () => Promise<void> {

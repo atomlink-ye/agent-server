@@ -10,7 +10,7 @@ import type { RuntimeScope } from '../../domain/runtime/runtime-invocation-conte
 
 const PASEO_PLANE = 'paseo';
 
-interface RuntimeSessionDatabase {
+interface RuntimeSessionQueryable {
   query<Row extends Record<string, unknown> = Record<string, unknown>>(
     sql: string,
     values?: readonly unknown[],
@@ -18,6 +18,14 @@ interface RuntimeSessionDatabase {
     readonly rows?: readonly Row[];
     readonly rowCount?: number | null;
   }>;
+}
+
+interface RuntimeSessionClient extends RuntimeSessionQueryable {
+  release(): void;
+}
+
+interface RuntimeSessionConnectable extends RuntimeSessionQueryable {
+  connect(): Promise<RuntimeSessionClient>;
 }
 
 interface RuntimeSessionRow extends Record<string, unknown> {
@@ -58,6 +66,10 @@ interface RuntimeSessionRow extends Record<string, unknown> {
   readonly generation_superseded_at: string | Date | null;
 }
 
+interface CurrentGenerationRow extends Record<string, unknown> {
+  readonly current_generation_id: string | null;
+}
+
 const SESSION_SELECT = `SELECT
   rs.id, rs.tenant_id, rs.principal_type, rs.principal_id,
   rs.scope_kind, rs.scope_id, rs.agent_chat_runtime_id, rs.runtime_epoch,
@@ -83,7 +95,11 @@ JOIN session_launch_snapshots sls ON sls.id=rs.launch_snapshot_id
 LEFT JOIN runtime_session_generations rsg ON rsg.id=rs.current_generation_id`;
 
 export class PostgresRuntimeSessionRepository implements RuntimeSessionRepository {
-  public constructor(private readonly db: RuntimeSessionDatabase) {}
+  private queryOnlyTransactionTail: Promise<void> = Promise.resolve();
+
+  public constructor(
+    private readonly db: RuntimeSessionQueryable | RuntimeSessionConnectable,
+  ) {}
 
   public async createOrGetForAgentChat(
     input: Parameters<RuntimeSessionRepository['createOrGetForAgentChat']>[0],
@@ -411,56 +427,119 @@ export class PostgresRuntimeSessionRepository implements RuntimeSessionRepositor
     );
     const generationId = randomUUID();
     const now = new Date().toISOString();
-    const result = await this.db.query(
-      `WITH current AS (
-         SELECT rs.current_generation_id,
-                COALESCE(MAX(rsg.generation),0) + 1 AS next_generation
-           FROM runtime_sessions rs
-           LEFT JOIN runtime_session_generations rsg
-             ON rsg.runtime_session_id=rs.id
-          WHERE rs.id=$1
-          GROUP BY rs.current_generation_id
-       ), superseded AS (
-         UPDATE runtime_session_generations old
-            SET status='superseded', superseded_at=$10
-           FROM current
-          WHERE old.id=current.current_generation_id
-            AND old.status='active'
-         RETURNING old.id
-       ), inserted AS (
-         INSERT INTO runtime_session_generations (
+    await this.transaction(async (db) => {
+      const current = await db.query<CurrentGenerationRow>(
+        `SELECT current_generation_id
+           FROM runtime_sessions
+          WHERE id=$1
+          FOR UPDATE`,
+        [input.id],
+      );
+      const currentGenerationId = current.rows?.[0]?.current_generation_id;
+      if (!currentGenerationId)
+        throw new Error('Runtime session replacement has no active generation.');
+
+      const superseded = await db.query(
+        `UPDATE runtime_session_generations
+            SET status='superseded', superseded_at=$2
+          WHERE id=$1 AND status='active'`,
+        [currentGenerationId, now],
+      );
+      if ((superseded.rowCount ?? 0) !== 1)
+        throw new Error('Runtime session replacement has no active generation.');
+
+      const inserted = await db.query(
+        `INSERT INTO runtime_session_generations (
            id,runtime_session_id,generation,plane,external_workspace_id,
            external_session_id,applied_revision,applied_spec_digest,
            endpoint_epoch,extension_grant_id,status,created_at,superseded_at
          )
-         SELECT $2,$1,current.next_generation,$3,$4,$5,$6,$7,$8,$9,
+         SELECT $2,$1,COALESCE(MAX(generation),0) + 1,$3,$4,$5,$6,$7,$8,$9,
                 'active',$10,NULL
-           FROM current
-         RETURNING id
-       )
-       UPDATE runtime_sessions
-          SET current_generation_id=(SELECT id FROM inserted),
-              runtime_status='ready',
-              paseo_workspace_id=$4,
-              provider_agent_id=$5,
-              updated_at=$10
-        WHERE id=$1 AND EXISTS (SELECT 1 FROM inserted)`,
-      [
-        input.id,
-        generationId,
-        input.sessionBinding.plane,
-        input.workspaceBinding.externalWorkspaceId,
-        input.sessionBinding.externalSessionId,
-        input.appliedRevision,
-        input.appliedSpecDigest,
-        input.endpointEpoch,
-        input.extensionGrantId ?? null,
-        now,
-      ],
-    );
-    if ((result.rowCount ?? 0) === 0)
-      throw new Error('Runtime session replacement could not be committed.');
+           FROM runtime_session_generations
+          WHERE runtime_session_id=$1`,
+        [
+          input.id,
+          generationId,
+          input.sessionBinding.plane,
+          input.workspaceBinding.externalWorkspaceId,
+          input.sessionBinding.externalSessionId,
+          input.appliedRevision,
+          input.appliedSpecDigest,
+          input.endpointEpoch,
+          input.extensionGrantId ?? null,
+          now,
+        ],
+      );
+      if ((inserted.rowCount ?? 0) !== 1)
+        throw new Error('Runtime session replacement generation was not created.');
+
+      const updated = await db.query(
+        `UPDATE runtime_sessions
+            SET current_generation_id=$2,
+                runtime_status='ready',
+                paseo_workspace_id=$3,
+                provider_agent_id=$4,
+                updated_at=$5
+          WHERE id=$1`,
+        [
+          input.id,
+          generationId,
+          input.workspaceBinding.externalWorkspaceId,
+          input.sessionBinding.externalSessionId,
+          now,
+        ],
+      );
+      if ((updated.rowCount ?? 0) !== 1)
+        throw new Error('Runtime session replacement could not be committed.');
+    });
     return this.requireById(input.id, 'after execution replacement');
+  }
+
+  private async transaction<T>(
+    work: (db: RuntimeSessionQueryable) => Promise<T>,
+  ): Promise<T> {
+    const connectable =
+      'connect' in this.db && typeof this.db.connect === 'function';
+    if (connectable) {
+      const client = await (this.db as RuntimeSessionConnectable).connect();
+      try {
+        return await this.runTransaction(client, work);
+      } finally {
+        client.release();
+      }
+    }
+
+    let result!: T;
+    let failure: unknown;
+    const run = this.queryOnlyTransactionTail.then(async () => {
+      try {
+        result = await this.runTransaction(this.db, work);
+      } catch (error) {
+        failure = error;
+      }
+    });
+    this.queryOnlyTransactionTail = run.then(() => undefined);
+    await run;
+    if (failure !== undefined) throw failure;
+    return result;
+  }
+
+  private async runTransaction<T>(
+    db: RuntimeSessionQueryable,
+    work: (db: RuntimeSessionQueryable) => Promise<T>,
+  ): Promise<T> {
+    let began = false;
+    try {
+      await db.query('BEGIN');
+      began = true;
+      const result = await work(db);
+      await db.query('COMMIT');
+      return result;
+    } catch (error) {
+      if (began) await db.query('ROLLBACK').catch(() => undefined);
+      throw error;
+    }
   }
 
   public async markUnavailable(id: string): Promise<RuntimeSession> {

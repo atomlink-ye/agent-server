@@ -16,6 +16,7 @@ import {
   type ExecutionRuntimeService,
 } from '../../application/runtime/execution-plane-runtime-facade.js';
 import { ContextAwareExecutionRuntime } from '../../application/runtime/context-aware-execution-runtime.js';
+import type { ScopedMemoryResolver } from '../../application/context/scoped-memory-resolver.js';
 import { ExecutionRunRegistry } from '../../application/runtime/execution-run-registry.js';
 import { LocalRuntimeExtensionBinder } from '../../infrastructure/extensions/local-runtime-extension-binder.js';
 import { RuntimeMcpServer } from '../../infrastructure/extensions/runtime-mcp-server.js';
@@ -80,6 +81,7 @@ export function createRuntimeModule(options: {
   readonly logger: Logger;
   readonly toolContributors: readonly RuntimeToolContributor[];
   readonly debugRuntime?: ExecutionRuntimeService;
+  readonly scopedMemory?: Pick<ScopedMemoryResolver, 'resolve'>;
 }): RuntimeModule {
   const runtimeAdapter = options.config.runtime?.adapter ?? 'paseo';
   const sessions = new PostgresRuntimeSessionRepository(options.database);
@@ -121,9 +123,8 @@ export function createRuntimeModule(options: {
   const productionExecutionRuntime = new ContextAwareExecutionRuntime(
     executionPlaneRuntime,
     new PostgresWorkerRuntimeInvocationResolver(options.database),
+    options.scopedMemory,
   );
-  // Keep explicitly injected debug runtimes minimal/deterministic. Production
-  // turns are enriched from durable Work/Runtime facts before reaching Paseo.
   const executionRuntime = options.debugRuntime ?? productionExecutionRuntime;
   const toolRegistry = new RuntimeToolRegistry(options.toolContributors);
   const mcpHost = new RuntimeMcpServer(

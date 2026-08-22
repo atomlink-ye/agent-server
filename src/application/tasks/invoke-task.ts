@@ -46,8 +46,7 @@ export class InvokeTask {
     private readonly definitions: DefinitionReadApi,
     private readonly resolver: AgentResolutionApi,
     private readonly now: () => Date = () => new Date(),
-  ) {
-  }
+  ) {}
 
   public async execute(request: InvokeTaskRequest): Promise<InvokeTaskResult> {
     const resolvedWorkspaceId = resolveWorkspaceId(
@@ -90,7 +89,8 @@ export class InvokeTask {
           originRef: null,
           invokableKind: request.invokable.kind,
           invokableVersionId: request.invokable.versionId,
-          inputSnapshotRef: encodeRootTaskRunRequestSnapshotRef(normalizedInput),
+          inputSnapshotRef:
+            encodeRootTaskRunRequestSnapshotRef(normalizedInput),
           inputFingerprint: fingerprint,
           now: frozenNow,
         });
@@ -133,7 +133,9 @@ export class InvokeTask {
           ),
         );
         if (recovered) return recovered;
-        throw new Error('Admission conflict recovery could not reload the task');
+        throw new Error(
+          'Admission conflict recovery could not reload the task',
+        );
       }
       throw error;
     }
@@ -212,7 +214,9 @@ export class WorkspaceScopeMismatchError extends Error {
 export class IdempotencyConflictError extends Error {
   public readonly code = 'idempotency_conflict';
   public constructor() {
-    super('The Idempotency-Key cannot be reused with a different request body.');
+    super(
+      'The Idempotency-Key cannot be reused with a different request body.',
+    );
     this.name = 'IdempotencyConflictError';
   }
 }

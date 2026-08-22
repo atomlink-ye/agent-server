@@ -43,7 +43,12 @@ export function createHarnessProductWork(input: {
   const runs = new PostgresRunRepository(db as any);
   const admissions = new PostgresAdmissionRepository(db as any);
   const conversations = new PostgresConversationRepository(db as any);
-  const admitRoot = new AdmitRootTask(tasks, runs, admissions, () => new Date(now));
+  const admitRoot = new AdmitRootTask(
+    tasks,
+    runs,
+    admissions,
+    () => new Date(now),
+  );
 
   const definitionResolution = new ResolveWorkDefinition({
     agents: {

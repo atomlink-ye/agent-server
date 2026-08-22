@@ -83,7 +83,9 @@ export class PostgresWorkRunInputStore implements WorkRunInputStore {
 export class WorkRunInputConflictError extends Error {
   public readonly code = 'work_run_input_conflict';
   public constructor() {
-    super('The WorkRun is already bound to a different immutable input snapshot.');
+    super(
+      'The WorkRun is already bound to a different immutable input snapshot.',
+    );
     this.name = 'WorkRunInputConflictError';
   }
 }

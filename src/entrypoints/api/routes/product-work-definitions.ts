@@ -182,31 +182,34 @@ export function registerProductWorkDefinitionRoutes(
     }
   });
 
-  app.get('/api/v1/work-definitions/:definitionId/versions', async (context) => {
-    const definitionId = canonicalUuid(context.req.param('definitionId'));
-    const limit = Number(context.req.query('limit') ?? 20);
-    if (!Number.isInteger(limit) || limit < 1 || limit > 100)
-      throw invalidRequest('limit must be between 1 and 100.');
-    try {
-      const page = await dependencies.definitions.listVersions({
-        definitionId,
-        accessContext: getAuthenticatedAccessContext(context),
-        limit,
-        cursor: context.req.query('cursor') ?? null,
-      });
-      return context.json(
-        ListProductWorkDefinitionVersionsResponseSchema.parse({
-          versions: page.items.map(productVersionSummaryResponse),
-          next_cursor: page.nextCursor,
-        }),
-        200,
-      );
-    } catch (error) {
-      if (isCodedError(error, 'invalid_cursor'))
-        throw new HttpError(400, 'invalid_cursor', 'The cursor is invalid.');
-      return mapReadError(error);
-    }
-  });
+  app.get(
+    '/api/v1/work-definitions/:definitionId/versions',
+    async (context) => {
+      const definitionId = canonicalUuid(context.req.param('definitionId'));
+      const limit = Number(context.req.query('limit') ?? 20);
+      if (!Number.isInteger(limit) || limit < 1 || limit > 100)
+        throw invalidRequest('limit must be between 1 and 100.');
+      try {
+        const page = await dependencies.definitions.listVersions({
+          definitionId,
+          accessContext: getAuthenticatedAccessContext(context),
+          limit,
+          cursor: context.req.query('cursor') ?? null,
+        });
+        return context.json(
+          ListProductWorkDefinitionVersionsResponseSchema.parse({
+            versions: page.items.map(productVersionSummaryResponse),
+            next_cursor: page.nextCursor,
+          }),
+          200,
+        );
+      } catch (error) {
+        if (isCodedError(error, 'invalid_cursor'))
+          throw new HttpError(400, 'invalid_cursor', 'The cursor is invalid.');
+        return mapReadError(error);
+      }
+    },
+  );
 
   app.get('/api/v1/work-definition-versions/:versionId', async (context) => {
     const versionId = canonicalUuid(context.req.param('versionId'));
@@ -265,7 +268,9 @@ function productVersionResponse(record: ProductWorkDefinitionVersionRecord) {
   });
 }
 
-function productVersionSummaryResponse(record: ProductWorkDefinitionVersionRecord) {
+function productVersionSummaryResponse(
+  record: ProductWorkDefinitionVersionRecord,
+) {
   return ProductWorkDefinitionVersionSummarySchema.parse({
     id: record.version.id,
     definition_id: record.version.definitionId,
@@ -300,10 +305,7 @@ function mapAuthoringError(
   error: unknown,
 ): Response {
   if (error instanceof InvalidProductWorkDefinitionError)
-    return context.json(
-      { valid: false, diagnostics: error.diagnostics },
-      422,
-    );
+    return context.json({ valid: false, diagnostics: error.diagnostics }, 422);
   if (error instanceof ProductWorkDefinitionReferenceError)
     return context.json(
       {

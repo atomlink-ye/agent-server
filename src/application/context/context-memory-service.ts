@@ -65,7 +65,9 @@ export class ContextMemoryService {
     context: MemoryVisibilityContext,
   ): Promise<readonly MemoryRecord[]> {
     const refs = await this.records.listByTenant(context.tenantId);
-    const visible = refs.filter((ref) => isMemoryVisible(provenance(ref), context));
+    const visible = refs.filter((ref) =>
+      isMemoryVisible(provenance(ref), context),
+    );
     const records = await Promise.all(
       visible.map(async (ref) => {
         const file = await this.files.read(ref.scope, ref.logicalPath);

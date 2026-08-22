@@ -9,7 +9,9 @@ import type { WorkDefinitionSourceDefinition } from '../../domain/work/work-defi
 import { validateProductWorkDefinition } from './validate-product-work-definition.js';
 
 export class ProductWorkDefinitionQuery {
-  public constructor(private readonly repository: WorkDefinitionSourceRepository) {}
+  public constructor(
+    private readonly repository: WorkDefinitionSourceRepository,
+  ) {}
 
   public async getDefinition(input: {
     readonly definitionId: string;

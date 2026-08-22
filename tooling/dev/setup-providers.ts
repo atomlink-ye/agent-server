@@ -1,11 +1,5 @@
 import { createHash } from 'node:crypto';
-import {
-  access,
-  constants,
-  mkdir,
-  readFile,
-  readlink,
-} from 'node:fs/promises';
+import { access, constants, mkdir, readFile, readlink } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { delimiter, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -26,7 +20,10 @@ const providerToolchainScript = resolve(
   repositoryRoot,
   'provider-toolchain/scripts/provider-toolchain.mjs',
 );
-const providerToolchainSourceRoot = resolve(repositoryRoot, 'provider-toolchain');
+const providerToolchainSourceRoot = resolve(
+  repositoryRoot,
+  'provider-toolchain',
+);
 const providerToolchainInputFiles = [
   'providers.manifest.json',
   'pnpm-lock.yaml',
@@ -211,11 +208,7 @@ export async function findInstalledProviderToolchain(): Promise<
     const manifestDigest = sha256(Buffer.from(stable(manifest)));
     const current = await readlink(join(providerToolchainRoot, 'current'));
     if (current !== `releases/${manifestDigest}`) return undefined;
-    const releaseRoot = join(
-      providerToolchainRoot,
-      'releases',
-      manifestDigest,
-    );
+    const releaseRoot = join(providerToolchainRoot, 'releases', manifestDigest);
     const ready = await readFile(join(releaseRoot, '.ready'), 'utf8');
     if (ready.trim() !== manifestDigest) return undefined;
     const release = JSON.parse(

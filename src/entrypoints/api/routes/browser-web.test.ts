@@ -30,30 +30,34 @@ afterEach(() => {
 describe('browser-safe Vite facade', () => {
   it('uses the server-side service credential and strips unknown conversation fields', async () => {
     process.env.AGENT_SERVER_SERVICE_TOKEN = SERVICE_TOKEN;
-    const upstream = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
-      expect(new Headers(init?.headers).get('authorization')).toBe(`Bearer ${SERVICE_TOKEN}`);
-      return new Response(
-        JSON.stringify({
-          conversations: [
-            {
-              conversation_id: 'conversation-1',
-              kind: 'direct',
-              title: null,
-              direct_agent: {
-                agent_definition_id: 'agent-1',
-                display_name: 'Researcher',
+    const upstream = vi.fn(
+      async (_input: string | URL | Request, init?: RequestInit) => {
+        expect(new Headers(init?.headers).get('authorization')).toBe(
+          `Bearer ${SERVICE_TOKEN}`,
+        );
+        return new Response(
+          JSON.stringify({
+            conversations: [
+              {
+                conversation_id: 'conversation-1',
+                kind: 'direct',
+                title: null,
+                direct_agent: {
+                  agent_definition_id: 'agent-1',
+                  display_name: 'Researcher',
+                },
+                topic: null,
+                created_at: '2026-08-21T00:00:00.000Z',
+                updated_at: '2026-08-21T00:00:00.000Z',
+                provider_session: 'must-not-reach-browser',
               },
-              topic: null,
-              created_at: '2026-08-21T00:00:00.000Z',
-              updated_at: '2026-08-21T00:00:00.000Z',
-              provider_session: 'must-not-reach-browser',
-            },
-          ],
-          service_token: SERVICE_TOKEN,
-        }),
-        { status: 200, headers: { 'content-type': 'application/json' } },
-      );
-    });
+            ],
+            service_token: SERVICE_TOKEN,
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      },
+    );
     vi.stubGlobal('fetch', upstream);
 
     const response = await appWithBrowserRoutes().request('/api/conversations');
@@ -84,23 +88,24 @@ describe('browser-safe Vite facade', () => {
     process.env.AGENT_SERVER_SERVICE_TOKEN = SERVICE_TOKEN;
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () =>
-        new Response(
-          JSON.stringify({
-            workId: WORK_ID,
-            workRef: WORK_ID,
-            title: 'Competitor Research',
-            productState: 'running',
-            problemKind: null,
-            attentionReason: null,
-            resultSummary: null,
-            resultCaptureStatus: 'not_present',
-            taskId: 'internal-task',
-            runId: 'internal-run',
-            provider_session: 'internal-provider-session',
-          }),
-          { status: 200, headers: { 'content-type': 'application/json' } },
-        ),
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              workId: WORK_ID,
+              workRef: WORK_ID,
+              title: 'Competitor Research',
+              productState: 'running',
+              problemKind: null,
+              attentionReason: null,
+              resultSummary: null,
+              resultCaptureStatus: 'not_present',
+              taskId: 'internal-task',
+              runId: 'internal-run',
+              provider_session: 'internal-provider-session',
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          ),
       ),
     );
 
@@ -127,7 +132,9 @@ describe('browser-safe Vite facade', () => {
     const upstream = vi.fn();
     vi.stubGlobal('fetch', upstream);
 
-    const response = await appWithBrowserRoutes().request('/api/works/not-a-uuid');
+    const response = await appWithBrowserRoutes().request(
+      '/api/works/not-a-uuid',
+    );
     expect(response.status).toBe(400);
     expect(upstream).not.toHaveBeenCalled();
   });

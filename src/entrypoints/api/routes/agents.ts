@@ -127,10 +127,17 @@ export function registerAgentRoutes(
     const query = parseListQuery(c.req.url);
     try {
       const access = getAuthenticatedAccessContext(c);
-      const coworkerRead = dependencies.agentRegistry as typeof dependencies.agentRegistry &
-        Partial<Pick<ManagedAgentDefinitionRead, 'listManagedDefinitionsByTenant'>>;
+      const coworkerRead =
+        dependencies.agentRegistry as typeof dependencies.agentRegistry &
+          Partial<
+            Pick<ManagedAgentDefinitionRead, 'listManagedDefinitionsByTenant'>
+          >;
       if (!coworkerRead.listManagedDefinitionsByTenant)
-        throw new HttpError(404, 'not_found', 'The coworker roster is unavailable.');
+        throw new HttpError(
+          404,
+          'not_found',
+          'The coworker roster is unavailable.',
+        );
       const page = await coworkerRead.listManagedDefinitionsByTenant({
         tenantId: access.tenantId,
         command: query,

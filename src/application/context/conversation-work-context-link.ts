@@ -47,7 +47,9 @@ export class ConversationWorkContextLink implements ConversationWorkLinkReposito
   }
 
   public findConversationIdByWork(
-    input: Parameters<ConversationWorkLinkRepository['findConversationIdByWork']>[0],
+    input: Parameters<
+      ConversationWorkLinkRepository['findConversationIdByWork']
+    >[0],
   ) {
     return this.links.findConversationIdByWork(input);
   }

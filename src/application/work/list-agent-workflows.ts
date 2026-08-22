@@ -13,7 +13,9 @@ export class ListAgentWorkflows {
   async execute(input: {
     readonly agentDefinitionId: string;
     readonly accessContext: AccessContext;
-  }): Promise<{ readonly definitions: readonly WorkDefinitionSourceDefinition[] }> {
+  }): Promise<{
+    readonly definitions: readonly WorkDefinitionSourceDefinition[];
+  }> {
     if (!this.repository.listDefinitionsForAgent)
       throw new Error('Agent workflow discovery is unavailable.');
     const definitions = await this.repository.listDefinitionsForAgent({

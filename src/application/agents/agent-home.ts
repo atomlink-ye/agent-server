@@ -151,9 +151,7 @@ export class ReadAgentHomeEntry {
 }
 
 export class WriteAgentHomeEntry {
-  public constructor(
-    private readonly repository: AgentHomeRepository,
-  ) {}
+  public constructor(private readonly repository: AgentHomeRepository) {}
 
   public async execute(input: {
     accessContext: AgentHomeAccessContext;

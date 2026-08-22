@@ -197,9 +197,7 @@ describe('Multi-principal Agent Visibility on real PostgreSQL', () => {
     try {
       await registry.publishAgentVersion(publishCommand);
       // If we get here, something is wrong - SA2 should not be able to publish SA1's version
-      expect.fail(
-        'SA2 should not be able to publish a version owned by SA1',
-      );
+      expect.fail('SA2 should not be able to publish a version owned by SA1');
     } catch (err: any) {
       expect(err.constructor.name).toBe('AgentNotFoundError');
     }

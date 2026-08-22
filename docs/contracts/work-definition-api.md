@@ -76,7 +76,7 @@ Validation is side-effect free. It performs no registry write, Work/Task creatio
 {
   "valid": true,
   "fingerprint": "sha256:...",
-  "metadata": {"normalized_name": "earnings-research"},
+  "metadata": { "normalized_name": "earnings-research" },
   "diagnostics": []
 }
 ```
@@ -152,10 +152,15 @@ Response:
     "definition_id": "...",
     "status": "published",
     "fingerprint": "sha256:...",
-    "source": {"apiVersion":"agentserver.dev/v1alpha1","kind":"WorkDefinition","metadata":{},"spec":{}},
-    "resolved": {"resource_manifest_fingerprint":"sha256:..."}
+    "source": {
+      "apiVersion": "agentserver.dev/v1alpha1",
+      "kind": "WorkDefinition",
+      "metadata": {},
+      "spec": {}
+    },
+    "resolved": { "resource_manifest_fingerprint": "sha256:..." }
   },
-  "resolved": {"resource_manifest_fingerprint":"sha256:..."}
+  "resolved": { "resource_manifest_fingerprint": "sha256:..." }
 }
 ```
 

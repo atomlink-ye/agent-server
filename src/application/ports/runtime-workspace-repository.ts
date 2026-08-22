@@ -15,9 +15,6 @@ export interface ExecutionWorkspaceState {
   readonly binding: ExecutionWorkspaceBinding | null;
 }
 
-/** @deprecated Prefer ExecutionWorkspaceState. */
-export type RuntimeWorkspace = ExecutionWorkspaceState;
-
 export interface RuntimeWorkspaceRepository {
   findForProductSession(input: {
     readonly productSessionId: string;

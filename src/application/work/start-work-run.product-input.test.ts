@@ -107,7 +107,13 @@ function harness() {
     },
     now: () => new Date(now),
   });
-  return { start, startWorkRun, recordInput, recordResolvedManifest, admitRoot };
+  return {
+    start,
+    startWorkRun,
+    recordInput,
+    recordResolvedManifest,
+    admitRoot,
+  };
 }
 
 describe('StartWorkRun Product input contract', () => {

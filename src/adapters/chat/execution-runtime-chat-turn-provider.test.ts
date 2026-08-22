@@ -5,6 +5,8 @@ import { ExecutionPlaneRuntimeFacade } from '../../application/runtime/execution
 import { ExecutionRunRegistry } from '../../application/runtime/execution-run-registry.js';
 import type {
   CreatedExecutionSession,
+  AttachExecutionSessionOutcome,
+  ExecutionAppliedSessionSpec,
   ExecutionPlaneCapabilities,
   ExecutionPlaneHealth,
   ExecutionPlanePort,
@@ -16,6 +18,7 @@ import type {
   ExecutionSessionSpec,
   ExecutionWorkspaceBinding,
 } from '../../application/ports/execution-plane.js';
+import { makeRuntimeSession } from '../../../tests/fixtures/runtime-session.js';
 import type { RuntimeMemoryCandidateCollector } from '../../application/ports/runtime-memory-candidate-collector.js';
 import type {
   RuntimeSession,
@@ -242,18 +245,20 @@ describe('ExecutionRuntimeChatTurnProvider', () => {
 
     const alphaSystemPrompt = plane.createdSpecs[0]?.systemPrompt;
     const betaSystemPrompt = plane.createdSpecs[1]?.systemPrompt;
-    expect(alphaSystemPrompt).toContain('Agent definition ID: definition-alpha');
+    expect(alphaSystemPrompt).toContain(
+      'Agent definition ID: definition-alpha',
+    );
     expect(alphaSystemPrompt).toContain('Always answer in terse Alpha format.');
-    expect(alphaSystemPrompt).toContain('alpha-calendar-capability');
-    expect(alphaSystemPrompt).toContain('Alpha persona home content.');
     expect(alphaSystemPrompt).not.toContain('definition-beta');
     expect(betaSystemPrompt).toContain('Agent definition ID: definition-beta');
     expect(betaSystemPrompt).toContain('Always answer in warm Beta format.');
-    expect(betaSystemPrompt).toContain('beta-calendar-capability');
-    expect(betaSystemPrompt).toContain('Beta persona home content.');
     expect(betaSystemPrompt).not.toContain('definition-alpha');
     expect(plane.runInputs[0]?.prompt).toContain('Alpha conversation context.');
+    expect(plane.runInputs[0]?.prompt).toContain('alpha-calendar-capability');
+    expect(plane.runInputs[0]?.prompt).toContain('Alpha persona home content.');
     expect(plane.runInputs[1]?.prompt).toContain('Beta conversation context.');
+    expect(plane.runInputs[1]?.prompt).toContain('beta-calendar-capability');
+    expect(plane.runInputs[1]?.prompt).toContain('Beta persona home content.');
   });
 });
 
@@ -289,10 +294,18 @@ class RecordingExecutionPlane implements ExecutionPlanePort {
   public async attachSession(
     binding: ExecutionSessionBinding,
     spec: ExecutionSessionSpec,
-  ): Promise<ExecutionSession> {
+    applied?: ExecutionAppliedSessionSpec,
+  ): Promise<AttachExecutionSessionOutcome> {
     this.attachedBindings.push(binding);
     this.attachedSpecs.push(spec);
-    return recordingSession(this.runInputs);
+    return {
+      kind:
+        applied && applied.appliedRevision !== spec.desiredRevision
+          ? 'reconfigured'
+          : 'reused',
+      session: recordingSession(this.runInputs),
+      appliedRevision: spec.desiredRevision ?? 1,
+    };
   }
 
   public async health(): Promise<ExecutionPlaneHealth> {
@@ -334,7 +347,7 @@ class InMemoryRuntimeSessions
       );
     });
     if (found) return found;
-    const session: RuntimeSession = {
+    const session: RuntimeSession = makeRuntimeSession({
       id: `runtime-session-${this.sessions.length + 1}`,
       scope: {
         kind: 'agent_chat',
@@ -353,15 +366,85 @@ class InMemoryRuntimeSessions
       toolRefs: input.toolRefs,
       workspaceBinding: null,
       sessionBinding: null,
-      createdAt: '2026-08-21T00:00:00.000Z',
-      updatedAt: '2026-08-21T00:00:00.000Z',
-    };
+    });
     this.sessions.push(session);
     return session;
   }
 
   public async findByAgentChat(): Promise<RuntimeSession | null> {
     return null;
+  }
+
+  public async createOrGetForTeamMember() {
+    return this.createOrGetForProductSession();
+  }
+  public async findByTeamMember(): Promise<RuntimeSession | null> {
+    return null;
+  }
+  public async reconcileDesiredSpec(input: { id: string; digest: string }) {
+    const index = this.sessions.findIndex((session) => session.id === input.id);
+    if (index < 0) throw new Error('runtime session missing');
+    const current = this.sessions[index]!;
+    const desiredRevision =
+      current.desiredSpecDigest === null ||
+      current.desiredSpecDigest === input.digest
+        ? current.desiredRevision
+        : current.desiredRevision + 1;
+    const next: RuntimeSession = {
+      ...current,
+      desiredRevision,
+      desiredSpecDigest: input.digest,
+      status:
+        current.currentGeneration && desiredRevision !== current.desiredRevision
+          ? 'reconciling'
+          : current.status,
+    };
+    this.sessions[index] = next;
+    return next;
+  }
+  public async replaceExecution(
+    input: Parameters<RuntimeSessionRepository['replaceExecution']>[0],
+  ): Promise<RuntimeSession> {
+    const index = this.sessions.findIndex((session) => session.id === input.id);
+    if (index < 0) throw new Error('runtime session missing');
+    const current = this.sessions[index]!;
+    const nextGeneration = (current.currentGeneration?.generation ?? 0) + 1;
+    const next: RuntimeSession = {
+      ...current,
+      status: 'ready',
+      currentGeneration: {
+        id: `generation-${current.id}-${nextGeneration}`,
+        runtimeSessionId: current.id,
+        generation: nextGeneration,
+        workspaceBinding: input.workspaceBinding,
+        sessionBinding: input.sessionBinding,
+        appliedRevision: input.appliedRevision,
+        appliedSpecDigest: input.appliedSpecDigest,
+        endpointEpoch: input.endpointEpoch,
+        extensionGrantId: input.extensionGrantId ?? null,
+        status: 'active',
+        createdAt: current.updatedAt,
+        supersededAt: null,
+      },
+      workspaceBinding: input.workspaceBinding,
+      sessionBinding: input.sessionBinding,
+    };
+    this.sessions[index] = next;
+    return next;
+  }
+  public async markUnavailable(id: string) {
+    const index = this.sessions.findIndex((session) => session.id === id);
+    if (index < 0) throw new Error('runtime session missing');
+    const current = this.sessions[index]!;
+    const next: RuntimeSession = {
+      ...current,
+      status: 'unavailable',
+      currentGeneration: current.currentGeneration
+        ? { ...current.currentGeneration, status: 'unavailable' }
+        : null,
+    };
+    this.sessions[index] = next;
+    return next;
   }
 
   public async findById(id: string): Promise<RuntimeSession | null> {
@@ -374,7 +457,8 @@ class InMemoryRuntimeSessions
     return (
       this.sessions.find(
         (session) =>
-          session.sessionBinding?.externalSessionId === binding.externalSessionId,
+          session.sessionBinding?.externalSessionId ===
+          binding.externalSessionId,
       ) ?? null
     );
   }
@@ -383,6 +467,10 @@ class InMemoryRuntimeSessions
     id: string;
     workspaceBinding: ExecutionWorkspaceBinding;
     sessionBinding: ExecutionSessionBinding;
+    appliedRevision: number;
+    appliedSpecDigest: string;
+    endpointEpoch: string;
+    extensionGrantId?: string;
   }): Promise<RuntimeSession> {
     this.bindCalls.push(input);
     const index = this.sessions.findIndex((session) => session.id === input.id);
@@ -390,6 +478,21 @@ class InMemoryRuntimeSessions
     const current = this.sessions[index]!;
     const next: RuntimeSession = {
       ...current,
+      status: 'ready',
+      currentGeneration: {
+        id: `generation-${current.id}-1`,
+        runtimeSessionId: current.id,
+        generation: 1,
+        workspaceBinding: input.workspaceBinding,
+        sessionBinding: input.sessionBinding,
+        appliedRevision: input.appliedRevision,
+        appliedSpecDigest: input.appliedSpecDigest,
+        endpointEpoch: input.endpointEpoch,
+        extensionGrantId: input.extensionGrantId ?? null,
+        status: 'active',
+        createdAt: current.updatedAt,
+        supersededAt: null,
+      },
       workspaceBinding: input.workspaceBinding,
       sessionBinding: input.sessionBinding,
     };
@@ -398,7 +501,20 @@ class InMemoryRuntimeSessions
   }
 
   public async createOrGetForProductSession(): Promise<RuntimeSession> {
-    throw new Error('not used');
+    return (
+      this.sessions[0] ??
+      this.createOrGetForAgentChat({
+        agentChatRuntimeId: 'fallback',
+        runtimeEpoch: 1,
+        tenantId: 'tenant',
+        principalType: 'service_account',
+        principalId: 'principal',
+        workspaceId: 'workspace',
+        agentVersionId: 'agent',
+        resolvedSkills: [],
+        toolRefs: [],
+      })
+    );
   }
   public async createOrGetForTask(): Promise<RuntimeSession> {
     throw new Error('not used');
@@ -497,7 +613,8 @@ function chatBrain(
   const agentChatRuntimeId = input.agentChatRuntimeId ?? 'chat-runtime-1';
   const runtimeEpoch = input.runtimeEpoch ?? 1;
   const conversationId = input.conversationId ?? 'conversation-1';
-  const triggerMessageId = input.triggerMessageId ?? `${conversationId}-trigger`;
+  const triggerMessageId =
+    input.triggerMessageId ?? `${conversationId}-trigger`;
   const productScope = {
     tenantId: 'tenant-1',
     workspaceId: 'workspace-1',

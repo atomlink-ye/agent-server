@@ -38,9 +38,7 @@ type Row = {
  * keeps ContextFS projection out of AgentRunExecutor and makes the runtime
  * boundary self-describing without parsing prompts.
  */
-export class PostgresWorkerRuntimeInvocationResolver
-  implements WorkerRuntimeInvocationResolver
-{
+export class PostgresWorkerRuntimeInvocationResolver implements WorkerRuntimeInvocationResolver {
   public constructor(
     private readonly db: Queryable,
     private readonly views: ContextViewResolver = new ContextViewResolver(),
@@ -89,7 +87,8 @@ export class PostgresWorkerRuntimeInvocationResolver
     );
     const row = result.rows?.[0];
     if (!row) return null;
-    if (row.scope_kind !== 'task' && row.scope_kind !== 'team_member') return null;
+    if (row.scope_kind !== 'task' && row.scope_kind !== 'team_member')
+      return null;
     if (
       !row.task_id ||
       !row.definition_id ||

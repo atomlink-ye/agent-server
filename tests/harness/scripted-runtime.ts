@@ -18,7 +18,9 @@ export function createScriptedRuntimeHarness(): ScriptedRuntimeHarness {
   return {
     plane,
     async createSession(input) {
-      const mcpUrl = input.mcpServer ? await input.mcpServer.start() : undefined;
+      const mcpUrl = input.mcpServer
+        ? await input.mcpServer.start()
+        : undefined;
       return plane.createSession({
         runtimeSessionId: input.runtimeSessionId,
         workspace: { cwd: process.cwd() },

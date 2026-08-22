@@ -111,7 +111,8 @@ export class ChatDeliveryWorker implements StepWorker {
           workerId: this.#options.workerId,
           publishedAt: new Date().toISOString(),
         });
-        if (!completed) throw new Error('Chat activation delivery lease was lost.');
+        if (!completed)
+          throw new Error('Chat activation delivery lease was lost.');
       } catch (error: unknown) {
         this.report('complete', error);
       }

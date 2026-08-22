@@ -109,7 +109,8 @@ export interface TeamExecutionRepository {
     status: TeamMemberRun['status'],
     runtimeSessionId?: string | null,
     owner?: OwnerScope,
-    expectedCurrentStatus?: TeamMemberRun['status'] | readonly TeamMemberRun['status'][],
+    expectedCurrentStatus?:
+      TeamMemberRun['status'] | readonly TeamMemberRun['status'][],
   ): Promise<TeamMemberRun>;
   updateMemberRuntimeSession(
     id: string,

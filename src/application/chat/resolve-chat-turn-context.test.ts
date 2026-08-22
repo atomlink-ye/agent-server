@@ -48,12 +48,18 @@ describe('ResolveChatTurnContext', () => {
     expect(context?.recoveryMessages.map((item) => item.sequence)).toEqual([
       1, 2, 3, 4,
     ]);
-    expect(context?.actor).toEqual({ type: 'service_account', id: 'principal-n2' });
+    expect(context?.actor).toEqual({
+      type: 'service_account',
+      id: 'principal-n2',
+    });
   });
 
   it('starts a new epoch in bootstrap mode and never consumes beyond through-sequence', async () => {
     const resolver = new ResolveChatTurnContext(
-      conversations([...messages, message(5, 'principal', 'principal-n2', 'future')]),
+      conversations([
+        ...messages,
+        message(5, 'principal', 'principal-n2', 'future'),
+      ]),
       { getRuntimeWatermark: async () => 0 },
     );
 
@@ -78,7 +84,9 @@ function conversations(source: readonly ChatMessage[] = messages) {
       return runtime;
     },
     async listMessages(input: { afterSequence?: number }) {
-      return source.filter((item) => item.sequence > (input.afterSequence ?? 0));
+      return source.filter(
+        (item) => item.sequence > (input.afterSequence ?? 0),
+      );
     },
     async findPrincipalMember(input: { principalId: string }) {
       return {

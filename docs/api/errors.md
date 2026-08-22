@@ -6,28 +6,28 @@ Developer API errors follow the existing Agent Server safe HTTP envelope. Intern
 
 This API uses one consistent set of error codes. The table below is the canonical reference; any code not listed here is an internal or transport-layer detail that may change without notice.
 
-| HTTP | Code | Meaning |
-| --- | --- | --- |
-| 400 | `invalid_request` | malformed request envelope, path, or unsupported parameters |
-| 409 | `idempotency_conflict` | apply key reused with a different source |
-| 404 | `work_definition_not_found` | owner-safe Definition or Version miss |
-| 422 | `invalid_definition` | Work Definition source fails structural validation |
-| 422 | `invalid_reference` | a referenced resource (Agent, Environment, Memory) was not found or is not published in this owner scope |
-| 422 | `input_validation_failed` | WorkRun input does not satisfy the immutable Definition input schema |
-| 404 | `work_not_found` | Work resource not found or outside the authenticated owner scope |
-| 404 | `work_run_not_found` | WorkRun resource not found |
-| 503 | `projection_unavailable` | product projection is temporarily unavailable |
+| HTTP | Code                        | Meaning                                                                                                  |
+| ---- | --------------------------- | -------------------------------------------------------------------------------------------------------- |
+| 400  | `invalid_request`           | malformed request envelope, path, or unsupported parameters                                              |
+| 409  | `idempotency_conflict`      | apply key reused with a different source                                                                 |
+| 404  | `work_definition_not_found` | owner-safe Definition or Version miss                                                                    |
+| 422  | `invalid_definition`        | Work Definition source fails structural validation                                                       |
+| 422  | `invalid_reference`         | a referenced resource (Agent, Environment, Memory) was not found or is not published in this owner scope |
+| 422  | `input_validation_failed`   | WorkRun input does not satisfy the immutable Definition input schema                                     |
+| 404  | `work_not_found`            | Work resource not found or outside the authenticated owner scope                                         |
+| 404  | `work_run_not_found`        | WorkRun resource not found                                                                               |
+| 503  | `projection_unavailable`    | product projection is temporarily unavailable                                                            |
 
 ### Roadmap §9 code mapping
 
 Roadmap §9 names four additional codes. This implementation covers their semantics with the codes above:
 
-| Roadmap code | Covered by | Notes |
-| --- | --- | --- |
-| `resource_not_found` | `work_definition_not_found` / `work_not_found` / `work_run_not_found` | each resource kind has its own specific not-found code |
-| `resource_not_published` | `invalid_reference` | a referenced resource that exists but is not published triggers an authoring diagnostic with this code |
-| `unsupported_capability` | `invalid_request` | requests for capabilities not supported in this API version return `400 invalid_request` |
-| `execution_unavailable` | `projection_unavailable` | transient execution-plane unavailability surfaces as `503 projection_unavailable` |
+| Roadmap code             | Covered by                                                            | Notes                                                                                                  |
+| ------------------------ | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `resource_not_found`     | `work_definition_not_found` / `work_not_found` / `work_run_not_found` | each resource kind has its own specific not-found code                                                 |
+| `resource_not_published` | `invalid_reference`                                                   | a referenced resource that exists but is not published triggers an authoring diagnostic with this code |
+| `unsupported_capability` | `invalid_request`                                                     | requests for capabilities not supported in this API version return `400 invalid_request`               |
+| `execution_unavailable`  | `projection_unavailable`                                              | transient execution-plane unavailability surfaces as `503 projection_unavailable`                      |
 
 Do not use the roadmap code names in client code; use the codes in the stable table.
 

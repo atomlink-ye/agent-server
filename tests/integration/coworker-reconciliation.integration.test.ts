@@ -95,11 +95,15 @@ describe('published Coworker reconciliation', () => {
       provisioner,
     );
 
-    await expect(reconciler.execute(access(ownerPrincipalId, ownerWorkspaceId))).resolves.toEqual({
+    await expect(
+      reconciler.execute(access(ownerPrincipalId, ownerWorkspaceId)),
+    ).resolves.toEqual({
       scanned: 1,
       converged: 1,
     });
-    await expect(reconciler.execute(access(peerPrincipalId, peerWorkspaceId))).resolves.toEqual({
+    await expect(
+      reconciler.execute(access(peerPrincipalId, peerWorkspaceId)),
+    ).resolves.toEqual({
       scanned: 1,
       converged: 1,
     });

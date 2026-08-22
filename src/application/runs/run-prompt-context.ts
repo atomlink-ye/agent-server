@@ -49,6 +49,9 @@ export interface AgenticLeadState {
   readonly attempts: readonly TeamWorkItemAttempt[];
 }
 
+export const RUNTIME_RECOVERY_INSTRUCTION =
+  'RUNTIME RECOVERY: the external provider session was replaced because it no longer satisfied the current Agent Server runtime contract. Re-establish context from durable Work/Task state, the current workspace, pinned memory, Workboard/Mailbox and other granted read tools before relying on prior transient provider context. Do not repeat an external side effect merely because its previous provider context is unavailable.';
+
 /**
  * Pure/read-only context assembly for an Agent turn. Runtime placement,
  * extension grants, event writes and execution side effects live elsewhere.
@@ -67,12 +70,44 @@ export class RunPromptContext {
     readonly invokableVersionId: string;
     readonly task: Task;
   }): Promise<ResolvedRunPrompt> {
+    return this.resolve(input, false);
+  }
+
+  /**
+   * A continuation still resolves the complete immutable Agent bootstrap. The
+   * provider may need replacement after a process/runtime failure, and a new
+   * provider generation must receive the same trusted system/skill/tool contract
+   * rather than an empty continuation-only bootstrap.
+   */
+  public async resolveContinuation(input: {
+    readonly prompt: string;
+    readonly ownerScope: InvokableOwnerScope;
+    readonly invokableVersionId: string;
+    readonly task: Task;
+  }): Promise<ResolvedRunPrompt> {
+    return this.resolve(input, true);
+  }
+
+  private async resolve(
+    input: {
+      readonly prompt: string;
+      readonly ownerScope: InvokableOwnerScope;
+      readonly invokableVersionId: string;
+      readonly task: Task;
+    },
+    continuation: boolean,
+  ): Promise<ResolvedRunPrompt> {
     if (
       input.invokableVersionId === RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID
     ) {
       return {
         systemPrompt: buildBootstrapPrompt(),
-        turnPrompt: input.prompt,
+        turnPrompt: continuation
+          ? buildTurnPrompt({
+              taskInput: input.prompt,
+              memory: await this.loadPinnedMemory(input.task),
+            })
+          : input.prompt,
         proposalLimit: 0,
         agentVersionId: input.invokableVersionId,
         modelPolicyRef: 'free-only',
@@ -102,56 +137,15 @@ export class RunPromptContext {
       ...(agentVersion.definitionId
         ? { agentDefinitionId: agentVersion.definitionId }
         : {}),
-      ...(agentVersion.agentOwner ? { agentOwner: agentVersion.agentOwner } : {}),
+      ...(agentVersion.agentOwner
+        ? { agentOwner: agentVersion.agentOwner }
+        : {}),
       modelPolicyRef: agentVersion.modelPolicyRef,
       skills: agentVersion.skills,
       toolRefs: agentVersion.toolRefs,
     };
   }
 
-  public async resolveContinuation(input: {
-    readonly prompt: string;
-    readonly ownerScope: InvokableOwnerScope;
-    readonly invokableVersionId: string;
-    readonly task: Task;
-  }): Promise<ResolvedRunPrompt> {
-    const metadata =
-      input.invokableVersionId === RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID
-        ? { proposalLimit: 0, modelPolicyRef: 'free-only' as const }
-        : await this.resolver.resolvePublished(
-            input.invokableVersionId,
-            input.ownerScope,
-            { resolveExtensions: false },
-          );
-    if (!metadata)
-      throw new Error(
-        `Published agent version ${input.invokableVersionId} could not be loaded for execution`,
-      );
-
-    return {
-      systemPrompt: '',
-      turnPrompt: buildTurnPrompt({
-        taskInput: input.prompt,
-        memory: await this.loadPinnedMemory(input.task),
-      }),
-      proposalLimit: metadata.proposalLimit ?? 0,
-      agentVersionId: input.invokableVersionId,
-      ...('definitionId' in metadata && metadata.definitionId
-        ? { agentDefinitionId: metadata.definitionId }
-        : {}),
-      ...('agentOwner' in metadata && metadata.agentOwner
-        ? { agentOwner: metadata.agentOwner }
-        : {}),
-      modelPolicyRef: metadata.modelPolicyRef,
-      skills: [],
-      toolRefs: [],
-    };
-  }
-
-  /**
-   * The legacy policy snapshot is retained only to narrow compatibility aliases
-   * while the new collaboration tools use capability-based authorization.
-   */
   public async loadAgenticLeadState(
     team: TeamRun,
     task: Task,
@@ -203,6 +197,7 @@ export class RunPromptContext {
   }): Promise<{
     readonly systemPrompt: string;
     readonly deliveredTurnPrompt: string;
+    readonly recoveryTurnPrompt: string;
   }> {
     const turnPrompt =
       input.team != null && input.member?.role === 'lead'
@@ -218,7 +213,7 @@ export class RunPromptContext {
         ? turnPrompt
         : appendCollaborationTurnGuidance(turnPrompt, input.task.teamTaskKind);
     const systemPrompt =
-      !input.priorExternalSessionId && input.team && input.member
+      input.team && input.member
         ? buildTeamSystemPrompt({
             role: input.member.role,
             roster: projectTeamRoster(input.teamMembers),
@@ -229,9 +224,7 @@ export class RunPromptContext {
                 : []),
             ].join('\n\n'),
           })
-        : !input.priorExternalSessionId
-          ? input.resolved.systemPrompt
-          : '';
+        : input.resolved.systemPrompt;
     const deliveredTurnPrompt =
       input.team && input.member?.role === 'lead'
         ? formatTeamDeliveryPrompt({
@@ -243,7 +236,11 @@ export class RunPromptContext {
             body: guidedTurnPrompt,
           })
         : guidedTurnPrompt;
-    return { systemPrompt, deliveredTurnPrompt };
+    const recoveryTurnPrompt = [
+      deliveredTurnPrompt,
+      RUNTIME_RECOVERY_INSTRUCTION,
+    ].join('\n\n');
+    return { systemPrompt, deliveredTurnPrompt, recoveryTurnPrompt };
   }
 
   private async withLeadCollaborationContext(
@@ -379,7 +376,7 @@ function appendCollaborationTurnGuidance(
     kind === 'direct_message'
       ? 'Collaboration message guidance: read inbox_list and board_list. A message is communication, never an implicit assignment. Acknowledge messages that request it with message_ack. If you choose to take an open actionable item, call board_claim explicitly. You may reply with message_send. Do not submit or accept Work merely because a message says it is done.'
       : kind === 'work_attempt'
-        ? 'Assigned Workboard guidance: use your real domain tools plus board_list/inbox_list. Persist meaningful progress with board_checkpoint, report a true blocker with board_block, communicate with message_send when useful, and complete the semantic attempt with board_submit including evidence_refs/artifact_refs when available. Do not use internal IDs or legacy Team commands.'
+        ? 'Assigned Workboard guidance: use your real domain tools plus board_list/inbox_list. Persist meaningful progress with board_checkpoint, report a true blocker with board_block, communicate with message_send when useful, and complete the semantic attempt with board_submit including evidence_refs/artifact_refs when available. Do not use internal IDs or compatibility Team commands.'
         : null;
   return guidance ? `${prompt}\n\n${guidance}` : prompt;
 }

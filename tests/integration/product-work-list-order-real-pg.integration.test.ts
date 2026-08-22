@@ -33,16 +33,27 @@ describe('Product Work latest-first list semantics on real PostgreSQL', () => {
   let pool: Pool;
 
   beforeAll(async () => {
-    pool = createPostgresPool({ connectionString: connectionString!, maxConnections: 2 });
+    pool = createPostgresPool({
+      connectionString: connectionString!,
+      maxConnections: 2,
+    });
     await applyDurableKernelMigrations(pool);
     await pool.query(
       `INSERT INTO workspaces
        (id,tenant_id,principal_type,principal_id,name,created_at,updated_at)
        VALUES($1,$2,'service_account',$3,$4,$5,$5)
        ON CONFLICT (id) DO UPDATE SET tenant_id=EXCLUDED.tenant_id,updated_at=EXCLUDED.updated_at`,
-      [workspaceId, tenantId, 'product-work-order', 'Product Work Order', '2026-08-17T00:00:00.000Z'],
+      [
+        workspaceId,
+        tenantId,
+        'product-work-order',
+        'Product Work Order',
+        '2026-08-17T00:00:00.000Z',
+      ],
     );
-    await pool.query('DELETE FROM work_runs WHERE work_id = ANY($1::uuid[])', [workIds]);
+    await pool.query('DELETE FROM work_runs WHERE work_id = ANY($1::uuid[])', [
+      workIds,
+    ]);
     await pool.query('DELETE FROM works WHERE id = ANY($1::uuid[])', [workIds]);
 
     for (const [index, id] of workIds.entries()) {
@@ -52,7 +63,16 @@ describe('Product Work latest-first list semantics on real PostgreSQL', () => {
         `INSERT INTO works
          (id,tenant_id,workspace_id,definition_id,current_definition_version_id,title,origin,archived_at,created_at,updated_at)
          VALUES($1,$2,$3,$4,$5,$6,'created',NULL,$7,$8)`,
-        [id, tenantId, workspaceId, definitionId, definitionVersionId, `Work ${index + 1}`, createdAt, updatedAt],
+        [
+          id,
+          tenantId,
+          workspaceId,
+          definitionId,
+          definitionVersionId,
+          `Work ${index + 1}`,
+          createdAt,
+          updatedAt,
+        ],
       );
     }
 
@@ -78,16 +98,29 @@ describe('Product Work latest-first list semantics on real PostgreSQL', () => {
   });
 
   afterAll(async () => {
-    await pool?.query('DELETE FROM work_runs WHERE work_id = ANY($1::uuid[])', [workIds]);
-    await pool?.query('DELETE FROM works WHERE id = ANY($1::uuid[])', [workIds]);
-    await pool?.query('DELETE FROM workspaces WHERE id=$1 AND tenant_id=$2', [workspaceId, tenantId]);
+    await pool?.query('DELETE FROM work_runs WHERE work_id = ANY($1::uuid[])', [
+      workIds,
+    ]);
+    await pool?.query('DELETE FROM works WHERE id = ANY($1::uuid[])', [
+      workIds,
+    ]);
+    await pool?.query('DELETE FROM workspaces WHERE id=$1 AND tenant_id=$2', [
+      workspaceId,
+      tenantId,
+    ]);
     await pool?.end();
   });
 
   it('paginates Work by updated_at descending with a seek cursor', async () => {
     const query = new PostgresProductWorkListQuery(pool);
-    const first = await query.listWorksLatestFirst(owner, { limit: 2, cursor: null });
-    expect(first.items.map((work) => work.id)).toEqual([workIds[2], workIds[1]]);
+    const first = await query.listWorksLatestFirst(owner, {
+      limit: 2,
+      cursor: null,
+    });
+    expect(first.items.map((work) => work.id)).toEqual([
+      workIds[2],
+      workIds[1],
+    ]);
     expect(first.nextCursor).toEqual(expect.any(String));
 
     const second = await query.listWorksLatestFirst(owner, {

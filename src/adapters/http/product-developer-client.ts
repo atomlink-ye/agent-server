@@ -139,8 +139,7 @@ export class ProductDeveloperClient {
   }
 
   public async runDefinition(input: RunDefinitionInput) {
-    const idempotencyKey =
-      input.idempotencyKey ?? `definition-${randomUUID()}`;
+    const idempotencyKey = input.idempotencyKey ?? `definition-${randomUUID()}`;
     const applied = await this.applyDefinition(input.source, idempotencyKey);
     const created = await this.createWork({
       definitionId: applied.definition.id,
@@ -259,7 +258,8 @@ function errorFrom(value: unknown): {
     if (Array.isArray(diagnostics) && diagnostics[0]) {
       const first = diagnostics[0] as Record<string, unknown>;
       return {
-        code: typeof first.code === 'string' ? first.code : 'invalid_definition',
+        code:
+          typeof first.code === 'string' ? first.code : 'invalid_definition',
         message:
           typeof first.message === 'string'
             ? first.message

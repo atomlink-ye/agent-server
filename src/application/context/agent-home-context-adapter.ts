@@ -21,11 +21,7 @@ import {
 } from '../../domain/context/context-fs.js';
 import { principalRef } from '../../domain/tenancy/product-context.js';
 
-/**
- * Compatibility bridge: the public Agent Home contract remains stable while
- * canonical ownership moves to ContextFS. New writes go only to ContextFS;
- * legacy rows remain readable until a later data migration removes them.
- */
+/** Agent Home public contract backed by ContextFS. */
 export class AgentHomeContextAdapter implements AgentHomeRepository {
   public constructor(
     private readonly files: LogicalFileStore,

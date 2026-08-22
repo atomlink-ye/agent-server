@@ -22,7 +22,10 @@ import type { ConversationRepository } from '../../application/ports/conversatio
 import type { WorkDefinitionResolutionPort } from '../../application/ports/work-definition-resolution.js';
 import type { WorkIdentityOwnerScope } from '../../application/ports/work-identity-repository.js';
 import type { LogicalFileStore } from '../../application/ports/logical-file-store.js';
-import { StartWorkRun, type StartWorkRunRequest } from '../../application/work/start-work-run.js';
+import {
+  StartWorkRun,
+  type StartWorkRunRequest,
+} from '../../application/work/start-work-run.js';
 import { WorkExecutionService } from '../../application/work/work-execution-service.js';
 import { QueryWorkProjectionFacts } from '../../application/work/query-work-projection-facts.js';
 import { validateProductWorkDefinition } from '../../application/work/validate-product-work-definition.js';
@@ -273,9 +276,7 @@ export function createWorkModule(options: {
           ? { conversations: options.conversations }
           : {}),
         conversationWorkLinks,
-        ...(context.chatContext
-          ? { chatContext: context.chatContext }
-          : {}),
+        ...(context.chatContext ? { chatContext: context.chatContext } : {}),
       });
     },
   };

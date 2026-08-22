@@ -15,7 +15,9 @@ const legacyAgentModules = new Set([
 // modules that no longer exist are removed with them: a deleted path left here
 // would let the duplicate model return at that exact path while this guard
 // stayed green.
-const allowedLegacyReaders = new Set(['src/domain/invokables/agent-definition.ts']);
+const allowedLegacyReaders = new Set([
+  'src/domain/invokables/agent-definition.ts',
+]);
 const importSpecifier = /(?:from|import)\s*\(?\s*['"]([^'"]+)['"]/gu;
 
 /**
@@ -69,7 +71,10 @@ describe('canonical Agent identity boundary', () => {
       'utf8',
     );
     const postgres = readFileSync(
-      resolve(root, 'src/infrastructure/postgres/postgres-invokable-repository.ts'),
+      resolve(
+        root,
+        'src/infrastructure/postgres/postgres-invokable-repository.ts',
+      ),
       'utf8',
     );
     for (const source of [port, postgres]) {

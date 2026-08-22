@@ -30,7 +30,11 @@ const createConversationSchema = z
 
 const messageSchema = z
   .object({
-    body: z.string().trim().min(1).max(64 * 1024),
+    body: z
+      .string()
+      .trim()
+      .min(1)
+      .max(64 * 1024),
   })
   .strict();
 
@@ -240,7 +244,10 @@ async function requireConversation(
 async function unreadFor(
   c: any,
   dependencies: ConversationRouteDependencies,
-): Promise<{ readonly lastReadSequence: number; readonly unreadCount: number }> {
+): Promise<{
+  readonly lastReadSequence: number;
+  readonly unreadCount: number;
+}> {
   const access = getAuthenticatedAccessContext(c);
   return dependencies.conversations.getUnread({
     tenantId: access.tenantId,
@@ -312,7 +319,11 @@ async function enableConversationWorkContext(
   dependencies: ConversationRouteDependencies,
 ) {
   if (!dependencies.workEntitlements)
-    throw new HttpError(404, 'not_found', 'The requested route does not exist.');
+    throw new HttpError(
+      404,
+      'not_found',
+      'The requested route does not exist.',
+    );
   const conversation = await requireConversation(c, dependencies);
   if (conversation.kind !== 'direct')
     throw new HttpError(
@@ -342,7 +353,11 @@ async function revokeConversationWorkContext(
   dependencies: ConversationRouteDependencies,
 ) {
   if (!dependencies.workEntitlements)
-    throw new HttpError(404, 'not_found', 'The requested route does not exist.');
+    throw new HttpError(
+      404,
+      'not_found',
+      'The requested route does not exist.',
+    );
   await requireConversation(c, dependencies);
   const access = getAuthenticatedAccessContext(c);
   await dependencies.workEntitlements.revoke({

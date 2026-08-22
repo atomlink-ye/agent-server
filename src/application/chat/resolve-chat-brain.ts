@@ -1,4 +1,7 @@
-import type { ResolvedChatBrain, ChatBrainResolver } from './chat-brain-resolver.js';
+import type {
+  ResolvedChatBrain,
+  ChatBrainResolver,
+} from './chat-brain-resolver.js';
 import type { ResolvedChatTurnContext } from './resolve-chat-turn-context.js';
 
 /** Focused Agent-definition/context projection seam for one resolved activation. */

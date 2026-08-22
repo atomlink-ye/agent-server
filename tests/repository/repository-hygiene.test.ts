@@ -29,9 +29,12 @@ const forbiddenRoots = [
   'scripts/record/',
 ];
 const forbiddenExact = ['Makefile', 'docs/agents/exec-plan-protocol.md'];
+// c3 and e8 are temporary phase aliases; generic letter-number forms include product versions.
+const temporaryName =
+  /(?:^|[-_.\/])(?:(?:phase|worker|lane)-[a-z]\d?|[ce]\d{1,2}|n\d+)(?:[-_.\/]|$)/i;
 
 describe('repository hygiene', () => {
-  it('keeps generated evidence and task history out of HEAD', () => {
+  it('keeps generated evidence and task-run artifacts out of HEAD', () => {
     for (const path of forbiddenExact) expect(tracked).not.toContain(path);
     for (const prefix of forbiddenRoots) {
       expect(
@@ -42,6 +45,15 @@ describe('repository hygiene', () => {
       ).toBe(false);
     }
     expect(tracked.some((path) => path.endsWith('.log'))).toBe(false);
+  });
+
+  it('keeps temporary phase and lane names out of long-lived source paths', () => {
+    const candidates = tracked.filter(
+      (path) =>
+        !path.startsWith('src/infrastructure/postgres/migrations/') &&
+        !path.startsWith('docs/decisions/'),
+    );
+    expect(candidates.filter((path) => temporaryName.test(path))).toEqual([]);
   });
 
   it('keeps package commands semantic and pnpm-native', () => {

@@ -21,7 +21,8 @@ function resolveTestDatabaseUrl(
 function assertDedicatedTestDatabase(connectionString: string): void {
   const parsed = new URL(connectionString);
   const databaseName = decodeURIComponent(parsed.pathname.replace(/^\//, ''));
-  if (!databaseName) throw new Error('test database URL must include a database name');
+  if (!databaseName)
+    throw new Error('test database URL must include a database name');
   if (/\b(prod|production|main|live)\b/i.test(databaseName)) {
     throw new Error(
       `refusing real Postgres tests against production-flavored database: ${databaseName}`,

@@ -103,7 +103,8 @@ export const CreateWorkResponseSchema = z
   .object({ work: WorkResponseSchema })
   .strict();
 
-export const UpdateWorkDefinitionVersionResponseSchema = CreateWorkResponseSchema;
+export const UpdateWorkDefinitionVersionResponseSchema =
+  CreateWorkResponseSchema;
 
 export const StartWorkRunResponseSchema = z
   .object({

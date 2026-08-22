@@ -16,7 +16,10 @@ export interface MaterializedChatReply {
  */
 export class MaterializeChatReply {
   public constructor(
-    private readonly conversations: Pick<ConversationRepository, 'appendMessage'>,
+    private readonly conversations: Pick<
+      ConversationRepository,
+      'appendMessage'
+    >,
     private readonly watermarks: Pick<
       ChatDispatchRepository,
       'advanceRuntimeWatermark'

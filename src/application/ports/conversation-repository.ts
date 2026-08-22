@@ -73,7 +73,10 @@ export interface ConversationRepository {
     readonly conversationId: string;
     readonly principalType: string;
     readonly principalId: string;
-  }): Promise<{ readonly lastReadSequence: number; readonly unreadCount: number }>;
+  }): Promise<{
+    readonly lastReadSequence: number;
+    readonly unreadCount: number;
+  }>;
 
   markRead(input: {
     readonly tenantId: string;

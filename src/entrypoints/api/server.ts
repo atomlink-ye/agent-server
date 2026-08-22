@@ -17,8 +17,13 @@ const { app, close } = await createService(config, logger);
 
 // The canonical frontend is a pure Vite client. Browser-facing BFF routes live
 // on Agent Server so service-account credentials never enter browser code.
-if (!process.env.AGENT_SERVER_SERVICE_TOKEN?.trim() && config.nodeEnv !== 'production') {
-  const localAccount = config.serviceAccounts?.find((account) => !account.disabled);
+if (
+  !process.env.AGENT_SERVER_SERVICE_TOKEN?.trim() &&
+  config.nodeEnv !== 'production'
+) {
+  const localAccount = config.serviceAccounts?.find(
+    (account) => !account.disabled,
+  );
   if (localAccount) process.env.AGENT_SERVER_SERVICE_TOKEN = localAccount.token;
 }
 registerBrowserCoworkerRoutes(app, config);

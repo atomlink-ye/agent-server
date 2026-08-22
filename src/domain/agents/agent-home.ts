@@ -19,9 +19,7 @@ export type AgentHomeNamespace = (typeof AGENT_HOME_NAMESPACES)[number];
 export class InvalidAgentHomePathError extends Error {
   public readonly code = 'invalid_agent_home_path';
   public constructor() {
-    super(
-      'The agent home path must be a normalized relative POSIX path.',
-    );
+    super('The agent home path must be a normalized relative POSIX path.');
   }
 }
 
@@ -44,9 +42,7 @@ export class AgentHomeNamespaceReadOnlyError extends Error {
 export class AgentHomeScopeRequiredError extends Error {
   public readonly code = 'scope_required';
   public constructor(public readonly namespace: AgentHomeNamespace) {
-    super(
-      `The ${namespace} namespace requires a scope parameter.`,
-    );
+    super(`The ${namespace} namespace requires a scope parameter.`);
   }
 }
 
@@ -93,8 +89,7 @@ function hasUnpairedSurrogate(value: string): boolean {
     const code = value.charCodeAt(index);
     if (code >= 0xd800 && code <= 0xdbff) {
       const next = value.charCodeAt(index + 1);
-      if (!Number.isFinite(next) || next < 0xdc00 || next > 0xdfff)
-        return true;
+      if (!Number.isFinite(next) || next < 0xdc00 || next > 0xdfff) return true;
       index += 1;
     } else if (code >= 0xdc00 && code <= 0xdfff) {
       return true;

@@ -246,7 +246,7 @@ describe('Product API v1 OI-38 cross-scope existence oracle', () => {
     const mcp = new RuntimeMcpServer(
       new RuntimeToolRegistry([workModule.contributeRuntime]),
     );
-    const grant = mcp.grants.issue({
+    const grant = await mcp.grants.issue({
       tenantId,
       workspaceId: workspaceA,
       principalType: 'service_account',
@@ -305,7 +305,7 @@ describe('Product API v1 OI-38 cross-scope existence oracle', () => {
         legacy: () => undefined,
       }),
     );
-    const grant = mcp.grants.issue({
+    const grant = await mcp.grants.issue({
       tenantId,
       workspaceId: workspaceA,
       principalType: 'service_account',

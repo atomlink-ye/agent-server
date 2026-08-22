@@ -12,9 +12,6 @@ export interface ProductWorkspace {
   readonly updatedAt: string;
 }
 
-/** @deprecated Prefer ProductWorkspace; retained while legacy callers migrate. */
-export type Workspace = ProductWorkspace;
-
 export interface ProductSession {
   readonly id: string;
   readonly workspaceId: string;
@@ -60,8 +57,14 @@ export interface SubmitSessionTurnInput {
   readonly origin: SessionTurnOrigin;
 }
 export interface SessionRepository {
-  createWorkspace(name: string, owner: AccessContext): Promise<ProductWorkspace>;
-  getWorkspace(id: string, owner: AccessContext): Promise<ProductWorkspace | null>;
+  createWorkspace(
+    name: string,
+    owner: AccessContext,
+  ): Promise<ProductWorkspace>;
+  getWorkspace(
+    id: string,
+    owner: AccessContext,
+  ): Promise<ProductWorkspace | null>;
   createSession(input: {
     workspaceId: string;
     agentVersionId: string;

@@ -6,13 +6,17 @@ import { ContextMemoryService } from './context-memory-service.js';
 export class ScopedMemoryResolver {
   public constructor(private readonly memory: ContextMemoryService) {}
 
-  public resolve(context: RuntimeInvocationContext): Promise<readonly MemoryRecord[]> {
+  public resolve(
+    context: RuntimeInvocationContext,
+  ): Promise<readonly MemoryRecord[]> {
     return this.memory.listVisible({
       tenantId: context.productScope.tenantId,
       workspaceId: context.productScope.workspaceId,
       agentDefinitionId: context.agentDefinitionId,
       actor: context.actor,
-      ...(context.conversationId ? { conversationId: context.conversationId } : {}),
+      ...(context.conversationId
+        ? { conversationId: context.conversationId }
+        : {}),
       ...(context.workId ? { workId: context.workId } : {}),
     });
   }

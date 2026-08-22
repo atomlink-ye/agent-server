@@ -26,6 +26,7 @@ import { TeamDriver } from '../teams/team-driver.js';
 import { encodeRootTaskRunRequestSnapshotRef } from '../tasks/root-task-input.js';
 import { CompleteRun } from './complete-run.js';
 import { ExecuteRun } from './execute-run.js';
+import { RUNTIME_RECOVERY_INSTRUCTION } from './run-prompt-context.js';
 import { FakeAgentRuntime } from '../../../tests/fixtures/fake-agent-runtime.js';
 import { collaborationToolRefsForRole } from '../../domain/collaboration/canonical-collaboration-tools.js';
 import type { CreateMemoryProposal } from '../memory/create-memory-proposal.js';
@@ -246,7 +247,7 @@ describe('ExecuteRun', () => {
     expect(outputCall?.[2]).not.toHaveProperty('detail_kind');
   });
 
-  it('passes the prior session provider Agent and persists the returned Agent id', async () => {
+  it('reuses the prior session provider Agent with its canonical bootstrap and persists the returned Agent id', async () => {
     const claim = createClaim();
     const task = {
       ...createTask('agent', 'managed-version-1'),
@@ -254,7 +255,19 @@ describe('ExecuteRun', () => {
       memorySnapshotId: 'snapshot-1',
       memorySnapshotHash: 'hash-1',
     } as Task;
-    const catalogResolve = vi.fn(async () => null);
+    const catalogResolve = vi.fn(async (ref: string) =>
+      ref === 'custom/skill'
+        ? {
+            ref,
+            name: 'Custom skill',
+            digest: 'sha256:custom-skill',
+            objectPath: 'skills/custom-skill',
+            manifestPath: 'skills/custom-skill/SKILL.md',
+            delivery: 'native_project' as const,
+            requiredToolRefs: [],
+          }
+        : null,
+    );
     const resolver = new ResolveAgentVersion(
       {
         findVersion: vi.fn(async () => ({
@@ -295,7 +308,19 @@ describe('ExecuteRun', () => {
       })),
     };
     const runtime = createRuntimeWithCandidates('agent-prior');
-    const binder = vi.fn(async () => undefined);
+    const extensionBinding = {
+      mcpServers: [
+        {
+          name: 'agent-server',
+          url: 'http://127.0.0.1:39117/mcp',
+          headers: { Authorization: 'Bearer grant-token' },
+        },
+      ],
+      endpointEpoch: 'epoch-1',
+      digest: 'sha256:extensions',
+      grantId: 'grant-1',
+    };
+    const binder = vi.fn(async () => extensionBinding);
     const batch = vi.fn(async () => undefined);
     const executeRun = new ExecuteRun(
       { execute: vi.fn(async ({ run }: { run: Run }) => run) } as never,
@@ -322,12 +347,18 @@ describe('ExecuteRun', () => {
         },
         prompt:
           'Pinned verified MEMORY.md:\npinned memory\n\nCurrent Task input:\nprivate prompt',
+        systemPrompt: expect.stringContaining('managed instructions'),
+        extensions: extensionBinding,
         proposalLimit: 1,
       }),
       expect.objectContaining({ emit: expect.any(Function) }),
     );
-    expect(catalogResolve).not.toHaveBeenCalled();
-    expect(binder).not.toHaveBeenCalled();
+    expect(catalogResolve).toHaveBeenCalledWith('custom/skill');
+    expect(binder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        skills: [expect.objectContaining({ ref: 'custom/skill' })],
+      }),
+    );
     expect(batch).toHaveBeenCalledTimes(1);
     expect(events.findLatestSessionBindingBySessionId).toHaveBeenCalledTimes(1);
     expect(events.bind).toHaveBeenLastCalledWith(
@@ -923,12 +954,12 @@ describe('ExecuteRun', () => {
           runtime: { modelPolicyRef: 'free-only' },
         },
       },
-    })) as unknown as (
-      owner: unknown,
-      versionId: string,
-    ) => Promise<never>;
+    })) as unknown as (owner: unknown, versionId: string) => Promise<never>;
     const findVersionByTenant = vi.fn(
-      async (input: { readonly tenantId: string; readonly versionId: string }) =>
+      async (input: {
+        readonly tenantId: string;
+        readonly versionId: string;
+      }) =>
         findVersion(
           {
             tenantId: input.tenantId,
@@ -972,12 +1003,16 @@ describe('ExecuteRun', () => {
         prompt: 'private prompt',
         systemPrompt:
           'Runtime contract: execute the supplied task input using the published agent instructions. Do not infer or access other session history.\n\nPublished AgentVersion instructions:\nmanaged instructions',
+        recoveryPrompt: `private prompt\n\n${RUNTIME_RECOVERY_INSTRUCTION}`,
       },
       undefined,
     );
-    expect(
-      JSON.stringify(vi.mocked(runtime.executeTurn).mock.calls[0]?.[0]),
-    ).not.toMatch(/package|modelPolicyRef|schema|template|completion|tools/);
+    const executionRequest = JSON.stringify(
+      vi.mocked(runtime.executeTurn).mock.calls[0]?.[0],
+    ).replace(RUNTIME_RECOVERY_INSTRUCTION, '');
+    expect(executionRequest).not.toMatch(
+      /package|modelPolicyRef|schema|template|completion|tools/,
+    );
     expect(completeRun.execute).toHaveBeenCalledTimes(1);
   });
 
@@ -1665,7 +1700,7 @@ describe('ExecuteRun', () => {
             findVersion: vi.fn(async () => null),
             findVersionByTenant: vi.fn(async () => null),
           } as never,
-      { resolve: vi.fn(async () => null) },
+          { resolve: vi.fn(async () => null) },
         ),
         events as never,
       );

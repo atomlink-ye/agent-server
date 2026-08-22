@@ -59,7 +59,8 @@ export async function seedPublishedWorkDefinition(
     memoryVersionIds: [],
     inputSchema,
   };
-  const parsed = validateProductWorkDefinition(`apiVersion: agentserver.dev/v1alpha1
+  const parsed =
+    validateProductWorkDefinition(`apiVersion: agentserver.dev/v1alpha1
 kind: WorkDefinition
 metadata:
   name: ${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}

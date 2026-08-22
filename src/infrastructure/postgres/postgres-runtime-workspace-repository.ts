@@ -1,5 +1,5 @@
 import type {
-  RuntimeWorkspace,
+  ExecutionWorkspaceState,
   RuntimeWorkspaceRepository,
   RuntimeWorkspaceScope,
 } from '../../application/ports/runtime-workspace-repository.js';
@@ -28,7 +28,7 @@ export class PostgresRuntimeWorkspaceRepository implements RuntimeWorkspaceRepos
     readonly productWorkspaceId: string;
     readonly principalType: string;
     readonly principalId: string;
-  }): Promise<RuntimeWorkspace> {
+  }): Promise<ExecutionWorkspaceState> {
     const result = await this.db.query(
       `SELECT DISTINCT rs.paseo_workspace_id
        FROM runtime_sessions rs
@@ -62,7 +62,7 @@ export class PostgresRuntimeWorkspaceRepository implements RuntimeWorkspaceRepos
     readonly productWorkspaceId: string;
     readonly principalType: string;
     readonly principalId: string;
-  }): Promise<RuntimeWorkspace> {
+  }): Promise<ExecutionWorkspaceState> {
     const result = await this.db.query(
       `SELECT DISTINCT rs.paseo_workspace_id
        FROM runtime_sessions rs
@@ -99,7 +99,7 @@ export class PostgresRuntimeWorkspaceRepository implements RuntimeWorkspaceRepos
     scope: RuntimeWorkspaceScope,
     productWorkspaceId: string,
     rows: readonly any[],
-  ): RuntimeWorkspace {
+  ): ExecutionWorkspaceState {
     const ids = rows.map((row) => row.paseo_workspace_id as string);
     if (ids.length > 1) throw new Error('Runtime workspace binding conflict.');
     return {

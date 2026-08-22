@@ -10,7 +10,12 @@ export const WorkDefinitionDiagnosticSchema = z
   .strict();
 
 export const WorkDefinitionSourceRequestSchema = z
-  .object({ source: z.string().min(1).max(64 * 1024) })
+  .object({
+    source: z
+      .string()
+      .min(1)
+      .max(64 * 1024),
+  })
   .strict();
 
 export const WorkDefinitionValidateSuccessSchema = z
@@ -78,7 +83,10 @@ export const ProductWorkDefinitionVersionSchema = z
     status: z.literal('published'),
     fingerprint: z.string().regex(/^sha256:[0-9a-f]{64}$/),
     source: z.record(z.string(), z.unknown()),
-    source_yaml: z.string().min(1).max(64 * 1024),
+    source_yaml: z
+      .string()
+      .min(1)
+      .max(64 * 1024),
     resolved: z
       .object({
         resource_manifest_fingerprint: z
@@ -160,4 +168,3 @@ export type ProductWorkDefinitionResponse = z.infer<
 export type ProductWorkDefinitionVersionResponse = z.infer<
   typeof ProductWorkDefinitionVersionSchema
 >;
-

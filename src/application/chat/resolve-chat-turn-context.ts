@@ -1,6 +1,9 @@
 import type { AgentChatRuntime } from '../../domain/chat/agent-chat-runtime.js';
 import type { ChatMessage } from '../../domain/chat/chat-message.js';
-import { principalRef, type PrincipalRef } from '../../domain/tenancy/product-context.js';
+import {
+  principalRef,
+  type PrincipalRef,
+} from '../../domain/tenancy/product-context.js';
 import type { ConversationWorkEntitlement } from '../../domain/chat/conversation-work-entitlement.js';
 import type {
   ChatDispatch,

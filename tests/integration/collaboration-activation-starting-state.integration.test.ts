@@ -153,7 +153,10 @@ describe('Collaboration activation with starting state', () => {
     const fixture = await seedFixture(pool);
 
     // Verify member starts in 'starting' state (true production scenario)
-    const before = await repository.findMemberRunById(fixture.memberId, fixture.owner);
+    const before = await repository.findMemberRunById(
+      fixture.memberId,
+      fixture.owner,
+    );
     expect(before?.status).toBe('starting');
 
     // Activate with expectedCurrentStatus accepting both 'starting' and 'idle'
@@ -169,7 +172,10 @@ describe('Collaboration activation with starting state', () => {
     expect(member.status).toBe('active');
 
     // Verify final state
-    const after = await repository.findMemberRunById(fixture.memberId, fixture.owner);
+    const after = await repository.findMemberRunById(
+      fixture.memberId,
+      fixture.owner,
+    );
     expect(after?.status).toBe('active');
   });
 
@@ -214,7 +220,10 @@ describe('Collaboration activation with starting state', () => {
     const fixture = await seedFixture(pool);
 
     // Verify member is in starting state
-    const before = await repository.findMemberRunById(fixture.memberId, fixture.owner);
+    const before = await repository.findMemberRunById(
+      fixture.memberId,
+      fixture.owner,
+    );
     expect(before?.status).toBe('starting');
 
     // Update with single expectedCurrentStatus='starting' should work
@@ -232,7 +241,10 @@ describe('Collaboration activation with starting state', () => {
     const fixture = await seedFixture(pool);
 
     // Verify member starts in 'starting' state
-    const before = await repository.findMemberRunById(fixture.memberId, fixture.owner);
+    const before = await repository.findMemberRunById(
+      fixture.memberId,
+      fixture.owner,
+    );
     expect(before?.status).toBe('starting');
 
     // Launch two concurrent attempts to activate the same member
@@ -265,12 +277,17 @@ describe('Collaboration activation with starting state', () => {
       expect(failedReason.status).toBe('rejected');
       if (failedReason.status === 'rejected') {
         expect(failedReason.reason).toBeInstanceOf(TeamExecutionError);
-        expect((failedReason.reason as TeamExecutionError).code).toBe('conflict');
+        expect((failedReason.reason as TeamExecutionError).code).toBe(
+          'conflict',
+        );
       }
     }
 
     // Verify final state: member is active (only one activation succeeded)
-    const after = await repository.findMemberRunById(fixture.memberId, fixture.owner);
+    const after = await repository.findMemberRunById(
+      fixture.memberId,
+      fixture.owner,
+    );
     expect(after?.status).toBe('active');
   });
 });

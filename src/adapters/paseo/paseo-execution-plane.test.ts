@@ -143,7 +143,9 @@ describe('PaseoExecutionPlane', () => {
     );
 
     expect(client.createCalls).toBe(0);
-    await attached.run({ runId: 'run-2', prompt: 'continue' });
+    if (attached.kind === 'replacement_required')
+      throw new Error('Expected the existing session to remain attachable.');
+    await attached.session.run({ runId: 'run-2', prompt: 'continue' });
     expect(client.sendCalls).toEqual([
       { agentId: 'existing-agent', text: 'continue' },
     ]);
@@ -154,21 +156,23 @@ describe('PaseoExecutionPlane', () => {
     client.timelineError = new Error('missing agent');
     const plane = createPlane(client);
 
-    await expect(
-      plane.attachSession(
-        { plane: 'paseo', externalSessionId: 'missing-agent' },
-        {
-          ...sessionSpec,
-          workspace: {
-            cwd: '/tmp/execution-plane-test/cell-1',
-            binding: {
-              plane: 'paseo',
-              externalWorkspaceId: 'existing-workspace',
-            },
+    const outcome = await plane.attachSession(
+      { plane: 'paseo', externalSessionId: 'missing-agent' },
+      {
+        ...sessionSpec,
+        workspace: {
+          cwd: '/tmp/execution-plane-test/cell-1',
+          binding: {
+            plane: 'paseo',
+            externalWorkspaceId: 'existing-workspace',
           },
         },
-      ),
-    ).rejects.toBeInstanceOf(ExecutionBindingUnavailableError);
+      },
+    );
+    expect(outcome).toEqual({
+      kind: 'replacement_required',
+      reason: 'provider_binding_stale',
+    });
     expect(client.createCalls).toBe(0);
     expect(client.sendCalls).toEqual([]);
   });

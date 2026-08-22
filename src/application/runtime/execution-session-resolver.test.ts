@@ -144,6 +144,27 @@ describe('ExecutionSessionResolver', () => {
     const calls: string[] = [];
     const runtime: RuntimeSession = {
       ...unboundRuntimeSession(),
+      status: 'ready',
+      currentGeneration: {
+        id: 'generation-1',
+        runtimeSessionId: 'runtime-session-1',
+        generation: 1,
+        workspaceBinding: {
+          plane: 'paseo',
+          externalWorkspaceId: 'external-workspace-1',
+        },
+        sessionBinding: {
+          plane: 'paseo',
+          externalSessionId: 'external-session-1',
+        },
+        appliedRevision: 1,
+        appliedSpecDigest: null,
+        endpointEpoch: 'none',
+        extensionGrantId: null,
+        status: 'active',
+        createdAt: '2026-08-22T00:00:00.000Z',
+        supersededAt: null,
+      },
       workspaceBinding: {
         plane: 'paseo',
         externalWorkspaceId: 'external-workspace-1',
@@ -154,7 +175,14 @@ describe('ExecutionSessionResolver', () => {
       },
     };
     const resolver = new ExecutionSessionResolver(fakePlane(calls), {
-      reconcileDesiredSpec: async () => runtime,
+      reconcileDesiredSpec: async ({ digest }) => ({
+        ...runtime,
+        desiredSpecDigest: digest,
+        currentGeneration: {
+          ...runtime.currentGeneration!,
+          appliedSpecDigest: digest,
+        },
+      }),
       bindExecution: async () => {
         throw new Error('must not persist on attach');
       },

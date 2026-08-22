@@ -41,6 +41,7 @@ import { registerSessionRoutes } from './routes/sessions.js';
 import { registerEnvironmentRoutes } from './routes/environments.js';
 import type { EnvironmentRegistry } from '../../application/ports/environment-registry.js';
 import type { InvokableRepository } from '../../application/ports/invokable-repository.js';
+import type { AgentResolutionApi } from '../../application/ports/agent-resolution-api.js';
 import type { TeamExecutionRepository } from '../../application/ports/team-execution-repository.js';
 import type { TeamMessageRepository } from '../../application/ports/team-message-repository.js';
 import type { TaskRepository } from '../../application/ports/task-repository.js';
@@ -104,6 +105,8 @@ export interface AppDependencies {
     >;
   readonly environmentRegistry?: EnvironmentRegistry;
   readonly invokableRepository?: InvokableRepository;
+  /** Legacy fixture composition only; production resourceModule owns this seam. */
+  readonly agentResolution?: AgentResolutionApi;
   readonly teamExecutions?: TeamExecutionRepository;
   readonly teamDriver?: Pick<TeamDriver, 'decideCompletion'>;
   readonly teamMessages?: TeamMessageRepository;
@@ -238,10 +241,15 @@ export function createApp(dependencies: AppDependencies): Hono<ApiEnvironment> {
         config: dependencies.config,
         agentRegistry: dependencies.agentRegistry,
       });
-    if (dependencies.invokableRepository && dependencies.environmentRegistry)
+    if (
+      dependencies.invokableRepository &&
+      dependencies.environmentRegistry &&
+      dependencies.agentResolution
+    )
       registerTeamRoutes(app, {
         config: dependencies.config,
         invokableRepository: dependencies.invokableRepository,
+        agentResolution: dependencies.agentResolution,
         environmentRegistry: dependencies.environmentRegistry,
       });
     if (dependencies.environmentRegistry)

@@ -284,7 +284,6 @@ describe('ExecuteRun', () => {
           },
         })) as never,
       },
-      { findPublishedAgentVersionById: vi.fn(async () => null) },
       { resolve: catalogResolve },
     );
     const events = {
@@ -940,10 +939,8 @@ describe('ExecuteRun', () => {
           input.versionId,
         ),
     );
-    const findLegacy = vi.fn(async () => null);
     const resolver = new ResolveAgentVersion(
       { findVersion, findVersionByTenant },
-      { findPublishedAgentVersionById: findLegacy },
       { resolve: vi.fn(async () => null) },
     );
     const runtime = createRuntime();
@@ -968,7 +965,6 @@ describe('ExecuteRun', () => {
       },
       'managed-version-1',
     );
-    expect(findLegacy).not.toHaveBeenCalled();
     expect(runtime.executeTurn).toHaveBeenCalledTimes(1);
     expect(runtime.executeTurn).toHaveBeenCalledWith(
       {
@@ -1022,7 +1018,6 @@ describe('ExecuteRun', () => {
           },
         })) as never,
       },
-      { findPublishedAgentVersionById: vi.fn(async () => null) },
       { resolve: vi.fn(async () => null) },
     );
     const runtime = createRuntimeWithCandidates();
@@ -1057,10 +1052,6 @@ describe('ExecuteRun', () => {
         spec: { instructions: 'not executable', tools: [], skills: [] },
       },
     })) as never;
-    const findLegacy = vi.fn(async () => ({
-      id: 'draft-or-foreign-version',
-      instructions: 'legacy must not be consulted by ExecuteRun',
-    })) as never;
     const resolver = new ResolveAgentVersion(
       {
         findVersion,
@@ -1072,7 +1063,6 @@ describe('ExecuteRun', () => {
           },
         })) as never,
       },
-      { findPublishedAgentVersionById: findLegacy },
       { resolve: vi.fn(async () => null) },
     );
     const runtime = createRuntime();
@@ -1091,48 +1081,7 @@ describe('ExecuteRun', () => {
     expect(completed.status).toBe('failed');
     expect(completed.error?.code).toBe('runtime_execution_failed');
     expect(runtime.executeTurn).not.toHaveBeenCalled();
-    expect(findLegacy).not.toHaveBeenCalled();
     expect(completeRun.execute).toHaveBeenCalledTimes(1);
-  });
-
-  it('preserves the legacy fallback prompt shape through the shared resolver', async () => {
-    const claim = createClaim();
-    const task = createTask('agent', 'legacy-version-1');
-    const runtime = createRuntime();
-    const completeRun = {
-      execute: vi.fn(async ({ run }: { run: Run }) => run),
-    } as unknown as CompleteRun;
-    const resolver = new ResolveAgentVersion(
-      {
-        findVersion: vi.fn(async () => null),
-        findVersionByTenant: vi.fn(async () => null),
-      },
-      {
-        findPublishedAgentVersionById: vi.fn(async () => ({
-          id: 'legacy-version-1',
-          instructions: 'legacy instructions',
-        })) as never,
-      },
-      { resolve: vi.fn(async () => null) },
-    );
-    const executeRun = createDirectExecuteRun({
-      completeRun,
-      runtime,
-      task,
-      resolver,
-    });
-
-    await executeRun.execute(claim);
-
-    expect(runtime.executeTurn).toHaveBeenCalledWith(
-      {
-        runId: claim.run.id,
-        prompt: 'private prompt',
-        systemPrompt:
-          'Runtime contract: execute the supplied task input using the published agent instructions. Do not infer or access other session history.\n\nPublished AgentVersion instructions:\nlegacy instructions',
-      },
-      undefined,
-    );
   });
 
   it('reports persistence failure with a receipt after runtime success', async () => {
@@ -1457,7 +1406,6 @@ describe('ExecuteRun', () => {
           },
         })) as never,
       },
-      { findPublishedAgentVersionById: vi.fn(async () => null) },
       { resolve: vi.fn(async () => null) },
     );
     const createMemoryProposal = {
@@ -1543,7 +1491,6 @@ describe('ExecuteRun', () => {
           },
         })) as never,
       },
-      { findPublishedAgentVersionById: vi.fn(async () => null) },
       { resolve: vi.fn(async () => null) },
     );
     await new ExecuteRun(
@@ -1650,7 +1597,6 @@ describe('ExecuteRun', () => {
           }),
         ) as never,
       },
-      { findPublishedAgentVersionById: vi.fn(async () => null) },
       { resolve: vi.fn(async () => null) },
     );
     const executeRun = new ExecuteRun(
@@ -1719,8 +1665,7 @@ describe('ExecuteRun', () => {
             findVersion: vi.fn(async () => null),
             findVersionByTenant: vi.fn(async () => null),
           } as never,
-          {} as never,
-          { resolve: vi.fn(async () => null) },
+      { resolve: vi.fn(async () => null) },
         ),
         events as never,
       );

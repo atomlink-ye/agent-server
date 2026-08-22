@@ -95,9 +95,28 @@ describe('North Star runtime grant boundary', () => {
         AGENT_SERVER_PRODUCT_WORK_RUN_START_TOOL_REF,
       ],
     });
+    const principal = { type: 'service_account' as const, id: 'principal-grant' };
+    const productScope = {
+      tenantId: 'tenant-grant',
+      workspaceId: 'workspace-grant',
+    };
     const session = await h.runtime.createSession({
       runtimeSessionId: 'chat-runtime-grant',
-      systemPrompt: 'Agent definition ID: agent-grant',
+      systemPrompt: 'Structured Agent identity is supplied by RuntimeInvocationContext.',
+      invocationContext: {
+        scope: {
+          kind: 'agent_chat',
+          agentChatRuntimeId: 'chat-runtime-grant',
+          runtimeEpoch: 1,
+        },
+        productScope,
+        actor: principal,
+        agentOwner: { scope: productScope, principal },
+        agentDefinitionId: 'agent-grant',
+        agentVersionId: 'agent-version-grant',
+        conversationId: 'conversation-grant',
+        triggerMessageId: 'message-grant',
+      },
       mcpServer: mcp,
       token: receipt.token,
     });

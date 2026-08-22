@@ -1,20 +1,16 @@
-import type { AgentDefinition } from '../../domain/invokables/agent-definition.js';
-import type { AgentVersion } from '../../domain/invokables/agent-version.js';
 import type { InvokableOwnerScope } from '../../domain/invokables/invokable.js';
 import type { TeamDefinition } from '../../domain/invokables/team-definition.js';
 import type { TeamVersion } from '../../domain/invokables/team-version.js';
 
 export type { InvokableOwnerScope };
 
+/**
+ * Compatibility repository for Team invokables only.
+ *
+ * AgentDefinition / ManagedAgentVersion are owned by AgentRegistry and
+ * AgentResolutionApi. Do not add Agent persistence back to this seam.
+ */
 export interface InvokableRepository {
-  saveAgentDefinition(definition: AgentDefinition): Promise<void>;
-  findAgentDefinitionById(id: string): Promise<AgentDefinition | null>;
-  saveAgentVersion(version: AgentVersion): Promise<void>;
-  findAgentVersionById(id: string): Promise<AgentVersion | null>;
-  findPublishedAgentVersionById(
-    id: string,
-    ownerScope: InvokableOwnerScope,
-  ): Promise<AgentVersion | null>;
   saveTeamDefinition(definition: TeamDefinition): Promise<void>;
   findTeamDefinitionById(id: string): Promise<TeamDefinition | null>;
   listTeamVersionsByDefinitionId?(

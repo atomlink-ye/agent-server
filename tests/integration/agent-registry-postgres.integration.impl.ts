@@ -334,34 +334,6 @@ describe('managed agent registry migration', () => {
     );
   });
 
-  it('keeps legacy definition repository upserts mutable', async () => {
-    const db = await database();
-    const repository = new PostgresInvokableRepository(db);
-    const definition = createAgentDefinition({
-      id: '00000000-0000-4000-8000-0000000b0023',
-      tenantId: 'legacy_tenant',
-      workspaceId: 'legacy_workspace',
-      principalType: 'user',
-      principalId: 'legacy_user',
-      name: 'Legacy Agent',
-      description: 'before',
-      now: () => new Date(now),
-    });
-    await repository.saveAgentDefinition(definition);
-    await repository.saveAgentDefinition({
-      ...definition,
-      name: 'Legacy Agent Updated',
-      description: 'after',
-      updatedAt: '2026-07-23T10:01:00.000Z',
-    });
-    await expect(
-      repository.findAgentDefinitionById(definition.id),
-    ).resolves.toMatchObject({
-      name: 'Legacy Agent Updated',
-      description: 'after',
-    });
-  });
-
   it.each([
     ['display name', "name = 'changed'"],
     ['normalized name', "normalized_name = 'changed'"],
@@ -377,25 +349,6 @@ describe('managed agent registry migration', () => {
       db.query(`UPDATE agent_definitions SET ${assignment} WHERE id = $1`, [
         definitionId,
       ]),
-    ).rejects.toThrow(/immutable|managed|definition/i);
-  });
-
-  it('prevents repository upsert from mutating a managed definition', async () => {
-    const db = await database();
-    await insertManagedDefinition(db);
-    const repository = new PostgresInvokableRepository(db);
-    await expect(
-      repository.saveAgentDefinition({
-        id: definitionId,
-        tenantId: 'tenant_changed',
-        workspaceId: 'workspace_changed',
-        principalType: 'service_account',
-        principalId: 'principal_changed',
-        name: 'Changed by repository',
-        description: 'must not persist',
-        createdAt: now,
-        updatedAt: '2026-07-23T10:01:00.000Z',
-      }),
     ).rejects.toThrow(/immutable|managed|definition/i);
   });
 

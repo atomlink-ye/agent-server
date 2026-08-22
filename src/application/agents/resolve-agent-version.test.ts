@@ -47,17 +47,14 @@ describe('ResolveAgentVersion', () => {
           input.versionId,
         ),
     );
-    const findLegacy = vi.fn(async () => ({ instructions: 'legacy' })) as never;
     const resolver = new ResolveAgentVersion(
       { findVersion, findVersionByTenant },
-      { findPublishedAgentVersionById: findLegacy },
       { resolve: vi.fn(async () => null) },
     );
 
     await expect(
       resolver.resolvePublished('version-1', scope),
     ).resolves.toBeNull();
-    expect(findLegacy).not.toHaveBeenCalled();
     expect(findVersion).toHaveBeenCalledWith(
       {
         tenantId: scope.tenantId,
@@ -75,7 +72,6 @@ describe('ResolveAgentVersion', () => {
         findVersion: vi.fn(async () => managed('published', 'managed')),
         findVersionByTenant: vi.fn(async () => managed('published', 'managed')),
       },
-      { findPublishedAgentVersionById: vi.fn() },
       { resolve: vi.fn(async () => null) },
     );
 
@@ -92,32 +88,17 @@ describe('ResolveAgentVersion', () => {
     });
   });
 
-  it('falls back to a legacy published version only when managed is absent', async () => {
-    const findLegacy = vi.fn(async () => ({
-      id: 'version-1',
-      instructions: 'legacy',
-      proposalLimit: 0,
-    })) as never;
+  it('returns null when no managed published version exists', async () => {
     const resolver = new ResolveAgentVersion(
       {
         findVersion: vi.fn(async () => null),
         findVersionByTenant: vi.fn(async () => null),
       },
-      { findPublishedAgentVersionById: findLegacy },
       { resolve: vi.fn(async () => null) },
     );
 
     await expect(
       resolver.resolvePublished('version-1', scope),
-    ).resolves.toEqual({
-      source: 'legacy',
-      id: 'version-1',
-      instructions: 'legacy',
-      modelPolicyRef: 'free-only',
-      proposalLimit: 0,
-      skills: [],
-      toolRefs: [],
-    });
-    expect(findLegacy).toHaveBeenCalledWith('version-1', scope);
+    ).resolves.toBeNull();
   });
 });

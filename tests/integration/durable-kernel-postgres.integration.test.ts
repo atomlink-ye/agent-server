@@ -20,10 +20,6 @@ import { transitionRun } from '../../src/domain/runs/run.js';
 import { createRootTask } from '../../src/domain/tasks/task.js';
 import { createMemoryProposal } from '../../src/domain/workspace-memory/memory-proposal.js';
 import { createAgentDefinition } from '../../src/domain/invokables/agent-definition.js';
-import {
-  createDraftAgentVersion,
-  publishAgentVersion,
-} from '../../src/domain/invokables/agent-version.js';
 import { createTeamDefinition } from '../../src/domain/invokables/team-definition.js';
 import {
   createDraftTeamVersion,
@@ -38,6 +34,7 @@ import {
 import { PostgresRunDispatcher } from '../../src/infrastructure/postgres/postgres-run-dispatcher.js';
 import { PostgresAdmissionRepository } from '../../src/infrastructure/postgres/postgres-admission-repository.js';
 import { PostgresInvokableRepository } from '../../src/infrastructure/postgres/postgres-invokable-repository.js';
+import { canonicalAgentResolver, seedCanonicalPublishedAgent } from '../fixtures/canonical-agent.js';
 import { PostgresRunRepository } from '../../src/infrastructure/postgres/postgres-run-repository.js';
 import { PostgresTaskRepository } from '../../src/infrastructure/postgres/postgres-task-repository.js';
 import { PostgresWorkspaceMemoryRepository } from '../../src/infrastructure/postgres/postgres-workspace-memory-repository.js';
@@ -1112,35 +1109,18 @@ describe('durable kernel postgres bootstrap', () => {
     await applyDurableKernelMigrations(database);
 
     const invokables = new PostgresInvokableRepository(database);
-    const createdAt = () => new Date('2026-07-22T12:00:00.000Z');
-    const publishedAt = () => new Date('2026-07-22T12:10:00.000Z');
-    const agentDefinition = createAgentDefinition({
-      id: '00000000-0000-4000-8000-000000030001',
-      tenantId: primaryAccessContext.tenantId,
-      workspaceId: primaryAccessContext.workspaceId,
-      principalType: primaryAccessContext.principalType,
-      principalId: primaryAccessContext.principalId,
-      name: 'Task Agent',
-      description: 'Used for canonical task invoke',
-      now: createdAt,
-    });
-    const agentVersion = publishAgentVersion(
-      createDraftAgentVersion({
-        id: '00000000-0000-4000-8000-000000030101',
-        definitionId: agentDefinition.id,
-        tenantId: primaryAccessContext.tenantId,
-        workspaceId: primaryAccessContext.workspaceId,
-        principalType: primaryAccessContext.principalType,
-        principalId: primaryAccessContext.principalId,
-        name: 'Task Agent v1',
-        description: 'Published task agent',
+    const { version: agentVersion } = await seedCanonicalPublishedAgent(
+      database,
+      primaryAccessContext,
+      {
+        definitionId: '00000000-0000-4000-8000-000000030001',
+        versionId: '00000000-0000-4000-8000-000000030101',
+        name: 'Task Agent',
+        description: 'Used for canonical task invoke',
         instructions: 'Do the task.',
-        now: createdAt,
-      }),
-      publishedAt,
+        now: new Date('2026-07-22T12:00:00.000Z'),
+      },
     );
-    await invokables.saveAgentDefinition(agentDefinition);
-    await invokables.saveAgentVersion(agentVersion);
 
     const tasks = new PostgresTaskRepository(database);
     const runs = new PostgresRunRepository(database);
@@ -1148,6 +1128,7 @@ describe('durable kernel postgres bootstrap', () => {
     const invoked = await new InvokeTask(
       admissions,
       invokables,
+      canonicalAgentResolver(database),
       () => new Date('2026-07-22T12:15:00.000Z'),
     ).execute({
       idempotencyKey: 'task-key',
@@ -1701,35 +1682,18 @@ describe('durable kernel postgres bootstrap', () => {
     await applyDurableKernelMigrations(database);
 
     const invokables = new PostgresInvokableRepository(database);
-    const createdAt = () => new Date('2026-07-22T12:00:00.000Z');
-    const publishedAt = () => new Date('2026-07-22T12:05:00.000Z');
-    const agentDefinition = createAgentDefinition({
-      id: '00000000-0000-4000-8000-000000040001',
-      tenantId: primaryAccessContext.tenantId,
-      workspaceId: primaryAccessContext.workspaceId,
-      principalType: primaryAccessContext.principalType,
-      principalId: primaryAccessContext.principalId,
-      name: 'Canonical Agent',
-      description: 'Executes through the task path',
-      now: createdAt,
-    });
-    const agentVersion = publishAgentVersion(
-      createDraftAgentVersion({
-        id: '00000000-0000-4000-8000-000000040101',
-        definitionId: agentDefinition.id,
-        tenantId: primaryAccessContext.tenantId,
-        workspaceId: primaryAccessContext.workspaceId,
-        principalType: primaryAccessContext.principalType,
-        principalId: primaryAccessContext.principalId,
-        name: 'Canonical Agent v1',
-        description: 'Published agent',
+    const { version: agentVersion } = await seedCanonicalPublishedAgent(
+      database,
+      primaryAccessContext,
+      {
+        definitionId: '00000000-0000-4000-8000-000000040001',
+        versionId: '00000000-0000-4000-8000-000000040101',
+        name: 'Canonical Agent',
+        description: 'Executes through the task path',
         instructions: 'Reply with the analyzed result only.',
-        now: createdAt,
-      }),
-      publishedAt,
+        now: new Date('2026-07-22T12:00:00.000Z'),
+      },
     );
-    await invokables.saveAgentDefinition(agentDefinition);
-    await invokables.saveAgentVersion(agentVersion);
 
     const tasks = new PostgresTaskRepository(database);
     const runs = new PostgresRunRepository(database);
@@ -1737,6 +1701,7 @@ describe('durable kernel postgres bootstrap', () => {
     const invocation = await new InvokeTask(
       admissions,
       invokables,
+      canonicalAgentResolver(database),
       clock.now,
     ).execute({
       idempotencyKey: 'canonical-agent-task',

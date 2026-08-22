@@ -180,16 +180,12 @@ function requiredMcp(spec: ExecutionSessionSpec): ExecutionMcpServerConfig {
 }
 
 function agentDefinitionId(spec: ExecutionSessionSpec): string {
-  // The structured invocation context is authoritative. The prompt fallback is
-  // retained temporarily for focused tests that predate RuntimeInvocationContext.
-  if (spec.invocationContext?.agentDefinitionId)
-    return spec.invocationContext.agentDefinitionId;
-  const match = /^Agent definition ID: (.+)$/m.exec(spec.systemPrompt);
-  if (!match?.[1])
+  const id = spec.invocationContext?.agentDefinitionId;
+  if (!id)
     throw new Error(
-      'Scripted execution could not read the agent definition ID.',
+      'Scripted execution requires agentDefinitionId in RuntimeInvocationContext.',
     );
-  return match[1];
+  return id;
 }
 
 function firstWorkflow(value: unknown): {

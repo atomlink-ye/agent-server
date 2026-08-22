@@ -5,11 +5,6 @@ import type { ChannelOutboxInput } from '../../src/domain/channels/channel-deliv
 import type { ChannelIngressInput } from '../../src/domain/channels/channel-event.js';
 import { GetTask } from '../../src/application/tasks/get-task.js';
 import { InvokeTask } from '../../src/application/tasks/invoke-task.js';
-import { createAgentDefinition } from '../../src/domain/invokables/agent-definition.js';
-import {
-  createDraftAgentVersion,
-  publishAgentVersion,
-} from '../../src/domain/invokables/agent-version.js';
 import {
   applyDurableKernelMigrations,
   createPostgresPool,
@@ -17,6 +12,7 @@ import {
 import { PostgresAdmissionRepository } from '../../src/infrastructure/postgres/postgres-admission-repository.js';
 import { PostgresChannelRepository } from '../../src/infrastructure/postgres/postgres-channel-repository.js';
 import { PostgresInvokableRepository } from '../../src/infrastructure/postgres/postgres-invokable-repository.js';
+import { canonicalAgentResolver, seedCanonicalPublishedAgent } from '../fixtures/canonical-agent.js';
 import { PostgresTaskRepository } from '../../src/infrastructure/postgres/postgres-task-repository.js';
 import { PostgresSessionRepository } from '../../src/infrastructure/postgres/postgres-session-repository.js';
 import { ResolveLarkBinding } from '../../src/application/channels/resolve-lark-binding.js';
@@ -58,6 +54,7 @@ describeRealPostgres('real PostgreSQL admission pool', () => {
         // Keep the pre-admission published-version lookup off the two
         // transaction connections used by the admission pool.
         new PostgresInvokableRepository(readerPool!),
+        canonicalAgentResolver(readerPool!),
         () => new Date('2026-07-23T12:00:00.000Z'),
       )
     : null;
@@ -68,28 +65,14 @@ describeRealPostgres('real PostgreSQL admission pool', () => {
     await applyDurableKernelMigrations(pool);
     await cleanTestRows(pool);
 
-    const definition = createAgentDefinition({
-      id: agentDefinitionId,
-      ...owner,
+    await seedCanonicalPublishedAgent(pool, owner, {
+      definitionId: agentDefinitionId,
+      versionId: agentVersionId,
       name: 'Real PostgreSQL admission agent',
       description: 'Admission integration fixture',
-      now: () => new Date('2026-07-23T11:00:00.000Z'),
+      instructions: 'Return the input unchanged.',
+      now: new Date('2026-07-23T11:00:00.000Z'),
     });
-    const version = publishAgentVersion(
-      createDraftAgentVersion({
-        id: agentVersionId,
-        definitionId: definition.id,
-        ...owner,
-        name: 'Real PostgreSQL admission agent v1',
-        description: 'Published admission integration fixture',
-        instructions: 'Return the input unchanged.',
-        now: () => new Date('2026-07-23T11:00:00.000Z'),
-      }),
-      () => new Date('2026-07-23T11:05:00.000Z'),
-    );
-    const invokables = new PostgresInvokableRepository(pool);
-    await invokables.saveAgentDefinition(definition);
-    await invokables.saveAgentVersion(version);
   });
 
   afterAll(async () => {
@@ -492,7 +475,8 @@ describeRealPostgres('real PostgreSQL admission pool', () => {
   it('settles concurrent same-key calls to one committed task and run without rollback leakage', async () => {
     const concurrentInvoke = new InvokeTask(
       new PostgresAdmissionRepository(pool!),
-      new BarrierInvokableRepository(readerPool!, createTwoPartyBarrier()),
+      new PostgresInvokableRepository(readerPool!),
+      barrierAgentResolver(readerPool!, createTwoPartyBarrier()),
       () => new Date('2026-07-23T12:00:00.000Z'),
     );
     const request = {
@@ -752,28 +736,14 @@ describeRealPostgres('real PostgreSQL admission pool', () => {
       owner,
     );
     const sessionOwner = { ...owner, workspaceId: workspace.id };
-    const definition = createAgentDefinition({
-      id: crypto.randomUUID(),
-      ...sessionOwner,
+    const { version } = await seedCanonicalPublishedAgent(pool!, sessionOwner, {
+      definitionId: crypto.randomUUID(),
+      versionId: crypto.randomUUID(),
       name: 'Task 6 real PG agent',
       description: 'Task 6 fixture',
-      now: () => new Date('2026-07-23T11:00:00.000Z'),
+      instructions: 'Return the input unchanged.',
+      now: new Date('2026-07-23T11:00:00.000Z'),
     });
-    const version = publishAgentVersion(
-      createDraftAgentVersion({
-        id: crypto.randomUUID(),
-        definitionId: definition.id,
-        ...sessionOwner,
-        name: 'Task 6 real PG agent v1',
-        description: 'Task 6 fixture',
-        instructions: 'Return the input unchanged.',
-        now: () => new Date('2026-07-23T11:00:00.000Z'),
-      }),
-      () => new Date('2026-07-23T11:05:00.000Z'),
-    );
-    const invokables = new PostgresInvokableRepository(pool!);
-    await invokables.saveAgentDefinition(definition);
-    await invokables.saveAgentVersion(version);
     const channel = new PostgresChannelRepository(pool!);
     const input = {
       id: crypto.randomUUID(),
@@ -927,23 +897,20 @@ describeRealPostgres('real PostgreSQL admission pool', () => {
   });
 });
 
-class BarrierInvokableRepository extends PostgresInvokableRepository {
-  public constructor(
-    database: ConstructorParameters<typeof PostgresInvokableRepository>[0],
-    private readonly arrive: () => Promise<void>,
-  ) {
-    super(database);
-  }
-
-  public override async findPublishedAgentVersionById(
-    ...args: Parameters<
-      PostgresInvokableRepository['findPublishedAgentVersionById']
-    >
-  ) {
-    const version = await super.findPublishedAgentVersionById(...args);
-    await this.arrive();
-    return version;
-  }
+function barrierAgentResolver(
+  database: Parameters<typeof canonicalAgentResolver>[0],
+  arrive: () => Promise<void>,
+) {
+  const resolver = canonicalAgentResolver(database);
+  return {
+    async resolvePublished(
+      ...args: Parameters<typeof resolver.resolvePublished>
+    ) {
+      const value = await resolver.resolvePublished(...args);
+      await arrive();
+      return value;
+    },
+  };
 }
 
 function createTwoPartyBarrier(): () => Promise<void> {

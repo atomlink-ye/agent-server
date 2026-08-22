@@ -1,7 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 
 import type { AccessContext } from '../../platform/access-context.js';
-import { ResolveAgentVersion } from '../agents/resolve-agent-version.js';
 import type { AgentResolutionApi } from '../ports/agent-resolution-api.js';
 import type {
   AdmissionOwnerScope,
@@ -45,32 +44,10 @@ export class InvokeTask {
   public constructor(
     private readonly admissions: AdmissionRepository,
     private readonly definitions: DefinitionReadApi,
-    resolverOrNow: AgentResolutionApi | (() => Date) = new ResolveAgentVersion(
-      {
-        findVersion: async () => null,
-        findVersionByTenant: async () => null,
-      },
-      definitions,
-      { resolve: async () => null },
-    ),
-    now: () => Date = () => new Date(),
+    private readonly resolver: AgentResolutionApi,
+    private readonly now: () => Date = () => new Date(),
   ) {
-    this.resolver =
-      typeof resolverOrNow === 'function'
-        ? new ResolveAgentVersion(
-            {
-              findVersion: async () => null,
-              findVersionByTenant: async () => null,
-            },
-            definitions,
-            { resolve: async () => null },
-          )
-        : resolverOrNow;
-    this.now = typeof resolverOrNow === 'function' ? resolverOrNow : now;
   }
-
-  private readonly resolver: AgentResolutionApi;
-  private readonly now: () => Date;
 
   public async execute(request: InvokeTaskRequest): Promise<InvokeTaskResult> {
     const resolvedWorkspaceId = resolveWorkspaceId(
@@ -97,9 +74,7 @@ export class InvokeTask {
           request.accessContext,
         );
 
-        if (existing) {
-          return existing;
-        }
+        if (existing) return existing;
 
         await this.assertPublishedInvokableExists(request);
 
@@ -115,8 +90,7 @@ export class InvokeTask {
           originRef: null,
           invokableKind: request.invokable.kind,
           invokableVersionId: request.invokable.versionId,
-          inputSnapshotRef:
-            encodeRootTaskRunRequestSnapshotRef(normalizedInput),
+          inputSnapshotRef: encodeRootTaskRunRequestSnapshotRef(normalizedInput),
           inputFingerprint: fingerprint,
           now: frozenNow,
         });
@@ -158,16 +132,9 @@ export class InvokeTask {
             request.accessContext,
           ),
         );
-
-        if (recovered) {
-          return recovered;
-        }
-
-        throw new Error(
-          'Admission conflict recovery could not reload the task',
-        );
+        if (recovered) return recovered;
+        throw new Error('Admission conflict recovery could not reload the task');
       }
-
       throw error;
     }
   }
@@ -183,15 +150,9 @@ export class InvokeTask {
       idempotencyKey,
       toAdmissionOwnerScope(accessContext),
     );
-
-    if (!existing) {
-      return null;
-    }
-
-    if (existing.requestFingerprint !== fingerprint) {
+    if (!existing) return null;
+    if (existing.requestFingerprint !== fingerprint)
       throw new IdempotencyConflictError();
-    }
-
     return {
       task: await this.loadTask(
         transaction.tasks,
@@ -211,11 +172,7 @@ export class InvokeTask {
       taskId,
       toTaskOwnerScope(accessContext),
     );
-
-    if (!task) {
-      throw new Error('Admitted task could not be reloaded');
-    }
-
+    if (!task) throw new Error('Admitted task could not be reloaded');
     return task;
   }
 
@@ -232,16 +189,12 @@ export class InvokeTask {
             request.invokable.versionId,
             toInvokableOwnerScope(request.accessContext),
           );
-
-    if (!version) {
-      throw new InvokableNotFoundError();
-    }
+    if (!version) throw new InvokableNotFoundError();
   }
 }
 
 export class InvokableNotFoundError extends Error {
   public readonly code = 'invokable_not_found';
-
   public constructor() {
     super('The requested published invokable does not exist.');
     this.name = 'InvokableNotFoundError';
@@ -250,7 +203,6 @@ export class InvokableNotFoundError extends Error {
 
 export class WorkspaceScopeMismatchError extends Error {
   public readonly code = 'workspace_scope_mismatch';
-
   public constructor() {
     super('The requested workspace_id must match the authenticated workspace.');
     this.name = 'WorkspaceScopeMismatchError';
@@ -259,11 +211,8 @@ export class WorkspaceScopeMismatchError extends Error {
 
 export class IdempotencyConflictError extends Error {
   public readonly code = 'idempotency_conflict';
-
   public constructor() {
-    super(
-      'The Idempotency-Key cannot be reused with a different request body.',
-    );
+    super('The Idempotency-Key cannot be reused with a different request body.');
     this.name = 'IdempotencyConflictError';
   }
 }
@@ -272,14 +221,9 @@ function resolveWorkspaceId(
   workspaceId: string | undefined,
   accessContext: AccessContext,
 ): string {
-  if (workspaceId === undefined) {
-    return accessContext.workspaceId;
-  }
-
-  if (workspaceId !== accessContext.workspaceId) {
+  if (workspaceId === undefined) return accessContext.workspaceId;
+  if (workspaceId !== accessContext.workspaceId)
     throw new WorkspaceScopeMismatchError();
-  }
-
   return workspaceId;
 }
 

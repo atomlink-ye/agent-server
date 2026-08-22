@@ -2,16 +2,12 @@ import type {
   AgentRegistry,
   ManagedAgentDefinitionRead,
 } from '../ports/agent-registry.js';
-import type { DefinitionReadApi } from '../ports/definition-read-api.js';
 import {
   isModelPolicyRef,
   type ModelPolicyRef,
 } from '../../domain/agents/managed-agent-package.js';
 import { resourceOwner, type ResourceOwner } from '../../domain/tenancy/product-context.js';
-import {
-  AGENT_SERVER_MEMORY_READ_TOOL_REF,
-  SUPPORTED_MANAGED_AGENT_TOOL_REFS,
-} from './built-in-skills.js';
+import { SUPPORTED_MANAGED_AGENT_TOOL_REFS } from './built-in-skills.js';
 import type {
   ResolvedSkillPackage,
   SkillCatalogPort,
@@ -27,16 +23,15 @@ export type {
   ResolvedAgentVersion,
 } from '../ports/agent-resolution-api.js';
 
+type CanonicalAgentVersionRead = Pick<AgentRegistry, 'findVersion'> &
+  Pick<ManagedAgentDefinitionRead, 'findVersionByTenant'>;
+
 export class ResolveAgentVersion implements AgentResolutionApi {
   public constructor(
-    private readonly managed: Pick<AgentRegistry, 'findVersion'> &
-      Pick<ManagedAgentDefinitionRead, 'findVersionByTenant'>,
-    private readonly legacy: Pick<
-      DefinitionReadApi,
-      'findPublishedAgentVersionById'
-    >,
+    private readonly managed: CanonicalAgentVersionRead,
     private readonly skillCatalog: SkillCatalogPort,
-  ) {}
+  ) {
+  }
 
   public async resolvePublished(
     versionId: string,
@@ -62,20 +57,14 @@ export class ResolveAgentVersion implements AgentResolutionApi {
           toolRefs: [],
         };
       }
-      const toolRefs = managedVersion.package.spec.tools.map(
-        (tool) => tool.ref,
-      );
+      const toolRefs = managedVersion.package.spec.tools.map((tool) => tool.ref);
       validateToolRefs(toolRefs);
-      const skillRefs = managedVersion.package.spec.skills.map(
-        (skill) => skill.ref,
-      );
+      const skillRefs = managedVersion.package.spec.skills.map((skill) => skill.ref);
       const seenSkills = new Set<string>();
       const skills: ResolvedSkillPackage[] = [];
       for (const ref of skillRefs) {
         if (seenSkills.has(ref))
-          throw new Error(
-            'The managed Agent references a Skill more than once.',
-          );
+          throw new Error('The managed Agent references a Skill more than once.');
         seenSkills.add(ref);
         const resolved = await this.skillCatalog.resolve(ref);
         if (!resolved)
@@ -99,22 +88,7 @@ export class ResolveAgentVersion implements AgentResolutionApi {
         toolRefs: Object.freeze([...toolRefs]),
       };
     }
-    const legacyVersion = await this.legacy.findPublishedAgentVersionById(
-      versionId,
-      scope,
-    );
-    return legacyVersion
-      ? {
-          source: 'legacy',
-          id: legacyVersion.id,
-          ...resolvedIdentity(legacyVersion),
-          instructions: legacyVersion.instructions,
-          modelPolicyRef: 'free-only',
-          proposalLimit: 0,
-          skills: [],
-          toolRefs: [],
-        }
-      : null;
+    return null;
   }
 }
 
@@ -139,6 +113,7 @@ function validateToolRefs(refs: readonly string[]): void {
     seen.add(ref);
   }
 }
+
 /**
  * Production registry entities carry all of these fields. Some deliberately
  * bounded unit/runtime fakes predate ContextFS and omit them; keep the new

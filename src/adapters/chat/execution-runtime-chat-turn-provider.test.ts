@@ -379,26 +379,69 @@ class InMemoryRuntimeSessions
     return null;
   }
   public async reconcileDesiredSpec(input: { id: string; digest: string }) {
-    const session = await this.findById(input.id);
-    if (!session) throw new Error('runtime session missing');
-    return {
-      ...session,
+    const index = this.sessions.findIndex((session) => session.id === input.id);
+    if (index < 0) throw new Error('runtime session missing');
+    const current = this.sessions[index]!;
+    const desiredRevision =
+      current.desiredSpecDigest === null ||
+      current.desiredSpecDigest === input.digest
+        ? current.desiredRevision
+        : current.desiredRevision + 1;
+    const next: RuntimeSession = {
+      ...current,
+      desiredRevision,
       desiredSpecDigest: input.digest,
-      desiredRevision: session.desiredRevision + 1,
-      status: 'ready' as const,
+      status:
+        current.currentGeneration && desiredRevision !== current.desiredRevision
+          ? 'reconciling'
+          : current.status,
     };
+    this.sessions[index] = next;
+    return next;
   }
-  public async replaceExecution(input: {
-    id: string;
-    workspaceBinding: ExecutionWorkspaceBinding;
-    sessionBinding: ExecutionSessionBinding;
-  }) {
-    return this.bindExecution(input);
+  public async replaceExecution(
+    input: Parameters<RuntimeSessionRepository['replaceExecution']>[0],
+  ): Promise<RuntimeSession> {
+    const index = this.sessions.findIndex((session) => session.id === input.id);
+    if (index < 0) throw new Error('runtime session missing');
+    const current = this.sessions[index]!;
+    const nextGeneration = (current.currentGeneration?.generation ?? 0) + 1;
+    const next: RuntimeSession = {
+      ...current,
+      status: 'ready',
+      currentGeneration: {
+        id: `generation-${current.id}-${nextGeneration}`,
+        runtimeSessionId: current.id,
+        generation: nextGeneration,
+        workspaceBinding: input.workspaceBinding,
+        sessionBinding: input.sessionBinding,
+        appliedRevision: input.appliedRevision,
+        appliedSpecDigest: input.appliedSpecDigest,
+        endpointEpoch: input.endpointEpoch,
+        extensionGrantId: input.extensionGrantId ?? null,
+        status: 'active',
+        createdAt: current.updatedAt,
+        supersededAt: null,
+      },
+      workspaceBinding: input.workspaceBinding,
+      sessionBinding: input.sessionBinding,
+    };
+    this.sessions[index] = next;
+    return next;
   }
   public async markUnavailable(id: string) {
-    const session = await this.findById(id);
-    if (!session) throw new Error('runtime session missing');
-    return { ...session, status: 'unavailable' as const };
+    const index = this.sessions.findIndex((session) => session.id === id);
+    if (index < 0) throw new Error('runtime session missing');
+    const current = this.sessions[index]!;
+    const next: RuntimeSession = {
+      ...current,
+      status: 'unavailable',
+      currentGeneration: current.currentGeneration
+        ? { ...current.currentGeneration, status: 'unavailable' }
+        : null,
+    };
+    this.sessions[index] = next;
+    return next;
   }
 
   public async findById(id: string): Promise<RuntimeSession | null> {
@@ -421,6 +464,10 @@ class InMemoryRuntimeSessions
     id: string;
     workspaceBinding: ExecutionWorkspaceBinding;
     sessionBinding: ExecutionSessionBinding;
+    appliedRevision: number;
+    appliedSpecDigest: string;
+    endpointEpoch: string;
+    extensionGrantId?: string;
   }): Promise<RuntimeSession> {
     this.bindCalls.push(input);
     const index = this.sessions.findIndex((session) => session.id === input.id);
@@ -428,6 +475,21 @@ class InMemoryRuntimeSessions
     const current = this.sessions[index]!;
     const next: RuntimeSession = {
       ...current,
+      status: 'ready',
+      currentGeneration: {
+        id: `generation-${current.id}-1`,
+        runtimeSessionId: current.id,
+        generation: 1,
+        workspaceBinding: input.workspaceBinding,
+        sessionBinding: input.sessionBinding,
+        appliedRevision: input.appliedRevision,
+        appliedSpecDigest: input.appliedSpecDigest,
+        endpointEpoch: input.endpointEpoch,
+        extensionGrantId: input.extensionGrantId ?? null,
+        status: 'active',
+        createdAt: current.updatedAt,
+        supersededAt: null,
+      },
       workspaceBinding: input.workspaceBinding,
       sessionBinding: input.sessionBinding,
     };

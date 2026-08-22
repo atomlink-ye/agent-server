@@ -109,6 +109,12 @@ function brain() {
 }
 
 function durableSession(bound: boolean): RuntimeSession {
+  const workspaceBinding = bound
+    ? { plane: 'paseo', externalWorkspaceId: 'workspace-provider-n2' }
+    : null;
+  const sessionBinding = bound
+    ? { plane: 'paseo', externalSessionId: 'session-provider-n2' }
+    : null;
   return makeRuntimeSession({
     id: 'runtime-session-n2',
     scope: {
@@ -126,12 +132,26 @@ function durableSession(bound: boolean): RuntimeSession {
     environmentVersionId: null,
     resolvedSkills: [],
     toolRefs: [],
-    workspaceBinding: bound
-      ? { plane: 'paseo', externalWorkspaceId: 'workspace-provider-n2' }
-      : null,
-    sessionBinding: bound
-      ? { plane: 'paseo', externalSessionId: 'session-provider-n2' }
-      : null,
+    status: bound ? 'ready' : 'pending',
+    currentGeneration:
+      bound && workspaceBinding && sessionBinding
+        ? {
+            id: 'generation-n2-1',
+            runtimeSessionId: 'runtime-session-n2',
+            generation: 1,
+            workspaceBinding,
+            sessionBinding,
+            appliedRevision: 1,
+            appliedSpecDigest: 'sha256:bootstrap-n2',
+            endpointEpoch: 'none',
+            extensionGrantId: null,
+            status: 'active',
+            createdAt: '2026-08-22T00:00:00.000Z',
+            supersededAt: null,
+          }
+        : null,
+    workspaceBinding,
+    sessionBinding,
   });
 }
 

@@ -10,7 +10,10 @@ import type { RuntimeExtensionBinder } from '../extensions/runtime-extension-bin
 import type { Logger } from '../../shared/observability/logger.js';
 import type { ChatBrainResolver } from './chat-brain-resolver.js';
 import type { ConversationActorResolver } from './chat-turn-context.js';
-import { ResolveChatTurnContext } from './resolve-chat-turn-context.js';
+import {
+  ChatTurnRuntimeUnavailableError,
+  ResolveChatTurnContext,
+} from './resolve-chat-turn-context.js';
 import { ResolveChatBrain } from './resolve-chat-brain.js';
 import { BindChatCapabilities } from './bind-chat-capabilities.js';
 import { ExecuteChatTurn } from './execute-chat-turn.js';
@@ -105,8 +108,18 @@ export class ChatDeliveryReconciler {
     });
   }
 
+  /**
+   * Historical unclaimed seam: a missing runtime remains a no-op, never a
+   * published activation. The production worker calls reconcile() and turns
+   * this same condition into claim release/retry.
+   */
   public async reconcileOne(dispatch: ChatDispatch): Promise<void> {
-    return this.reconcile(dispatch);
+    try {
+      await this.reconcile(dispatch);
+    } catch (error) {
+      if (error instanceof ChatTurnRuntimeUnavailableError) return;
+      throw error;
+    }
   }
 
   private async completeCompatibilityClaim(

@@ -85,6 +85,7 @@ export const durableKernelMigrationFileNames = [
   '0051_agent_chat_runtime_epoch_scope.sql',
   '0052_persistent_chat_delta_wake.sql',
   '0053_memory_context_convergence.sql',
+  '0054_drop_team_member_direct_conversations.sql',
 ] as const;
 const durableKernelMigrationRegistryTable = 'durable_kernel_schema_migrations';
 const durableKernelMigrationAdvisoryLock = [

@@ -28,7 +28,9 @@ export type SessionSummary = {
   readonly work_refs: readonly string[];
   readonly truncated: boolean;
 };
-export type SessionEntry = ProductExecutionDetailEvent & { readonly ordinal: number };
+export type SessionEntry = ProductExecutionDetailEvent & {
+  readonly ordinal: number;
+};
 export type Session = {
   readonly label: SessionLabel;
   readonly summary: SessionSummary;
@@ -51,7 +53,11 @@ export async function loadExecutionDetail(
   );
   try {
     const detail = ProductExecutionDetailResponseSchema.parse(value);
-    if (detail.work_id !== workId || detail.work_run_id !== runId || detail.attempt_id !== attemptId)
+    if (
+      detail.work_id !== workId ||
+      detail.work_run_id !== runId ||
+      detail.attempt_id !== attemptId
+    )
       throw new Error('identity mismatch');
     return detail;
   } catch {
@@ -72,12 +78,18 @@ export async function loadSessionTranscripts(
       throw new Error('identity mismatch');
     return transcripts;
   } catch {
-    throw new RunTraceReadError('Captured session transcripts were invalid.', 502);
+    throw new RunTraceReadError(
+      'Captured session transcripts were invalid.',
+      502,
+    );
   }
 }
 
 export class RunTraceReadError extends Error {
-  constructor(message: string, readonly status?: number) {
+  constructor(
+    message: string,
+    readonly status?: number,
+  ) {
     super(message);
     this.name = 'RunTraceReadError';
   }
@@ -85,7 +97,10 @@ export class RunTraceReadError extends Error {
 
 async function request(path: string): Promise<unknown> {
   try {
-    return await apiTransport.request(path, { method: 'GET', cache: 'no-store' });
+    return await apiTransport.request(path, {
+      method: 'GET',
+      cache: 'no-store',
+    });
   } catch (error) {
     if (error instanceof ApiTransportError) {
       throw new RunTraceReadError(error.message, error.status);

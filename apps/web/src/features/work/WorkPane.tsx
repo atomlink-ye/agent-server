@@ -10,7 +10,11 @@ export interface WorkPaneProps {
 type WorkPaneState =
   | { readonly status: 'loading'; readonly works: readonly WorkListItem[] }
   | { readonly status: 'ready'; readonly works: readonly WorkListItem[] }
-  | { readonly status: 'error'; readonly works: readonly WorkListItem[]; readonly error: string };
+  | {
+      readonly status: 'error';
+      readonly works: readonly WorkListItem[];
+      readonly error: string;
+    };
 
 export function WorkPane({
   onOpenWork,
@@ -115,11 +119,15 @@ export function WorkPane({
             <span className="work-list-copy">
               <strong>{work.title}</strong>
               <span>
-                <span className={`work-status-dot work-status-dot--${work.product_state}`} />
+                <span
+                  className={`work-status-dot work-status-dot--${work.product_state}`}
+                />
                 {workStateLabel(work.product_state)}
               </span>
             </span>
-            <time dateTime={work.updated_at}>{formatUpdatedTime(work.updated_at)}</time>
+            <time dateTime={work.updated_at}>
+              {formatUpdatedTime(work.updated_at)}
+            </time>
           </button>
         ))}
       </div>

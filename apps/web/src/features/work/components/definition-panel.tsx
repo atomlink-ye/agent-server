@@ -4,7 +4,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { stringify } from 'yaml';
 import type { ProductWorkDefinitionVersionResponse } from '@atomlink-ye/agent-server/product-contract';
 
-import { humanize, workTabHref } from '@/features/work/components/work-presentation';
+import {
+  humanize,
+  workTabHref,
+} from '@/features/work/components/work-presentation';
 import { ApiTransportError } from '@/api/transport';
 import {
   applyWorkDefinition,
@@ -115,7 +118,9 @@ export function DefinitionPanel({
         error instanceof ApiTransportError ? error.payload : undefined,
       );
       setDiagnostics(nextDiagnostics);
-      setStatusMessage('The Definition validated, but its resource plan failed.');
+      setStatusMessage(
+        'The Definition validated, but its resource plan failed.',
+      );
       setState('error');
       return null;
     }
@@ -134,10 +139,16 @@ export function DefinitionPanel({
       applied = await applyWorkDefinition(source);
     } catch (error) {
       setDiagnostics(
-        diagnosticsFrom(error instanceof ApiTransportError ? error.payload : undefined),
+        diagnosticsFrom(
+          error instanceof ApiTransportError ? error.payload : undefined,
+        ),
       );
       setState('error');
-      setStatusMessage(error instanceof Error ? error.message : 'The Definition was not applied.');
+      setStatusMessage(
+        error instanceof Error
+          ? error.message
+          : 'The Definition was not applied.',
+      );
       return;
     }
     if (applied.definitionId !== workDefinitionId) {
@@ -157,8 +168,12 @@ export function DefinitionPanel({
       return;
     }
     setState('applied');
-    setStatusMessage('Applied and pinned as the current Work Definition version.');
-    window.location.assign(workTabHref(workId, 'definition', undefined, originConversationId));
+    setStatusMessage(
+      'Applied and pinned as the current Work Definition version.',
+    );
+    window.location.assign(
+      workTabHref(workId, 'definition', undefined, originConversationId),
+    );
   }
 
   async function runCurrentVersion() {
@@ -167,11 +182,16 @@ export function DefinitionPanel({
     setStatusMessage(null);
     try {
       const runId = await startWorkRun(workId);
-      window.location.assign(workTabHref(workId, 'overview', runId, originConversationId));
+      window.location.assign(
+        workTabHref(workId, 'overview', runId, originConversationId),
+      );
     } catch (error) {
       setState('error');
-      const errorDetail = error instanceof Error ? error.message : 'Please try again.';
-      setStatusMessage(`The current Definition version could not be started: ${errorDetail}`);
+      const errorDetail =
+        error instanceof Error ? error.message : 'Please try again.';
+      setStatusMessage(
+        `The current Definition version could not be started: ${errorDetail}`,
+      );
     }
   }
 
@@ -193,14 +213,18 @@ export function DefinitionPanel({
       </div>
 
       {editable ? (
-        <div className="work-definition__authoring" data-testid="definition-authoring">
+        <div
+          className="work-definition__authoring"
+          data-testid="definition-authoring"
+        >
           <div className="work-definition__editor-column">
             <div className="work-definition__editor-heading">
               <div>
                 <h3>YAML source</h3>
                 <p>
-                  The API currently returns normalized source. It is re-serialized as YAML here,
-                  so original comments and formatting are not round-tripped.
+                  The API currently returns normalized source. It is
+                  re-serialized as YAML here, so original comments and
+                  formatting are not round-tripped.
                 </p>
               </div>
               <span>{source.length.toLocaleString()} chars</span>
@@ -221,7 +245,11 @@ export function DefinitionPanel({
             />
             <div className="work-definition__actions">
               <button
-                disabled={state === 'validating' || state === 'applying' || state === 'running'}
+                disabled={
+                  state === 'validating' ||
+                  state === 'applying' ||
+                  state === 'running'
+                }
                 onClick={() => void validateAndPlan()}
                 type="button"
               >
@@ -229,14 +257,22 @@ export function DefinitionPanel({
               </button>
               <button
                 className="work-definition__primary-action"
-                disabled={state === 'validating' || state === 'applying' || state === 'running'}
+                disabled={
+                  state === 'validating' ||
+                  state === 'applying' ||
+                  state === 'running'
+                }
                 onClick={() => void applyDefinition()}
                 type="button"
               >
                 {state === 'applying' ? 'Applying…' : 'Apply new version'}
               </button>
               <button
-                disabled={!isCurrentVersion || state === 'running' || state === 'applying'}
+                disabled={
+                  !isCurrentVersion ||
+                  state === 'running' ||
+                  state === 'applying'
+                }
                 onClick={() => void runCurrentVersion()}
                 type="button"
               >
@@ -253,7 +289,10 @@ export function DefinitionPanel({
               </p>
             ) : null}
             {diagnostics.length ? (
-              <ul className="work-definition__diagnostics" data-testid="definition-diagnostics">
+              <ul
+                className="work-definition__diagnostics"
+                data-testid="definition-diagnostics"
+              >
                 {diagnostics.map((diagnostic, index) => (
                   <li key={`${diagnostic.path}:${diagnostic.code}:${index}`}>
                     <code>{diagnostic.path}</code>
@@ -264,7 +303,11 @@ export function DefinitionPanel({
               </ul>
             ) : null}
           </div>
-          <DefinitionPlanPreview fallbackKind={kind} plan={plan} participants={participants} />
+          <DefinitionPlanPreview
+            fallbackKind={kind}
+            plan={plan}
+            participants={participants}
+          />
         </div>
       ) : null}
 
@@ -284,7 +327,11 @@ export function DefinitionPanel({
           label="Description"
           value={description ?? 'No description captured'}
         />
-        <Fact label="Environment" value={environment.label} code={environment.code} />
+        <Fact
+          label="Environment"
+          value={environment.label}
+          code={environment.code}
+        />
       </dl>
       {!editable ? (
         <div className="work-definition__agents">
@@ -305,16 +352,23 @@ function DefinitionPlanPreview({
   readonly plan: Plan | null;
   readonly participants: readonly ParticipantView[];
 }) {
-  const previewParticipants = plan?.resolved.participants ?? participants.map((participant) => ({
-    name: participant.name,
-    role: participant.role,
-    source: participant.versionId ? ('referenced' as const) : ('inline' as const),
-    agent_version_id: participant.versionId,
-    skills: [] as readonly string[],
-    tools: [] as readonly string[],
-  }));
+  const previewParticipants =
+    plan?.resolved.participants ??
+    participants.map((participant) => ({
+      name: participant.name,
+      role: participant.role,
+      source: participant.versionId
+        ? ('referenced' as const)
+        : ('inline' as const),
+      agent_version_id: participant.versionId,
+      skills: [] as readonly string[],
+      tools: [] as readonly string[],
+    }));
   return (
-    <aside className="work-definition__preview" aria-label="Resolved Definition preview">
+    <aside
+      className="work-definition__preview"
+      aria-label="Resolved Definition preview"
+    >
       <p className="work-shell-kicker">Structured preview</p>
       <h3>{humanize(plan?.resolved.kind ?? fallbackKind)}</h3>
       <p>
@@ -327,8 +381,12 @@ function DefinitionPlanPreview({
         {previewParticipants.map((participant) => (
           <li key={`${participant.role}:${participant.name}`}>
             <strong>{participant.name}</strong>
-            <span>{humanize(participant.role)} · {participant.source}</span>
-            {participant.agent_version_id ? <code>{participant.agent_version_id}</code> : null}
+            <span>
+              {humanize(participant.role)} · {participant.source}
+            </span>
+            {participant.agent_version_id ? (
+              <code>{participant.agent_version_id}</code>
+            ) : null}
           </li>
         ))}
       </ul>

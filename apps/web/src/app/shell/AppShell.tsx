@@ -58,7 +58,9 @@ export function AppShell({
       navigate('/files');
       return;
     }
-    navigate(returnConversationId ? conversationPath(returnConversationId) : '/');
+    navigate(
+      returnConversationId ? conversationPath(returnConversationId) : '/',
+    );
   };
 
   return (

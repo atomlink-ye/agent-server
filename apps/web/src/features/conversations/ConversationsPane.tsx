@@ -1,9 +1,5 @@
 import { useMemo, useState, useSyncExternalStore } from 'react';
-import type {
-  ChatCommands,
-  Conversation,
-  ConversationId,
-} from './contracts';
+import type { ChatCommands, Conversation, ConversationId } from './contracts';
 import type { Coworker } from '../agents/contracts';
 import { ConversationsList } from './components/ConversationsList';
 import type { AppStore } from './stores/app';

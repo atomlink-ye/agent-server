@@ -1,4 +1,10 @@
-import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
+import {
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+  useParams,
+} from 'react-router-dom';
 
 import { useAppRuntime } from '../providers';
 import AppShell from '../shell/AppShell';
@@ -8,7 +14,10 @@ export function AppRouter() {
   return (
     <Routes>
       <Route path="/" element={<WorkspaceRoute />} />
-      <Route path="/conversations/:conversationId" element={<WorkspaceRoute />} />
+      <Route
+        path="/conversations/:conversationId"
+        element={<WorkspaceRoute />}
+      />
       <Route path="/work" element={<WorkspaceRoute />} />
       <Route path="/work/:workId" element={<WorkspaceRoute />} />
       <Route path="/agents" element={<WorkspaceRoute />} />

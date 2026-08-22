@@ -2,7 +2,9 @@ export function conversationPath(conversationId: string): string {
   return `/conversations/${encodeURIComponent(conversationId)}`;
 }
 
-export function workRootPath(originConversationId: string | null = null): string {
+export function workRootPath(
+  originConversationId: string | null = null,
+): string {
   return originConversationId
     ? `/work?from_conversation=${encodeURIComponent(originConversationId)}`
     : '/work';
@@ -26,7 +28,8 @@ export function workTabPath(
   sessionIndex: number | null = null,
 ): string {
   const query = new URLSearchParams();
-  if (originConversationId) query.set('from_conversation', originConversationId);
+  if (originConversationId)
+    query.set('from_conversation', originConversationId);
   if (tab !== 'overview') query.set('tab', tab);
   if (runId) query.set('run', runId);
   if (sessionIndex !== null) query.set('session', String(sessionIndex));

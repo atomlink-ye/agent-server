@@ -14,14 +14,13 @@ import {
 import { ApiTransportError } from '@/api/transport';
 
 type AuthoringState =
-  | 'idle'
-  | 'validating'
-  | 'valid'
-  | 'applying'
-  | 'applied'
-  | 'error';
+  'idle' | 'validating' | 'valid' | 'applying' | 'applied' | 'error';
 
-export function NewWork({ originConversationId = null }: { readonly originConversationId?: string | null }) {
+export function NewWork({
+  originConversationId = null,
+}: {
+  readonly originConversationId?: string | null;
+}) {
   const [source, setSource] = useState('');
   const [title, setTitle] = useState('');
   const [state, setState] = useState<AuthoringState>('idle');
@@ -66,7 +65,9 @@ export function NewWork({ originConversationId = null }: { readonly originConver
       );
       setDiagnostics(nextDiagnostics);
       setState('error');
-      setStatusMessage('The Definition validated, but its resource plan failed.');
+      setStatusMessage(
+        'The Definition validated, but its resource plan failed.',
+      );
       return null;
     }
 
@@ -88,28 +89,42 @@ export function NewWork({ originConversationId = null }: { readonly originConver
       await createWork(applied.definitionId, applied.versionId);
     } catch (error) {
       setDiagnostics(
-        diagnosticsFrom(error instanceof ApiTransportError ? error.payload : undefined),
+        diagnosticsFrom(
+          error instanceof ApiTransportError ? error.payload : undefined,
+        ),
       );
       setState('error');
-      setStatusMessage(error instanceof Error ? error.message : 'The Definition was not applied.');
+      setStatusMessage(
+        error instanceof Error
+          ? error.message
+          : 'The Definition was not applied.',
+      );
     }
   }
 
   async function createWork(definitionId: string, versionId: string) {
     try {
       const created = await createWorkRequest(definitionId, versionId, title);
-      window.location.assign(workTabHref(created.workId, 'definition', undefined, originConversationId));
+      window.location.assign(
+        workTabHref(
+          created.workId,
+          'definition',
+          undefined,
+          originConversationId,
+        ),
+      );
     } catch (error) {
       setState('error');
-      setStatusMessage(error instanceof Error ? error.message : 'The Work could not be created.');
+      setStatusMessage(
+        error instanceof Error
+          ? error.message
+          : 'The Work could not be created.',
+      );
     }
   }
 
   return (
-    <section
-      className="new-work-form"
-      data-testid="new-work-form"
-    >
+    <section className="new-work-form" data-testid="new-work-form">
       <div className="new-work-form__heading">
         <h2>Create New Work</h2>
         <p>
@@ -179,7 +194,10 @@ export function NewWork({ originConversationId = null }: { readonly originConver
           ) : null}
 
           {diagnostics.length > 0 ? (
-            <ul className="new-work-form__diagnostics" data-testid="new-work-diagnostics">
+            <ul
+              className="new-work-form__diagnostics"
+              data-testid="new-work-diagnostics"
+            >
               {diagnostics.map((diagnostic, index) => (
                 <li key={`${diagnostic.path}:${diagnostic.code}:${index}`}>
                   <code>{diagnostic.path}</code>

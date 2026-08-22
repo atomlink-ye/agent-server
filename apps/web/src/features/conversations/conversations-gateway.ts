@@ -88,7 +88,11 @@ export async function sendMessage(
 
 export async function loadWorkCard(workId: string): Promise<WorkChatCard> {
   if (!isUuid(workId))
-    throw new ApiTransportError(400, 'invalid_request', 'This Work is unavailable.');
+    throw new ApiTransportError(
+      400,
+      'invalid_request',
+      'This Work is unavailable.',
+    );
   const card = asRecord(
     await apiTransport.request(
       `/api/works/${encodeURIComponent(workId)}/chat-card`,
@@ -128,7 +132,6 @@ function normalizeDirectAgent(value: unknown): Conversation['directAgent'] {
     displayName: nullableString(record.display_name),
   };
 }
-
 
 function normalizeMessage(value: unknown): ChatMessage {
   const record = asRecord(value);
@@ -221,7 +224,6 @@ function nullableString(value: unknown): string | null {
   throw invalidResponse();
 }
 
-
 function requiredAuthorType(value: unknown): ChatMessage['authorType'] {
   if (value === 'principal' || value === 'agent_definition') return value;
   throw invalidResponse();
@@ -231,7 +233,6 @@ function requiredConversationKind(value: unknown): Conversation['kind'] {
   if (value === 'direct' || value === 'group') return value;
   throw invalidResponse();
 }
-
 
 function nullableEnum<T extends string>(
   value: unknown,

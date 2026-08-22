@@ -43,7 +43,11 @@ export type WorkDetailData = {
 export type WorkListItem = WorkListResponse['works'][number];
 
 export type RoleSummary = {
-  readonly label: { readonly name: string; readonly role: string; readonly status: string };
+  readonly label: {
+    readonly name: string;
+    readonly role: string;
+    readonly status: string;
+  };
   readonly summary: {
     readonly entry_count: number;
     readonly last_meaningful: { readonly action: string | null } | null;
@@ -93,21 +97,31 @@ export interface CreatedWork {
 }
 
 export class ProductReadError extends Error {
-  constructor(message: string, readonly status: number) {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
     super(message);
     this.name = 'ProductReadError';
   }
 }
 
 export class ProductMutationError extends Error {
-  constructor(message: string, readonly status: number, readonly code?: string) {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code?: string,
+  ) {
     super(message);
     this.name = 'ProductMutationError';
   }
 }
 
 export async function loadWorks(): Promise<WorkListResponse> {
-  return parseProduct(WorkListResponseSchema, await readProductJson('/api/works'));
+  return parseProduct(
+    WorkListResponseSchema,
+    await readProductJson('/api/works'),
+  );
 }
 
 export async function loadWorkDetail(
@@ -122,8 +136,14 @@ export async function loadWorkDetail(
   ]);
   const workResponse = parseProduct(GetWorkResponseSchema, workValue);
   const runsResponse = parseProduct(WorkRunListResponseSchema, runsValue);
-  if (workResponse.work.id !== workId || runsResponse.work_runs.some((run) => run.work_id !== workId)) {
-    throw new ProductReadError('The Product Work response did not match the requested Work.', 502);
+  if (
+    workResponse.work.id !== workId ||
+    runsResponse.work_runs.some((run) => run.work_id !== workId)
+  ) {
+    throw new ProductReadError(
+      'The Product Work response did not match the requested Work.',
+      502,
+    );
   }
   const runs = runsResponse.work_runs;
   const selectedSummary = selectedRunId
@@ -140,7 +160,9 @@ export async function loadWorkDetail(
   const definitionPromise = readOptionalProductJson(
     `/api/work-definition-versions/${encodeURIComponent(selectedDefinitionVersionId)}`,
   ).then((value) =>
-    value === null ? null : parseProduct(GetProductWorkDefinitionVersionResponseSchema, value),
+    value === null
+      ? null
+      : parseProduct(GetProductWorkDefinitionVersionResponseSchema, value),
   );
   if (!selectedSummary) {
     return {
@@ -165,13 +187,19 @@ export async function loadWorkDetail(
     run.projection_status === 'internally_anchored' &&
     (run.work?.id !== workId || run.work_run?.id !== selectedSummary.id)
   ) {
-    throw new ProductReadError('The Product Run response did not match the requested Work.', 502);
+    throw new ProductReadError(
+      'The Product Run response did not match the requested Work.',
+      502,
+    );
   }
   if (
     trace.projection_status === 'internally_anchored' &&
     (trace.work?.id !== workId || trace.work_run?.id !== selectedSummary.id)
   ) {
-    throw new ProductReadError('The Product Trace response did not match the requested Run.', 502);
+    throw new ProductReadError(
+      'The Product Trace response did not match the requested Run.',
+      502,
+    );
   }
   if (!isAnchoredRun(run) || !isAnchoredTrace(trace)) {
     throw new Error('The Product WorkRun projection was not captured.');
@@ -193,11 +221,14 @@ export async function loadRunRoleSummaries(
   const body = parseProduct(
     ProductSessionTranscriptsResponseSchema,
     await readProductJson(
-    `/api/works/${encodeURIComponent(workId)}/runs/${encodeURIComponent(runId)}/session-transcripts`,
+      `/api/works/${encodeURIComponent(workId)}/runs/${encodeURIComponent(runId)}/session-transcripts`,
     ),
   );
   if (body.work_id !== workId || body.work_run_id !== runId) {
-    throw new ProductReadError('The session transcript response did not match the requested Run.', 502);
+    throw new ProductReadError(
+      'The session transcript response did not match the requested Run.',
+      502,
+    );
   }
   return body.sessions.map((session) => ({
     label: session.label,
@@ -212,15 +243,18 @@ export async function loadRunRoleSummaries(
 
 export async function startWorkRun(workId: string): Promise<string> {
   try {
-    const body = parseProduct(StartWorkRunResponseSchema, await apiTransport.request(
-      `/api/works/${encodeURIComponent(workId)}/runs`,
-      {
-        method: 'POST',
-        cache: 'no-store',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ trigger_kind: 'manual' }),
-      },
-    ));
+    const body = parseProduct(
+      StartWorkRunResponseSchema,
+      await apiTransport.request(
+        `/api/works/${encodeURIComponent(workId)}/runs`,
+        {
+          method: 'POST',
+          cache: 'no-store',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ trigger_kind: 'manual' }),
+        },
+      ),
+    );
     return body.work_run.id;
   } catch (error) {
     if (error instanceof ProductMutationError) throw error;
@@ -245,7 +279,9 @@ export async function validateWorkDefinition(
   );
 }
 
-export async function planWorkDefinition(source: string): Promise<DefinitionPlan> {
+export async function planWorkDefinition(
+  source: string,
+): Promise<DefinitionPlan> {
   return decodeFingerprint(
     await apiTransport.request('/api/work-definitions/plan', {
       method: 'POST',
@@ -256,7 +292,9 @@ export async function planWorkDefinition(source: string): Promise<DefinitionPlan
   );
 }
 
-export async function applyWorkDefinition(source: string): Promise<DefinitionApply> {
+export async function applyWorkDefinition(
+  source: string,
+): Promise<DefinitionApply> {
   return decodeDefinitionApply(
     await apiTransport.request('/api/work-definitions/apply', {
       method: 'POST',
@@ -293,15 +331,18 @@ export async function pinWorkDefinition(
   workId: string,
   definitionVersionId: string,
 ): Promise<void> {
-  parseProduct(UpdateWorkDefinitionVersionResponseSchema, await apiTransport.request(
-    `/api/works/${encodeURIComponent(workId)}/definition-version`,
-    {
-      method: 'POST',
-      cache: 'no-store',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ definition_version_id: definitionVersionId }),
-    },
-  ));
+  parseProduct(
+    UpdateWorkDefinitionVersionResponseSchema,
+    await apiTransport.request(
+      `/api/works/${encodeURIComponent(workId)}/definition-version`,
+      {
+        method: 'POST',
+        cache: 'no-store',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ definition_version_id: definitionVersionId }),
+      },
+    ),
+  );
 }
 
 async function readProductJson(path: string): Promise<unknown> {
@@ -402,7 +443,8 @@ function decodeCreatedWork(value: unknown): CreatedWork {
 
 function decodeDiagnostics(value: unknown): DefinitionDiagnostics {
   if (value === undefined || value === null) return [];
-  if (!Array.isArray(value)) throw new Error('The Definition diagnostics response was invalid.');
+  if (!Array.isArray(value))
+    throw new Error('The Definition diagnostics response was invalid.');
   return value.map((item) => {
     const diagnostic = record(item);
     if (
@@ -426,17 +468,25 @@ function record(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
-function decodeParticipant(value: unknown): DefinitionPlan['resolved']['participants'][number] {
+function decodeParticipant(
+  value: unknown,
+): DefinitionPlan['resolved']['participants'][number] {
   const participant = record(value);
   if (
     !participant ||
     typeof participant.name !== 'string' ||
-    (participant.role !== 'primary' && participant.role !== 'lead' && participant.role !== 'member') ||
+    (participant.role !== 'primary' &&
+      participant.role !== 'lead' &&
+      participant.role !== 'member') ||
     (participant.source !== 'referenced' && participant.source !== 'inline') ||
-    (participant.agent_version_id !== null && typeof participant.agent_version_id !== 'string') ||
-    !Array.isArray(participant.skills) || !participant.skills.every(isString) ||
-    !Array.isArray(participant.tools) || !participant.tools.every(isString)
-  ) throw new Error('The Definition plan response was invalid.');
+    (participant.agent_version_id !== null &&
+      typeof participant.agent_version_id !== 'string') ||
+    !Array.isArray(participant.skills) ||
+    !participant.skills.every(isString) ||
+    !Array.isArray(participant.tools) ||
+    !participant.tools.every(isString)
+  )
+    throw new Error('The Definition plan response was invalid.');
   return {
     name: participant.name,
     role: participant.role,
@@ -451,7 +501,10 @@ function isString(value: unknown): value is string {
   return typeof value === 'string';
 }
 
-function parseProduct<T>(schema: { parse(value: unknown): T }, value: unknown): T {
+function parseProduct<T>(
+  schema: { parse(value: unknown): T },
+  value: unknown,
+): T {
   try {
     return schema.parse(value);
   } catch {

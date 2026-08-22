@@ -3,10 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';
 
 import { ConversationsPane } from './ConversationsPane';
-import type {
-  ChatCommands,
-  Conversation,
-} from './contracts';
+import type { ChatCommands, Conversation } from './contracts';
 import type { Coworker } from '../agents/contracts';
 import { createAppStore } from './stores/app';
 import { createConversationsStore } from './stores/conversations';

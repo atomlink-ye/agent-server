@@ -107,7 +107,10 @@ export async function publishWorkResult(input: {
   });
 }
 
-async function post(path: string, body: Record<string, unknown>): Promise<unknown> {
+async function post(
+  path: string,
+  body: Record<string, unknown>,
+): Promise<unknown> {
   return json(path, { method: 'POST', body: JSON.stringify(body) });
 }
 async function json(path: string, init: RequestInit = {}): Promise<unknown> {
@@ -117,7 +120,8 @@ function scopeParams(request: ContextScopeRequest): string {
   const params = new URLSearchParams({ scope: request.scope });
   if (request.agentDefinitionId)
     params.set('agent_definition_id', request.agentDefinitionId);
-  if (request.conversationId) params.set('conversation_id', request.conversationId);
+  if (request.conversationId)
+    params.set('conversation_id', request.conversationId);
   if (request.workId) params.set('work_id', request.workId);
   return params.toString();
 }
@@ -143,6 +147,7 @@ function text(value: unknown): string {
   return value;
 }
 function integer(value: unknown): number {
-  if (!Number.isSafeInteger(value)) throw new Error('Invalid Context response.');
+  if (!Number.isSafeInteger(value))
+    throw new Error('Invalid Context response.');
   return value as number;
 }

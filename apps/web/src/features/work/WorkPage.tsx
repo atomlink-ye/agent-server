@@ -63,7 +63,9 @@ export function WorkPage({
               </button>
             </div>
           ) : null}
-          {showNewWork ? <NewWork originConversationId={returnConversationId} /> : null}
+          {showNewWork ? (
+            <NewWork originConversationId={returnConversationId} />
+          ) : null}
           {!showNewWork && selectedWorkId ? (
             <WorkDetailShell
               workId={selectedWorkId}
@@ -79,7 +81,9 @@ export function WorkPage({
                 ✓
               </span>
               <h1>Choose a Work item</h1>
-              <p>Select a real Work item from the pane, or create a new Work.</p>
+              <p>
+                Select a real Work item from the pane, or create a new Work.
+              </p>
               <button type="button" onClick={() => setShowNewWork(true)}>
                 New Work
               </button>

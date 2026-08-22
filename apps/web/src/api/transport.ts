@@ -3,7 +3,12 @@ export class ApiTransportError extends Error {
   readonly code: string;
   readonly payload: unknown;
 
-  constructor(status: number, code: string, message: string, payload: unknown = null) {
+  constructor(
+    status: number,
+    code: string,
+    message: string,
+    payload: unknown = null,
+  ) {
     super(message);
     this.name = 'ApiTransportError';
     this.status = status;
@@ -28,7 +33,11 @@ export class ApiTransport {
         },
       });
     } catch {
-      throw new ApiTransportError(0, 'network_error', 'The service is unavailable.');
+      throw new ApiTransportError(
+        0,
+        'network_error',
+        'The service is unavailable.',
+      );
     }
 
     const payload = await response.json().catch(() => null);

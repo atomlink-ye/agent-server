@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react';
 
-import { isUuid, loadWorkCard, type WorkChatCard } from '../../conversations/conversations-gateway';
+import {
+  isUuid,
+  loadWorkCard,
+  type WorkChatCard,
+} from '../../conversations/conversations-gateway';
 
 export interface WorkCardProps {
   readonly workRef: string | null;

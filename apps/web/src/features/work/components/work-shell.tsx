@@ -20,7 +20,11 @@ import {
   type WorkTab,
 } from '@/features/work/components/work-presentation';
 import { ExecutionTranscript } from '@/features/run-trace/execution-transcript';
-import { MapView, RunTrace, type TraceView } from '@/features/run-trace/run-trace';
+import {
+  MapView,
+  RunTrace,
+  type TraceView,
+} from '@/features/run-trace/run-trace';
 import { SessionTranscripts } from '@/features/run-trace/session-transcripts';
 import {
   loadRunRoleSummaries,
@@ -70,8 +74,8 @@ export function WorkListShell() {
             Does this need me? What happened in the latest Run?
           </p>
           <p className="work-list-header__coverage">
-            Delivered Artifacts are not shown until the Product API exposes them;
-            this view does not infer them from messages or tool output.
+            Delivered Artifacts are not shown until the Product API exposes
+            them; this view does not infer them from messages or tool output.
           </p>
         </div>
         <button
@@ -86,9 +90,17 @@ export function WorkListShell() {
       {showNewWork ? <NewWork /> : null}
       {state === 'loading' ? <WorkListLoading /> : null}
       {state === 'error' ? <WorkListError /> : null}
-      {state === 'available' && works.length === 0 ? <WorkListEmpty showNewWork={showNewWork} onNewWork={() => setShowNewWork(true)} /> : null}
+      {state === 'available' && works.length === 0 ? (
+        <WorkListEmpty
+          showNewWork={showNewWork}
+          onNewWork={() => setShowNewWork(true)}
+        />
+      ) : null}
       {state === 'available' && works.length > 0 ? (
-        <section aria-labelledby="work-list-heading" className="work-list-region">
+        <section
+          aria-labelledby="work-list-heading"
+          className="work-list-region"
+        >
           <div className="work-list-region__heading">
             <p className="work-list-region__eyebrow">Available Work</p>
             <h2 id="work-list-heading">Current Work</h2>
@@ -164,7 +176,8 @@ export function WorkDetailShell({
           timer = setTimeout(() => void refresh(), 2_000);
       } catch (error) {
         if (!active) return;
-        const isProjectionUnavailable = error instanceof ProductReadError && error.status === 503;
+        const isProjectionUnavailable =
+          error instanceof ProductReadError && error.status === 503;
         if (isProjectionUnavailable && firstLoad) {
           setState('starting');
           timer = setTimeout(() => void refresh(), 2_000);
@@ -197,7 +210,10 @@ export function WorkDetailShell({
         </p>
       ) : null}
       {state === 'error' ? (
-        <section className="work-list-state work-list-state--error" role="alert">
+        <section
+          className="work-list-state work-list-state--error"
+          role="alert"
+        >
           <p className="work-list-state__eyebrow">Couldn't load Work</p>
           <h2>The selected Work or Run is unavailable.</h2>
           <p>Return to My Work and choose an available Product Work record.</p>
@@ -280,7 +296,9 @@ function WorkDetail({
 
   return (
     <>
-      <p className="work-shell-breadcrumb"><a href="/">My Work</a> / {work.title}</p>
+      <p className="work-shell-breadcrumb">
+        <a href="/">My Work</a> / {work.title}
+      </p>
       <header className="work-detail-header work-detail-header--stacked">
         <div>
           <p className="work-shell-kicker">Work</p>
@@ -292,11 +310,15 @@ function WorkDetail({
               : ''}
           </p>
           <p className="work-detail-surface-note">
-            Define, run, inspect collaboration, and review through Product facts.
+            Define, run, inspect collaboration, and review through Product
+            facts.
           </p>
         </div>
       </header>
-      <RunTrigger workId={work.id} originConversationId={originConversationId} />
+      <RunTrigger
+        workId={work.id}
+        originConversationId={originConversationId}
+      />
       <WorkTabs
         activeTab={activeTab}
         definitionRunId={undefined}
@@ -304,8 +326,16 @@ function WorkDetail({
         workId={work.id}
         originConversationId={originConversationId}
       />
-      {activeTab === 'overview' ? <OverviewPanel data={data} originConversationId={originConversationId} key={data.run?.work_run.id} /> : null}
-      {activeTab === 'runs' ? <RunsPanel data={data} originConversationId={originConversationId} /> : null}
+      {activeTab === 'overview' ? (
+        <OverviewPanel
+          data={data}
+          originConversationId={originConversationId}
+          key={data.run?.work_run.id}
+        />
+      ) : null}
+      {activeTab === 'runs' ? (
+        <RunsPanel data={data} originConversationId={originConversationId} />
+      ) : null}
       {activeTab === 'transcript' ? (
         <TranscriptPanel
           data={data}
@@ -351,7 +381,12 @@ function WorkTabs({
         return (
           <a
             aria-current={activeTab === tab.id ? 'page' : undefined}
-            href={workTabHref(workId, tab.id, targetRunId, originConversationId)}
+            href={workTabHref(
+              workId,
+              tab.id,
+              targetRunId,
+              originConversationId,
+            )}
             key={tab.id}
           >
             {tab.label}
@@ -362,7 +397,17 @@ function WorkTabs({
   );
 }
 
-function RunRoleCards({ trace, workId, runId, originConversationId }: { readonly trace: AnchoredTrace; readonly workId: string; readonly runId: string; readonly originConversationId?: string | null }) {
+function RunRoleCards({
+  trace,
+  workId,
+  runId,
+  originConversationId,
+}: {
+  readonly trace: AnchoredTrace;
+  readonly workId: string;
+  readonly runId: string;
+  readonly originConversationId?: string | null;
+}) {
   const [sessions, setSessions] = useState<readonly RoleSummary[] | null>(null);
 
   useEffect(() => {
@@ -392,7 +437,15 @@ function RunRoleCards({ trace, workId, runId, originConversationId }: { readonly
             className="work-role-card"
             key={`${session.label.name}-${index}`}
             onClick={() => {
-              window.location.assign(workTabPath(workId, 'transcript', runId, originConversationId ?? null, index));
+              window.location.assign(
+                workTabPath(
+                  workId,
+                  'transcript',
+                  runId,
+                  originConversationId ?? null,
+                  index,
+                ),
+              );
             }}
             title={title}
             type="button"
@@ -407,8 +460,16 @@ function RunRoleCards({ trace, workId, runId, originConversationId }: { readonly
   );
 }
 
-function OverviewPanel({ data, originConversationId }: { readonly data: WorkDetailData; readonly originConversationId?: string | null }) {
-  const [selectedAttemptId, setSelectedAttemptId] = useState<string | null>(null);
+function OverviewPanel({
+  data,
+  originConversationId,
+}: {
+  readonly data: WorkDetailData;
+  readonly originConversationId?: string | null;
+}) {
+  const [selectedAttemptId, setSelectedAttemptId] = useState<string | null>(
+    null,
+  );
   const [traceView, setTraceView] = useState<TraceView>('timeline');
   if (!data.run || !data.trace)
     return (
@@ -454,7 +515,12 @@ function OverviewPanel({ data, originConversationId }: { readonly data: WorkDeta
         view={traceView}
         onViewChange={setTraceView}
       />
-      <RunRoleCards trace={trace} workId={data.work.id} runId={run.work_run.id} originConversationId={originConversationId} />
+      <RunRoleCards
+        trace={trace}
+        workId={data.work.id}
+        runId={run.work_run.id}
+        originConversationId={originConversationId}
+      />
       <RunReview
         run={run}
         trace={trace}
@@ -466,7 +532,13 @@ function OverviewPanel({ data, originConversationId }: { readonly data: WorkDeta
   );
 }
 
-function TranscriptPanel({ data, selectedSessionIndex }: { readonly data: WorkDetailData; readonly selectedSessionIndex?: number }) {
+function TranscriptPanel({
+  data,
+  selectedSessionIndex,
+}: {
+  readonly data: WorkDetailData;
+  readonly selectedSessionIndex?: number;
+}) {
   const [view, setView] = useState<'sessions' | 'execution'>('sessions');
   if (!data.run || !data.trace)
     return (
@@ -478,8 +550,15 @@ function TranscriptPanel({ data, selectedSessionIndex }: { readonly data: WorkDe
     );
   const live = data.run.work_run.product_state === 'running';
   return (
-    <section className="work-transcript-panel run-trace" data-testid="work-transcript-panel">
-      <div className="run-trace__tabs" role="tablist" aria-label="Transcript views">
+    <section
+      className="work-transcript-panel run-trace"
+      data-testid="work-transcript-panel"
+    >
+      <div
+        className="run-trace__tabs"
+        role="tablist"
+        aria-label="Transcript views"
+      >
         {(['sessions', 'execution'] as const).map((item) => (
           <button
             aria-selected={view === item}
@@ -489,12 +568,18 @@ function TranscriptPanel({ data, selectedSessionIndex }: { readonly data: WorkDe
             role="tab"
             type="button"
           >
-            {item === 'sessions' ? 'Session Transcripts' : 'Execution Transcript'}
+            {item === 'sessions'
+              ? 'Session Transcripts'
+              : 'Execution Transcript'}
           </button>
         ))}
       </div>
       {view === 'sessions' ? (
-        <SessionTranscripts live={live} trace={data.trace} initialSelectedIndex={selectedSessionIndex} />
+        <SessionTranscripts
+          live={live}
+          trace={data.trace}
+          initialSelectedIndex={selectedSessionIndex}
+        />
       ) : (
         <ExecutionTranscript live={live} trace={data.trace} />
       )}
@@ -502,7 +587,10 @@ function TranscriptPanel({ data, selectedSessionIndex }: { readonly data: WorkDe
   );
 }
 
-function scrollTestIdIntoViewAfterRender(testId: string, fallbackTestId?: string) {
+function scrollTestIdIntoViewAfterRender(
+  testId: string,
+  fallbackTestId?: string,
+) {
   // Two nested requestAnimationFrame calls: the first fires after React has
   // committed the state update that (may have) mounted the target element,
   // the second fires after the browser has painted that commit -- this is
@@ -516,7 +604,9 @@ function scrollTestIdIntoViewAfterRender(testId: string, fallbackTestId?: string
         return;
       }
       if (fallbackTestId) {
-        document.querySelector(`[data-testid="${fallbackTestId}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        document
+          .querySelector(`[data-testid="${fallbackTestId}"]`)
+          ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
     });
   });
@@ -576,8 +666,8 @@ function RunReview({
         <p className="work-shell-kicker">Review</p>
         <h2>Run result and collaboration summary</h2>
         <p>
-          This review uses captured Product facts only. No assistant text or file
-          is promoted to an Artifact.
+          This review uses captured Product facts only. No assistant text or
+          file is promoted to an Artifact.
         </p>
       </div>
       <div className="work-review__grid">
@@ -591,30 +681,55 @@ function RunReview({
         <dl className="work-review__facts">
           <ReviewFact label="Agents" value={trace.actors.length} />
           <ReviewFact label="Work Items" value={trace.work_items.length} />
-          <ReviewFact label="Attempts" value={attemptCount} onClick={() => {
-            onRequestTimelineView();
-            scrollTestIdIntoViewAfterRender('trace-timeline');
-          }} />
-          <ReviewFact label="Rework" value={feedbackCount} onClick={() => {
-            const reworkItem = trace.work_items.find((item) => item.attempts.length > 1);
-            if (reworkItem && reworkItem.attempts[0]) onSelectAttempt(reworkItem.attempts[0].id);
-            onRequestTimelineView();
-            scrollTestIdIntoViewAfterRender('trace-timeline');
-          }} />
-          <ReviewFact label="Agent messages" value={messageCount} onClick={() => {
-            onRequestTimelineView();
-            scrollTestIdIntoViewAfterRender('timeline-messages', 'trace-timeline');
-          }} />
-          <ReviewFact label="MCP activities" value={trace.mcp_activities.length} />
+          <ReviewFact
+            label="Attempts"
+            value={attemptCount}
+            onClick={() => {
+              onRequestTimelineView();
+              scrollTestIdIntoViewAfterRender('trace-timeline');
+            }}
+          />
+          <ReviewFact
+            label="Rework"
+            value={feedbackCount}
+            onClick={() => {
+              const reworkItem = trace.work_items.find(
+                (item) => item.attempts.length > 1,
+              );
+              if (reworkItem && reworkItem.attempts[0])
+                onSelectAttempt(reworkItem.attempts[0].id);
+              onRequestTimelineView();
+              scrollTestIdIntoViewAfterRender('trace-timeline');
+            }}
+          />
+          <ReviewFact
+            label="Agent messages"
+            value={messageCount}
+            onClick={() => {
+              onRequestTimelineView();
+              scrollTestIdIntoViewAfterRender(
+                'timeline-messages',
+                'trace-timeline',
+              );
+            }}
+          />
+          <ReviewFact
+            label="MCP activities"
+            value={trace.mcp_activities.length}
+          />
         </dl>
       </div>
       <div className="work-review__map" data-testid="review-mini-map">
         <h3>Run Map</h3>
-        <MapView selectedAttemptKey={selectedAttemptId} trace={trace} onSelect={(attemptId) => {
-          onSelectAttempt(attemptId);
-          onRequestTimelineView();
-          scrollTestIdIntoViewAfterRender('trace-timeline');
-        }} />
+        <MapView
+          selectedAttemptKey={selectedAttemptId}
+          trace={trace}
+          onSelect={(attemptId) => {
+            onSelectAttempt(attemptId);
+            onRequestTimelineView();
+            scrollTestIdIntoViewAfterRender('trace-timeline');
+          }}
+        />
       </div>
       <div className="work-review__problems" data-testid="review-problems">
         <h3>Problems & capture gaps</h3>
@@ -622,20 +737,29 @@ function RunReview({
           {reworkItems.length ? (
             <li>
               <strong>Rework:</strong>{' '}
-              {reworkItems.map((item) => item.subject).join(', ')} ({reworkItems.length} item{reworkItems.length > 1 ? 's' : ''} required multiple Attempts)
+              {reworkItems.map((item) => item.subject).join(', ')} (
+              {reworkItems.length} item{reworkItems.length > 1 ? 's' : ''}{' '}
+              required multiple Attempts)
             </li>
           ) : null}
           {mcpOnlyItems.length ? (
             <li>
-              <strong>MCP-only coverage:</strong>{' '}
-              {mcpOnlyItems.length} Work Item{mcpOnlyItems.length > 1 ? 's have' : ' has'} MCP activity but no observed Agent messages
+              <strong>MCP-only coverage:</strong> {mcpOnlyItems.length} Work
+              Item{mcpOnlyItems.length > 1 ? 's have' : ' has'} MCP activity but
+              no observed Agent messages
             </li>
           ) : null}
           <li>
             <strong>Timeline scope:</strong>{' '}
             {trace.timeline_coverage.scope.replaceAll('_', ' ')}
             {trace.timeline_coverage.excluded_execution.length ? (
-              <> — excluded: {trace.timeline_coverage.excluded_execution.map((e) => e.replaceAll('_', ' ')).join(', ')}</>
+              <>
+                {' '}
+                — excluded:{' '}
+                {trace.timeline_coverage.excluded_execution
+                  .map((e) => e.replaceAll('_', ' '))
+                  .join(', ')}
+              </>
             ) : null}
           </li>
           {!reworkItems.length && !mcpOnlyItems.length ? (
@@ -648,7 +772,9 @@ function RunReview({
           <h3>Key Agent outputs</h3>
           {keyOutputs.map((output, index) => (
             <article key={index}>
-              <strong>{output.subject} (Attempt {output.attemptNo})</strong>
+              <strong>
+                {output.subject} (Attempt {output.attemptNo})
+              </strong>
               {output.result ? <p>Result: {output.result}</p> : null}
               {output.feedback ? <p>Feedback: {output.feedback}</p> : null}
             </article>
@@ -670,7 +796,15 @@ function ReviewFact({
 }) {
   if (onClick) {
     return (
-      <div className="work-review__fact--clickable" role="button" tabIndex={0} onClick={onClick} onKeyDown={(e) => { if (e.key === 'Enter') onClick(); }}>
+      <div
+        className="work-review__fact--clickable"
+        role="button"
+        tabIndex={0}
+        onClick={onClick}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') onClick();
+        }}
+      >
         <dt>{label}</dt>
         <dd>{value}</dd>
       </div>
@@ -684,7 +818,13 @@ function ReviewFact({
   );
 }
 
-function RunsPanel({ data, originConversationId }: { readonly data: WorkDetailData; readonly originConversationId?: string | null }) {
+function RunsPanel({
+  data,
+  originConversationId,
+}: {
+  readonly data: WorkDetailData;
+  readonly originConversationId?: string | null;
+}) {
   if (data.runs.length === 0)
     return (
       <section className="work-detail-state">
@@ -714,7 +854,9 @@ function RunsPanel({ data, originConversationId }: { readonly data: WorkDetailDa
             <li data-selected={selected ? 'true' : undefined} key={run.id}>
               <div className="work-run-list__identity">
                 <strong>{index === 0 ? 'Latest Run' : 'Historical Run'}</strong>
-                <time dateTime={run.created_at}>{formatTimestamp(run.created_at)}</time>
+                <time dateTime={run.created_at}>
+                  {formatTimestamp(run.created_at)}
+                </time>
               </div>
               <div className="work-run-list__definition">
                 <span>Definition</span>
@@ -728,15 +870,34 @@ function RunsPanel({ data, originConversationId }: { readonly data: WorkDetailDa
                 <span
                   className={`work-state-pill work-state-pill--${data.run.work_run.product_state}`}
                 >
-                  {productStatePresentation(data.run.work_run.product_state).label}
+                  {
+                    productStatePresentation(data.run.work_run.product_state)
+                      .label
+                  }
                 </span>
               ) : (
-                <span className="work-run-list__quiet">Outcome loads on open</span>
+                <span className="work-run-list__quiet">
+                  Outcome loads on open
+                </span>
               )}
-              <a href={workTabHref(data.work.id, 'overview', run.id, originConversationId)}>
+              <a
+                href={workTabHref(
+                  data.work.id,
+                  'overview',
+                  run.id,
+                  originConversationId,
+                )}
+              >
                 {selected ? 'View Overview' : 'Open Run'}
               </a>
-              <a href={workTabHref(data.work.id, 'definition', run.id, originConversationId)}>
+              <a
+                href={workTabHref(
+                  data.work.id,
+                  'definition',
+                  run.id,
+                  originConversationId,
+                )}
+              >
                 Definition used
               </a>
             </li>
@@ -773,7 +934,13 @@ function definitionName(
   return typeof name === 'string' && name.length > 0 ? name : null;
 }
 
-function RunTrigger({ workId, originConversationId }: { readonly workId: string; readonly originConversationId?: string | null }) {
+function RunTrigger({
+  workId,
+  originConversationId,
+}: {
+  readonly workId: string;
+  readonly originConversationId?: string | null;
+}) {
   const [state, setState] = useState<'idle' | 'starting' | 'error'>('idle');
   const [errorDetail, setErrorDetail] = useState<string | null>(null);
 
@@ -782,9 +949,13 @@ function RunTrigger({ workId, originConversationId }: { readonly workId: string;
     setErrorDetail(null);
     try {
       const runId = await startWorkRun(workId);
-      window.location.assign(workTabHref(workId, 'overview', runId, originConversationId));
+      window.location.assign(
+        workTabHref(workId, 'overview', runId, originConversationId),
+      );
     } catch (error) {
-      setErrorDetail(error instanceof Error ? error.message : 'Please try again.');
+      setErrorDetail(
+        error instanceof Error ? error.message : 'Please try again.',
+      );
       setState('error');
     }
   }
@@ -804,13 +975,13 @@ function RunTrigger({ workId, originConversationId }: { readonly workId: string;
       </button>
       {state === 'error' ? (
         <p>
-          Failed to start Run{errorDetail ? `: ${errorDetail}` : '. Please try again.'}
+          Failed to start Run
+          {errorDetail ? `: ${errorDetail}` : '. Please try again.'}
         </p>
       ) : null}
     </div>
   );
 }
-
 
 function WorkListLoading() {
   return (
@@ -848,7 +1019,10 @@ function WorkListError() {
   );
 }
 
-function WorkListEmpty({ showNewWork, onNewWork }: {
+function WorkListEmpty({
+  showNewWork,
+  onNewWork,
+}: {
   readonly showNewWork: boolean;
   readonly onNewWork: () => void;
 }) {

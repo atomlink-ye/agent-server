@@ -102,9 +102,11 @@ export function ConversationsPage({
         return;
       }
       refreshInFlight = true;
-      void conversationListStore.load(commands.loadConversations).finally(() => {
-        refreshInFlight = false;
-      });
+      void conversationListStore
+        .load(commands.loadConversations)
+        .finally(() => {
+          refreshInFlight = false;
+        });
     };
     const startPolling = (): void => {
       if (disposed || document.visibilityState !== 'visible') return;
@@ -129,8 +131,7 @@ export function ConversationsPage({
   }, [commands.loadConversations, conversationListStore]);
 
   useEffect(() => {
-    if (conversationState.status !== 'ready')
-      return;
+    if (conversationState.status !== 'ready') return;
 
     const conversations = conversationState.conversations;
     const routeExists = routeConversationId
@@ -162,7 +163,9 @@ export function ConversationsPage({
     const selectedExists = selected
       ? conversations.some(({ id }) => id === selected)
       : false;
-    const nextConversationId = selectedExists ? selected! : conversations[0]!.id;
+    const nextConversationId = selectedExists
+      ? selected!
+      : conversations[0]!.id;
     appSelectionStore.select(nextConversationId);
     initialSelectionResolved.current = true;
     if (location.pathname === '/') {
@@ -254,7 +257,8 @@ export function ConversationsPage({
 
   const send = useCallback(
     async (body: string): Promise<void> => {
-      if (!conversationId || !messageStore.beginSend(conversationId, body)) return;
+      if (!conversationId || !messageStore.beginSend(conversationId, body))
+        return;
       try {
         const message = await commands.sendMessage(conversationId, body);
         if (!message) {
@@ -317,63 +321,63 @@ export function ConversationsPage({
 
   return (
     <>
-          <ConversationsPane
-            commands={commands}
-            appStore={appSelectionStore}
-            conversationsStore={conversationListStore}
-            onSelectConversation={handleSelect}
+      <ConversationsPane
+        commands={commands}
+        appStore={appSelectionStore}
+        conversationsStore={conversationListStore}
+        onSelectConversation={handleSelect}
+      />
+
+      <main className="chat-panel">
+        <TitleBar section="Conversations" />
+        <header className="chat-header">
+          <div className="chat-header-title">
+            <span className="conversation-header-avatar" aria-hidden="true">
+              {selectedConversation
+                ? conversationDisplayName(selectedConversation)
+                    .slice(0, 1)
+                    .toUpperCase() || 'C'
+                : 'C'}
+            </span>
+            <div>
+              <span className="eyebrow">Conversation</span>
+              <h1>
+                {selectedConversation
+                  ? conversationDisplayName(selectedConversation)
+                  : 'Conversation'}
+              </h1>
+            </div>
+          </div>
+          <button
+            className="icon-button"
+            type="button"
+            aria-label="More options"
+            disabled
+          >
+            ···
+          </button>
+        </header>
+
+        <section className="chat-content" aria-label="Conversation">
+          <ChatTranscript
+            conversationId={conversationId}
+            hasConversations={conversationState.conversations.length > 0}
+            state={messageState}
+            onRetry={retryMessages}
+            onOpenWork={openWork}
           />
-
-          <main className="chat-panel">
-            <TitleBar section="Conversations" />
-            <header className="chat-header">
-              <div className="chat-header-title">
-                <span className="conversation-header-avatar" aria-hidden="true">
-                  {selectedConversation
-                    ? conversationDisplayName(selectedConversation)
-                        .slice(0, 1)
-                        .toUpperCase() || 'C'
-                    : 'C'}
-                </span>
-                <div>
-                  <span className="eyebrow">Conversation</span>
-                  <h1>
-                    {selectedConversation
-                      ? conversationDisplayName(selectedConversation)
-                      : 'Conversation'}
-                  </h1>
-                </div>
-              </div>
-              <button
-                className="icon-button"
-                type="button"
-                aria-label="More options"
-                disabled
-              >
-                ···
-              </button>
-            </header>
-
-            <section className="chat-content" aria-label="Conversation">
-              <ChatTranscript
-                conversationId={conversationId}
-                hasConversations={conversationState.conversations.length > 0}
-                state={messageState}
-                onRetry={retryMessages}
-                onOpenWork={openWork}
-              />
-              <ChatComposer
-                draft={messageState?.draft ?? ''}
-                sending={messageState?.sendStatus === 'sending'}
-                disabled={conversationId === null}
-                sendError={messageState?.sendError ?? null}
-                canRetry={messageState?.sendStatus === 'failed'}
-                onDraftChange={setDraft}
-                onSend={(body) => void send(body)}
-                onRetry={retrySend}
-              />
-            </section>
-          </main>
+          <ChatComposer
+            draft={messageState?.draft ?? ''}
+            sending={messageState?.sendStatus === 'sending'}
+            disabled={conversationId === null}
+            sendError={messageState?.sendError ?? null}
+            canRetry={messageState?.sendStatus === 'failed'}
+            onDraftChange={setDraft}
+            onSend={(body) => void send(body)}
+            onRetry={retrySend}
+          />
+        </section>
+      </main>
     </>
   );
 }

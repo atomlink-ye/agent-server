@@ -32,7 +32,9 @@ type ScopeChoice = Readonly<{
 
 export function FilesPage() {
   const [coworkers, setCoworkers] = useState<readonly Coworker[]>([]);
-  const [conversations, setConversations] = useState<readonly Conversation[]>([]);
+  const [conversations, setConversations] = useState<readonly Conversation[]>(
+    [],
+  );
   const [works, setWorks] = useState<readonly WorkListItem[]>([]);
   const [selectedKey, setSelectedKey] = useState('workspace');
   const [listing, setListing] = useState<ContextFileListing | null>(null);
@@ -56,7 +58,8 @@ export function FilesPage() {
         setTargetWorkId(nextWorks[0]?.id ?? '');
       },
       (reason: unknown) =>
-        active && setError(reason instanceof Error ? reason.message : String(reason)),
+        active &&
+        setError(reason instanceof Error ? reason.message : String(reason)),
     );
     return () => {
       active = false;
@@ -65,7 +68,12 @@ export function FilesPage() {
 
   const choices = useMemo<readonly ScopeChoice[]>(() => {
     const result: ScopeChoice[] = [
-      { key: 'workspace', label: 'Workspace', kind: 'Workspace', request: { scope: 'workspace' } },
+      {
+        key: 'workspace',
+        label: 'Workspace',
+        kind: 'Workspace',
+        request: { scope: 'workspace' },
+      },
     ];
     for (const agent of coworkers) {
       result.push({
@@ -86,7 +94,10 @@ export function FilesPage() {
     for (const conversation of conversations) {
       result.push({
         key: `conversation:${conversation.id}`,
-        label: conversation.directAgent?.displayName ?? conversation.title ?? 'Conversation',
+        label:
+          conversation.directAgent?.displayName ??
+          conversation.title ??
+          'Conversation',
         kind: 'Conversation',
         conversation,
         request: { scope: 'conversation', conversationId: conversation.id },
@@ -103,7 +114,8 @@ export function FilesPage() {
     }
     return result;
   }, [conversations, coworkers, works]);
-  const selected = choices.find((choice) => choice.key === selectedKey) ?? choices[0]!;
+  const selected =
+    choices.find((choice) => choice.key === selectedKey) ?? choices[0]!;
 
   useEffect(() => {
     if (!selected) return;
@@ -113,7 +125,9 @@ export function FilesPage() {
     setError(null);
     void loadContextFiles(selected.request).then(
       (next) => active && setListing(next),
-      (reason: unknown) => active && setError(reason instanceof Error ? reason.message : String(reason)),
+      (reason: unknown) =>
+        active &&
+        setError(reason instanceof Error ? reason.message : String(reason)),
     );
     return () => {
       active = false;
@@ -182,8 +196,16 @@ export function FilesPage() {
 
   return (
     <>
-      <aside className="sidebar files-pane" aria-label="Files and Context navigation">
-        <div className="pane-heading"><div><span className="eyebrow">Shared world</span><h1>Files</h1></div></div>
+      <aside
+        className="sidebar files-pane"
+        aria-label="Files and Context navigation"
+      >
+        <div className="pane-heading">
+          <div>
+            <span className="eyebrow">Shared world</span>
+            <h1>Files</h1>
+          </div>
+        </div>
         <div className="files-scope-list">
           {choices.map((choice) => (
             <button
@@ -192,7 +214,8 @@ export function FilesPage() {
               data-active={choice.key === selected.key ? 'true' : 'false'}
               onClick={() => setSelectedKey(choice.key)}
             >
-              <small>{choice.kind}</small><strong>{choice.label}</strong>
+              <small>{choice.kind}</small>
+              <strong>{choice.label}</strong>
             </button>
           ))}
         </div>
@@ -202,41 +225,110 @@ export function FilesPage() {
         <TitleBar section="Files" />
         <section className="files-files" aria-label="Context files">
           <header className="files-files-header">
-            <div><span className="eyebrow">{selected.kind}</span><h1>{selected.label}</h1></div>
-            <span className="files-access">{listing?.access === 'read_only' ? 'Read only' : 'Read / write'}</span>
+            <div>
+              <span className="eyebrow">{selected.kind}</span>
+              <h1>{selected.label}</h1>
+            </div>
+            <span className="files-access">
+              {listing?.access === 'read_only' ? 'Read only' : 'Read / write'}
+            </span>
           </header>
-          {error ? <p className="files-error" role="alert">{error}</p> : null}
-          {notice ? <p className="files-notice" role="status">{notice}</p> : null}
+          {error ? (
+            <p className="files-error" role="alert">
+              {error}
+            </p>
+          ) : null}
+          {notice ? (
+            <p className="files-notice" role="status">
+              {notice}
+            </p>
+          ) : null}
           <div className="files-files-grid">
             <div className="files-file-list">
-              {listing === null ? <p className="pane-placeholder">Loading context…</p> : null}
-              {listing?.entries.length === 0 ? <p className="pane-placeholder">No files in this canonical scope.</p> : null}
+              {listing === null ? (
+                <p className="pane-placeholder">Loading context…</p>
+              ) : null}
+              {listing?.entries.length === 0 ? (
+                <p className="pane-placeholder">
+                  No files in this canonical scope.
+                </p>
+              ) : null}
               {listing?.entries.map((entry) => (
-                <button type="button" key={entry.id} data-active={file?.id === entry.id ? 'true' : 'false'} onClick={() => void openFile(entry.path)}>
+                <button
+                  type="button"
+                  key={entry.id}
+                  data-active={file?.id === entry.id ? 'true' : 'false'}
+                  onClick={() => void openFile(entry.path)}
+                >
                   <strong>{entry.path}</strong>
-                  <small>v{entry.currentVersion} · {shortHash(entry.contentSha256)}</small>
+                  <small>
+                    v{entry.currentVersion} · {shortHash(entry.contentSha256)}
+                  </small>
                 </button>
               ))}
             </div>
             <article className="files-file-viewer">
-              {!file ? <div className="work-main-empty"><span className="work-main-icon">▱</span><h1>Choose a file</h1><p>This surface shows ContextFS product facts, never a provider cwd.</p></div> : (
+              {!file ? (
+                <div className="work-main-empty">
+                  <span className="work-main-icon">▱</span>
+                  <h1>Choose a file</h1>
+                  <p>
+                    This surface shows ContextFS product facts, never a provider
+                    cwd.
+                  </p>
+                </div>
+              ) : (
                 <>
-                  <header><div><span className="eyebrow">Canonical ContextFS</span><h2>{file.path}</h2></div><span className="files-mono">{shortHash(file.contentSha256)}</span></header>
+                  <header>
+                    <div>
+                      <span className="eyebrow">Canonical ContextFS</span>
+                      <h2>{file.path}</h2>
+                    </div>
+                    <span className="files-mono">
+                      {shortHash(file.contentSha256)}
+                    </span>
+                  </header>
                   <pre>{file.content}</pre>
                   <div className="files-file-actions">
                     {selected.conversation?.directAgent ? (
-                      <button type="button" onClick={() => void promoteToRelationship()}>Promote to my memory</button>
+                      <button
+                        type="button"
+                        onClick={() => void promoteToRelationship()}
+                      >
+                        Promote to my memory
+                      </button>
                     ) : null}
                     {selected.conversation && works.length ? (
-                      <label>Admit to Work
-                        <select value={targetWorkId} onChange={(event) => setTargetWorkId(event.target.value)}>
-                          {works.map((work) => <option key={work.id} value={work.id}>{work.title}</option>)}
+                      <label>
+                        Admit to Work
+                        <select
+                          value={targetWorkId}
+                          onChange={(event) =>
+                            setTargetWorkId(event.target.value)
+                          }
+                        >
+                          {works.map((work) => (
+                            <option key={work.id} value={work.id}>
+                              {work.title}
+                            </option>
+                          ))}
                         </select>
-                        <button type="button" disabled={!targetWorkId} onClick={() => void admitToWork()}>Admit input</button>
+                        <button
+                          type="button"
+                          disabled={!targetWorkId}
+                          onClick={() => void admitToWork()}
+                        >
+                          Admit input
+                        </button>
                       </label>
                     ) : null}
                     {selected.work && !file.path.startsWith('artifacts/') ? (
-                      <button type="button" onClick={() => void publishResult()}>Publish as Work result</button>
+                      <button
+                        type="button"
+                        onClick={() => void publishResult()}
+                      >
+                        Publish as Work result
+                      </button>
                     ) : null}
                   </div>
                 </>
@@ -253,7 +345,9 @@ function basename(path: string): string {
   return path.split('/').filter(Boolean).at(-1) ?? 'context.txt';
 }
 function shortHash(value: string): string {
-  return value.startsWith('sha256:') ? `${value.slice(0, 15)}…` : `${value.slice(0, 12)}…`;
+  return value.startsWith('sha256:')
+    ? `${value.slice(0, 15)}…`
+    : `${value.slice(0, 12)}…`;
 }
 
 export default FilesPage;

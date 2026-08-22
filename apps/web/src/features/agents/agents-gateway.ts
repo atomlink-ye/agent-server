@@ -3,7 +3,8 @@ import { apiTransport } from '../../api/transport';
 
 export async function loadCoworkers(): Promise<readonly Coworker[]> {
   const root = record(await apiTransport.request('/api/agents'));
-  if (!Array.isArray(root?.items)) throw new Error('Invalid Coworker response.');
+  if (!Array.isArray(root?.items))
+    throw new Error('Invalid Coworker response.');
   return root.items.map(normalizeCoworker);
 }
 
@@ -17,7 +18,9 @@ export interface CoworkerProfile {
   };
 }
 
-export async function loadCoworkerProfile(agentId: string): Promise<CoworkerProfile> {
+export async function loadCoworkerProfile(
+  agentId: string,
+): Promise<CoworkerProfile> {
   const payload = await apiTransport.request(
     `/api/agents/${encodeURIComponent(agentId)}/profile`,
   );
@@ -36,7 +39,10 @@ export async function loadCoworkerProfile(agentId: string): Promise<CoworkerProf
     },
     capabilities: {
       modelPolicyRef: text(capabilities.model_policy_ref),
-      proposalLimit: capabilities.proposal_limit === null ? null : integer(capabilities.proposal_limit),
+      proposalLimit:
+        capabilities.proposal_limit === null
+          ? null
+          : integer(capabilities.proposal_limit),
       tools: strings(capabilities.tools),
       skills: strings(capabilities.skills),
     },
@@ -60,7 +66,8 @@ function normalizeCoworker(value: unknown): Coworker {
   };
 }
 function text(value: unknown): string {
-  if (typeof value !== 'string' || !value.trim()) throw new Error('Invalid Coworker profile.');
+  if (typeof value !== 'string' || !value.trim())
+    throw new Error('Invalid Coworker profile.');
   return value;
 }
 function nullableText(value: unknown): string | null {
@@ -72,10 +79,12 @@ function strings(value: unknown): readonly string[] {
   return value as string[];
 }
 function integer(value: unknown): number {
-  if (!Number.isSafeInteger(value) || (value as number) < 0) throw new Error('Invalid Coworker profile.');
+  if (!Number.isSafeInteger(value) || (value as number) < 0)
+    throw new Error('Invalid Coworker profile.');
   return value as number;
 }
 function runtimeStatus(value: unknown): Coworker['runtimeStatus'] {
-  if (value === 'available' || value === 'draining' || value === 'unavailable') return value;
+  if (value === 'available' || value === 'draining' || value === 'unavailable')
+    return value;
   throw new Error('Invalid Coworker runtime status.');
 }

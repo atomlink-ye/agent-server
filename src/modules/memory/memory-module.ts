@@ -37,6 +37,7 @@ import type { MemoryApiRouteDependencies } from '../../entrypoints/api/routes/me
 import { registerMemoryApiRoutes } from '../../entrypoints/api/routes/memory-api.js';
 import { registerLearningProposalRoutes } from '../../entrypoints/api/routes/learning-proposals.js';
 import { registerWorkspaceMemoryRoutes } from '../../entrypoints/api/routes/workspace-memory.js';
+import { registerContextFileRoutes } from '../../entrypoints/api/routes/context-files.js';
 import { createMemoryRuntimeContributor } from '../../entrypoints/mcp/runtime-tool-contributors.js';
 import type { RuntimeToolContributor } from '../../platform/runtime-tool-registry.js';
 import type { ApiEnvironment } from '../../platform/http-types.js';
@@ -213,6 +214,12 @@ export function createMemoryModule(
       registerLearningProposalRoutes(app, {
         config,
         ...http.learningProposals,
+      });
+      registerContextFileRoutes(app, {
+        config,
+        database: options.database,
+        files: logicalFiles,
+        promotions: contextPromotions,
       });
     },
     contributeRuntime: createMemoryRuntimeContributor({

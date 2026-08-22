@@ -4,6 +4,7 @@ import type {
   AgentHomeScopeParams,
 } from '../../domain/agents/agent-home.js';
 import type { ContextView } from '../../domain/context/context-fs.js';
+import type { MemoryRecord } from '../../domain/context/memory-context.js';
 import type { AgentChatRuntime } from '../../domain/chat/agent-chat-runtime.js';
 import {
   principalRef,
@@ -18,6 +19,7 @@ import type {
   ListAgentHomeEntries,
 } from '../agents/agent-home.js';
 import { ContextViewResolver } from '../context/context-view-resolver.js';
+import type { ScopedMemoryResolver } from '../context/scoped-memory-resolver.js';
 import {
   createChatTurnContext,
   runtimeInvocationContextForChat,
@@ -41,6 +43,8 @@ export type ResolvedChatBrain = Readonly<{
   readonly agentOwner: ResourceOwner;
   /** Canonical ContextFS mount manifest for this Chat turn. */
   readonly contextView: ContextView;
+  /** Canonical memories admitted by the same pure scope policy used by Workers. */
+  readonly memory: readonly MemoryRecord[];
   readonly instructions: string;
   readonly capabilitySummary: ChatTurnCapabilitySummary;
   /** Compatibility prompt projection while consumers migrate to ContextFS. */
@@ -69,6 +73,7 @@ export class ChatBrainResolver {
     private readonly agentResolution: AgentResolutionApi,
     private readonly listAgentHomeEntries: Pick<ListAgentHomeEntries, 'execute'>,
     private readonly contextViews: ContextViewResolver = new ContextViewResolver(),
+    private readonly scopedMemory?: Pick<ScopedMemoryResolver, 'resolve'>,
   ) {}
 
   public async resolve(
@@ -140,6 +145,9 @@ export class ChatBrainResolver {
       ...runtimeInvocationContextForChat(turnContext),
       contextView,
     });
+    const memory = this.scopedMemory
+      ? await this.scopedMemory.resolve(invocationContext)
+      : Object.freeze([] as MemoryRecord[]);
 
     return Object.freeze({
       [resolvedChatBrainBrand]: true as const,
@@ -147,6 +155,7 @@ export class ChatBrainResolver {
       invocationContext,
       agentOwner,
       contextView,
+      memory: Object.freeze([...memory]),
       instructions: resolvedVersion.instructions,
       capabilitySummary: Object.freeze({
         agentDefinitionId: definition.id,

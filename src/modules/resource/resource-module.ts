@@ -130,10 +130,11 @@ export async function createResourceModule(
     environmentRegistry,
     memories: memoryVersionReadApi,
   });
-  const defaultCoworkerProvisioning = new EnsureCoworkerConversation(
-    new PostgresConversationRepository(options.database),
-    new PostgresConversationWorkEntitlementRepository(options.database),
+  const conversationRepository = new PostgresConversationRepository(
+    options.database,
   );
+  const workEntitlementRepository =
+    new PostgresConversationWorkEntitlementRepository(options.database);
 
   return {
     managedAgentDefinitions: agentRegistry,
@@ -149,11 +150,22 @@ export async function createResourceModule(
         config,
         definitions: productWorkDefinitions,
       });
+      const configuredCoworkerProvisioning =
+        httpOptions?.coworkerProvisioning ??
+        (config.directChatPlane !== 'absent'
+          ? new EnsureCoworkerConversation(
+              conversationRepository,
+              config.productWorkPlane !== 'absent'
+                ? workEntitlementRepository
+                : undefined,
+            )
+          : undefined);
       registerAgentRoutes(app, {
         config,
         agentRegistry,
-        coworkerProvisioning:
-          httpOptions?.coworkerProvisioning ?? defaultCoworkerProvisioning,
+        ...(configuredCoworkerProvisioning
+          ? { coworkerProvisioning: configuredCoworkerProvisioning }
+          : {}),
       });
       registerTeamRoutes(app, {
         config,

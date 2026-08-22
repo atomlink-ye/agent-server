@@ -437,7 +437,9 @@ export class PostgresRuntimeSessionRepository implements RuntimeSessionRepositor
       );
       const currentGenerationId = current.rows?.[0]?.current_generation_id;
       if (!currentGenerationId)
-        throw new Error('Runtime session replacement has no active generation.');
+        throw new Error(
+          'Runtime session replacement has no active generation.',
+        );
 
       const superseded = await db.query(
         `UPDATE runtime_session_generations
@@ -446,7 +448,9 @@ export class PostgresRuntimeSessionRepository implements RuntimeSessionRepositor
         [currentGenerationId, now],
       );
       if ((superseded.rowCount ?? 0) !== 1)
-        throw new Error('Runtime session replacement has no active generation.');
+        throw new Error(
+          'Runtime session replacement has no active generation.',
+        );
 
       const inserted = await db.query(
         `INSERT INTO runtime_session_generations (
@@ -472,7 +476,9 @@ export class PostgresRuntimeSessionRepository implements RuntimeSessionRepositor
         ],
       );
       if ((inserted.rowCount ?? 0) !== 1)
-        throw new Error('Runtime session replacement generation was not created.');
+        throw new Error(
+          'Runtime session replacement generation was not created.',
+        );
 
       const updated = await db.query(
         `UPDATE runtime_sessions

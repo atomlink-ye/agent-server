@@ -501,16 +501,14 @@ export class AgentRunExecutor {
         throw new Error('Lead runtime grant capabilities are unavailable.');
     }
 
-    let extensions;
-    if (
-      !priorExternalSessionId &&
-      (resolved.skills.length > 0 ||
-        runtimeToolRefs.length > 0 ||
-        (collaborativeTeam != null && member != null))
-    ) {
+    const requiresRuntimeExtensions =
+      resolved.skills.length > 0 ||
+      runtimeToolRefs.length > 0 ||
+      (collaborativeTeam != null && member != null);
+    const bindRuntimeExtensions = async () => {
       if (!this.runtimeExtensionBinder)
         throw new Error('Runtime extension binding is unavailable.');
-      extensions = await this.runtimeExtensionBinder.bind({
+      return this.runtimeExtensionBinder.bind({
         tenantId: task.tenantId,
         principalType: task.principalType,
         principalId: task.principalId,
@@ -532,7 +530,11 @@ export class AgentRunExecutor {
           collaborativeTeam && member ? domainToolRefs : runtimeToolRefs,
         ...(cellCwd ? { cellCwd } : {}),
       });
-    }
+    };
+    let extensions =
+      !priorExternalSessionId && requiresRuntimeExtensions
+        ? await bindRuntimeExtensions()
+        : undefined;
 
     const refreshableBinder = this.runtimeExtensionBinder as
       | (RuntimeExtensionBinder & {
@@ -607,35 +609,10 @@ export class AgentRunExecutor {
       if (otherActive) throw new Error('Team member has another active Task.');
     }
 
-    if (
-      priorExternalSessionId &&
-      member &&
-      collaborativeTeam &&
-      refreshableBinder?.refreshForTeamMember
-    ) {
-      const refreshed = await refreshableBinder.refreshForTeamMember({
-        ...(exactLeadGrantId ? { grantId: exactLeadGrantId } : {}),
-        teamMemberRunId: member.id,
-        scopeId: turnGrantScopeId,
-        taskId: task.id,
-        runId: claim.run.id,
-        allowedTools: runtimeToolRefs,
-        contextEpoch: deriveTeamContextEpoch(task.id, claim.run.id),
-      });
-      exactLeadGrantId = refreshed.grantId;
-    }
-
-    if (
-      priorExternalSessionId &&
-      !member &&
-      sessionRuntime &&
-      sessionRuntime.toolRefs.length > 0 &&
-      refreshableBinder?.refreshForSession
-    )
-      refreshableBinder.refreshForSession(
-        task.sessionId ?? task.id,
-        task.sessionId ? sessionRuntime.toolRefs : [],
-      );
+    if (priorExternalSessionId && requiresRuntimeExtensions)
+      extensions = await bindRuntimeExtensions();
+    if (member?.role === 'lead' && extensions?.grantId)
+      exactLeadGrantId = extensions.grantId;
 
     const runtimeObservationSink = this.events
       ? {
@@ -680,33 +657,29 @@ export class AgentRunExecutor {
                   : {}),
               }
             : {}),
-          ...(!priorExternalSessionId && runtimeModelPolicy
+          ...(runtimeModelPolicy
             ? {
                 provider: runtimeModelPolicy.provider,
                 model: runtimeModelPolicy.model,
               }
             : {}),
-          ...(!priorExternalSessionId
+          systemPrompt: prompts.systemPrompt,
+          ...(collaborativeTeam && !priorExternalSessionId
             ? {
-                systemPrompt: prompts.systemPrompt,
-                ...(collaborativeTeam
-                  ? {
-                      workspaceTitle: `Team ${collaborativeTeam.id.slice(0, 8)}`,
-                    }
-                  : {}),
-                ...(member
-                  ? {
-                      sessionTitle: `${member.name} (${member.role})`,
-                      labels: {
-                        team_run_id: member.teamRunId,
-                        member_name: member.name,
-                        role: member.role,
-                      },
-                    }
-                  : {}),
-                ...(extensions ? { extensions } : {}),
+                workspaceTitle: `Team ${collaborativeTeam.id.slice(0, 8)}`,
               }
             : {}),
+          ...(member && !priorExternalSessionId
+            ? {
+                sessionTitle: `${member.name} (${member.role})`,
+                labels: {
+                  team_run_id: member.teamRunId,
+                  member_name: member.name,
+                  role: member.role,
+                },
+              }
+            : {}),
+          ...(extensions ? { extensions } : {}),
           ...(resolved.proposalLimit > 0
             ? { proposalLimit: resolved.proposalLimit }
             : {}),

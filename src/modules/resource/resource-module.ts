@@ -20,6 +20,7 @@ import { ResolveWorkDefinition } from '../../application/work/resolve-work-defin
 import type { ApiEnvironment } from '../../platform/http-types.js';
 import type { AppConfig } from '../../shared/config.js';
 import { registerAgentRoutes } from '../../entrypoints/api/routes/agents.js';
+import { registerAgentProfileRoute } from '../../entrypoints/api/routes/agent-profile.js';
 import { registerEnvironmentRoutes } from '../../entrypoints/api/routes/environments.js';
 import { registerProductWorkDefinitionRoutes } from '../../entrypoints/api/routes/product-work-definitions.js';
 import { registerTeamRoutes } from '../../entrypoints/api/routes/teams.js';
@@ -184,6 +185,11 @@ export async function createResourceModule(
         ...(configuredCoworkerProvisioning
           ? { coworkerProvisioning: configuredCoworkerProvisioning }
           : {}),
+      });
+      registerAgentProfileRoute(app, {
+        config,
+        agents: agentRegistry,
+        resolution: agentResolutionApi,
       });
       registerTeamRoutes(app, {
         config,

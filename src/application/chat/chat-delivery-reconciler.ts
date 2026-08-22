@@ -101,7 +101,7 @@ export class ChatDeliveryReconciler {
       through_sequence: dispatch.throughSequence,
       watermark: materialized.watermark,
       turn_mode: reply.mode ?? context.turn.modeHint,
-      activation_causes: dispatch.causes.length,
+      activation_causes: dispatch.causes?.length ?? 0,
     });
   }
 

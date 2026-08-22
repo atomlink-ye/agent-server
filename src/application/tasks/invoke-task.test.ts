@@ -178,22 +178,6 @@ describe('InvokeTask', () => {
 
 class PublishedInvokableRepository implements InvokableRepository {
 
-  public async saveAgentDefinition(): Promise<void> {
-    throw new Error('Not implemented in invoke-task tests');
-  }
-
-  public async findAgentDefinitionById(): Promise<null> {
-    return null;
-  }
-
-  public async saveAgentVersion(): Promise<void> {
-    throw new Error('Not implemented in invoke-task tests');
-  }
-
-  public async findAgentVersionById(): Promise<null> {
-    return null;
-  }
-
   public async saveTeamDefinition(): Promise<void> {
     throw new Error('Not implemented in invoke-task tests');
   }

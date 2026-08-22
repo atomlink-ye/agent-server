@@ -85,12 +85,15 @@ export class RunPromptContext {
     return this.resolve(input, true);
   }
 
-  private async resolve(input: {
-    readonly prompt: string;
-    readonly ownerScope: InvokableOwnerScope;
-    readonly invokableVersionId: string;
-    readonly task: Task;
-  }, continuation: boolean): Promise<ResolvedRunPrompt> {
+  private async resolve(
+    input: {
+      readonly prompt: string;
+      readonly ownerScope: InvokableOwnerScope;
+      readonly invokableVersionId: string;
+      readonly task: Task;
+    },
+    continuation: boolean,
+  ): Promise<ResolvedRunPrompt> {
     if (
       input.invokableVersionId === RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID
     ) {

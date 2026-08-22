@@ -3,6 +3,7 @@ import { serve } from '@hono/node-server';
 import { createService } from '../../bootstrap.js';
 import { loadConfig } from '../../shared/config.js';
 import { createLogger } from '../../shared/observability/logger.js';
+import { registerBrowserContextRoutes } from './routes/browser-context.js';
 import { registerBrowserCoworkerRoutes } from './routes/browser-coworkers.js';
 import { registerBrowserWebRoutes } from './routes/browser-web.js';
 import { shutdownService } from './shutdown.js';
@@ -16,14 +17,12 @@ const { app, close } = await createService(config, logger);
 
 // The canonical frontend is a pure Vite client. Browser-facing BFF routes live
 // on Agent Server so service-account credentials never enter browser code.
-// Local development historically declares two sample accounts; choose the
-// first enabled account only outside production when no explicit browser token
-// is configured. Production remains fail-closed and requires an explicit token.
 if (!process.env.AGENT_SERVER_SERVICE_TOKEN?.trim() && config.nodeEnv !== 'production') {
   const localAccount = config.serviceAccounts?.find((account) => !account.disabled);
   if (localAccount) process.env.AGENT_SERVER_SERVICE_TOKEN = localAccount.token;
 }
 registerBrowserCoworkerRoutes(app, config);
+registerBrowserContextRoutes(app, config);
 registerBrowserWebRoutes(app, config);
 
 const server = serve(

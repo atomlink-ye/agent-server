@@ -1,5 +1,9 @@
 import { randomUUID } from 'node:crypto';
 
+import { importAgent } from '../../../src/application/agents/import-agent.js';
+import { publishAgentVersion } from '../../../src/application/agents/publish-agent-version.js';
+import { PostgresAgentRegistry } from '../../../src/infrastructure/postgres/postgres-agent-registry.js';
+import type { AccessContext } from '../../../src/platform/access-context.js';
 import type { HarnessOwner, SeedDatabase } from './types.js';
 import { HARNESS_NOW } from './types.js';
 
@@ -17,65 +21,78 @@ export async function seedPublishedAgentVersion(
   const definitionId = options.definitionId ?? randomUUID();
   const versionId = options.versionId ?? randomUUID();
   const name = options.name ?? 'Harness Agent';
-  const normalizedName = name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  const instructions =
+    options.instructions ?? 'Handle deterministic harness work.';
   const now = options.now ?? HARNESS_NOW;
-  const canonicalPackage = JSON.stringify({
-    apiVersion: 'agentserver.dev/v1alpha1',
-    kind: 'AgentDefinition',
-    metadata: { name: normalizedName },
-    spec: {
-      instructions: options.instructions ?? 'Handle deterministic harness work.',
-      model_policy_ref: 'free-only',
-      proposal_limit: 0,
-      tools: [],
-      skills: [],
+  const ids = [definitionId, versionId];
+  const accessContext: AccessContext = {
+    tenantId: owner.tenantId,
+    workspaceId: owner.workspaceId,
+    principalType: owner.principalType,
+    principalId: owner.principalId,
+    policySnapshotVersion: 'harness-policy-v1',
+  };
+  const registry = new PostgresAgentRegistry(db);
+  const source = managedAgentSource(name, instructions);
+  const imported = await importAgent(registry, {
+    accessContext,
+    idempotencyKey: `harness-agent-import:${definitionId}`,
+    source,
+    now: () => new Date(now),
+    idFactory: () => {
+      const id = ids.shift();
+      if (!id) throw new Error('Harness Agent id factory exhausted.');
+      return id;
     },
   });
-  await db.query(
-    `INSERT INTO agent_definitions
-      (id,tenant_id,workspace_id,principal_type,principal_id,name,managed_discriminator,
-       normalized_name,role_label,summary,created_at,updated_at)
-     VALUES($1,$2,$3,$4,$5,$6,'managed_agent_v1',$7,'worker','Harness fixture',$8,$8)
-     ON CONFLICT (id) DO NOTHING`,
-    [
-      definitionId,
-      owner.tenantId,
-      owner.workspaceId,
-      owner.principalType,
-      owner.principalId,
-      name,
-      normalizedName,
-      now,
-    ],
-  );
-  await db.query(
-    `INSERT INTO agent_versions
-      (id,definition_id,tenant_id,workspace_id,principal_type,principal_id,status,name,
-       description,instructions,managed_discriminator,canonical_package,fingerprint,
-       pattern_metadata,compiler_metadata,policy_snapshot,reference_snapshot,
-       tool_skill_snapshot,validation_report,compiled_package,execution_snapshot,
-       created_at,updated_at,published_at)
-     VALUES($1,$2,$3,$4,$5,$6,'published',$7,'Harness fixture',$8,'managed_agent_v1',
-       $9::jsonb,$10,$11::jsonb,$11::jsonb,$12::jsonb,$13::jsonb,$13::jsonb,$14::jsonb,
-       $11::jsonb,$11::jsonb,$15,$15,$15)
-     ON CONFLICT (id) DO NOTHING`,
-    [
-      versionId,
-      definitionId,
-      owner.tenantId,
-      owner.workspaceId,
-      owner.principalType,
-      owner.principalId,
-      name,
-      options.instructions ?? 'Handle deterministic harness work.',
-      canonicalPackage,
-      'a'.repeat(64),
-      '{}',
-      JSON.stringify({ modelPolicyRef: 'free-only' }),
-      JSON.stringify({ tools: [], skills: [] }),
-      JSON.stringify({ valid: true, metadata: { normalizedName } }),
-      now,
-    ],
-  );
-  return { definitionId, versionId };
+  const published =
+    imported.version.status === 'published'
+      ? imported.version
+      : await publishAgentVersion(registry, {
+          accessContext,
+          idempotencyKey: `harness-agent-publish:${versionId}`,
+          versionId: imported.version.id,
+        });
+  return { definitionId: imported.definition.id, versionId: published.id };
+}
+
+function managedAgentSource(name: string, instructions: string): string {
+  return [
+    'apiVersion: agent-server/v1alpha1',
+    'kind: ManagedAgent',
+    'metadata:',
+    `  name: ${JSON.stringify(name)}`,
+    'spec:',
+    '  description: Deterministic Agent Server harness fixture.',
+    `  instructions: ${JSON.stringify(instructions)}`,
+    '  runtime:',
+    '    provider: paseo',
+    '    modelPolicyRef: free-only',
+    '    mode: isolated',
+    '  tools: []',
+    '  skills: []',
+    '  input:',
+    '    schema:',
+    '      type: object',
+    '      properties:',
+    '        text:',
+    '          type: string',
+    '      required: [text]',
+    '      additionalProperties: false',
+    '    prompt: Handle {{input.text}}.',
+    '  session:',
+    '    invocation: fresh_per_invocation',
+    '    followUps: queued',
+    '    binding: reusable',
+    '  memory:',
+    '    policy: workspace_snapshot',
+    '    proposalLimit: 0',
+    '  permissions:',
+    '    network: none',
+    '    filesystem: workspace_read',
+    '  completion:',
+    '    type: executable',
+    '    command: done',
+    '',
+  ].join('\n');
 }

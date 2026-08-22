@@ -17,7 +17,7 @@ import type { AppConfig } from '../../src/shared/config.js';
 
 const token = 'coworker-api-token';
 const tenantId = 'tenant_coworker_api';
-const workspaceId = 'workspace_coworker_api';
+const workspaceId = '91000000-0000-4000-8000-000000000101';
 const principalId = 'svc_coworker_api';
 let database: PGlite | undefined;
 

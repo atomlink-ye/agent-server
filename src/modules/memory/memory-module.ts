@@ -12,6 +12,7 @@ import {
   ListLearningProposals,
   RejectLearningProposal,
 } from '../../application/learning/learning-proposals.js';
+import { ContextAwareLearningProposalRepository } from '../../application/learning/context-aware-learning-proposal-repository.js';
 import {
   CreateMemory,
   CreateMemoryStore,
@@ -21,11 +22,15 @@ import {
   ListMemoryStores,
   UpdateMemory,
 } from '../../application/memory-api/memory-api.js';
+import { ContextAwareMemoryApiRepository } from '../../application/memory-api/context-aware-memory-api-repository.js';
+import { ContextMemoryService } from '../../application/context/context-memory-service.js';
+import { ContextPromotionService } from '../../application/context/context-promotion-service.js';
 import type {
   MemoryReviewApi,
   MemoryWorkspaceHttpApi,
 } from '../../application/ports/memory-review-api.js';
 import type { FileStore } from '../../application/ports/file-store.js';
+import type { LogicalFileStore } from '../../application/ports/logical-file-store.js';
 import type { TaskRepository } from '../../application/ports/task-repository.js';
 import type { SessionRepository } from '../../application/ports/session-repository.js';
 import type { MemoryApiRouteDependencies } from '../../entrypoints/api/routes/memory-api.js';
@@ -36,10 +41,15 @@ import { createMemoryRuntimeContributor } from '../../entrypoints/mcp/runtime-to
 import type { RuntimeToolContributor } from '../../platform/runtime-tool-registry.js';
 import type { ApiEnvironment } from '../../platform/http-types.js';
 import type { AppConfig } from '../../shared/config.js';
-import { LocalFileStore } from '../../infrastructure/files/local-file-store.js';
+import { ContextFsFileStore } from '../../infrastructure/files/context-fs-file-store.js';
 import { PostgresLearningProposalRepository } from '../../infrastructure/postgres/postgres-learning-proposal-repository.js';
 import { PostgresMemoryApiRepository } from '../../infrastructure/postgres/postgres-memory-api-repository.js';
 import { PostgresWorkspaceMemoryRepository } from '../../infrastructure/postgres/postgres-workspace-memory-repository.js';
+import { PostgresLogicalFileStore } from '../../infrastructure/postgres/postgres-logical-file-store.js';
+import {
+  PostgresContextTransitionRepository,
+  PostgresMemoryContextRepository,
+} from '../../infrastructure/postgres/postgres-memory-context-repository.js';
 import type { TeamToolContextResolver } from '../../application/teams/team-tool-context.js';
 
 export interface MemoryModule {
@@ -54,6 +64,9 @@ export interface MemoryModule {
   };
   readonly reviewApi: MemoryReviewApi;
   readonly fileStore: FileStore;
+  readonly logicalFiles: LogicalFileStore;
+  readonly contextMemory: ContextMemoryService;
+  readonly contextPromotions: ContextPromotionService;
   readonly createMemoryProposal: CreateMemoryProposal;
   installHttp(app: Hono<ApiEnvironment>, config: AppConfig): void;
   readonly contributeRuntime: RuntimeToolContributor;
@@ -89,13 +102,30 @@ export function createMemoryModule(
   const workspaceMemoryRepository = new PostgresWorkspaceMemoryRepository(
     options.database,
   );
-  const learningProposalRepository = new PostgresLearningProposalRepository(
+
+  const logicalFiles = new PostgresLogicalFileStore(options.database);
+  const memoryContextRepository = new PostgresMemoryContextRepository(
     options.database,
   );
-  const memoryApiRepository = new PostgresMemoryApiRepository(options.database);
-  const fileStore = new LocalFileStore(
-    `${options.config.paseo.agentCwd}/memory-store`,
+  const contextMemory = new ContextMemoryService(
+    memoryContextRepository,
+    logicalFiles,
   );
+  const contextPromotions = new ContextPromotionService(
+    logicalFiles,
+    new PostgresContextTransitionRepository(options.database),
+    contextMemory,
+  );
+
+  const learningProposalRepository = new ContextAwareLearningProposalRepository(
+    new PostgresLearningProposalRepository(options.database),
+    contextMemory,
+  );
+  const memoryApiRepository = new ContextAwareMemoryApiRepository(
+    new PostgresMemoryApiRepository(options.database),
+    contextMemory,
+  );
+  const fileStore = new ContextFsFileStore(logicalFiles);
   const managedMemory = new ManagedMemory(options.database, fileStore);
 
   const createMemoryProposal = new CreateMemoryProposal(
@@ -166,6 +196,9 @@ export function createMemoryModule(
     http,
     reviewApi,
     fileStore,
+    logicalFiles,
+    contextMemory,
+    contextPromotions,
     createMemoryProposal,
     installHttp(app, config) {
       registerWorkspaceMemoryRoutes(app, {

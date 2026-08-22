@@ -117,10 +117,10 @@ export function DefinitionPanel({
       setState('error');
       return null;
     }
-    setPlan(planned.body);
+    setPlan(planned);
     setState('valid');
     setStatusMessage('Definition is valid and its resource plan resolved.');
-    return planned.body;
+    return planned;
   }
 
   async function applyDefinition() {

@@ -43,10 +43,11 @@ export function AppShell({
 
   const selectTab = (tab: DesktopTab): void => {
     if (tab === 'work') {
+      const originConversationId = returnConversationId ?? routeConversationId;
       navigate(
         selectedWorkId
-          ? workPath(selectedWorkId, returnConversationId)
-          : workRootPath(returnConversationId),
+          ? workPath(selectedWorkId, originConversationId)
+          : workRootPath(originConversationId),
       );
       return;
     }

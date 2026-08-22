@@ -86,6 +86,7 @@ export const durableKernelMigrationFileNames = [
   '0052_persistent_chat_delta_wake.sql',
   '0053_memory_context_convergence.sql',
   '0054_drop_team_member_direct_conversations.sql',
+  '0055_runtime_session_generations_and_grants.sql',
 ] as const;
 const durableKernelMigrationRegistryTable = 'durable_kernel_schema_migrations';
 const durableKernelMigrationAdvisoryLock = [

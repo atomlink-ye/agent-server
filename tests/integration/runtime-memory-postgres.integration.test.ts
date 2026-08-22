@@ -173,8 +173,11 @@ describe('runtime memory PostgreSQL materialization', () => {
       systemPrompt: '',
     });
     if (secondSession.kind === 'replacement_required')
-      throw new Error('Expected the existing session to remain attachable.');
-    await secondSession.session.run({
+      throw new Error(
+        `unexpected replacement_required: ${secondSession.reason}`,
+      );
+    const session = secondSession.session;
+    await session.run({
       runId: continuationRunId,
       prompt: 'second',
     });

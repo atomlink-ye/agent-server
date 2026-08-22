@@ -74,7 +74,7 @@ function normalizePaseoRequestedModel(
 }
 
 export interface RuntimeModuleDatabase {
-  query<Row extends Record<string, unknown> = Record<string, unknown>>(
+  query<Row = Record<string, unknown>>(
     sql: string,
     values?: readonly unknown[],
   ): Promise<{

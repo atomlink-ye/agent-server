@@ -56,7 +56,6 @@
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "canary:runtime": "node --import tsx tooling/dev/run-canary.ts runtime",
     "canary:golden-path": "node --import tsx tooling/dev/run-canary.ts golden-path",
-    "canary:runtime-restart": "node --import tsx tooling/dev/run-canary.ts runtime-restart",
     "smoke:agent-team": "node --import tsx tooling/dev/run-canary.ts agent-team",
     "smoke:team-registry-work": "node --import tsx tooling/dev/run-canary.ts team-registry-work",
     "eval:memory": "node --import tsx evals/memory-policy/run.ts",

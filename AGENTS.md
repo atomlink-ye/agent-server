@@ -61,7 +61,6 @@ pnpm test:scenario
 pnpm test:pg
 pnpm canary:runtime
 pnpm canary:golden-path
-pnpm canary:runtime-restart
 ```
 
 Select the smallest credible evidence for the outgoing diff. Report only commands that actually ran.

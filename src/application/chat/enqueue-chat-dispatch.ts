@@ -1,6 +1,8 @@
 import type { ChatDispatchRepository } from '../ports/chat-dispatch-repository.js';
 import { ChatActivationPlanner } from './chat-activation-planner.js';
 
+export const CHAT_ACTIVATION_BURST_DEBOUNCE_MS = 75;
+
 export async function enqueueChatDispatchForMessage(
   dispatches: ChatDispatchRepository,
   input: {
@@ -11,6 +13,8 @@ export async function enqueueChatDispatchForMessage(
     readonly latestMessageSequence: number;
     readonly latestMessageAuthorType: 'principal' | 'agent_definition';
     readonly latestMessageId?: string;
+    /** Zero/default keeps deterministic legacy callers immediate. */
+    readonly debounceMs?: number;
   },
 ): Promise<boolean> {
   const planner = new ChatActivationPlanner();
@@ -30,6 +34,7 @@ export async function enqueueChatDispatchForMessage(
     dedupeKey: activation.dedupeKey,
     cause: durableCause,
     priority: activation.priority,
+    debounceMs: input.debounceMs ?? 0,
   });
   return result.enqueued;
 }

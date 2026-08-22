@@ -24,7 +24,7 @@ import {
 } from '../stores/conversations';
 import { createMessagesStore, type MessagesStore } from '../stores/messages';
 import '../work-integration.css';
-import './n3-surfaces.css';
+import './workspace-surfaces.css';
 
 export interface ChatShellProps {
   readonly commands: ChatCommands;

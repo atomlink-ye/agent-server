@@ -7,7 +7,7 @@
  * second palette.
  */
 
-.n3-surfaces {
+.workspace-surfaces {
   display: flex;
   flex-direction: column;
   min-height: 0;

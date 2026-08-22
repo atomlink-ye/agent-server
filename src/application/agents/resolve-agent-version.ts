@@ -7,6 +7,7 @@ import {
   isModelPolicyRef,
   type ModelPolicyRef,
 } from '../../domain/agents/managed-agent-package.js';
+import { resourceOwner, type ResourceOwner } from '../../domain/tenancy/product-context.js';
 import {
   AGENT_SERVER_MEMORY_READ_TOOL_REF,
   SUPPORTED_MANAGED_AGENT_TOOL_REFS,
@@ -48,10 +49,12 @@ export class ResolveAgentVersion implements AgentResolutionApi {
     });
     if (managedVersion) {
       if (managedVersion.status !== 'published') return null;
+      const identity = resolvedIdentity(managedVersion);
       if (options.resolveExtensions === false) {
         return {
           source: 'managed',
           id: managedVersion.id,
+          ...identity,
           instructions: managedVersion.package.spec.instructions,
           modelPolicyRef: readModelPolicyRef(managedVersion),
           proposalLimit: managedVersion.package.spec.memory?.proposalLimit ?? 0,
@@ -88,6 +91,7 @@ export class ResolveAgentVersion implements AgentResolutionApi {
       return {
         source: 'managed',
         id: managedVersion.id,
+        ...identity,
         instructions: managedVersion.package.spec.instructions,
         modelPolicyRef: readModelPolicyRef(managedVersion),
         proposalLimit: managedVersion.package.spec.memory?.proposalLimit ?? 0,
@@ -103,6 +107,7 @@ export class ResolveAgentVersion implements AgentResolutionApi {
       ? {
           source: 'legacy',
           id: legacyVersion.id,
+          ...resolvedIdentity(legacyVersion),
           instructions: legacyVersion.instructions,
           modelPolicyRef: 'free-only',
           proposalLimit: 0,
@@ -133,4 +138,42 @@ function validateToolRefs(refs: readonly string[]): void {
       throw new Error('The managed Agent references an unsupported Tool.');
     seen.add(ref);
   }
+}
+/**
+ * Production registry entities carry all of these fields. Some deliberately
+ * bounded unit/runtime fakes predate ContextFS and omit them; keep the new
+ * structured identity optional rather than turning those shims into product
+ * ownership authorities.
+ */
+function resolvedIdentity(value: unknown): Readonly<{
+  definitionId?: string;
+  agentOwner?: ResourceOwner;
+}> {
+  if (!value || typeof value !== 'object') return Object.freeze({});
+  const row = value as Record<string, unknown>;
+  const definitionId =
+    typeof row.definitionId === 'string' && row.definitionId.length > 0
+      ? row.definitionId
+      : undefined;
+  const canResolveOwner =
+    typeof row.tenantId === 'string' &&
+    row.tenantId.length > 0 &&
+    typeof row.workspaceId === 'string' &&
+    row.workspaceId.length > 0 &&
+    (row.principalType === 'service_account' || row.principalType === 'user') &&
+    typeof row.principalId === 'string' &&
+    row.principalId.length > 0;
+  return Object.freeze({
+    ...(definitionId ? { definitionId } : {}),
+    ...(canResolveOwner
+      ? {
+          agentOwner: resourceOwner({
+            tenantId: row.tenantId as string,
+            workspaceId: row.workspaceId as string,
+            principalType: row.principalType as string,
+            principalId: row.principalId as string,
+          }),
+        }
+      : {}),
+  });
 }

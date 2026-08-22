@@ -21,10 +21,14 @@ import type { ProductWorkListQuery } from '../../application/ports/product-work-
 import type { ConversationRepository } from '../../application/ports/conversation-repository.js';
 import type { WorkDefinitionResolutionPort } from '../../application/ports/work-definition-resolution.js';
 import type { WorkIdentityOwnerScope } from '../../application/ports/work-identity-repository.js';
-import { StartWorkRun } from '../../application/work/start-work-run.js';
+import type { LogicalFileStore } from '../../application/ports/logical-file-store.js';
+import { StartWorkRun, type StartWorkRunRequest } from '../../application/work/start-work-run.js';
+import { WorkExecutionService } from '../../application/work/work-execution-service.js';
 import { QueryWorkProjectionFacts } from '../../application/work/query-work-projection-facts.js';
 import { validateProductWorkDefinition } from '../../application/work/validate-product-work-definition.js';
 import { WorkIdentityApi } from '../../application/work/work-identity-api.js';
+import { ContextViewResolver } from '../../application/context/context-view-resolver.js';
+import { ConversationWorkContextLink } from '../../application/context/conversation-work-context-link.js';
 import type { RuntimeToolContributor } from '../../platform/runtime-tool-registry.js';
 import { registerProductWorkCommandRoutes } from '../../entrypoints/api/routes/product-work-commands.js';
 import { registerProductWorkRoutes } from '../../entrypoints/api/routes/product-work.js';
@@ -35,6 +39,7 @@ import {
   type WorkIdentityConnectable,
 } from '../../infrastructure/postgres/postgres-work-identity-repository.js';
 import { PostgresConversationWorkLinkRepository } from './conversation-work-link-repository.js';
+import { PostgresLogicalFileStore } from '../../infrastructure/postgres/postgres-logical-file-store.js';
 import { PostgresRunEventRepository } from '../../infrastructure/postgres/postgres-run-event-repository.js';
 import { PostgresSessionTranscriptFactsQuery } from '../../infrastructure/postgres/postgres-session-transcript-facts-query.js';
 import { PostgresWorkDefinitionSourceRepository } from '../../infrastructure/postgres/postgres-work-definition-source-repository.js';
@@ -46,6 +51,9 @@ import type { AppConfig } from '../../shared/config.js';
 
 export interface WorkModule {
   readonly projection: ProductProjectionApi;
+  readonly execution: WorkExecutionService;
+  readonly contextFiles: LogicalFileStore;
+  readonly contextViews: ContextViewResolver;
   createChatWorkCardProjection(): ChatWorkCardProjection;
   installHttp(
     app: Hono<ApiEnvironment>,
@@ -127,20 +135,20 @@ export function createWorkModule(options: {
     DefinitionReadApi,
     'findTeamDefinitionById' | 'findPublishedTeamVersionById'
   >;
-  /** Production supplies the generic Composition resolver; legacy tests may omit it. */
   readonly definitionResolution?: WorkDefinitionResolutionPort;
   readonly execution: ExecutionAdmission;
   readonly executionFacts: ExecutionFactQuery;
-  /** Production supplies the conversation adapter; legacy construction may omit it. */
   readonly conversations?: Pick<ConversationRepository, 'appendMessage'>;
-  /** Production supplies the RuntimeModule capability authority. */
   readonly runtimeCapabilities?: {
     capabilities(): ExecutionPlaneCapabilities;
   };
 }): WorkModule {
   const repository = new PostgresWorkIdentityRepository(options.database);
-  const conversationWorkLinks = new PostgresConversationWorkLinkRepository(
-    options.database,
+  const contextFiles = new PostgresLogicalFileStore(options.database);
+  const contextViews = new ContextViewResolver();
+  const conversationWorkLinks = new ConversationWorkContextLink(
+    new PostgresConversationWorkLinkRepository(options.database),
+    contextFiles,
   );
   const productLists = new PostgresProductWorkListQuery(options.database);
   const definitionSources = new PostgresWorkDefinitionSourceRepository(
@@ -153,7 +161,7 @@ export function createWorkModule(options: {
       ? { definitionResolution: options.definitionResolution }
       : {}),
   });
-  const startWorkRun = new StartWorkRun({
+  const startWorkRunPrimitive = new StartWorkRun({
     identity: workIdentity,
     execution: options.execution,
     ...(options.runtimeCapabilities
@@ -203,6 +211,16 @@ export function createWorkModule(options: {
     workFacts,
     executionFacts: options.executionFacts,
   });
+  const execution = new WorkExecutionService(
+    workIdentity,
+    startWorkRunPrimitive,
+    projection,
+  );
+  const startWorkRun = {
+    execute(input: StartWorkRunRequest) {
+      return execution.startExistingWork(input);
+    },
+  };
   const chatWorkCard = createChatWorkCardProjection({
     workIdentity: workIdentityQuery,
     productProjection: projection,
@@ -221,6 +239,9 @@ export function createWorkModule(options: {
 
   return {
     projection,
+    execution,
+    contextFiles,
+    contextViews,
     createChatWorkCardProjection() {
       return createChatWorkCardProjection({
         workIdentity: workIdentityQuery,

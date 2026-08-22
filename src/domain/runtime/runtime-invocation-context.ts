@@ -1,3 +1,4 @@
+import type { ContextView } from '../context/context-fs.js';
 import type { PrincipalRef, ProductScope, ResourceOwner } from '../tenancy/product-context.js';
 
 export type RuntimeScope =
@@ -21,4 +22,6 @@ export type RuntimeInvocationContext = Readonly<{
   triggerMessageId?: string;
   workId?: string;
   workRunId?: string;
+  /** Logical ContextFS mount manifest; never a provider cwd or session binding. */
+  contextView?: ContextView;
 }>;

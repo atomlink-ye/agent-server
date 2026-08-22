@@ -80,6 +80,8 @@ export const durableKernelMigrationFileNames = [
   '0046_conversation_work_entitlements.sql',
   '0047_chat_turn_provenance.sql',
   '0048_agent_chat_runtime_session.sql',
+  '0049_context_fs.sql',
+  '0050_context_fs_agent_home_scope.sql',
 ] as const;
 const durableKernelMigrationRegistryTable = 'durable_kernel_schema_migrations';
 const durableKernelMigrationAdvisoryLock = [

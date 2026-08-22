@@ -8,6 +8,7 @@ import type { TeamMemberRun } from '../../domain/teams/team-member-run.js';
 import type { TeamRun } from '../../domain/teams/team-run.js';
 import type { TeamWorkItem } from '../../domain/teams/team-work-item.js';
 import type { TeamWorkItemAttempt } from '../../domain/teams/team-work-item-attempt.js';
+import type { ResourceOwner } from '../../domain/tenancy/product-context.js';
 import type {
   AgentResolutionApi,
   ResolvedAgentVersion,
@@ -35,6 +36,8 @@ export interface ResolvedRunPrompt {
   readonly turnPrompt: string;
   readonly proposalLimit: number;
   readonly agentVersionId: string;
+  readonly agentDefinitionId?: string;
+  readonly agentOwner?: ResourceOwner;
   readonly modelPolicyRef: ResolvedAgentVersion['modelPolicyRef'];
   readonly skills: readonly ResolvedSkillPackage[];
   readonly toolRefs: readonly string[];
@@ -96,6 +99,10 @@ export class RunPromptContext {
       turnPrompt: buildTurnPrompt({ taskInput: input.prompt, memory }),
       proposalLimit: agentVersion.proposalLimit ?? 0,
       agentVersionId: input.invokableVersionId,
+      ...(agentVersion.definitionId
+        ? { agentDefinitionId: agentVersion.definitionId }
+        : {}),
+      ...(agentVersion.agentOwner ? { agentOwner: agentVersion.agentOwner } : {}),
       modelPolicyRef: agentVersion.modelPolicyRef,
       skills: agentVersion.skills,
       toolRefs: agentVersion.toolRefs,
@@ -129,6 +136,12 @@ export class RunPromptContext {
       }),
       proposalLimit: metadata.proposalLimit ?? 0,
       agentVersionId: input.invokableVersionId,
+      ...('definitionId' in metadata && metadata.definitionId
+        ? { agentDefinitionId: metadata.definitionId }
+        : {}),
+      ...('agentOwner' in metadata && metadata.agentOwner
+        ? { agentOwner: metadata.agentOwner }
+        : {}),
       modelPolicyRef: metadata.modelPolicyRef,
       skills: [],
       toolRefs: [],

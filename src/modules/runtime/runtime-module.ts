@@ -1,6 +1,7 @@
 import { PaseoExecutionPlane } from '../../adapters/paseo/paseo-execution-plane.js';
 import { UnavailableExecutionPlane } from '../../adapters/runtime/unavailable-execution-plane.js';
 import type { RuntimeExtensionBinder } from '../../application/extensions/runtime-extension-binder.js';
+import { RuntimeToolGrantService } from '../../application/extensions/runtime-tool-grant-service.js';
 import {
   RuntimeReadinessProbe,
   type ReadinessProbe,
@@ -26,6 +27,7 @@ import { PostgresLogicalFileStore } from '../../infrastructure/postgres/postgres
 import { PostgresMemoryContextRepository } from '../../infrastructure/postgres/postgres-memory-context-repository.js';
 import { PostgresRuntimeSessionLookup } from '../../infrastructure/postgres/postgres-runtime-session-lookup.js';
 import { PostgresRuntimeSessionRepository } from '../../infrastructure/postgres/postgres-runtime-session-repository.js';
+import { PostgresRuntimeToolGrantPersistence } from '../../infrastructure/postgres/postgres-runtime-tool-grant-persistence.js';
 import { PostgresRuntimeWorkspaceRepository } from '../../infrastructure/postgres/postgres-runtime-workspace-repository.js';
 import { PostgresWorkerRuntimeInvocationResolver } from '../../infrastructure/postgres/postgres-worker-runtime-invocation-resolver.js';
 import {
@@ -37,10 +39,11 @@ import type { AppConfig } from '../../shared/config.js';
 import type { Logger } from '../../shared/observability/logger.js';
 
 export interface RuntimeExtensionControl extends RuntimeExtensionBinder {
-  revokeForTeamRun(teamRunId: string): void;
+  revokeForTeamRun(teamRunId: string): Promise<void>;
 }
 
 export interface RuntimeMcpHostLifecycle {
+  start(): Promise<string>;
   stop(): Promise<void>;
 }
 
@@ -55,7 +58,7 @@ export interface RuntimeModule {
   readonly runtimeCellRoot?: string;
   readonly mcpHost: RuntimeMcpHostLifecycle;
   capabilities(): ExecutionPlaneCapabilities;
-  /** Composition-root only; not a runtime/user plugin API. */
+  /** Composition-root only until R3 freezes the final contributor graph. */
   registerToolContributor(contributor: RuntimeToolContributor): void;
 }
 
@@ -70,13 +73,15 @@ function normalizePaseoRequestedModel(
     : model;
 }
 
+export interface RuntimeModuleDatabase {
+  query<Row extends Record<string, unknown> = Record<string, unknown>>(
+    sql: string,
+    values?: readonly unknown[],
+  ): Promise<{ readonly rows?: readonly Row[]; readonly rowCount?: number | null }>;
+}
+
 export function createRuntimeModule(options: {
-  readonly database: {
-    query(
-      sql: string,
-      values?: readonly unknown[],
-    ): Promise<{ rows?: readonly any[] }>;
-  };
+  readonly database: RuntimeModuleDatabase;
   readonly config: Pick<
     AppConfig,
     'paseo' | 'runtime' | 'runtimeMcp' | 'skillRegistryRoot'
@@ -136,15 +141,17 @@ export function createRuntimeModule(options: {
     new PostgresWorkerRuntimeInvocationResolver(options.database),
     scopedMemory,
   );
-  // Keep explicitly injected debug runtimes minimal/deterministic. Production
-  // Chat and Worker turns are enriched from canonical ContextFS facts.
   const executionRuntime = options.debugRuntime ?? productionExecutionRuntime;
   const toolRegistry = new RuntimeToolRegistry(options.toolContributors);
+  const grantService = new RuntimeToolGrantService(
+    new PostgresRuntimeToolGrantPersistence(options.database),
+  );
   const mcpHost = new RuntimeMcpServer(
     toolRegistry,
-    undefined,
+    grantService,
     options.config.runtimeMcp?.listenHost,
     options.config.runtimeMcp?.advertisedHost,
+    options.config.runtimeMcp?.port,
   );
   const extensions = new LocalRuntimeExtensionBinder(
     options.config.paseo.agentCwd,

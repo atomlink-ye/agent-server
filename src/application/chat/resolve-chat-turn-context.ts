@@ -48,7 +48,8 @@ export class ResolveChatTurnContext {
       tenantId: dispatch.tenantId,
       agentDefinitionId: dispatch.agentDefinitionId,
     });
-    if (!runtime || runtime.status !== 'available') return null;
+    if (!runtime || runtime.status !== 'available')
+      throw new Error('chat_turn_runtime_unavailable');
 
     const watermark = await this.watermarks.getRuntimeWatermark({
       agentChatRuntimeId: runtime.id,
@@ -56,6 +57,8 @@ export class ResolveChatTurnContext {
       tenantId: dispatch.tenantId,
       conversationId: dispatch.conversationId,
     });
+    // A retry may observe a reply that was materialized before the worker lost
+    // its dispatch lease. Treat that as already complete and never re-run it.
     if (watermark >= dispatch.throughSequence) return null;
 
     const afterWatermark = await this.conversations.listMessages({

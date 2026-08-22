@@ -1,0 +1,278 @@
+/*
+ * Agents and Files coworker surfaces (N3).
+ *
+ * ChatShell imports this file; the surfaces were merged without it, so the
+ * production bundle could not resolve the import. Tokens come from index.css
+ * so these panes match the existing desktop shell rather than introducing a
+ * second palette.
+ */
+
+.n3-surfaces {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  background: var(--paper);
+  color: var(--ink-900);
+}
+
+.n3-main {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 20px 24px;
+}
+
+.n3-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+
+/* ---------- Agents ---------- */
+
+.n3-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.n3-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid var(--ink-100);
+  border-radius: 12px;
+  background: var(--cloud);
+  box-shadow: var(--shadow-soft);
+  text-align: left;
+  cursor: pointer;
+}
+
+.n3-card:hover {
+  box-shadow: var(--shadow-pop);
+}
+
+.n3-card span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.n3-card strong {
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.n3-card small {
+  color: var(--ink-500);
+  font-size: 12px;
+}
+
+.n3-avatar,
+.n3-profile-avatar {
+  display: grid;
+  flex: none;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--coral-soft);
+  color: var(--ink-900);
+  font-weight: 600;
+}
+
+.n3-avatar {
+  width: 34px;
+  height: 34px;
+  font-size: 14px;
+}
+
+.n3-profile-avatar {
+  width: 52px;
+  height: 52px;
+  font-size: 20px;
+}
+
+.n3-profile-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.n3-profile-header h1 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.n3-profile-header p {
+  margin: 2px 0 0;
+  color: var(--ink-500);
+  font-size: 13px;
+}
+
+.n3-runtime {
+  align-self: flex-start;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--ink-100);
+  color: var(--ink-700);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.n3-runtime--available {
+  background: var(--coral-soft);
+  color: var(--ink-900);
+}
+
+.n3-runtime--draining {
+  background: var(--gold);
+  color: var(--ink-900);
+}
+
+.n3-runtime--unavailable {
+  background: var(--ink-100);
+  color: var(--ink-500);
+}
+
+.n3-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.n3-chips li {
+  padding: 2px 10px;
+  border: 1px solid var(--ink-100);
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+.n3-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 18px;
+  border: 1px solid var(--ink-100);
+  border-radius: 12px;
+  background: var(--cloud);
+}
+
+/* ---------- Files / Context ---------- */
+
+.n3-files {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+
+.n3-files-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.n3-files-grid {
+  display: grid;
+  grid-template-columns: minmax(240px, 320px) 1fr;
+  gap: 14px;
+  min-height: 0;
+}
+
+.n3-scope-list,
+.n3-file-list,
+.n3-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+}
+
+.n3-list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.n3-list-item:hover {
+  background: var(--ink-100);
+}
+
+.n3-list-item[data-active='true'] {
+  border-color: var(--coral);
+  background: var(--cloud);
+}
+
+.n3-file-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.n3-file-viewer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--ink-100);
+  border-radius: 12px;
+  background: var(--cloud);
+}
+
+.n3-mono {
+  margin: 0;
+  overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.n3-access {
+  color: var(--ink-500);
+  font-size: 12px;
+}
+
+/* ---------- States ---------- */
+
+.n3-notice,
+.n3-error {
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.n3-notice {
+  background: var(--ink-100);
+  color: var(--ink-700);
+}
+
+.n3-error {
+  background: var(--coral-soft);
+  color: var(--ink-900);
+}

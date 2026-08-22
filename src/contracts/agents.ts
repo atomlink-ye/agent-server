@@ -63,6 +63,18 @@ export const AgentDefinitionResponseSchema = z
   })
   .strict();
 
+export const AgentCoworkerResponseSchema = AgentDefinitionResponseSchema.extend({
+  active_agent_version_id: AgentIdSchema,
+  runtime_status: z.enum(['available', 'draining', 'unavailable']),
+}).strict();
+
+export const AgentCoworkerListResponseSchema = z
+  .object({
+    items: z.array(AgentCoworkerResponseSchema),
+    next_cursor: z.string().nullable(),
+  })
+  .strict();
+
 export const AgentVersionResponseSchema = z
   .object({
     id: AgentIdSchema,
@@ -99,6 +111,10 @@ export type ValidateAgentPackageResponse = z.infer<
 export type ImportAgentResponse = z.infer<typeof ImportAgentResponseSchema>;
 export type AgentDefinitionResponse = z.infer<
   typeof AgentDefinitionResponseSchema
+>;
+export type AgentCoworkerResponse = z.infer<typeof AgentCoworkerResponseSchema>;
+export type AgentCoworkerListResponse = z.infer<
+  typeof AgentCoworkerListResponseSchema
 >;
 export type AgentVersionResponse = z.infer<typeof AgentVersionResponseSchema>;
 export type AgentVersionListResponse = z.infer<

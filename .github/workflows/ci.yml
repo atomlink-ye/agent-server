@@ -10,34 +10,6 @@ permissions:
   contents: read
 
 jobs:
-  n1-migrate-fixtures:
-    if: github.event_name == 'pull_request' && github.head_ref == 'refactor/final-agent-identity-harness-convergence' && github.actor != 'github-actions[bot]'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: refactor/final-agent-identity-harness-convergence
-          fetch-depth: 0
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-      - run: corepack enable
-      - run: pnpm install --frozen-lockfile
-      - run: node scripts/dev/n1-finalize-migrate.mjs
-      - name: Commit final convergence
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/entrypoints/api/app.ts tests/fixtures/create-test-app.ts tests/integration/real-pg-pool.integration.impl.ts
-          if git diff --cached --quiet; then
-            echo "No migration changes"
-            exit 0
-          fi
-          git commit -m "test: finish canonical Agent fixture convergence"
-          git push origin HEAD:refactor/final-agent-identity-harness-convergence
-
   deterministic:
     runs-on: ubuntu-latest
     timeout-minutes: 30

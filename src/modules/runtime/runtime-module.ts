@@ -16,11 +16,14 @@ import {
   type ExecutionRuntimeService,
 } from '../../application/runtime/execution-plane-runtime-facade.js';
 import { ContextAwareExecutionRuntime } from '../../application/runtime/context-aware-execution-runtime.js';
-import type { ScopedMemoryResolver } from '../../application/context/scoped-memory-resolver.js';
+import { ContextMemoryService } from '../../application/context/context-memory-service.js';
+import { ScopedMemoryResolver } from '../../application/context/scoped-memory-resolver.js';
 import { ExecutionRunRegistry } from '../../application/runtime/execution-run-registry.js';
 import { LocalRuntimeExtensionBinder } from '../../infrastructure/extensions/local-runtime-extension-binder.js';
 import { RuntimeMcpServer } from '../../infrastructure/extensions/runtime-mcp-server.js';
 import { LocalRuntimeMemoryCandidateCollector } from '../../infrastructure/files/runtime-memory-artifact-collector.js';
+import { PostgresLogicalFileStore } from '../../infrastructure/postgres/postgres-logical-file-store.js';
+import { PostgresMemoryContextRepository } from '../../infrastructure/postgres/postgres-memory-context-repository.js';
 import { PostgresRuntimeSessionLookup } from '../../infrastructure/postgres/postgres-runtime-session-lookup.js';
 import { PostgresRuntimeSessionRepository } from '../../infrastructure/postgres/postgres-runtime-session-repository.js';
 import { PostgresRuntimeWorkspaceRepository } from '../../infrastructure/postgres/postgres-runtime-workspace-repository.js';
@@ -120,11 +123,21 @@ export function createRuntimeModule(options: {
     new LocalRuntimeMemoryCandidateCollector(),
     options.config.paseo.agentCwd,
   );
+  const scopedMemory =
+    options.scopedMemory ??
+    new ScopedMemoryResolver(
+      new ContextMemoryService(
+        new PostgresMemoryContextRepository(options.database),
+        new PostgresLogicalFileStore(options.database),
+      ),
+    );
   const productionExecutionRuntime = new ContextAwareExecutionRuntime(
     executionPlaneRuntime,
     new PostgresWorkerRuntimeInvocationResolver(options.database),
-    options.scopedMemory,
+    scopedMemory,
   );
+  // Keep explicitly injected debug runtimes minimal/deterministic. Production
+  // Chat and Worker turns are enriched from canonical ContextFS facts.
   const executionRuntime = options.debugRuntime ?? productionExecutionRuntime;
   const toolRegistry = new RuntimeToolRegistry(options.toolContributors);
   const mcpHost = new RuntimeMcpServer(

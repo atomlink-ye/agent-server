@@ -1,5 +1,5 @@
-import type { ProductState } from '../../contracts/product-projection/index.js';
 import type { ChatWorkCard } from '../product-projection/chat-work-card-projection.js';
+import type { ChatDispatchRepository } from '../ports/chat-dispatch-repository.js';
 import type { WorkChatWakeDelivery } from './work-chat-wake-delivery.js';
 
 export interface WorkChatWakeWorkKey {
@@ -26,5 +26,9 @@ export interface WorkChatWakeStateRepository {
     workerId: string,
     leaseMs: number,
   ): Promise<WorkChatWakeDelivery | null>;
+  /** Same durable activation queue used by ordinary Conversation messages. */
+  enqueueChatActivation?(
+    input: Parameters<ChatDispatchRepository['enqueue']>[0],
+  ): ReturnType<ChatDispatchRepository['enqueue']>;
   markDelivered(deliveryId: string, workerId: string): Promise<void>;
 }

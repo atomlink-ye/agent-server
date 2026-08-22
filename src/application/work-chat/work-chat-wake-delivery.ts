@@ -1,3 +1,4 @@
+import type { ChatMessage } from '../../domain/chat/chat-message.js';
 import type { ChatWorkCard } from '../product-projection/chat-work-card-projection.js';
 import type { ConversationRepository } from '../ports/conversation-repository.js';
 import type { WorkChatWakeWorkKey } from './work-chat-wake-state-repository.js';
@@ -21,12 +22,17 @@ export interface WorkChatWakeDelivery extends WorkChatWakeWorkKey {
   readonly observedAt: string;
 }
 
+export interface DeliveredWorkChatWake {
+  readonly agentDefinitionId: string;
+  readonly message: ChatMessage;
+}
+
 /**
- * Lane 1 supplies this grant-derived, idempotent adapter. It must derive the
- * agent/runtime identity server-side and complete only after durable append.
+ * Lane 1 supplies this grant-derived, idempotent adapter. It derives the
+ * agent/runtime identity server-side and completes only after durable append.
  */
 export interface WorkChatWakeDeliveryPort {
-  deliver(delivery: WorkChatWakeDelivery): Promise<void>;
+  deliver(delivery: WorkChatWakeDelivery): Promise<DeliveredWorkChatWake>;
 }
 
 /**
@@ -87,7 +93,7 @@ export function createWorkChatWakeDelivery(
         throw new Error('Work Chat wake runtime is unavailable.');
       }
 
-      await dependencies.conversations.appendMessage({
+      const message = await dependencies.conversations.appendMessage({
         author: {
           type: 'agent_definition',
           tenantId: delivery.tenantId,
@@ -104,6 +110,7 @@ export function createWorkChatWakeDelivery(
         workRef: delivery.card.workRef,
         deliveryId: delivery.deliveryId,
       });
+      return { agentDefinitionId, message };
     },
   };
 }

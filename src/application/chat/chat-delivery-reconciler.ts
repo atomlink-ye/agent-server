@@ -6,36 +6,78 @@ import type {
 import type { ChatTurnProvider } from '../ports/chat-turn-provider.js';
 import type { ConversationWorkEntitlementRepository } from '../ports/conversation-work-entitlement-repository.js';
 import type { ConversationWorkLinkRepository } from '../../domain/chat/chat-work-origin-ref.js';
-import { principalRef } from '../../domain/tenancy/product-context.js';
 import type { RuntimeExtensionBinder } from '../extensions/runtime-extension-binder.js';
-import {
-  AGENT_SERVER_LIST_AGENT_WORKFLOWS_TOOL_REF,
-  AGENT_SERVER_PRODUCT_WORK_RUN_START_TOOL_REF,
-} from '../agents/built-in-skills.js';
 import type { Logger } from '../../shared/observability/logger.js';
 import type { ChatBrainResolver } from './chat-brain-resolver.js';
 import type { ConversationActorResolver } from './chat-turn-context.js';
+import {
+  ChatTurnRuntimeUnavailableError,
+  ResolveChatTurnContext,
+} from './resolve-chat-turn-context.js';
+import { ResolveChatBrain } from './resolve-chat-brain.js';
+import { BindChatCapabilities } from './bind-chat-capabilities.js';
+import { ExecuteChatTurn } from './execute-chat-turn.js';
+import { MaterializeChatReply } from './materialize-chat-reply.js';
 
+/**
+ * Thin orchestration seam:
+ * ResolveChatTurnContext → ResolveChatBrain → BindChatCapabilities →
+ * ExecuteChatTurn → MaterializeChatReply.
+ *
+ * Claim ownership belongs to ChatDeliveryWorker. The optional workerId path is
+ * retained only for older focused tests/callers while they migrate.
+ */
 export class ChatDeliveryReconciler {
+  readonly #resolveContext: ResolveChatTurnContext;
+  readonly #resolveBrain: ResolveChatBrain;
+  readonly #bindCapabilities: BindChatCapabilities;
+  readonly #executeTurn: ExecuteChatTurn;
+  readonly #materialize: MaterializeChatReply;
+
   public constructor(
     private readonly conversations: ConversationRepository,
     private readonly dispatches: ChatDispatchRepository,
-    private readonly provider: ChatTurnProvider,
-    private readonly brainResolver: ChatBrainResolver,
-    private readonly conversationWorkLinks:
+    provider: ChatTurnProvider,
+    brainResolver: ChatBrainResolver,
+    conversationWorkLinks:
       Pick<ConversationWorkLinkRepository, 'findWorkIdsByOrigin'> | undefined,
     private readonly logger?: Logger,
     private readonly now: () => Date = () => new Date(),
-    private readonly workEntitlements?: ConversationWorkEntitlementRepository,
-    private readonly extensions?: RuntimeExtensionBinder,
-    private readonly actorResolver?: ConversationActorResolver,
-  ) {}
+    workEntitlements?: ConversationWorkEntitlementRepository,
+    extensions?: RuntimeExtensionBinder,
+    actorResolver?: ConversationActorResolver,
+  ) {
+    this.#resolveContext = new ResolveChatTurnContext(
+      conversations,
+      dispatches,
+      workEntitlements,
+      actorResolver,
+    );
+    this.#resolveBrain = new ResolveChatBrain(brainResolver);
+    this.#bindCapabilities = new BindChatCapabilities(extensions);
+    this.#executeTurn = new ExecuteChatTurn(provider);
+    this.#materialize = new MaterializeChatReply(
+      conversations,
+      dispatches,
+      conversationWorkLinks,
+    );
+  }
 
+  /** Compatibility path for old unclaimed callers. Production uses ChatDeliveryWorker. */
   public async reconcilePendingDispatches(limit = 50): Promise<number> {
     const pending = await this.dispatches.listPending(limit);
     let processed = 0;
     for (const dispatch of pending) {
-      await this.reconcile(dispatch);
+      try {
+        await this.reconcile(dispatch);
+      } catch (error) {
+        if (error instanceof ChatTurnRuntimeUnavailableError) continue;
+        throw error;
+      }
+      await this.dispatches.markPublished(
+        dispatch.id,
+        this.now().toISOString(),
+      );
       processed += 1;
     }
     return processed;
@@ -45,206 +87,65 @@ export class ChatDeliveryReconciler {
     dispatch: ChatDispatch,
     workerId?: string,
   ): Promise<void> {
-    const runtime = await this.conversations.getChatRuntime({
-      tenantId: dispatch.tenantId,
-      agentDefinitionId: dispatch.agentDefinitionId,
-    });
-    if (!runtime) {
-      this.logger?.log('warn', 'chat.delivery.runtime_missing', {
-        tenant_id: dispatch.tenantId,
-        agent_definition_id: dispatch.agentDefinitionId,
-        conversation_id: dispatch.conversationId,
-      });
+    const context = await this.#resolveContext.execute(dispatch);
+    if (!context) {
+      // A materialized retry whose watermark already covers this activation can
+      // be safely acknowledged without executing the provider again.
+      if (workerId) await this.completeCompatibilityClaim(dispatch, workerId);
       return;
     }
 
-    const messages = await this.conversations.listMessages({
-      tenantId: dispatch.tenantId,
-      conversationId: dispatch.conversationId,
-    });
-    const triggerMessage = messages.find(
-      (message) =>
-        message.sequence === dispatch.throughSequence &&
-        message.tenantId === dispatch.tenantId &&
-        message.conversationId === dispatch.conversationId,
-    );
-    if (!triggerMessage) {
-      this.logger?.log('warn', 'chat.delivery.trigger_missing', {
-        dispatch_id: dispatch.id,
-        tenant_id: dispatch.tenantId,
-        conversation_id: dispatch.conversationId,
-        through_sequence: dispatch.throughSequence,
-      });
-      return;
-    }
-
-    const entitlement = this.workEntitlements
-      ? await this.workEntitlements.resolveForChatTurn({
-          tenantId: dispatch.tenantId,
-          conversationId: dispatch.conversationId,
-          agentDefinitionId: dispatch.agentDefinitionId,
-        })
-      : null;
-
-    const canResolveMembership = Boolean(
-      this.actorResolver || this.conversations.findPrincipalMember,
-    );
-    let membershipActor = null;
-    if (triggerMessage.authorType === 'principal') {
-      if (this.actorResolver) {
-        membershipActor = await this.actorResolver.resolve({
-          tenantId: dispatch.tenantId,
-          conversationId: dispatch.conversationId,
-          principalId: triggerMessage.authorId,
-        });
-      } else if (this.conversations.findPrincipalMember) {
-        const member = await this.conversations.findPrincipalMember({
-          tenantId: dispatch.tenantId,
-          conversationId: dispatch.conversationId,
-          principalId: triggerMessage.authorId,
-        });
-        if (member?.memberPrincipalType) {
-          membershipActor = principalRef({
-            principalType: member.memberPrincipalType,
-            principalId: member.memberId,
-          });
-        }
-      }
-    }
-    if (
-      triggerMessage.authorType === 'principal' &&
-      canResolveMembership &&
-      !membershipActor
-    )
-      throw new Error('chat_turn_actor_membership_missing');
-
-    const entitlementActor =
-      entitlement && triggerMessage.authorType === 'principal'
-        ? principalRef({
-            principalType: entitlement.principalType,
-            principalId: entitlement.principalId,
-          })
-        : null;
-    if (
-      membershipActor &&
-      entitlementActor &&
-      (membershipActor.id !== entitlementActor.id ||
-        membershipActor.type !== entitlementActor.type)
-    )
-      throw new Error('chat_turn_actor_entitlement_mismatch');
-    const actor = membershipActor ?? entitlementActor ?? undefined;
-
-    const brain = await this.brainResolver.resolve({
-      tenantId: dispatch.tenantId,
-      agentDefinitionId: dispatch.agentDefinitionId,
-      conversationId: dispatch.conversationId,
-      triggerMessageId: triggerMessage.id,
-      runtime,
-      ...(actor ? { actor } : {}),
-      ...(entitlement
-        ? { workEntitlementWorkspaceId: entitlement.workspaceId }
-        : {}),
-    });
-
-    const extensions =
-      entitlement && this.extensions
-        ? await this.extensions.bind({
-            tenantId: entitlement.tenantId,
-            principalType: entitlement.principalType,
-            principalId: entitlement.principalId,
-            workspaceId: entitlement.workspaceId,
-            scopeId: runtime.id,
-            chatContext: {
-              conversationId: dispatch.conversationId,
-              triggerMessageId: triggerMessage.id,
-            },
-            skills: [],
-            toolRefs: [
-              AGENT_SERVER_LIST_AGENT_WORKFLOWS_TOOL_REF,
-              AGENT_SERVER_PRODUCT_WORK_RUN_START_TOOL_REF,
-            ],
-            catalogTools: [
-              AGENT_SERVER_LIST_AGENT_WORKFLOWS_TOOL_REF,
-              AGENT_SERVER_PRODUCT_WORK_RUN_START_TOOL_REF,
-            ],
-          })
-        : undefined;
-
-    const reply = await this.provider.runTurn({
-      tenantId: dispatch.tenantId,
-      agentDefinitionId: dispatch.agentDefinitionId,
-      agentVersionId: runtime.activeAgentVersionId,
-      conversationId: dispatch.conversationId,
-      triggerMessageId: triggerMessage.id,
+    const brain = await this.#resolveBrain.execute(context);
+    const extensions = await this.#bindCapabilities.execute(context, brain);
+    const reply = await this.#executeTurn.execute(
+      context,
       brain,
-      messages: messages.map((message) => ({
-        authorType: message.authorType,
-        authorId: message.authorId,
-        body: message.body,
-      })),
-      ...(extensions ? { extensions } : {}),
-    });
+      extensions,
+    );
+    const materialized = await this.#materialize.execute(context, reply);
 
-    const workIds = this.conversationWorkLinks
-      ? await this.conversationWorkLinks.findWorkIdsByOrigin({
-          tenantId: dispatch.tenantId,
-          conversationId: dispatch.conversationId,
-          triggerMessageId: triggerMessage.id,
-        })
-      : [];
-    const workRef = workIds.length === 1 ? workIds[0]! : null;
-    if (workIds.length > 1) {
-      this.logger?.log('warn', 'chat.delivery.ambiguous_work_provenance', {
-        dispatch_id: dispatch.id,
-        tenant_id: dispatch.tenantId,
-        agent_definition_id: dispatch.agentDefinitionId,
-        conversation_id: dispatch.conversationId,
-        trigger_message_id: triggerMessage.id,
-        work_ids: workIds,
-      });
-    }
-
-    await this.conversations.appendMessage({
-      author: {
-        type: 'agent_definition',
-        tenantId: dispatch.tenantId,
-        conversationId: dispatch.conversationId,
-        agentDefinitionId: dispatch.agentDefinitionId,
-        agentVersionId: runtime.activeAgentVersionId,
-        runtimeEpoch: runtime.epoch,
-        provider: reply.provider,
-      },
-      body: reply.body,
-      workRef,
-    });
-
-    const publishedAt = this.now().toISOString();
-    if (workerId) {
-      const published = await this.dispatches.completeClaim({
-        id: dispatch.id,
-        workerId,
-        publishedAt,
-      });
-      if (!published) {
-        this.logger?.log('warn', 'chat.delivery.lease_lost', {
-          dispatch_id: dispatch.id,
-          worker_id: workerId,
-        });
-        return;
-      }
-    } else {
-      await this.dispatches.markPublished(dispatch.id, publishedAt);
-    }
+    if (workerId) await this.completeCompatibilityClaim(dispatch, workerId);
 
     this.logger?.log('info', 'chat.delivery.materialized', {
       tenant_id: dispatch.tenantId,
       agent_definition_id: dispatch.agentDefinitionId,
       conversation_id: dispatch.conversationId,
       dispatch_id: dispatch.id,
+      through_sequence: dispatch.throughSequence,
+      watermark: materialized.watermark,
+      turn_mode: reply.mode ?? context.turn.modeHint,
+      activation_causes: dispatch.causes?.length ?? 0,
     });
   }
 
+  /**
+   * Historical unclaimed seam: a missing runtime remains a no-op, never a
+   * published activation. The production worker calls reconcile() and turns
+   * this same condition into claim release/retry.
+   */
   public async reconcileOne(dispatch: ChatDispatch): Promise<void> {
-    return this.reconcile(dispatch);
+    try {
+      await this.reconcile(dispatch);
+    } catch (error) {
+      if (error instanceof ChatTurnRuntimeUnavailableError) return;
+      throw error;
+    }
+  }
+
+  private async completeCompatibilityClaim(
+    dispatch: ChatDispatch,
+    workerId: string,
+  ): Promise<void> {
+    const published = await this.dispatches.completeClaim({
+      id: dispatch.id,
+      workerId,
+      publishedAt: this.now().toISOString(),
+    });
+    if (!published) {
+      this.logger?.log('warn', 'chat.delivery.lease_lost', {
+        dispatch_id: dispatch.id,
+        worker_id: workerId,
+      });
+    }
   }
 }

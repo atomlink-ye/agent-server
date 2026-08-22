@@ -173,9 +173,35 @@ export class WorkChatWakeWorker implements StepWorker {
     if (!delivery) return observed;
 
     try {
-      await this.#dependencies.delivery.deliver(delivery);
+      // The visible Work update is durable first. Only after that append do we
+      // enqueue a Chat activation using the exact same queue as user messages.
+      const delivered = await this.#dependencies.delivery.deliver(delivery);
+      const productState = delivery.card.productState;
+      if (!isEligibleState(productState))
+        throw new Error('Claimed Work Chat wake is not activation-eligible.');
+      if (this.#dependencies.state.enqueueChatActivation) {
+        await this.#dependencies.state.enqueueChatActivation({
+          tenantId: delivery.tenantId,
+          agentDefinitionId: delivered.agentDefinitionId,
+          conversationId: delivery.conversationId,
+          throughSequence: delivered.message.sequence,
+          dedupeKey: `work-wake:${delivery.deliveryId}`,
+          cause: {
+            type: 'work_wake',
+            conversationId: delivery.conversationId,
+            throughSequence: delivered.message.sequence,
+            deliveryId: delivery.deliveryId,
+            workId: delivery.workId,
+            workRef: delivery.card.workRef,
+            productState,
+          },
+          priority: productState === 'complete' ? 'normal' : 'urgent',
+        });
+      }
     } catch (error: unknown) {
       // Leave the lease in place. Reclaim is allowed only after it expires.
+      // appendMessage is delivery-idempotent and activation cause identity is
+      // unique, so retry cannot duplicate either durable fact.
       this.report('deliver', error);
       return true;
     }

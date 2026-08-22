@@ -114,4 +114,9 @@ export interface RuntimeSessionRepository {
     readonly workspaceBinding: ExecutionWorkspaceBinding;
     readonly sessionBinding: ExecutionSessionBinding;
   }): Promise<RuntimeSession>;
+  /**
+   * Clears a stale external provider binding while preserving the canonical
+   * RuntimeSession and its launch snapshot. Optional only for bounded fakes.
+   */
+  clearExecutionBinding?(id: string): Promise<RuntimeSession>;
 }

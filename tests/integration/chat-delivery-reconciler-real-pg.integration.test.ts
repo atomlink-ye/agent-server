@@ -9,6 +9,7 @@ import { PostgresConversationRepository } from '../../src/infrastructure/postgre
 import { PostgresConversationWorkLinkRepository } from '../../src/modules/work/conversation-work-link-repository.js';
 import { PostgresChatDispatchRepository } from '../../src/infrastructure/postgres/postgres-chat-dispatch-repository.js';
 import { ChatDeliveryReconciler } from '../../src/application/chat/chat-delivery-reconciler.js';
+import { ChatDeliveryWorker } from '../../src/entrypoints/chat/worker.js';
 import { ChatBrainResolver } from '../../src/application/chat/chat-brain-resolver.js';
 import type { AgentResolutionApi } from '../../src/application/ports/agent-resolution-api.js';
 import { MockChatTurnProvider } from '../../src/adapters/chat/mock-chat-turn-provider.js';
@@ -133,6 +134,7 @@ describe('Chat delivery reconciler on real PostgreSQL', () => {
       lastReadSequence: 0,
       latestMessageSequence: latestSequence,
       latestMessageAuthorType: 'principal',
+      debounceMs: 0,
     });
     expect(enqueued).toBe(true);
 
@@ -144,8 +146,11 @@ describe('Chat delivery reconciler on real PostgreSQL', () => {
       createTestBrainResolver(),
       conversationWorkLinks,
     );
-    const processed = await reconciler.reconcilePendingDispatches(50);
-    expect(processed).toBe(1);
+    const worker = new ChatDeliveryWorker(dispatchRepo, reconciler, {
+      workerId: 'chat-delivery-golden-worker',
+      leaseMs: 60_000,
+    });
+    await expect(worker.step()).resolves.toMatchObject({ kind: 'processed' });
 
     // Verify agent reply was materialized
     const messagesAfter = await convRepo.listMessages({
@@ -164,10 +169,9 @@ describe('Chat delivery reconciler on real PostgreSQL', () => {
     // Verify dispatch was marked published
     const dispatchesAfter = await pool.query<{
       published_at: string | null;
-    }>(
-      `SELECT published_at FROM chat_dispatches WHERE conversation_id=$1`,
-      [conv.id],
-    );
+    }>(`SELECT published_at FROM chat_dispatches WHERE conversation_id=$1`, [
+      conv.id,
+    ]);
     expect(dispatchesAfter.rows?.length).toBe(1);
     expect(dispatchesAfter.rows?.[0]?.published_at).not.toBeNull();
   });
@@ -223,6 +227,7 @@ describe('Chat delivery reconciler on real PostgreSQL', () => {
       lastReadSequence: 0,
       latestMessageSequence: latestSequence,
       latestMessageAuthorType: 'principal',
+      debounceMs: 0,
     });
 
     const reconciler = new ChatDeliveryReconciler(
@@ -232,7 +237,11 @@ describe('Chat delivery reconciler on real PostgreSQL', () => {
       createTestBrainResolver(),
       conversationWorkLinks,
     );
-    await reconciler.reconcilePendingDispatches(50);
+    const worker = new ChatDeliveryWorker(dispatchRepo, reconciler, {
+      workerId: 'chat-delivery-work-check-worker',
+      leaseMs: 60_000,
+    });
+    await expect(worker.step()).resolves.toMatchObject({ kind: 'processed' });
 
     // Verify work tables are EXACTLY UNCHANGED
     const taskCountAfter = await pool.query<{ count: string }>(
@@ -301,6 +310,7 @@ describe('Chat delivery reconciler on real PostgreSQL', () => {
       lastReadSequence: 0,
       latestMessageSequence: aliceLatestSequence,
       latestMessageAuthorType: 'principal',
+      debounceMs: 0,
     });
 
     const reconciler = new ChatDeliveryReconciler(
@@ -310,7 +320,11 @@ describe('Chat delivery reconciler on real PostgreSQL', () => {
       createTestBrainResolver(),
       conversationWorkLinks,
     );
-    await reconciler.reconcilePendingDispatches(50);
+    const worker = new ChatDeliveryWorker(dispatchRepo, reconciler, {
+      workerId: 'chat-delivery-d4-guard-worker',
+      leaseMs: 60_000,
+    });
+    await expect(worker.step()).resolves.toMatchObject({ kind: 'processed' });
 
     // Bob posts a message
     await postConversationMessage(convRepo, {
@@ -332,9 +346,10 @@ describe('Chat delivery reconciler on real PostgreSQL', () => {
       lastReadSequence: 0,
       latestMessageSequence: bobLatestSequence,
       latestMessageAuthorType: 'principal',
+      debounceMs: 0,
     });
 
-    await reconciler.reconcilePendingDispatches(50);
+    await expect(worker.step()).resolves.toMatchObject({ kind: 'processed' });
 
     // Verify Bob's conversation messages do NOT contain Alice's secret
     const bobMessagesAfter = await pool.query<{ body: string }>(

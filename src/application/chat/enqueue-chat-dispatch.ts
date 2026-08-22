@@ -1,6 +1,8 @@
 import type { ChatDispatchRepository } from '../ports/chat-dispatch-repository.js';
 import { ChatActivationPlanner } from './chat-activation-planner.js';
 
+export const CHAT_ACTIVATION_BURST_DEBOUNCE_MS = 75;
+
 export async function enqueueChatDispatchForMessage(
   dispatches: ChatDispatchRepository,
   input: {
@@ -10,6 +12,9 @@ export async function enqueueChatDispatchForMessage(
     readonly lastReadSequence: number;
     readonly latestMessageSequence: number;
     readonly latestMessageAuthorType: 'principal' | 'agent_definition';
+    readonly latestMessageId?: string;
+    /** Explicit zero is available to deterministic callers that bypass workers. */
+    readonly debounceMs?: number;
   },
 ): Promise<boolean> {
   const planner = new ChatActivationPlanner();
@@ -17,12 +22,19 @@ export async function enqueueChatDispatchForMessage(
   if (!activation) return false;
   const cause = activation.causes[0];
   if (!cause) return false;
+  const durableCause =
+    cause.type === 'unread_message' && input.latestMessageId
+      ? { ...cause, messageId: input.latestMessageId }
+      : cause;
   const result = await dispatches.enqueue({
     tenantId: input.tenantId,
     agentDefinitionId: input.agentDefinitionId,
     conversationId: input.conversationId,
     throughSequence: cause.throughSequence,
     dedupeKey: activation.dedupeKey,
+    cause: durableCause,
+    priority: activation.priority,
+    debounceMs: input.debounceMs ?? CHAT_ACTIVATION_BURST_DEBOUNCE_MS,
   });
   return result.enqueued;
 }

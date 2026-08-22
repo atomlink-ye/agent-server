@@ -1,10 +1,12 @@
 import type { ChatWorkCard } from '../../application/product-projection/chat-work-card-projection.js';
+import type { ChatDispatchRepository } from '../../application/ports/chat-dispatch-repository.js';
 import type { WorkChatWakeDelivery } from '../../application/work-chat/work-chat-wake-delivery.js';
 import type {
   WorkChatWakeStateRepository,
   WorkChatWakeWorkKey,
 } from '../../application/work-chat/work-chat-wake-state-repository.js';
 import type { ProductState } from '../../contracts/product-projection/index.js';
+import { PostgresChatDispatchRepository } from './postgres-chat-dispatch-repository.js';
 
 interface Queryable {
   query<Row = Record<string, unknown>>(
@@ -13,6 +15,7 @@ interface Queryable {
   ): Promise<{
     readonly rows?: readonly Row[];
     readonly rowCount?: number | null;
+    readonly affectedRows?: number | null;
   }>;
 }
 
@@ -48,7 +51,11 @@ type OutboxRow = {
 
 /** Durable transition checkpoint plus leaseable Chat wake outbox. */
 export class PostgresWorkChatWakeStateRepository implements WorkChatWakeStateRepository {
-  public constructor(private readonly database: WorkChatWakeDatabase) {}
+  readonly #chatActivations: PostgresChatDispatchRepository;
+
+  public constructor(private readonly database: WorkChatWakeDatabase) {
+    this.#chatActivations = new PostgresChatDispatchRepository(database);
+  }
 
   public async observe(input: {
     readonly key: WorkChatWakeWorkKey;
@@ -108,7 +115,7 @@ export class PostgresWorkChatWakeStateRepository implements WorkChatWakeStateRep
             input.observedAt,
           ],
         );
-        if ((updated.rowCount ?? 0) !== 1)
+        if ((updated.rowCount ?? updated.affectedRows ?? 0) !== 1)
           throw new Error('Work Chat wake state disappeared during admission.');
       }
 
@@ -184,6 +191,12 @@ export class PostgresWorkChatWakeStateRepository implements WorkChatWakeStateRep
     return row ? mapDelivery(row) : null;
   }
 
+  public enqueueChatActivation(
+    input: Parameters<ChatDispatchRepository['enqueue']>[0],
+  ): ReturnType<ChatDispatchRepository['enqueue']> {
+    return this.#chatActivations.enqueue(input);
+  }
+
   public async markDelivered(
     deliveryId: string,
     workerId: string,
@@ -194,7 +207,7 @@ export class PostgresWorkChatWakeStateRepository implements WorkChatWakeStateRep
        WHERE id=$1 AND claimed_by=$2 AND delivered_at IS NULL`,
       [deliveryId, workerId],
     );
-    if ((result.rowCount ?? 0) !== 1)
+    if ((result.rowCount ?? result.affectedRows ?? 0) !== 1)
       throw new Error('Work Chat wake delivery lease was lost.');
   }
 

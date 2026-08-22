@@ -287,6 +287,19 @@ export class PostgresRuntimeSessionRepository
     });
   }
 
+  public async clearExecutionBinding(id: string): Promise<RuntimeSession> {
+    await this.db.query(
+      `UPDATE runtime_sessions
+       SET paseo_workspace_id=NULL, provider_agent_id=NULL, updated_at=$2
+       WHERE id=$1`,
+      [id, new Date().toISOString()],
+    );
+    const joined = await this.db.query(`${SESSION_SELECT} WHERE rs.id=$1`, [id]);
+    if (!joined.rows?.[0])
+      throw new Error('Runtime session could not be loaded after binding reset.');
+    return map(joined.rows[0]);
+  }
+
   private async insertSnapshot(input: {
     readonly id: string;
     readonly tenantId: string;

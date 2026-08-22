@@ -20,7 +20,6 @@ const forbiddenRoots = [
   'evidence/',
   'reports/',
   'docs/evidence/',
-  'docs/exec-plans/',
   'docs/superpowers/',
   'scripts/ci/',
   'scripts/e2e/',
@@ -29,9 +28,10 @@ const forbiddenRoots = [
   'scripts/record/',
 ];
 const forbiddenExact = ['Makefile', 'docs/agents/exec-plan-protocol.md'];
+const temporaryName = /(?:^|[-_.\/])(?:phase[-_a-z0-9]*|lane[-_a-z0-9]*|worker-[a-z0-9]+|n\d+)(?:[-_.\/]|$)/i;
 
 describe('repository hygiene', () => {
-  it('keeps generated evidence and task history out of HEAD', () => {
+  it('keeps generated evidence and task-run artifacts out of HEAD', () => {
     for (const path of forbiddenExact) expect(tracked).not.toContain(path);
     for (const prefix of forbiddenRoots) {
       expect(
@@ -42,6 +42,27 @@ describe('repository hygiene', () => {
       ).toBe(false);
     }
     expect(tracked.some((path) => path.endsWith('.log'))).toBe(false);
+  });
+
+  it('allows durable active execution plans but keeps run evidence outside them', () => {
+    const activePlans = tracked.filter((path) =>
+      path.startsWith('docs/exec-plans/active/'),
+    );
+    expect(activePlans.every((path) => path.endsWith('.md'))).toBe(true);
+    expect(
+      activePlans.some((path) => /(?:screenshot|capture|transcript|evidence)/i.test(path)),
+    ).toBe(false);
+  });
+
+  it('keeps temporary phase and lane names out of long-lived source paths', () => {
+    const candidates = tracked.filter(
+      (path) =>
+        !path.startsWith('src/infrastructure/postgres/migrations/') &&
+        !path.startsWith('docs/decisions/') &&
+        !path.startsWith('docs/exec-plans/') &&
+        !path.startsWith('.agents/'),
+    );
+    expect(candidates.filter((path) => temporaryName.test(path))).toEqual([]);
   });
 
   it('keeps package commands semantic and pnpm-native', () => {

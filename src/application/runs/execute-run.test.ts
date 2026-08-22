@@ -1002,6 +1002,8 @@ describe('ExecuteRun', () => {
         prompt: 'private prompt',
         systemPrompt:
           'Runtime contract: execute the supplied task input using the published agent instructions. Do not infer or access other session history.\n\nPublished AgentVersion instructions:\nmanaged instructions',
+        recoveryPrompt:
+          'private prompt\n\nRUNTIME RECOVERY: the external provider session was replaced because it no longer satisfied the current Agent Server runtime contract. Re-establish context from durable Work/Task state, the current workspace, pinned memory, Workboard/Mailbox and other granted read tools before relying on prior transient provider context. Do not repeat an external side effect merely because its previous provider context is unavailable.',
       },
       undefined,
     );

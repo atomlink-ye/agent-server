@@ -98,7 +98,7 @@ async function startWorkThroughScriptedRuntime(
       ]),
     ),
   );
-  const receipt = mcp.grants.issue({
+  const receipt = await mcp.grants.issue({
     tenantId: world.owner.tenantId,
     workspaceId: world.owner.workspaceId,
     principalType: world.owner.principalType,

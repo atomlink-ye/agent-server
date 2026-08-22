@@ -85,7 +85,7 @@ describe('North Star runtime grant boundary', () => {
         ]),
       ),
     );
-    const receipt = mcp.grants.issue({
+    const receipt = await mcp.grants.issue({
       tenantId: 'tenant-grant',
       workspaceId: 'workspace-grant',
       principalType: 'service_account',

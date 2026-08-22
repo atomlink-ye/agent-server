@@ -6,7 +6,12 @@ import type { ResolvedSkillPackage } from '../extensions/skill-catalog.js';
 export type AgentVersionResolutionScope = InvokableOwnerScope;
 
 export type ResolvedAgentVersion = Readonly<{
-  readonly source: 'managed' | 'legacy';
+  /**
+   * Managed packages are the only resolvable Agent version shape. The legacy
+   * projection was removed in N1; keeping it in this union would let consumers
+   * write compatibility branches for a value nothing can produce.
+   */
+  readonly source: 'managed';
   readonly id: string;
   /** Canonical Agent identity; optional only for compatibility test/runtime shims. */
   readonly definitionId?: string;

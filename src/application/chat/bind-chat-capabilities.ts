@@ -35,7 +35,9 @@ export class BindChatCapabilities {
         conversationId: context.dispatch.conversationId,
         triggerMessageId: context.triggerMessage.id,
       },
-      skills: brain.resolvedSkills,
+      // The persisted Chat brain stores the launch-snapshot skill identity;
+      // full runtime skill packages remain owned by the runtime module.
+      skills: [],
       toolRefs: [...requestedToolRefs],
       catalogTools: [...requestedToolRefs],
     });

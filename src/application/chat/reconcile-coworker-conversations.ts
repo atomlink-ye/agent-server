@@ -7,6 +7,10 @@ export interface CoworkerConversationReconciliationResult {
   readonly converged: number;
 }
 
+type CoworkerRosterRead = Required<
+  Pick<ManagedAgentDefinitionRead, 'listManagedDefinitionsByTenant'>
+>;
+
 /**
  * Backfills the product invariant introduced by coworker publication:
  * every tenant-visible published Coworker has one idempotent Direct Chat for
@@ -15,10 +19,7 @@ export interface CoworkerConversationReconciliationResult {
  */
 export class ReconcileCoworkerConversations {
   public constructor(
-    private readonly definitions: Pick<
-      ManagedAgentDefinitionRead,
-      'listManagedDefinitionsByTenant'
-    >,
+    private readonly definitions: CoworkerRosterRead,
     private readonly provisioning: Pick<EnsureCoworkerConversation, 'execute'>,
   ) {}
 

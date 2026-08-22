@@ -67,7 +67,7 @@ export class RunPromptContext {
     readonly invokableVersionId: string;
     readonly task: Task;
   }): Promise<ResolvedRunPrompt> {
-    return this.resolve(input);
+    return this.resolve(input, false);
   }
 
   /**
@@ -82,7 +82,7 @@ export class RunPromptContext {
     readonly invokableVersionId: string;
     readonly task: Task;
   }): Promise<ResolvedRunPrompt> {
-    return this.resolve(input);
+    return this.resolve(input, true);
   }
 
   private async resolve(input: {
@@ -90,13 +90,18 @@ export class RunPromptContext {
     readonly ownerScope: InvokableOwnerScope;
     readonly invokableVersionId: string;
     readonly task: Task;
-  }): Promise<ResolvedRunPrompt> {
+  }, continuation: boolean): Promise<ResolvedRunPrompt> {
     if (
       input.invokableVersionId === RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID
     ) {
       return {
         systemPrompt: buildBootstrapPrompt(),
-        turnPrompt: input.prompt,
+        turnPrompt: continuation
+          ? buildTurnPrompt({
+              taskInput: input.prompt,
+              memory: await this.loadPinnedMemory(input.task),
+            })
+          : input.prompt,
         proposalLimit: 0,
         agentVersionId: input.invokableVersionId,
         modelPolicyRef: 'free-only',

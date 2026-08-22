@@ -30,7 +30,7 @@ describe('RunPromptContext', () => {
     expect(resolver.resolvePublished).not.toHaveBeenCalled();
   });
 
-  it('rebuilds continuation context from verified pinned memory without resolving extensions', async () => {
+  it('rebuilds compatibility continuation context from verified pinned memory', async () => {
     const resolver = { resolvePublished: vi.fn(async () => null) };
     const fileStore = {
       readVerified: vi.fn(async () => 'pinned memory'),
@@ -68,7 +68,7 @@ describe('RunPromptContext', () => {
       snapshotId: 'snapshot-1',
       expectedContentHash: 'sha256:memory',
     });
-    expect(resolver.resolvePublished).not.toHaveBeenCalled();
+    expect(resolved.systemPrompt).toContain('Runtime contract:');
   });
 
   it('keeps the bounded collaboration snapshot and durable workboard/mailbox rules in Lead prompt assembly', async () => {

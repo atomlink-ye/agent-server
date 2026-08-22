@@ -34,7 +34,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "lint": "pnpm format:check && pnpm typecheck",
+    "lint": "node --import tsx scripts/quality/run-lint.ts",
     "scope:changed": "node --import tsx scripts/quality/change-scope.ts",
     "check:compatibility-surfaces": "node --import tsx scripts/quality/check-compatibility-surfaces.ts",
     "check:package-commands": "node --import tsx scripts/quality/check-duplication.ts",

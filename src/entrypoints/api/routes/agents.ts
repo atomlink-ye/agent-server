@@ -8,6 +8,7 @@ import {
   listAgentVersions,
 } from '../../../application/agents/read-agent.js';
 import { validateAgentPackage } from '../../../application/agents/validate-agent-package.js';
+import type { EnsureCoworkerConversation } from '../../../application/chat/ensure-coworker-conversation.js';
 import {
   AgentNotFoundError,
   AgentPackageValidationError,
@@ -22,6 +23,7 @@ import type {
 } from '../../../application/ports/agent-registry.js';
 import { HttpError } from '../../../contracts/http.js';
 import {
+  AgentCoworkerListResponseSchema,
   AgentDefinitionResponseSchema,
   AgentIdSchema,
   AgentVersionListResponseSchema,
@@ -46,9 +48,11 @@ interface AgentRouteDependencies {
     Pick<
       ManagedAgentDefinitionRead,
       | 'findManagedDefinitionByTenant'
+      | 'listManagedDefinitionsByTenant'
       | 'findVersionByTenant'
       | 'listVersionsByTenant'
     >;
+  readonly coworkerProvisioning?: Pick<EnsureCoworkerConversation, 'execute'>;
 }
 const validatePath = '/api/v1/agent-packages:validate';
 const importPath = '/api/v1/agents:import';
@@ -64,6 +68,7 @@ export function registerAgentRoutes(
     '/api/v1/agent-packages:validate',
     requireServiceAccountAccess(authenticator),
   );
+  app.use('/api/v1/agents', requireServiceAccountAccess(authenticator));
   app.use('/api/v1/agents/*', requireServiceAccountAccess(authenticator));
   app.use('/api/v1/agents:import', requireServiceAccountAccess(authenticator));
   app.use(
@@ -119,6 +124,30 @@ export function registerAgentRoutes(
     }
   });
 
+  app.get('/api/v1/agents', async (c) => {
+    const query = parseListQuery(c.req.url);
+    try {
+      const access = getAuthenticatedAccessContext(c);
+      const page = await dependencies.agentRegistry.listManagedDefinitionsByTenant({
+        tenantId: access.tenantId,
+        command: query,
+      });
+      return c.json(
+        AgentCoworkerListResponseSchema.parse({
+          items: page.items.map((item) => ({
+            ...definitionResponse(item.definition),
+            active_agent_version_id: item.activeAgentVersionId,
+            runtime_status: item.runtimeStatus,
+          })),
+          next_cursor: page.nextCursor,
+        }),
+        200,
+      );
+    } catch (error) {
+      throw mapAgentError(error);
+    }
+  });
+
   app.get('/api/v1/agents/:agentId', async (c) => {
     assertUuidPath(c.req.param('agentId'));
     try {
@@ -140,7 +169,7 @@ export function registerAgentRoutes(
   });
   app.get('/api/v1/agents/:agentId/versions', async (c) => {
     assertUuidPath(c.req.param('agentId'));
-    const query = parseVersionListQuery(c.req.url);
+    const query = parseListQuery(c.req.url);
     try {
       const page = await listAgentVersions(
         dependencies.agentRegistry,
@@ -192,11 +221,24 @@ export function registerAgentRoutes(
     );
     if (!input.success) throw invalidRequest();
     try {
+      const access = getAuthenticatedAccessContext(c);
       const version = await publishAgentVersion(dependencies.agentRegistry, {
-        accessContext: getAuthenticatedAccessContext(c),
+        accessContext: access,
         idempotencyKey: c.req.header('idempotency-key') ?? '',
         versionId,
       });
+      if (dependencies.coworkerProvisioning) {
+        const definition =
+          await dependencies.agentRegistry.findManagedDefinitionByTenant({
+            tenantId: access.tenantId,
+            definitionId: version.definitionId,
+          });
+        if (!definition) throw new AgentNotFoundError();
+        await dependencies.coworkerProvisioning.execute({
+          accessContext: access,
+          definition,
+        });
+      }
       return c.json(
         AgentVersionResponseSchema.parse(versionResponse(version)),
         200,
@@ -210,7 +252,7 @@ export function registerAgentRoutes(
 function assertUuidPath(value: string | undefined): asserts value is string {
   if (!AgentIdSchema.safeParse(value).success) throw invalidRequest();
 }
-function parseVersionListQuery(url: string): {
+function parseListQuery(url: string): {
   cursor: string | null;
   limit: number;
 } {

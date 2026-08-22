@@ -29,8 +29,9 @@ const forbiddenRoots = [
   'scripts/record/',
 ];
 const forbiddenExact = ['Makefile', 'docs/agents/exec-plan-protocol.md'];
+// c3 and e8 are temporary phase aliases; generic letter-number forms include product versions.
 const temporaryName =
-  /(?:^|[-_.\/])(?:phase[-_a-z0-9]*|n\d+)(?:[-_.\/]|$)/i;
+  /(?:^|[-_.\/])(?:(?:phase|worker|lane)-[a-z]\d?|[ce]\d{1,2}|n\d+)(?:[-_.\/]|$)/i;
 
 describe('repository hygiene', () => {
   it('keeps generated evidence and task-run artifacts out of HEAD', () => {

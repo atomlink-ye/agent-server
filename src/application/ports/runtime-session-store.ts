@@ -4,9 +4,9 @@ import type {
   RuntimeSessionId,
   RuntimeSessionOwner,
   RuntimeSessionStatus,
-  RuntimeSpecRevision,
 } from '../../domain/runtime/runtime-session.js';
 import type { RuntimeGenerationId } from '../../domain/runtime/runtime-session.js';
+import type { RuntimeSessionSpecInput } from '../../domain/runtime/runtime-session-spec.js';
 
 export interface RuntimeSessionStore {
   findById(id: RuntimeSessionId): Promise<RuntimeSession | null>;
@@ -14,17 +14,15 @@ export interface RuntimeSessionStore {
     owner: RuntimeSessionOwner,
     scope: RuntimeScope,
   ): Promise<RuntimeSession | null>;
-  create(input: {
+  createWithInitialSpec(input: {
     readonly owner: RuntimeSessionOwner;
     readonly scope: RuntimeScope;
-    readonly desiredSpecRevision: RuntimeSpecRevision;
+    readonly spec: Omit<
+      RuntimeSessionSpecInput,
+      'runtimeSessionId' | 'revision' | 'createdAt'
+    >;
     readonly now: string;
   }): Promise<RuntimeSession>;
-  updateDesiredRevision(
-    id: RuntimeSessionId,
-    revision: RuntimeSpecRevision,
-    updatedAt: string,
-  ): Promise<void>;
   bindCurrentGeneration(
     id: RuntimeSessionId,
     generationId: RuntimeGenerationId,

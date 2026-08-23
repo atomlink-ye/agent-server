@@ -14,6 +14,9 @@ export interface RuntimeSpecStore {
     revision: RuntimeSpecRevision,
   ): Promise<RuntimeSessionSpec | null>;
   getDesired(session: RuntimeSession): Promise<RuntimeSessionSpec>;
-  /** Implementations construct/validate the digest; callers provide no digest. */
-  append(spec: RuntimeSessionSpecInput): Promise<void>;
+  /** Implementations construct/validate the digest and advance the pointer atomically. */
+  append(input: {
+    readonly spec: RuntimeSessionSpecInput;
+    readonly expectedDesiredRevision: RuntimeSpecRevision;
+  }): Promise<void>;
 }

@@ -218,11 +218,6 @@ export class ExecuteRun {
         : null;
       await this.events?.append(claim.run.id, 'started', {});
       if (teamContext) await this.teamCoordinator!.markActive(teamContext);
-      await this.events?.bind({
-        runId: claim.run.id,
-        ...(task.sessionId ? { sessionId: task.sessionId } : {}),
-        createdAt: claim.run.updatedAt,
-      });
       if (task.status === 'queued')
         await this.tasks.save(
           transitionTask(task, 'active', () => new Date(claim.run.updatedAt)),

@@ -8,10 +8,6 @@ import {
 } from '../../src/infrastructure/postgres/postgres.js';
 import { PostgresWorkspaceMemoryRepository } from '../../src/infrastructure/postgres/postgres-workspace-memory-repository.js';
 import { PostgresTaskRepository } from '../../src/infrastructure/postgres/postgres-task-repository.js';
-import { PostgresRunEventRepository } from '../../src/infrastructure/postgres/postgres-run-event-repository.js';
-import { PaseoExecutionPlane } from '../../src/adapters/paseo/paseo-execution-plane.js';
-import type { PaseoClientPort } from '../../src/adapters/paseo/paseo-client-port.js';
-import type { ManagedEnvironmentProvider } from '../../src/domain/environments/managed-environment-package.js';
 
 const owner = {
   tenantId: 'tenant-1',
@@ -28,8 +24,6 @@ const runtimeAgentVersionId = '00000000-0000-4000-8000-000000000904';
 const runtimeTaskId = '00000000-0000-4000-8000-000000000101';
 const runtimeMessageId = '00000000-0000-4000-8000-000000000903';
 const runtimeRunId = '00000000-0000-4000-8000-000000000201';
-const continuationTaskId = '00000000-0000-4000-8000-000000000202';
-const continuationRunId = '00000000-0000-4000-8000-000000000203';
 
 function proposal(
   id: string,
@@ -80,115 +74,6 @@ async function database() {
 }
 
 describe('runtime memory PostgreSQL materialization', () => {
-  it('persists the first Agent and reuses it for the next Run in the same Product Session', async () => {
-    const db = await database();
-    let creates = 0;
-    const sends: string[] = [];
-    const client: PaseoClientPort = {
-      connect: async () => undefined,
-      connectionStatus: () => 'connected',
-      openWorkspace: async () => 'workspace-1',
-      createIndependentWorkspace: async () => 'workspace-1',
-      setWorkspaceTitle: async () => undefined,
-      listModels: async (
-        _provider: ManagedEnvironmentProvider,
-        _cwd: string,
-      ) => [{ id: 'free/model', label: 'free' }],
-      createAgent: async (_input: {
-        readonly provider: ManagedEnvironmentProvider;
-      }) => {
-        creates += 1;
-        return {
-          id: 'agent-session-1',
-          provider: 'opencode',
-          model: 'free/model',
-        };
-      },
-      sendAgentMessage: async (agentId, text) => {
-        sends.push(`${agentId}:${text}`);
-      },
-      waitForFinish: async () => ({
-        status: 'idle',
-        error: null,
-        lastMessage: 'done',
-        usage: { inputTokens: 1, outputTokens: 1 },
-      }),
-      fetchAgentTimeline: async () => ({
-        epoch: 'epoch-1',
-        startCursor: null,
-        endCursor: null,
-        window: { minSeq: 0, maxSeq: 0, nextSeq: 1 },
-        entries: [],
-      }),
-      close: async () => undefined,
-    };
-    const runtime = new PaseoExecutionPlane(
-      {
-        wsUrl: 'ws://test',
-        cwd: '/tmp/runtime-memory-pglite',
-        provider: 'opencode',
-        workspaceTitle: 'test',
-        connectTimeoutMs: 1,
-        executionTimeoutMs: 1,
-      },
-      { log: () => undefined },
-      client,
-    );
-    const bindings = new PostgresRunEventRepository(db);
-    const firstSession = await runtime.createSession({
-      runtimeSessionId: runtimeRunId,
-      workspace: { cwd: '/tmp/runtime-memory-pglite' },
-      provider: 'opencode',
-      model: 'free/model',
-      systemPrompt: '',
-    });
-    await firstSession.session.run({ runId: runtimeRunId, prompt: 'first' });
-    await bindings.bind({
-      runId: runtimeRunId,
-      sessionBinding: firstSession.sessionBinding,
-      createdAt: '2026-01-01T00:00:00.000Z',
-    });
-    await db.query(
-      `INSERT INTO tasks(id,tenant_id,workspace_id,principal_type,principal_id,policy_snapshot_version,root_task_id,depth,status,ingress,invokable_kind,invokable_version_id,input_snapshot_ref,input_fingerprint,session_id,created_at,updated_at) VALUES ($1,'tenant-1',$2,'service_account','svc-1','policy-1',$1,0,'active','api','agent',$3,'ref','fingerprint-2',$4,now(),now())`,
-      [
-        continuationTaskId,
-        owner.workspaceId,
-        runtimeAgentVersionId,
-        '00000000-0000-4000-8000-000000000902',
-      ],
-    );
-    await db.query(
-      `INSERT INTO runs(id,task_id,attempt,status,lease_owner,activation_id,lease_expires_at,fencing_token,created_at,updated_at) VALUES ($1,$2,1,'running','worker','00000000-0000-4000-8000-000000000302',now()+interval '1 hour',1,now(),now())`,
-      [continuationRunId, continuationTaskId],
-    );
-    const prior = await bindings.findLatestSessionBindingBySessionId(
-      '00000000-0000-4000-8000-000000000902',
-    );
-    const secondSession = await runtime.attachSession(prior!, {
-      runtimeSessionId: 'continuation-runtime-session',
-      workspace: {
-        cwd: '/tmp/runtime-memory-pglite',
-        binding: firstSession.workspaceBinding,
-      },
-      systemPrompt: '',
-    });
-    if (secondSession.kind === 'replacement_required')
-      throw new Error(
-        `unexpected replacement_required: ${secondSession.reason}`,
-      );
-    const session = secondSession.session;
-    await session.run({
-      runId: continuationRunId,
-      prompt: 'second',
-    });
-
-    expect(firstSession.sessionBinding.externalSessionId).toBe(
-      'agent-session-1',
-    );
-    expect(prior?.externalSessionId).toBe('agent-session-1');
-    expect(creates).toBe(1);
-    expect(sends).toEqual(['agent-session-1:first', 'agent-session-1:second']);
-  });
   it('lists only pending proposals for the exact successful source run and owner', async () => {
     const db = await database();
     await db.query(

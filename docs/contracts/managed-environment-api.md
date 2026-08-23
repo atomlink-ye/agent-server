@@ -79,9 +79,10 @@ cell; subsequent Runs in the same ProductSession continue the bound provider
 Agent. A different ProductSession receives a different RuntimeSession, Cell,
 Workspace, and provider Agent.
 
-Existing `runtime_session_bindings` remain per-Run provenance. The RuntimeSession
-and Cell are internal implementation semantics; no public RuntimeSession API is
-claimed.
+The RuntimeSession and Cell are internal implementation semantics; no public
+RuntimeSession API is claimed. Provider identity is owned by the current active
+RuntimeSessionGeneration; the retired per-Run binding table is not a source of
+truth.
 
 ## Explicit non-goals
 

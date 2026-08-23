@@ -1,11 +1,11 @@
 /**
  * Resolves roster member names to Paseo agent ids.
  *
- * The hop is two steps, not one: `team_member_runs.runtime_session_id` is a
- * uuid into our own `runtime_sessions`, and the Paseo agent id is that row's
- * `provider_agent_id`. Members whose session has not yet been created, or whose
- * session has no provider agent, are omitted rather than returned with a null
- * id - a caller asking for a session transcript cannot do anything with such a row.
+ * Provider identity is read only through the current active generation:
+ * `team_member_runs.runtime_session_id` -> `runtime_sessions.current_generation_id`
+ * -> `runtime_session_generations.provider_session_id`. Members whose session,
+ * current generation, or provider identity is missing/inactive are omitted
+ * rather than returned with a null id.
  *
  * Read-only: one SELECT, no writes.
  */
@@ -19,7 +19,8 @@ interface Row {
   readonly name: string;
   readonly role: string;
   readonly status: string;
-  readonly provider_agent_id: string;
+  readonly provider_session_id: string | null;
+  readonly provider_workspace_id: string | null;
 }
 
 export class PostgresSessionAgentBindingLookup implements SessionAgentBindingLookup {
@@ -36,19 +37,39 @@ export class PostgresSessionAgentBindingLookup implements SessionAgentBindingLoo
     teamRunId: string,
   ): Promise<readonly SessionAgentBinding[]> {
     const result = await this.db.query(
-      `SELECT m.name, m.role, m.status, s.provider_agent_id
+      `SELECT m.name, m.role, m.status, g.provider_session_id,
+              g.provider_workspace_id
          FROM team_member_runs m
          JOIN runtime_sessions s ON s.id = m.runtime_session_id
+         JOIN runtime_session_generations g
+           ON g.id = s.current_generation_id
+          AND g.runtime_session_id = s.id
         WHERE m.team_run_id = $1
-          AND s.provider_agent_id IS NOT NULL
+          AND s.current_generation_id IS NOT NULL
+          AND g.status = 'active'
+          AND g.provider_session_id IS NOT NULL
+          AND g.provider_workspace_id IS NOT NULL
         ORDER BY m.created_at`,
       [teamRunId],
     );
-    return (result.rows ?? []).map((row) => ({
-      memberName: row.name,
-      role: row.role,
-      status: row.status,
-      providerAgentId: row.provider_agent_id,
-    }));
+    return (result.rows ?? [])
+      .filter(
+        (
+          row,
+        ): row is Row & {
+          readonly provider_session_id: string;
+          readonly provider_workspace_id: string;
+        } =>
+          typeof row.provider_session_id === 'string' &&
+          row.provider_session_id.length > 0 &&
+          typeof row.provider_workspace_id === 'string' &&
+          row.provider_workspace_id.length > 0,
+      )
+      .map((row) => ({
+        memberName: row.name,
+        role: row.role,
+        status: row.status,
+        providerAgentId: row.provider_session_id,
+      }));
   }
 }

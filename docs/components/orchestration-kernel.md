@@ -17,7 +17,7 @@ The current walking skeleton contains:
 - the authenticated API-first Memory Store/Memory routes composed beside the
   existing Task/Run kernel; Memory Version append and current-pointer CAS are
   owned by the Memory API repository rather than Task admission.
-- the minimum Phase D `RuntimeSessionBinding`/`RunEvent` repository, lifecycle event persistence, final assistant Message write, replay/poll SSE routes, and owner-scoped Task cancellation.
+- the minimum Phase D Run Event repository, lifecycle event persistence, final assistant Message write, replay/poll SSE routes, and owner-scoped Task cancellation.
 
 Admission first creates or replays through a transaction-scoped repository. The real PostgreSQL 16 lane uses an admission `pg.Pool` with max 2 plus a separate reader pool with max 2, and a forced same-key race to prove committed visibility, replay, owner isolation, and unique-key convergence. This proves durable admission, owner-scoped Task reads, idempotent replay, fenced in-process execution, and sequential Team child genealogy while preserving `/api/v1/runs` as a compatibility API.
 

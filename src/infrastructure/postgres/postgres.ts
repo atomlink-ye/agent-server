@@ -88,6 +88,7 @@ export const durableKernelMigrationFileNames = [
   '0054_drop_team_member_direct_conversations.sql',
   '0055_runtime_session_generations_and_grants.sql',
   '0056_runtime_model_replacement.sql',
+  '0057_drop_runtime_session_bindings.sql',
 ] as const;
 const durableKernelMigrationRegistryTable = 'durable_kernel_schema_migrations';
 const durableKernelMigrationAdvisoryLock = [

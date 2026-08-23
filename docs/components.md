@@ -52,8 +52,8 @@ Workspace there. A later Run reuses the same provider binding; another
 ProductSession receives a distinct Cell and provider Workspace. This is an
 implemented baseline, not production isolation or Runtime Session V2.
 
-Per-Run bindings/events remain durable evidence. Transaction concurrency, crash
-recovery, legacy nullable Sessions, Grant renewal/header persistence, Host
+Run Events remain durable evidence; per-Run provider bindings are not persisted.
+Transaction concurrency, crash recovery, legacy nullable Sessions, Grant renewal/header persistence, Host
 placement/GC, a second adapter, and production lifecycle hardening are deferred.
 
 ## Phase C Session lane boundary

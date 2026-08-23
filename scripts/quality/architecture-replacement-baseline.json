@@ -50,26 +50,6 @@
       "key": "architecture.infrastructure-imports|src/infrastructure/extensions/runtime-mcp-server.ts|infrastructure->entrypoints:../../entrypoints/mcp/direct-memory-mcp.js|000001",
       "why": "Infrastructure still reaches into entrypoint or composition code.",
       "phase": "Phase 5 — composition graph"
-    },
-    {
-      "rule": "persistence.provider-agent-id",
-      "path": "src/infrastructure/postgres/postgres-session-agent-binding-lookup.ts",
-      "line": 39,
-      "symbol": "provider_agent_id",
-      "occurrence": 1,
-      "key": "persistence.provider-agent-id|src/infrastructure/postgres/postgres-session-agent-binding-lookup.ts|provider_agent_id|000001",
-      "why": "Runtime persistence still carries the provider agent binding.",
-      "phase": "Phase 1 — runtime/persistence"
-    },
-    {
-      "rule": "persistence.provider-agent-id",
-      "path": "src/infrastructure/postgres/postgres-session-agent-binding-lookup.ts",
-      "line": 43,
-      "symbol": "provider_agent_id",
-      "occurrence": 2,
-      "key": "persistence.provider-agent-id|src/infrastructure/postgres/postgres-session-agent-binding-lookup.ts|provider_agent_id|000002",
-      "why": "Runtime persistence still carries the provider agent binding.",
-      "phase": "Phase 1 — runtime/persistence"
     }
   ]
 }

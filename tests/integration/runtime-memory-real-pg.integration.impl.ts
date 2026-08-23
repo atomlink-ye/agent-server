@@ -2,7 +2,6 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { createMemoryProposal } from '../../src/domain/workspace-memory/memory-proposal.js';
 import { PostgresWorkspaceMemoryRepository } from '../../src/infrastructure/postgres/postgres-workspace-memory-repository.js';
-import { PostgresRunEventRepository } from '../../src/infrastructure/postgres/postgres-run-event-repository.js';
 import {
   applyDurableKernelMigrations,
   createPostgresPool,
@@ -104,10 +103,6 @@ describeReal('real PostgreSQL runtime memory replay', () => {
       [ids.run, ids.task],
     );
     await pool.query(
-      `INSERT INTO runtime_session_bindings(run_id,provider_agent_id,created_at) VALUES ($1,'agent-prior',now())`,
-      [ids.run],
-    );
-    await pool.query(
       `INSERT INTO agent_definitions(id,tenant_id,workspace_id,principal_type,principal_id,name,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,'Alternate agent',now(),now())`,
       [
         ids.alternateDefinition,
@@ -165,30 +160,11 @@ describeReal('real PostgreSQL runtime memory replay', () => {
     );
   });
 
-  it('finds the latest non-null execution session through the durable run/task session relation', async () => {
-    if (!pool) return;
-    const repository = new PostgresRunEventRepository(pool);
-    await repository.bind({
-      runId: ids.alternateRun,
-      createdAt: new Date().toISOString(),
-    });
-    await expect(
-      repository.findLatestSessionBindingBySessionId(ids.session),
-    ).resolves.toEqual({
-      plane: 'paseo',
-      externalSessionId: 'agent-prior',
-    });
-  });
-
   afterAll(async () => {
     if (!pool) return;
     await pool.query(
       'DELETE FROM workspace_memory_proposals WHERE tenant_id=$1',
       [owner.tenantId],
-    );
-    await pool.query(
-      'DELETE FROM runtime_session_bindings WHERE run_id = ANY($1::uuid[])',
-      [[ids.run, ids.alternateRun]],
     );
     await pool.query('DELETE FROM runs WHERE id=$1', [ids.run]);
     await pool.query('DELETE FROM runs WHERE id=$1', [ids.alternateRun]);

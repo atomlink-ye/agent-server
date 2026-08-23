@@ -1,5 +1,4 @@
 import type { RunStatus } from '../../domain/runs/run-status.js';
-import type { ExecutionSessionBinding } from './execution-plane.js';
 import { z } from 'zod';
 
 export type RunEventJsonValue =
@@ -425,22 +424,7 @@ export interface RunEvent {
   readonly payload: RunEventPayload;
   readonly createdAt: string;
 }
-export interface RuntimeSessionBinding {
-  readonly runId: string;
-  readonly sessionId?: string | null;
-  readonly sessionBinding?: ExecutionSessionBinding;
-  readonly createdAt: string;
-}
 export interface RunEventRepository {
-  bind(input: RuntimeSessionBinding): Promise<void>;
-  getBinding(runId: string): Promise<RuntimeSessionBinding | null>;
-  findLatestSessionBindingBySessionId(
-    sessionId: string,
-  ): Promise<ExecutionSessionBinding | null>;
-  getSessionBindingForRunInSession(
-    runId: string,
-    sessionId: string,
-  ): Promise<ExecutionSessionBinding | null>;
   append(
     runId: string,
     type: RunEventType,

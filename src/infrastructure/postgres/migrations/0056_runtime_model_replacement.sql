@@ -4,15 +4,13 @@ BEGIN;
 -- boundary. RuntimeSession, launch-snapshot, generation, and grant rows are
 -- external-provider live-binding state, not durable product facts. They are
 -- intentionally discarded so the replacement model starts without legacy
--- provider bindings, endpoint epochs, or grant shapes. The legacy Work
--- run_id provenance in runtime_session_bindings is preserved in Phase 1.
+-- provider bindings, endpoint epochs, or grant shapes. Legacy per-Run provider
+-- provenance is retired by the follow-up migration without backfill.
 --
 -- This reset is deliberately limited to the runtime authorities being
 -- replaced: runtime_sessions bindings, runtime_session_generations' legacy
--- binding shape, and session_launch_snapshots. The legacy Work run_id
--- provenance in runtime_session_bindings is explicitly preserved in Phase 1;
--- it is not a reset authority. Deleting it belongs to the Work/Team cutover,
--- not to a Chat fallback. Work, Run, Task, Agent, Team, Memory, and Chat
+-- binding shape, and session_launch_snapshots. Work, Run, Task, Agent, Team,
+-- Memory, and Chat
 -- durable tables are not deleted, altered, backfilled, or used as
 -- compatibility storage. There is no dual schema, compatibility view, or
 -- data backfill.

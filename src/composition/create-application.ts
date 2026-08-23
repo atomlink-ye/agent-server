@@ -3,7 +3,6 @@ import type { Pool } from 'pg';
 
 import { ClaimNextRun } from '../application/runs/claim-next-run.js';
 import { CompleteRun } from '../application/runs/complete-run.js';
-import { ExecuteRun } from '../application/runs/execute-run.js';
 import { GetTask } from '../application/tasks/get-task.js';
 import { GetTaskTree } from '../application/tasks/get-task-tree.js';
 import { ExecuteTeamTask } from '../application/tasks/execute-team-task.js';
@@ -23,18 +22,20 @@ import { ProcessLarkIngress } from '../application/channels/process-lark-ingress
 import {
   PublishMemoryReviewSurface,
 } from '../application/channels/publish-memory-review-surface.js';
-import { SynthesizeMemoryDocument } from '../application/channels/synthesize-memory-document.js';
 import { createLarkMemoryDocumentAdapter } from '../adapters/lark/lark-memory-document.js';
 import { createMemoryReviewActionTokenDeriver } from '../application/channels/memory-review-action-token.js';
 import { ApplyMemoryReviewCommand } from '../application/channels/apply-memory-review-command.js';
 import { ApplyMemoryReviewControl } from '../application/channels/apply-memory-review-control.js';
-import { AcceptMemoryFromBoundDocument } from '../application/channels/accept-memory-from-bound-document.js';
 import { TeamDriver } from '../application/teams/team-driver.js';
 import { PostgresExecutionFactQuery } from '../infrastructure/postgres/postgres-execution-fact-query.js';
 import { InvokeTaskExecutionAdmission } from '../application/ports/execution-admission.js';
 import { noExternalDependencies } from '../application/health/readiness.js';
 import { createConfiguredRuntimeCapabilities } from './create-runtime-capabilities.js';
-import { createChatCapabilities } from './create-chat-capabilities.js';
+import {
+  createChatExecutionConsumer,
+  createMemoryChannelExecutionConsumers,
+  createRunExecutionConsumer,
+} from './create-execution-consumers.js';
 import { createMemoryCapabilities } from './create-memory-capabilities.js';
 import { createKernelCapabilities } from './create-kernel-capabilities.js';
 import { createInfrastructure } from './create-infrastructure.js';
@@ -59,6 +60,7 @@ import { PostgresRuntimeGrantAuthority } from '../infrastructure/postgres/runtim
 import { AuthorizeRuntimeTool } from '../application/runtime/authorize-runtime-tool.js';
 import { EnsureRuntimeSessionService } from '../application/runtime/ensure-runtime-session.js';
 import { ExecuteRuntimeTurn } from '../application/runtime/execute-runtime-turn.js';
+import { CancelRuntimeTurn } from '../application/runtime/cancel-runtime-turn.js';
 import { AgentChatRuntimeSessionCreator } from '../application/runtime/create-agent-chat-runtime-session.js';
 import { ResolveRuntimeSessionSpecService } from '../application/runtime/resolve-runtime-session-spec.js';
 import { RuntimeGenerationManager } from '../application/runtime/runtime-generation-manager.js';
@@ -81,6 +83,7 @@ interface RuntimeOwner {
   readonly resolveRuntimeSpec: ResolveRuntimeSessionSpec;
   readonly ensureRuntimeSession: EnsureRuntimeSession;
   readonly executeRuntimeTurn: Pick<ExecuteRuntimeTurnUseCase, 'execute'>;
+  readonly cancelRuntimeTurn: Pick<CancelRuntimeTurn, 'execute'>;
   readonly chatRuntime: {
     readonly sessionCreator: Pick<AgentChatRuntimeSessionCreator, 'execute'>;
     readonly turnExecutor: Pick<ExecuteRuntimeTurnUseCase, 'execute'>;
@@ -135,7 +138,7 @@ function createRuntimeOwner(input: {
     generations,
     generationManager,
     grants,
-    mcpEndpoint: createRuntimeMcpEndpoint(runtimeMcpServer),
+    mcpEndpoint: runtimeMcpEndpoint,
     logger: input.logger,
     now: () => new Date(),
   });
@@ -143,6 +146,10 @@ function createRuntimeOwner(input: {
     turns,
     ensureRuntimeSession,
     grants,
+  );
+  const cancelRuntimeTurn = new CancelRuntimeTurn(
+    turns,
+    ensureRuntimeSession,
   );
   const sessionCreator = new AgentChatRuntimeSessionCreator(
     runtimeSessions,
@@ -159,6 +166,7 @@ function createRuntimeOwner(input: {
     resolveRuntimeSpec,
     ensureRuntimeSession,
     executeRuntimeTurn,
+    cancelRuntimeTurn,
     chatRuntime: { sessionCreator, turnExecutor: executeRuntimeTurn },
     runtimeMcpServer,
     runtimeMcpEndpoint,
@@ -382,8 +390,8 @@ export async function createApplication(
   const executionRuns = new ExecutionRunRegistry();
   const chatCapabilities =
     directChatPlane === 'absent'
-      ? createChatCapabilities({ directChatPlane })
-      : createChatCapabilities({
+      ? createChatExecutionConsumer({ directChatPlane })
+      : createChatExecutionConsumer({
           directChatPlane,
           database: pool,
           chatRuntime,
@@ -397,16 +405,17 @@ export async function createApplication(
           workerId,
           leaseMs: leaseDurationMs,
         });
-  const synthesizeMemoryDocument = new SynthesizeMemoryDocument(
-    executionRuntime,
-  );
-  const acceptMemoryFromDocument = new AcceptMemoryFromBoundDocument(
-    executionRuntime,
+  const memoryChannelConsumers = createMemoryChannelExecutionConsumers({
+    runtime: executionRuntime,
     events,
-    memoryModule.reviewApi.review,
-    memoryModule.reviewApi.managedMemory,
-    process.env.LARK_CLI_PROFILE ?? 'agent-test',
-  );
+    review: memoryModule.reviewApi.review,
+    managedMemory: memoryModule.reviewApi.managedMemory,
+    profile: process.env.LARK_CLI_PROFILE ?? 'agent-test',
+  });
+  const {
+    synthesizeMemoryDocument,
+    acceptMemoryFromDocument,
+  } = memoryChannelConsumers;
   const cancelTask = new CancelTask(
     taskRepository,
     runRepository,
@@ -468,7 +477,7 @@ export async function createApplication(
     resourceModule.definitionReadApi,
     teamDriver,
   );
-  const executeRun = new ExecuteRun({
+  const executeRun = createRunExecutionConsumer({
     completeRun,
     tasks: taskRepository,
     definitions: resourceModule.definitionReadApi,

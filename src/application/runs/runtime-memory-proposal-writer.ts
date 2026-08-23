@@ -3,7 +3,7 @@ import type { Task } from '../../domain/tasks/task.js';
 import type { Logger } from '../../shared/observability/logger.js';
 import type { CreateMemoryProposal } from '../memory/create-memory-proposal.js';
 import type { ClaimedRun } from '../ports/run-repository.js';
-import type { ExecutionTurnOutcome } from '../runtime/execution-plane-runtime-facade.js';
+import type { ExecutionTurnOutcome } from '../ports/execution-runtime.js';
 import {
   createRuntimeExecutionReceipt,
   RuntimeMemoryPersistenceError,

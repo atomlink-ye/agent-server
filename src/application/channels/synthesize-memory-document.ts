@@ -1,6 +1,6 @@
 import type { MemoryDocumentDraft } from '../ports/lark-memory-document.js';
 import { buildBootstrapPrompt } from '../context/runtime-prompts.js';
-import type { ExecutionRuntimeService } from '../runtime/execution-plane-runtime-facade.js';
+import type { ExecutionRuntimeService } from '../ports/execution-runtime.js';
 
 const MAX_OUTPUT_BYTES = 4096;
 const MAX_COMMENT_BYTES = 32768;

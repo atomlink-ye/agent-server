@@ -1,7 +1,7 @@
 import type {
   ConversationWorkLink,
   ConversationWorkLinkRepository,
-} from '../../domain/chat/chat-work-origin-ref.js';
+} from '../domain/chat/chat-work-origin-ref.js';
 
 interface Queryable {
   query<Row = Record<string, unknown>>(

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { ReadinessProbe } from '../../../application/health/readiness.js';
-import type { ExecutionRuntimeService } from '../../../application/runtime/execution-plane-runtime-facade.js';
+import type { ExecutionRuntimeService } from '../../../application/ports/execution-runtime.js';
 import { makeRuntimeSession } from '../../../../tests/fixtures/runtime-session.js';
 import type { GetRun } from '../../../application/runs/get-run.js';
 import type { SubmitRun } from '../../../application/runs/submit-run.js';

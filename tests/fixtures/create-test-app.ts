@@ -7,7 +7,7 @@ import { PGlite } from '@electric-sql/pglite';
 
 import { RuntimeReadinessProbe } from '../../src/application/health/readiness.js';
 import { createConfiguredRuntimeCapabilities } from '../../src/composition/create-runtime-capabilities.js';
-import { createMemoryModule } from '../../src/modules/memory/memory-module.js';
+import { createMemoryModule } from '../../src/composition/create-memory-capabilities.js';
 import { createResourceModule } from '../../src/composition/create-resource-capabilities.js';
 import { createWorkModule } from '../../src/modules/work/work-module.js';
 import { CreateMemoryProposal } from '../../src/application/memory/create-memory-proposal.js';

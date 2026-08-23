@@ -107,10 +107,7 @@ export function createRuntimeModule(options: {
   const executionPlane: ExecutionPlanePort =
     runtimeAdapter === 'none'
       ? new UnavailableExecutionPlane()
-      : new PaseoExecutionPlane(
-          paseoConfig,
-          options.logger,
-        );
+      : new PaseoExecutionPlane(paseoConfig, options.logger);
   const runtimeProvider = createRuntimeProvider({
     adapter: runtimeAdapter,
     config: options.config,

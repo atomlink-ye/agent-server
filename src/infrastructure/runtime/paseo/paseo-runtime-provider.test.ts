@@ -121,9 +121,9 @@ describe('PaseoRuntimeProvider', () => {
   });
 
   it('owns Paseo model normalization and config mapping', () => {
-    expect(normalizePaseoRequestedModel('claude', 'opencode-go/claude-sonnet')).toBe(
-      'claude-sonnet',
-    );
+    expect(
+      normalizePaseoRequestedModel('claude', 'opencode-go/claude-sonnet'),
+    ).toBe('claude-sonnet');
     expect(normalizePaseoRequestedModel('opencode', 'opencode-go/model')).toBe(
       'opencode-go/model',
     );
@@ -181,15 +181,19 @@ describe('PaseoRuntimeProvider', () => {
 
     const protocolFailure = new FakeClient();
     protocolFailure.timelineError = new PaseoClientProjectionError();
-    await expect(provider(protocolFailure).inspect(binding())).resolves.toMatchObject({
+    await expect(
+      provider(protocolFailure).inspect(binding()),
+    ).resolves.toMatchObject({
       status: 'unavailable',
     });
 
     const missingTimeline = withoutTimeline(new FakeClient());
-    await expect(provider(missingTimeline).inspect(binding())).resolves.toEqual({
-      status: 'unavailable',
-      reason: 'Paseo session timeline inspection is unavailable.',
-    });
+    await expect(provider(missingTimeline).inspect(binding())).resolves.toEqual(
+      {
+        status: 'unavailable',
+        reason: 'Paseo session timeline inspection is unavailable.',
+      },
+    );
   });
 
   it('classifies missing and structurally wrong bindings without probing errors', async () => {

@@ -24,6 +24,13 @@ export function compareRuntimeSpecs(
   applied: RuntimeSessionSpec,
   desired: RuntimeSessionSpec,
 ): RuntimeSpecDiff {
+  if (applied.bootstrapDigest === desired.bootstrapDigest)
+    return Object.freeze({
+      changed: Object.freeze([] as RuntimeSpecField[]),
+      mutableInPlace: Object.freeze([] as RuntimeSpecField[]),
+      replacementRequired: Object.freeze([] as RuntimeSpecField[]),
+    });
+
   const comparisons: readonly RuntimeSpecComparison[] = [
     {
       field: 'workspace',

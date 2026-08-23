@@ -9,11 +9,12 @@ import {
 import type { ApiEnvironment } from '../../../platform/http-types.js';
 import type { AppConfig } from '../../../shared/config.js';
 import { decodeProductResponse } from '../browser-product-decoder.js';
-
-const NO_STORE_HEADERS = {
-  'cache-control': 'no-store',
-  'content-type': 'application/json; charset=utf-8',
-} as const;
+import {
+  fetchAuthenticated,
+  jsonResponse,
+  readJson,
+  safeStatus,
+} from './browser-bff-transport.js';
 
 /** Browser-safe canonical Agent roster/profile facade for the Vite client. */
 export function registerBrowserCoworkerRoutes(
@@ -62,13 +63,7 @@ async function forwardValidated(
 ): Promise<Response> {
   let upstream: Response;
   try {
-    upstream = await fetch(upstreamUrl(config, path), {
-      method: 'GET',
-      headers: {
-        accept: 'application/json',
-        authorization: `Bearer ${browserServiceToken(config)}`,
-      },
-    });
+    upstream = await fetchAuthenticated(config, path, { method: 'GET' });
   } catch {
     return jsonResponse(
       { error: { code: 'service_unavailable', message: requestFailure } },
@@ -76,7 +71,7 @@ async function forwardValidated(
     );
   }
 
-  const body = await upstream.json().catch(() => undefined);
+  const body = await readJson(upstream);
   if (!upstream.ok)
     return jsonResponse(
       normalizeError(body, requestFailure),
@@ -92,22 +87,6 @@ async function forwardValidated(
   return jsonResponse(decoded.data, upstream.status, {
     'x-agent-server-upstream': 'fetched',
   });
-}
-
-function upstreamUrl(config: AppConfig, path: string): string {
-  const configured = process.env.AGENT_SERVER_BASE_URL?.trim();
-  const base = configured || `http://127.0.0.1:${config.port}`;
-  return `${base.replace(/\/$/u, '')}${path}`;
-}
-
-function browserServiceToken(config: AppConfig): string {
-  const configured = process.env.AGENT_SERVER_SERVICE_TOKEN?.trim();
-  if (configured) return configured;
-  const active = (config.serviceAccounts ?? []).filter(
-    (account) => !account.disabled,
-  );
-  if (active.length === 1) return active[0]!.token;
-  throw new Error('browser_web_service_token_missing');
 }
 
 function normalizeError(
@@ -132,19 +111,4 @@ function normalizeError(
           : fallback,
     },
   };
-}
-
-function jsonResponse(
-  body: unknown,
-  status: number,
-  extraHeaders: Record<string, string> = {},
-): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...NO_STORE_HEADERS, ...extraHeaders },
-  });
-}
-
-function safeStatus(status: number): number {
-  return status >= 400 && status < 600 ? status : 502;
 }

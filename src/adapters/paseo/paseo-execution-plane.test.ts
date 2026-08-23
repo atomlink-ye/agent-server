@@ -11,6 +11,7 @@ import type {
   PaseoFinishedAgent,
   PaseoTimelinePage,
 } from './paseo-client-port.js';
+import { PaseoProviderErrorIndistinguishableAtBoundaryError } from './errors.js';
 import { PaseoExecutionPlane } from './paseo-execution-plane.js';
 
 const logger = { log: () => undefined };
@@ -21,7 +22,7 @@ class FakePlaneClient implements PaseoClientPort {
   sendCalls: { agentId: string; text: string }[] = [];
   cancelCalls = 0;
   closeCalls = 0;
-  timelineError: Error | null = null;
+  timelineError: (Error & { readonly code?: string }) | null = null;
 
   async connect() {
     this.status = 'connected';
@@ -156,6 +157,36 @@ describe('PaseoExecutionPlane', () => {
     client.timelineError = new Error('missing agent');
     const plane = createPlane(client);
 
+    await expect(
+      plane.attachSession(
+        { plane: 'paseo', externalSessionId: 'missing-agent' },
+        {
+          ...sessionSpec,
+          workspace: {
+            cwd: '/tmp/execution-plane-test/cell-1',
+            binding: {
+              plane: 'paseo',
+              externalWorkspaceId: 'existing-workspace',
+            },
+          },
+        },
+      ),
+    ).rejects.toMatchObject({
+      name: 'PaseoProviderErrorIndistinguishableAtBoundaryError',
+      reason: 'provider_error_indistinguishable_at_boundary',
+      evidence: { errorName: 'Error', errorMessage: 'missing agent' },
+    } satisfies Partial<PaseoProviderErrorIndistinguishableAtBoundaryError>);
+    expect(client.createCalls).toBe(0);
+    expect(client.sendCalls).toEqual([]);
+  });
+
+  it('requires an explicit missing-session code before replacement', async () => {
+    const client = new FakePlaneClient();
+    client.timelineError = Object.assign(new Error('missing agent'), {
+      code: 'agent_not_found',
+    });
+    const plane = createPlane(client);
+
     const outcome = await plane.attachSession(
       { plane: 'paseo', externalSessionId: 'missing-agent' },
       {
@@ -169,6 +200,7 @@ describe('PaseoExecutionPlane', () => {
         },
       },
     );
+
     expect(outcome).toEqual({
       kind: 'replacement_required',
       reason: 'provider_binding_stale',

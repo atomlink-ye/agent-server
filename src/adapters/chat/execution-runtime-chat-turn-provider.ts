@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import type {
   ChatTurnMessage,
   ChatTurnMode,
@@ -85,9 +87,10 @@ export class ExecutionRuntimeChatTurnProvider implements ChatTurnProvider {
         triggerMessageId: input.triggerMessageId,
       },
       turnId: chatRunId(
+        CHAT_RUNTIME_TURN_NAMESPACE,
         input.conversationId,
         input.triggerMessageId,
-      ) as RuntimeTurnId,
+      ),
       prompt,
       desiredSystemPrompt: createDesiredRuntimeSystemPrompt(
         buildStableSystemPrompt(input),
@@ -98,8 +101,50 @@ export class ExecutionRuntimeChatTurnProvider implements ChatTurnProvider {
   }
 }
 
-function chatRunId(conversationId: string, triggerMessageId: string): string {
-  return `chat:${conversationId}:${triggerMessageId}`;
+export const CHAT_RUNTIME_TURN_NAMESPACE = 'agent-server:chat-runtime-turn:v1';
+const CHAT_RUNTIME_TURN_UUID_NAMESPACE = '6ba7b810-9dad-11d1-80b4-00c04fd430c8';
+const CHAT_RUNTIME_TURN_UUID_NAMESPACE_BYTES = Buffer.from(
+  CHAT_RUNTIME_TURN_UUID_NAMESPACE.replaceAll('-', ''),
+  'hex',
+);
+
+export function chatRunId(
+  namespace: string,
+  conversationId: string,
+  triggerMessageId: string,
+): RuntimeTurnId {
+  const name = Buffer.from(
+    JSON.stringify([namespace, conversationId, triggerMessageId]),
+    'utf8',
+  );
+  const digest = createHash('sha1')
+    .update(CHAT_RUNTIME_TURN_UUID_NAMESPACE_BYTES)
+    .update(name)
+    .digest();
+  digest[6] = (digest[6] ?? 0) & 0x0f;
+  digest[6] |= 0x50;
+  digest[8] = (digest[8] ?? 0) & 0x3f;
+  digest[8] |= 0x80;
+  const hex = digest.toString('hex');
+  const uuid = [
+    hex.slice(0, 8),
+    hex.slice(8, 12),
+    hex.slice(12, 16),
+    hex.slice(16, 20),
+    hex.slice(20, 32),
+  ].join('-');
+  assertRuntimeTurnId(uuid);
+  return uuid;
+}
+
+function assertRuntimeTurnId(value: string): asserts value is RuntimeTurnId {
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(
+      value,
+    )
+  ) {
+    throw new Error('chat_runtime_turn_id_invalid');
+  }
 }
 
 function buildExecutionPrompt(

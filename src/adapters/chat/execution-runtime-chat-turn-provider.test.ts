@@ -8,9 +8,43 @@ import type {
   ExecuteRuntimeTurn,
   ExecuteRuntimeTurnInput,
 } from '../../application/runtime/execute-runtime-turn.js';
-import { ExecutionRuntimeChatTurnProvider } from './execution-runtime-chat-turn-provider.js';
+import {
+  CHAT_RUNTIME_TURN_NAMESPACE,
+  chatRunId,
+  ExecutionRuntimeChatTurnProvider,
+} from './execution-runtime-chat-turn-provider.js';
 
 describe('ExecutionRuntimeChatTurnProvider', () => {
+  it('derives deterministic canonical UUID runtime turn IDs from the chat tuple', () => {
+    const first = chatRunId(
+      CHAT_RUNTIME_TURN_NAMESPACE,
+      'conversation-1',
+      'message-1',
+    );
+    const retry = chatRunId(
+      CHAT_RUNTIME_TURN_NAMESPACE,
+      'conversation-1',
+      'message-1',
+    );
+    const differentMessage = chatRunId(
+      CHAT_RUNTIME_TURN_NAMESPACE,
+      'conversation-1',
+      'message-2',
+    );
+    const differentNamespace = chatRunId(
+      'agent-server:other-namespace:v1',
+      'conversation-1',
+      'message-1',
+    );
+
+    expect(first).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
+    expect(first).toBe(retry);
+    expect(differentMessage).not.toBe(first);
+    expect(differentNamespace).not.toBe(first);
+  });
+
   it('creates a durable chat session and executes a conversation turn through the new seams', async () => {
     const session = runtimeSession('runtime-session-1');
     const creator = new RecordingSessionCreator([session]);
@@ -49,7 +83,10 @@ describe('ExecutionRuntimeChatTurnProvider', () => {
         agentOwner: brain.agentOwner,
         agentVersionId: 'agent-version-1',
         resolvedSkills: [],
-        toolRefs: [],
+        toolRefs: [
+          'agent-server/list-agent-workflows',
+          'agent-server/product-work-run-start',
+        ],
       }),
     ]);
     expect(executor.calls).toHaveLength(1);
@@ -61,7 +98,11 @@ describe('ExecutionRuntimeChatTurnProvider', () => {
           conversationId: 'conversation-1',
           triggerMessageId: 'conversation-1-trigger',
         },
-        turnId: 'chat:conversation-1:conversation-1-trigger',
+        turnId: chatRunId(
+          CHAT_RUNTIME_TURN_NAMESPACE,
+          'conversation-1',
+          'conversation-1-trigger',
+        ),
       }),
     );
     expect(executor.calls[0]?.prompt).toContain(

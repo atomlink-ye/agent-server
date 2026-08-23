@@ -20,10 +20,11 @@ export interface RuntimeTurnStore {
 
   findById(id: RuntimeTurnId): Promise<RuntimeTurn | null>;
 
-  /** Atomically binds a ready generation and moves pending to preparing. */
+  /** Atomically records the prompt, binds a ready generation, and prepares. */
   bindGenerationAndPrepare(input: {
     readonly id: RuntimeTurnId;
     readonly generationId: RuntimeGenerationId;
+    readonly promptDigest: string;
   }): Promise<RuntimeTurn | false>;
 
   /** Atomically moves preparing to running. */

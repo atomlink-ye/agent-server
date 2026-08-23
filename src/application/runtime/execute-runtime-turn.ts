@@ -6,6 +6,7 @@ import type {
   ExecutionResult,
 } from '../ports/runtime-execution-session.js';
 import type { EnsureRuntimeSession } from '../ports/ensure-runtime-session.js';
+import type { RotateRuntimeGrant } from '../ports/rotate-runtime-grant.js';
 import type { RuntimeTurnStore } from '../ports/runtime-turn-store.js';
 import type {
   RuntimeFailureCode,
@@ -35,43 +36,52 @@ export class ExecuteRuntimeTurn {
   public constructor(
     private readonly turns: RuntimeTurnStore,
     private readonly ensureRuntimeSession: EnsureRuntimeSession,
+    private readonly rotateRuntimeGrant: RotateRuntimeGrant,
     private readonly now: () => Date = () => new Date(),
   ) {}
 
   public async execute(
     input: ExecuteRuntimeTurnInput,
   ): Promise<ExecutionOutput> {
+    const created = await this.turns.createPending({
+      ...(input.turnId ? { id: input.turnId } : {}),
+      runtimeSessionId: input.runtimeSessionId,
+      source: input.source,
+      promptDigest: null,
+      createdAt: this.now().toISOString(),
+    });
+
     let ready: Awaited<ReturnType<EnsureRuntimeSession['execute']>>;
     try {
       ready = await this.ensureRuntimeSession.execute(input.runtimeSessionId);
     } catch (error) {
-      throw new RuntimeTurnExecutionError(mapFailureCode(error));
+      const code = mapFailureCode(error);
+      await this.fail(created.id, code);
+      throw new RuntimeTurnExecutionError(code);
     }
 
     const actualPrompt =
       ready.resolution === 'reused' ? input.prompt : input.recoveryPrompt;
     if (actualPrompt === undefined) {
       await ready.session.close().catch(() => undefined);
-      throw new RuntimeTurnExecutionError(
+      const code =
         ready.resolution === 'replaced'
           ? 'runtime_replacement_failed'
-          : 'runtime_reconfigure_failed',
-      );
+          : 'runtime_reconfigure_failed';
+      await this.fail(created.id, code);
+      throw new RuntimeTurnExecutionError(code);
     }
 
-    const created = await this.turns.createPending({
-      ...(input.turnId ? { id: input.turnId } : {}),
-      runtimeSessionId: input.runtimeSessionId,
-      source: input.source,
-      promptDigest: createHash('sha256').update(actualPrompt).digest('hex'),
-      createdAt: this.now().toISOString(),
-    });
+    const promptDigest = createHash('sha256')
+      .update(actualPrompt)
+      .digest('hex');
 
     let prepared;
     try {
       prepared = await this.turns.bindGenerationAndPrepare({
         id: created.id,
         generationId: ready.generation.id,
+        promptDigest,
       });
     } catch (error) {
       await ready.session.close().catch(() => undefined);
@@ -85,6 +95,24 @@ export class ExecuteRuntimeTurn {
       if (current?.status === 'cancelled')
         throw new RuntimeTurnExecutionError('runtime_turn_cancelled');
       throw new RuntimeTurnExecutionError('runtime_provider_unavailable');
+    }
+
+    let grantRotation: Awaited<ReturnType<RotateRuntimeGrant['execute']>>;
+    try {
+      grantRotation = await this.rotateRuntimeGrant.execute({
+        runtimeSessionId: input.runtimeSessionId,
+        generationId: ready.generation.id,
+        runtimeTurnId: created.id,
+      });
+    } catch {
+      await ready.session.close().catch(() => undefined);
+      await this.fail(created.id, 'runtime_grant_denied');
+      throw new RuntimeTurnExecutionError('runtime_grant_denied');
+    }
+    if (grantRotation.kind === 'denied') {
+      await ready.session.close().catch(() => undefined);
+      await this.fail(created.id, 'runtime_grant_denied');
+      throw new RuntimeTurnExecutionError('runtime_grant_denied');
     }
 
     let started;
@@ -182,6 +210,11 @@ export class ExecuteRuntimeTurn {
 
 function mapFailureCode(error: unknown): RuntimeFailureCode {
   if (error instanceof RuntimeTurnExecutionError) return error.code;
+  if (
+    error instanceof Error &&
+    error.message === 'runtime_reconfigure_deferred'
+  )
+    return 'runtime_reconfigure_failed';
   if (isFailureCode(error)) return error.code;
   return 'runtime_provider_unavailable';
 }

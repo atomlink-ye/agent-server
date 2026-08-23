@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import type { IssueRuntimeToolGrant } from '../ports/issue-runtime-tool-grant.js';
 import { AGENT_SERVER_EXECUTION_MCP_SERVER_NAME } from '../ports/runtime-extension-binding.js';
 import type {
@@ -11,35 +9,52 @@ import type {
   ProviderSessionBinding,
   RuntimeExecutionProvider,
 } from '../ports/runtime-execution-provider.js';
-import type {
-  RuntimeGenerationStore,
-  RuntimeGenerationTransaction,
-} from '../ports/runtime-generation-store.js';
+import type { RuntimeGenerationStore } from '../ports/runtime-generation-store.js';
 import type { RuntimeSessionStore } from '../ports/runtime-session-store.js';
 import type { RuntimeMcpEndpoint } from '../ports/runtime-mcp-endpoint.js';
 import type { RuntimeSpecStore } from '../ports/runtime-spec-store.js';
 import type { RuntimeSessionGeneration } from '../../domain/runtime/runtime-session-generation.js';
 import { computeRuntimeBootstrapDigest } from '../../domain/runtime/runtime-session-spec.js';
-import type {
-  RuntimeGenerationId,
-  RuntimeSessionId,
-} from '../../domain/runtime/runtime-session.js';
+import type { RuntimeSessionId } from '../../domain/runtime/runtime-session.js';
 import { buildReconciliationPlan } from './reconciliation/build-reconciliation-plan.js';
 import type { Logger } from '../../shared/observability/logger.js';
+import { RuntimeGenerationManager } from './runtime-generation-manager.js';
+
+export interface EnsureRuntimeSessionServiceOptions {
+  readonly provider: RuntimeExecutionProvider;
+  readonly sessions: RuntimeSessionStore;
+  readonly specs: RuntimeSpecStore;
+  readonly generations: RuntimeGenerationStore;
+  readonly generationManager: RuntimeGenerationManager;
+  readonly grants: IssueRuntimeToolGrant;
+  readonly mcpEndpoint: RuntimeMcpEndpoint;
+  readonly logger: Logger;
+  readonly now: () => Date;
+}
 
 /** Production reconciliation use case for one durable RuntimeSession. */
 export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
-  public constructor(
-    private readonly provider: RuntimeExecutionProvider,
-    private readonly sessions: RuntimeSessionStore,
-    private readonly specs: RuntimeSpecStore,
-    private readonly generations: RuntimeGenerationStore,
-    private readonly generationTransaction: RuntimeGenerationTransaction,
-    private readonly grants: IssueRuntimeToolGrant,
-    private readonly mcpEndpoint: RuntimeMcpEndpoint,
-    private readonly logger?: Logger,
-    private readonly now: () => Date = () => new Date(),
-  ) {}
+  private readonly provider: RuntimeExecutionProvider;
+  private readonly sessions: RuntimeSessionStore;
+  private readonly specs: RuntimeSpecStore;
+  private readonly generations: RuntimeGenerationStore;
+  private readonly generationManager: RuntimeGenerationManager;
+  private readonly grants: IssueRuntimeToolGrant;
+  private readonly mcpEndpoint: RuntimeMcpEndpoint;
+  private readonly logger: Logger;
+  private readonly now: () => Date;
+
+  public constructor(options: EnsureRuntimeSessionServiceOptions) {
+    this.provider = options.provider;
+    this.sessions = options.sessions;
+    this.specs = options.specs;
+    this.generations = options.generations;
+    this.generationManager = options.generationManager;
+    this.grants = options.grants;
+    this.mcpEndpoint = options.mcpEndpoint;
+    this.logger = options.logger;
+    this.now = options.now;
+  }
 
   public async execute(sessionId: RuntimeSessionId): Promise<ReadyRuntime> {
     const session = await this.sessions.findById(sessionId);
@@ -81,20 +96,9 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
 
     if (effectivePlan.kind === 'reconfigure') {
       if (!current) throw new Error('runtime_provider_session_missing');
-      const handle = await this.provider.reconfigure(
-        this.binding(current, applied),
-        this.providerSpec(desired),
-      );
-      await this.generations.updateAppliedSpec({
-        id: current.id,
-        appliedSpecRevision: desired.revision,
-        appliedBootstrapDigest: desired.bootstrapDigest,
-      });
-      return {
-        generation: this.activeGeneration(current, desired),
-        session: handle.session,
-        resolution: 'reconfigured',
-      };
+      // DECISION-007: RuntimeGenerationManager.reconfigure is deferred;
+      // do not mutate durable spec state or invoke provider reconfigure here.
+      throw new Error('runtime_reconfigure_deferred');
     }
 
     return this.provision({
@@ -109,35 +113,27 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
     readonly session: Awaited<ReturnType<RuntimeSessionStore['findById']>>;
     readonly desired: Awaited<ReturnType<RuntimeSpecStore['getDesired']>>;
     readonly previous: RuntimeSessionGeneration | null;
-    readonly previousApplied: Awaited<ReturnType<RuntimeSpecStore['getDesired']>> | null;
+    readonly previousApplied: Awaited<
+      ReturnType<RuntimeSpecStore['getDesired']>
+    > | null;
   }): Promise<ReadyRuntime> {
     if (!input.session) throw new Error('runtime_session_not_found');
-    const now = this.now().toISOString();
-    const generationId = randomUUID() as RuntimeGenerationId;
-    const generation = Object.freeze({
-      id: generationId,
-      runtimeSessionId: input.session.id,
-      generation: (input.previous?.generation ?? 0) + 1,
-      provider: input.desired.provider,
-      providerWorkspaceId: null,
-      providerSessionId: null,
-      appliedSpecRevision: input.desired.revision,
-      appliedBootstrapDigest: input.desired.bootstrapDigest,
-      endpointEpoch: input.desired.extensionSetDigest,
-      status: 'provisioning' as const,
-      createdAt: now,
-      activeAt: null,
-      supersededAt: null,
-      closedAt: null,
+    const generation = await this.generationManager.beginReplacement({
+      sessionId: input.session.id,
+      previous: input.previous,
+      desired: input.desired,
     });
-    await this.generations.insert(generation);
 
-    let grantId: Awaited<ReturnType<IssueRuntimeToolGrant['issue']>>['grantId'] | undefined;
-    let created: Awaited<ReturnType<RuntimeExecutionProvider['create']>> | undefined;
+    let grantId:
+      | Awaited<ReturnType<IssueRuntimeToolGrant['issue']>>['grantId']
+      | undefined;
+    let created:
+      Awaited<ReturnType<RuntimeExecutionProvider['create']>> | undefined;
+    let active: RuntimeSessionGeneration | undefined;
     try {
       const grant = await this.grants.issue({
         runtimeSessionId: input.session.id,
-        generationId,
+        generationId: generation.id,
         tenantId: input.session.owner.tenantId,
         principal: {
           principalType: input.session.owner.principalType,
@@ -158,29 +154,17 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
       if (!created.providerWorkspaceId || !created.providerSessionId)
         throw new Error('runtime_provider_session_missing');
 
-      await this.generationTransaction.replaceCurrentGeneration({
-        sessionId: input.session.id,
-        previousGenerationId: input.previous?.id ?? null,
-        generation: {
-          id: generationId,
-          provider: created.provider,
-          providerWorkspaceId: created.providerWorkspaceId,
-          providerSessionId: created.providerSessionId,
-          appliedSpecRevision: input.desired.revision,
-          appliedBootstrapDigest: input.desired.bootstrapDigest,
-          endpointEpoch: input.desired.extensionSetDigest,
-          createdAt: now,
-          activeAt: this.now().toISOString(),
-        },
+      active = await this.generationManager.activateReplacement({
+        generationId: generation.id,
+        expectedPreviousGenerationId: input.previous?.id ?? null,
+        providerWorkspaceId: created.providerWorkspaceId,
+        providerSessionId: created.providerSessionId,
       });
     } catch (error) {
       await created?.session.close().catch(() => undefined);
       if (grantId) await this.grants.revoke(grantId).catch(() => undefined);
-      await this.generations
-        .failProvisioning({
-          id: generationId,
-          failedAt: this.now().toISOString(),
-        })
+      await this.generationManager
+        .failProvisioning(generation.id)
         .catch(() => undefined);
       throw error;
     }
@@ -189,19 +173,10 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
       await this.closeOrRecordOrphan(
         input.previous,
         input.previousApplied,
-        generation,
+        active!,
       );
-    await this.sessions.markStatus(input.session.id, 'ready', this.now().toISOString());
-    const active = Object.freeze({
-      ...generation,
-      provider: created!.provider,
-      providerWorkspaceId: created!.providerWorkspaceId,
-      providerSessionId: created!.providerSessionId,
-      status: 'active' as const,
-      activeAt: this.now().toISOString(),
-    });
     return {
-      generation: active,
+      generation: active!,
       session: created!.session,
       resolution: 'replaced',
     };
@@ -227,7 +202,8 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
     if (components.status === 'indeterminate')
       throw new Error('runtime_provider_bootstrap_digest_indeterminate');
     if (
-      inspection.observed.providerSessionId !== input.current.providerSessionId ||
+      inspection.observed.providerSessionId !==
+        input.current.providerSessionId ||
       computeRuntimeBootstrapDigest(components.value) !==
         input.current.appliedBootstrapDigest
     )
@@ -254,7 +230,7 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
         // The switch is already durable; report the provider orphan below.
       }
     }
-    this.logger?.log('warn', 'runtime.provider.orphan_session', {
+    this.logger.log('warn', 'runtime.provider.orphan_session', {
       previous_generation_id: previous.id,
       replacement_generation_id: replacement.id,
       provider: previous.provider,
@@ -311,17 +287,5 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
       },
       applied: this.providerSpec(applied) as ProviderSessionBinding['applied'],
     };
-  }
-
-  private activeGeneration(
-    generation: RuntimeSessionGeneration,
-    desired: Awaited<ReturnType<RuntimeSpecStore['getDesired']>>,
-  ): RuntimeSessionGeneration {
-    return Object.freeze({
-      ...generation,
-      appliedSpecRevision: desired.revision,
-      appliedBootstrapDigest: desired.bootstrapDigest,
-      status: 'active' as const,
-    });
   }
 }

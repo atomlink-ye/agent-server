@@ -115,6 +115,7 @@ export class PostgresRuntimeTurnStore implements RuntimeTurnStore {
   public async bindGenerationAndPrepare(input: {
     readonly id: RuntimeTurnId;
     readonly generationId: RuntimeGenerationId;
+    readonly promptDigest: string;
   }): Promise<RuntimeTurn | false> {
     const database = await this.transactionClient();
     try {
@@ -174,10 +175,10 @@ export class PostgresRuntimeTurnStore implements RuntimeTurnStore {
 
       const updated = await database.query<RuntimeTurnRow>(
         `UPDATE runtime_turns
-            SET generation_id=$2,status='preparing'
+            SET generation_id=$2,prompt_digest=$3,status='preparing'
           WHERE id=$1 AND status='pending'
-        RETURNING ${TURN_COLUMNS}`,
-        [input.id, input.generationId],
+          RETURNING ${TURN_COLUMNS}`,
+        [input.id, input.generationId, input.promptDigest],
       );
       const prepared = updated.rows?.[0];
       if (!prepared) {

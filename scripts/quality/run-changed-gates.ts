@@ -26,6 +26,7 @@ const has = (predicate: (path: string) => boolean): boolean =>
   changed.some(predicate);
 
 run('pnpm', ['check:imports']);
+run('pnpm', ['check:architecture-replacement']);
 run('pnpm', ['check:compatibility-surfaces']);
 run('pnpm', ['check:package-commands']);
 

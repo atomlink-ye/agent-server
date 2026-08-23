@@ -58,10 +58,10 @@ function workRunSummary(detail: RecordingWorkRunDetail) {
 }
 
 /**
- * Project the recorded WorkResponse and WorkRunResponse into the missing list
- * response. No list data is synthesized: all fields originate in documents
- * [2] or [1], and the accepted list contract supplies only the required
- * `next_cursor: null` pagination terminator.
+ * Project recorded Product responses for browser-test fixtures. No list data
+ * is synthesized: all fields originate in documents [2] or [1], and the
+ * accepted list contract supplies only the required `next_cursor: null`
+ * pagination terminator.
  */
 export function projectWorkList(recording: ProductRecording): WorkListResponse {
   const work = workFromRecording(recording);

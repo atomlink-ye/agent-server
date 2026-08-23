@@ -2,11 +2,11 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { expect, it } from 'vitest';
 
-import parallelRecording from '@/lib/__fixtures__/product-recordings/parallel-success.json';
-import reworkRecording from '@/lib/__fixtures__/product-recordings/rework-once.json';
+import parallelRecording from '@/test-support/fixtures/product-recordings/parallel-success.json';
+import reworkRecording from '@/test-support/fixtures/product-recordings/rework-once.json';
 import { RunTrace } from './run-trace-view';
 import { attemptsFrom } from './selectors';
-import { parseRecordedTrace } from './recording-test-helpers';
+import { parseRecordedTrace } from '@/test-support/run-trace-recording-test-helpers';
 
 (
   globalThis as typeof globalThis & {

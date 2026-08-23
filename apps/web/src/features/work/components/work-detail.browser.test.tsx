@@ -9,11 +9,11 @@ import {
   ProductWorkRunSuccessSchema,
 } from '@atomlink-ye/agent-server/product-contract';
 import { WorkDetailPage } from '@/features/work/pages/WorkDetailPage';
-import reworkRecording from '@/lib/__fixtures__/product-recordings/rework-once.json';
+import reworkRecording from '@/test-support/fixtures/product-recordings/rework-once.json';
 import {
   projectWorkList,
   projectWorkRunList,
-} from '@/lib/product-recording-projections';
+} from '@/test-support/product-recording-test-helpers';
 
 (
   globalThis as typeof globalThis & {

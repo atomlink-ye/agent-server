@@ -29,7 +29,6 @@ export function WorkProductFrame({
           </span>
         </nav>
         <div className="work-product-nav__foot">
-          <a href="/chat">Compatibility Chat</a>
           <span>Runtime debugging only</span>
         </div>
       </aside>

@@ -3,9 +3,9 @@ import { createRoot } from 'react-dom/client';
 import type { ProductSessionTranscriptsResponse } from '@atomlink-ye/agent-server/product-contract';
 import { expect, it, vi } from 'vitest';
 
-import reworkRecording from '@/lib/__fixtures__/product-recordings/rework-once.json';
+import reworkRecording from '@/test-support/fixtures/product-recordings/rework-once.json';
 import { SessionTranscripts } from './session-transcripts';
-import { parseRecordedTrace } from './recording-test-helpers';
+import { parseRecordedTrace } from '@/test-support/run-trace-recording-test-helpers';
 
 (
   globalThis as typeof globalThis & {

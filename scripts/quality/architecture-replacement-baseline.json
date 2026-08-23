@@ -822,16 +822,6 @@
       "phase": "Phase 5 — composition graph"
     },
     {
-      "rule": "backend.platform-import",
-      "path": "src/platform/http-types.ts",
-      "line": 1,
-      "symbol": "./access-context.js",
-      "occurrence": 1,
-      "key": "backend.platform-import|src/platform/http-types.ts|./access-context.js|000001",
-      "why": "Production code still imports the legacy platform tree.",
-      "phase": "Phase 5 — composition graph"
-    },
-    {
       "rule": "backend.platform-tree",
       "path": "src/platform",
       "line": 1,

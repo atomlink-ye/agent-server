@@ -9,6 +9,7 @@ import {
   hasPositiveModelUsage,
   mapPaseoFinishStatus,
 } from './status-mapper.js';
+import { sanitizePaseoErrorEvidence } from './errors.js';
 import { PaseoGateway } from './paseo-gateway.js';
 import { PaseoObservationProjector } from './paseo-observation-projector.js';
 
@@ -145,16 +146,18 @@ export class PaseoTurnRunner {
         );
         providerWaitStatus = finished.status;
       } catch (error) {
-        providerWaitStatus = 'error';
+        providerWaitStatus = 'rejected_indistinguishable_at_boundary';
+        const evidence = sanitizePaseoErrorEvidence(error);
         this.logger.log('info', 'runtime.wait.completed', {
           run_id: input.run.runId,
           elapsed_ms: Date.now() - waitStartedAt,
-          status: 'error',
+          status: providerWaitStatus,
+          reason: 'provider_wait_error_indistinguishable_at_boundary',
+          error_name: evidence.errorName,
+          error_message: evidence.errorMessage,
         });
         throw new ExecutionPlaneUnavailableError(
-          error instanceof Error
-            ? `Paseo turn settlement failed: ${error.name}`
-            : 'Paseo turn settlement failed.',
+          `Paseo turn settlement failed: ${providerWaitStatus}.`,
         );
       } finally {
         this.logger.log('info', 'runtime.provider.wait.completed', {
@@ -163,6 +166,9 @@ export class PaseoTurnRunner {
           system_prompt_bytes: systemPromptBytes,
           turn_prompt_bytes: turnPromptBytes,
           status: providerWaitStatus,
+          ...(providerWaitStatus === 'rejected_indistinguishable_at_boundary'
+            ? { reason: 'provider_wait_error_indistinguishable_at_boundary' }
+            : {}),
         });
       }
       this.logger.log('info', 'runtime.wait.completed', {

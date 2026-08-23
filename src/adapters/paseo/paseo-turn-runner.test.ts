@@ -8,7 +8,11 @@ import { PaseoTurnRunner } from './paseo-turn-runner.js';
 const logger = { log: () => undefined };
 
 function createClient(
-  options: { finalStatus?: string; finalMessage?: string } = {},
+  options: {
+    finalStatus?: string;
+    finalMessage?: string;
+    waitError?: Error;
+  } = {},
 ) {
   let timelineReads = 0;
   const client = {
@@ -55,6 +59,7 @@ function createClient(
     },
     async sendAgentMessage() {},
     async waitForFinish() {
+      if (options.waitError) throw options.waitError;
       return {
         status: options.finalStatus ?? 'idle',
         error: options.finalStatus === 'error' ? 'provider failed' : null,
@@ -130,6 +135,37 @@ describe('PaseoTurnRunner', () => {
     ).resolves.toMatchObject({
       status: 'failed',
       failure: { message: expect.stringMatching(/provider failed|failed/i) },
+    });
+  });
+
+  it('records a thrown wait rejection without claiming a provider timeout', async () => {
+    const { client } = createClient({ waitError: new Error('request failed') });
+    const logs: {
+      event: string;
+      fields: Readonly<Record<string, unknown>> | undefined;
+    }[] = [];
+    const runner = new PaseoTurnRunner(
+      new PaseoGateway(client),
+      { log: (_level, event, fields) => logs.push({ event, fields }) },
+      { executionTimeoutMs: 2_000 },
+    );
+
+    await expect(
+      runner.run({
+        run: { runId: 'run-rejected', prompt: 'hello' },
+        agentId: 'agent-1',
+        provider: 'opencode',
+        model: 'free/model',
+        cwd: '/tmp/runtime-cell',
+      }),
+    ).rejects.toMatchObject({ name: 'ExecutionPlaneUnavailableError' });
+
+    expect(logs).toContainEqual({
+      event: 'runtime.provider.wait.completed',
+      fields: expect.objectContaining({
+        status: 'rejected_indistinguishable_at_boundary',
+        reason: 'provider_wait_error_indistinguishable_at_boundary',
+      }),
     });
   });
 });

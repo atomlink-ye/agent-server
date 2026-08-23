@@ -1,5 +1,5 @@
 import type { ExecutionPlaneHealth } from './execution-plane.js';
-import type { ExecutionSession } from './runtime-execution-session.js';
+import type { ExecutionOutput, ExecutionSession } from './runtime-execution-session.js';
 import type { ExecutionExtensionBinding } from './runtime-extension-binding.js';
 import type {
   RuntimeSessionId,
@@ -123,4 +123,9 @@ export interface RuntimeExecutionProvider {
 
   /** Closes the provider-global connection owned by this process. */
   close(): Promise<void>;
+
+  completeOneShot(input: {
+    readonly systemPrompt: string;
+    readonly prompt: string;
+  }): Promise<ExecutionOutput>;
 }

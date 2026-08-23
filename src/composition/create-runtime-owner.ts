@@ -55,11 +55,9 @@ export function createRuntimeOwner(input: {
   const runtimeProvider = input.config.runtime?.adapter === 'none'
     ? new UnavailableRuntimeProvider()
     : createPaseoRuntimeProvider(input.config, input.logger);
-  const oneShotCompletion = new PaseoOneShotRuntimeCompletion(runtimeProvider, {
-    provider: input.config.paseo.provider,
-    model: input.config.paseo.model ?? null,
-    cwd: input.config.paseo.agentCwd,
-  });
+  const oneShotCompletion = new PaseoOneShotRuntimeCompletion(
+    runtimeProvider,
+  );
   const runtimeSessions = new PostgresRuntimeSessionStore(input.database);
   const specs = new PostgresRuntimeSpecStore(input.database);
   const generations = new PostgresRuntimeGenerationStore(input.database);

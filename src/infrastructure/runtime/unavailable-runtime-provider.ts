@@ -30,6 +30,10 @@ export class UnavailableRuntimeProvider implements RuntimeExecutionProvider {
     return false;
   }
 
+  public async completeOneShot(): Promise<never> {
+    throw new ExecutionPlaneUnavailableError();
+  }
+
   public async health(): Promise<ExecutionPlaneHealth> {
     return {
       ready: false,

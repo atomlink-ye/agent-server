@@ -1,6 +1,6 @@
 import { serve } from '@hono/node-server';
 
-import { createService } from '../../bootstrap.js';
+import { createApplication } from '../../bootstrap.js';
 import { loadConfig } from '../../shared/config.js';
 import { createLogger } from '../../shared/observability/logger.js';
 import { registerBrowserContextRoutes } from './routes/browser-context.js';
@@ -13,7 +13,7 @@ const logger = createLogger({
   service: config.serviceName,
   minimumLevel: config.logLevel,
 });
-const { app, close } = await createService(config, logger);
+const { app, close } = await createApplication(config, logger);
 
 // The canonical frontend is a pure Vite client. Browser-facing BFF routes live
 // on Agent Server so service-account credentials never enter browser code.

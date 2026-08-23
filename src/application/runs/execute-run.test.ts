@@ -1471,7 +1471,7 @@ describe('ExecuteRun', () => {
           { category: 'project_constraint', content: 'over limit candidate' },
         ],
       })),
-    } as TestExecutionRuntime;
+    } as FakeAgentRuntime;
     const completeRun = {
       execute: vi.fn(async ({ run }: { run: Run }) => run),
     } as unknown as CompleteRun;
@@ -1576,7 +1576,7 @@ describe('ExecuteRun', () => {
           ],
         };
       }),
-    } as TestExecutionRuntime;
+    } as FakeAgentRuntime;
     const batch = vi.fn(
       async (inputs: readonly { content: string }[]) => inputs as never,
     );
@@ -1704,7 +1704,7 @@ describe('ExecuteRun', () => {
 
 function createExecuteRun(input: {
   readonly completeRun: CompleteRun;
-  readonly runtime: TestExecutionRuntime;
+  readonly runtime: FakeAgentRuntime;
   readonly task: Task;
   readonly logger?: Logger;
 }): ExecuteRun {
@@ -1874,7 +1874,7 @@ function createLeadRuntimeFixture() {
 
 function createDirectExecuteRun(input: {
   readonly completeRun: CompleteRun;
-  readonly runtime: TestExecutionRuntime;
+  readonly runtime: FakeAgentRuntime;
   readonly task: Task;
   readonly resolver: ResolveAgentVersion;
   readonly createMemoryProposal?: CreateMemoryProposal;
@@ -1899,7 +1899,7 @@ function createDirectExecuteRun(input: {
 
 function createRuntimeWithCandidates(
   externalSessionId = 'agent-test',
-): TestExecutionRuntime {
+): FakeAgentRuntime {
   const runtime = createRuntime();
   vi.mocked(runtime.executeTurn).mockResolvedValue({
     provider: 'test-provider',
@@ -1917,7 +1917,7 @@ function createRuntimeWithCandidates(
   return runtime;
 }
 
-function createRuntime(error?: Error): TestExecutionRuntime {
+function createRuntime(error?: Error): FakeAgentRuntime {
   const runtime = {
     ensureReady: vi.fn(async () => true),
     executeTurn: vi.fn(async () => {
@@ -1945,7 +1945,7 @@ function createRuntime(error?: Error): TestExecutionRuntime {
       checks: [],
     })),
     close: vi.fn(async () => undefined),
-  } as unknown as TestExecutionRuntime;
+  } as unknown as FakeAgentRuntime;
   return runtime;
 }
 

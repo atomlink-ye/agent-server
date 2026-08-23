@@ -67,7 +67,9 @@ type FakeTurnInput = {
   readonly provider?: string;
   readonly model?: string;
   readonly sessionTitle?: string;
+  readonly workspaceTitle?: string;
   readonly labels?: Readonly<Record<string, string>>;
+  readonly extensions?: ExecutionExtensionBinding;
   readonly proposalLimit?: number;
 };
 
@@ -133,6 +135,19 @@ export class FakeAgentRuntime {
   public constructor(options: FakeRuntimeOptions = {}) {
     this.#options = options;
     this.ready = options.ready ?? true;
+  }
+
+  public async complete(input: {
+    readonly systemPrompt: string;
+    readonly prompt: string;
+  }): Promise<{ readonly provider: string; readonly model: string; readonly text: string }> {
+    const result = await this.execute({
+      operation: 'create',
+      runId: `one-shot-${this.executeCalls + 1}`,
+      prompt: input.prompt,
+      systemPrompt: input.systemPrompt,
+    });
+    return { provider: result.provider, model: result.model, text: result.text };
   }
 
   public async initialize(): Promise<void> {

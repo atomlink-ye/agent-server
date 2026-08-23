@@ -1,4 +1,5 @@
 import { mkdir } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 
 import {
   ExecutionBindingUnavailableError,
@@ -33,6 +34,7 @@ import { PaseoSdkClient } from '../../../adapters/paseo/paseo-sdk-client.js';
 import { PaseoTurnRunner } from '../../../adapters/paseo/paseo-turn-runner.js';
 import { normalizePaseoRequestedModel } from './paseo-model-normalizer.js';
 import { mapPaseoConfig } from './paseo-config-mapper.js';
+import type { ExecutionOutput } from '../../../application/ports/runtime-execution-session.js';
 
 const PASEO_RUNTIME_PROVIDER_CAPABILITIES: RuntimeProviderCapabilities = {
   canReconfigure: false,
@@ -131,6 +133,50 @@ export class PaseoRuntimeProvider implements RuntimeExecutionProvider {
 
   public capabilities(): RuntimeProviderCapabilities {
     return PASEO_RUNTIME_PROVIDER_CAPABILITIES;
+  }
+
+  /** Provider-native transient completion; it never enters RuntimeSession state. */
+  public async completeOneShot(input: {
+    readonly systemPrompt: string;
+    readonly prompt: string;
+  }): Promise<ExecutionOutput> {
+    await this.#initialize();
+    const { provider, model } = this.#resolveLaunch({
+      provider: this.#options.provider,
+      model: this.#options.requestedModel ?? null,
+    });
+    await mkdir(this.#options.cwd, { recursive: true });
+    const workspaceId = await this.#gateway.createWorkspace(this.#options.cwd);
+    const invocationId = `one-shot:${randomUUID()}`;
+    const agent = await this.#gateway.createAgent({
+      provider,
+      cwd: this.#options.cwd,
+      workspaceId,
+      model,
+      systemPrompt: input.systemPrompt,
+      runId: invocationId,
+    });
+    if (!agent.id) throw new ProtocolViolationError('Paseo one-shot session has no provider identity.');
+    const session = this.#session({
+      provider,
+      providerWorkspaceId: workspaceId,
+      providerSessionId: agent.id,
+      spec: {
+        provider,
+        model,
+        cwd: this.#options.cwd,
+        systemPrompt: input.systemPrompt,
+      },
+      model,
+    });
+    try {
+      const result = await session.run({ runId: invocationId, prompt: input.prompt });
+      if (result.status !== 'completed')
+        throw new ExecutionPlaneUnavailableError('Paseo one-shot completion failed.');
+      return result.output;
+    } finally {
+      await session.close();
+    }
   }
 
   public async ensureReady(): Promise<boolean> {
@@ -332,7 +378,7 @@ export class PaseoRuntimeProvider implements RuntimeExecutionProvider {
     }
   }
 
-  #resolveLaunch(desired: ProviderRuntimeSpec): {
+  #resolveLaunch(desired: Pick<ProviderRuntimeSpec, 'provider' | 'model'>): {
     readonly provider: ManagedEnvironmentProvider;
     readonly model: string;
   } {
@@ -357,7 +403,7 @@ export class PaseoRuntimeProvider implements RuntimeExecutionProvider {
     readonly provider: string;
     readonly providerWorkspaceId: string;
     readonly providerSessionId: string;
-    readonly spec: ProviderRuntimeSpec;
+    readonly spec: Pick<ProviderRuntimeSpec, 'provider' | 'model' | 'cwd' | 'systemPrompt'>;
     readonly model?: string;
   }): PaseoExecutionSession {
     const model = input.model ?? this.#resolveLaunch(input.spec).model;

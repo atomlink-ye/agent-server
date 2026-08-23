@@ -65,7 +65,7 @@ class FakeClient implements PaseoClientPort {
     if (this.timelineError) throw this.timelineError;
     return timeline;
   }
-  async close() {
+  async closeSession() {
     this.status = 'closed';
   }
 }
@@ -244,7 +244,7 @@ describe('PaseoRuntimeProvider', () => {
   });
 
   it('rejects provider close when Paseo cannot close a session', async () => {
-    await expect(provider().close(binding())).rejects.toBeInstanceOf(
+    await expect(provider().closeSession(binding())).rejects.toBeInstanceOf(
       UnsupportedCapabilityError,
     );
   });

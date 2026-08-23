@@ -105,7 +105,7 @@ export interface CreateMemoryModuleOptions {
 }
 
 export function createMemoryReviewSurface(input: {
-  readonly module: MemoryModule;
+  readonly module: Pick<MemoryModule, 'reviewApi'>;
   readonly channels: PostgresChannelRepository;
   readonly reviewSurface: LarkReviewSurfaceRepository;
   readonly config: LarkCanaryEnabledConfig;

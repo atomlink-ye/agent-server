@@ -8,25 +8,16 @@ import { ExecuteTeamTask } from '../application/tasks/execute-team-task.js';
 import type { AppConfig } from '../shared/config.js';
 import type { PublishMemoryReviewSurface } from '../application/channels/publish-memory-review-surface.js';
 import type { Logger } from '../shared/observability/logger.js';
-import { createLarkMemoryDocumentAdapter } from '../adapters/lark/lark-memory-document.js';
-import { createMemoryReviewActionTokenDeriver } from '../application/channels/memory-review-action-token.js';
 import { noExternalDependencies } from '../application/health/readiness.js';
 import { createConfiguredRuntimeCapabilities } from './create-runtime-capabilities.js';
 import {
   createChatExecutionConsumer,
-  createMemoryChannelExecutionConsumers,
   createRunExecutionRegistry,
 } from './create-execution-consumers.js';
-import {
-  createLarkChannelWorkers,
-  type LarkChannelWorkers,
-} from './create-lark-channel-workers.js';
+import { createChannelComposition } from './create-channel-composition.js';
 import { createApplicationLifecycle } from './create-application-lifecycle.js';
 import { createHttpApp } from '../entrypoints/api/app.js';
-import {
-  createMemoryCapabilities,
-  createMemoryReviewSurface,
-} from './create-memory-capabilities.js';
+import { createMemoryCapabilities } from './create-memory-capabilities.js';
 import {
   createKernelCapabilities,
   createTaskExecutionConsumers,
@@ -148,23 +139,6 @@ export async function createApplication(
     ...(options.fileStore ? { fileStore: options.fileStore } : {}),
     teamTools: { contextResolver: teamToolContextResolver },
   });
-  const reviewTokenDeriver = config.larkCanary?.enabled
-    ? createMemoryReviewActionTokenDeriver(config.larkCanary.appSecret)
-    : undefined;
-  const memoryDocument = config.larkCanary?.enabled
-    ? createLarkMemoryDocumentAdapter(config.larkCanary)
-    : undefined;
-  const memoryReviewSurface =
-    config.larkCanary?.enabled && reviewTokenDeriver
-      ? createMemoryReviewSurface({
-          module: memoryModule,
-          channels: channelRepository,
-          reviewSurface: reviewSurfaceRepository,
-          config: config.larkCanary,
-          tokenDeriver: reviewTokenDeriver,
-          document: memoryDocument,
-        })
-      : undefined;
   const runtimeCapabilities = createConfiguredRuntimeCapabilities(config);
   const { workModule, workChatWorker, conversationWorkLinks } =
     createWorkCapabilities({
@@ -227,14 +201,17 @@ export async function createApplication(
           workerId,
           leaseMs: leaseDurationMs,
         });
-  const memoryChannelConsumers = createMemoryChannelExecutionConsumers({
-    runtime: oneShotCompletion,
-    review: memoryModule.reviewApi.review,
-    managedMemory: memoryModule.reviewApi.managedMemory,
-    profile: process.env.LARK_CLI_PROFILE ?? 'agent-test',
+  const channelComposition = createChannelComposition({
+    config,
+    repository: channelRepository,
+    reviewSurface: reviewSurfaceRepository,
+    submitSessionTurn,
+    memory: memoryModule,
+    oneShotCompletion,
+    workerId,
+    leaseMs: leaseDurationMs,
+    logger,
   });
-  const { synthesizeMemoryDocument, acceptMemoryFromDocument } =
-    memoryChannelConsumers;
   const { cancelTask, getTask, getTaskTree } = createTaskExecutionConsumers({
     taskRepository,
     runRepository,
@@ -271,7 +248,9 @@ export async function createApplication(
       resolveRuntimeSpec,
     },
     memory: memoryModule,
-    ...(memoryReviewSurface ? { memoryReviewSurface } : {}),
+    ...(channelComposition.memoryReviewSurface
+      ? { memoryReviewSurface: channelComposition.memoryReviewSurface }
+      : {}),
     ...(options.memoryReviewNotifier
       ? { memoryReviewNotifier: options.memoryReviewNotifier }
       : {}),
@@ -281,32 +260,6 @@ export async function createApplication(
     concurrency: config.dispatcher?.concurrency ?? 4,
     logger,
   });
-  let larkWorker: LarkChannelWorkers['larkWorker'] | undefined;
-  let larkOutboxWorker: LarkChannelWorkers['larkOutboxWorker'] | undefined;
-  let larkReceiver: LarkChannelWorkers['larkReceiver'] | undefined;
-  if (config.larkCanary?.enabled) {
-    const larkConfig = config.larkCanary;
-    if (!memoryReviewSurface || !reviewTokenDeriver)
-      throw new Error('lark_review_surface_unavailable');
-    const larkWorkers = createLarkChannelWorkers({
-      config: larkConfig,
-      repository: channelRepository,
-      submitSessionTurn,
-      reviewSurface: reviewSurfaceRepository,
-      review: memoryModule.reviewApi.review,
-      managedMemory: memoryModule.reviewApi.managedMemory,
-      memoryDocument,
-      synthesizeMemoryDocument,
-      acceptMemoryFromDocument,
-      reviewTokenDeriver,
-      workerId,
-      leaseMs: leaseDurationMs,
-      logger,
-    });
-    larkWorker = larkWorkers.larkWorker;
-    larkOutboxWorker = larkWorkers.larkOutboxWorker;
-    larkReceiver = larkWorkers.larkReceiver;
-  }
   const readiness = noExternalDependencies;
   const app = createHttpApp({
     config,
@@ -334,13 +287,11 @@ export async function createApplication(
     resourceModule,
   });
   const workers = createWorkers({
-    ...(larkWorker ? { larkWorker } : {}),
-    ...(larkOutboxWorker ? { larkOutboxWorker } : {}),
+    ...channelComposition.workers,
     ...(chatCapabilities.chatWorker
       ? { chatWorker: chatCapabilities.chatWorker }
       : {}),
     ...(workChatWorker ? { workChatWorker } : {}),
-    ...(larkReceiver ? { larkReceiver } : {}),
   });
   const lifecycle = createApplicationLifecycle({
     dispatcher,

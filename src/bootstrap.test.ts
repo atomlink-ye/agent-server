@@ -1,8 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import {
-  createLarkIngressWorker,
-} from './bootstrap.js';
+import { createLarkIngressWorker } from './bootstrap.js';
 import {
   closeServiceResources,
   startServiceResources,

@@ -67,7 +67,9 @@ export interface AppDependencies {
   >;
 }
 
-export function createApp(dependencies: AppDependencies): Hono<ApiEnvironment> {
+export function createHttpApp(
+  dependencies: AppDependencies,
+): Hono<ApiEnvironment> {
   const app = new Hono<ApiEnvironment>();
   const version = dependencies.version ?? '0.1.0';
   // These declarations gate only the Direct Chat/Product Work composition.

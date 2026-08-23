@@ -142,7 +142,7 @@ export function createWorkModule(options: {
   readonly execution: ExecutionAdmission;
   readonly executionFacts: ExecutionFactQuery;
   readonly conversations?: Pick<ConversationRepository, 'appendMessage'>;
-  readonly runtimeCapabilities?: RuntimeCapabilities;
+  readonly runtimeCapabilities: RuntimeCapabilities;
 }): WorkModule {
   const repository = new PostgresWorkIdentityRepository(options.database);
   const contextFiles = new PostgresLogicalFileStore(options.database);
@@ -165,9 +165,7 @@ export function createWorkModule(options: {
   const startWorkRunPrimitive = new StartWorkRun({
     identity: workIdentity,
     execution: options.execution,
-    ...(options.runtimeCapabilities
-      ? { runtimeCapabilities: options.runtimeCapabilities }
-      : {}),
+    runtimeCapabilities: options.runtimeCapabilities,
     productDefinitions: {
       async getInputContract({ versionId, accessContext }) {
         const productVersion = await definitionSources.findProductVersion(

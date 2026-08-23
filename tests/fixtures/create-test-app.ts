@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { PGlite } from '@electric-sql/pglite';
 
 import { RuntimeReadinessProbe } from '../../src/application/health/readiness.js';
+import { createConfiguredRuntimeCapabilities } from '../../src/composition/create-runtime-capabilities.js';
 import { createMemoryModule } from '../../src/modules/memory/memory-module.js';
 import { createResourceModule } from '../../src/modules/resource/resource-module.js';
 import { createWorkModule } from '../../src/modules/work/work-module.js';
@@ -27,7 +28,7 @@ import { ExecuteTeamTask } from '../../src/application/tasks/execute-team-task.j
 import { InvokeTask } from '../../src/application/tasks/invoke-task.js';
 import { InvokeTaskExecutionAdmission } from '../../src/application/ports/execution-admission.js';
 import { CancelTask } from '../../src/application/tasks/cancel-task.js';
-import { createApp } from '../../src/entrypoints/api/app.js';
+import { createHttpApp } from '../../src/entrypoints/api/app.js';
 import { PostgresAdmissionRepository } from '../../src/infrastructure/postgres/postgres-admission-repository.js';
 import { PostgresInvokableRepository } from '../../src/infrastructure/postgres/postgres-invokable-repository.js';
 import { applyDurableKernelMigrations } from '../../src/infrastructure/postgres/postgres.js';
@@ -309,6 +310,7 @@ export async function createTestApp(
     definitionResolution: resourceModule.workDefinitionResolution,
     execution: new InvokeTaskExecutionAdmission(invokeTask),
     executionFacts: new PostgresExecutionFactQuery(repositoryDatabase),
+    runtimeCapabilities: createConfiguredRuntimeCapabilities(testConfig),
   });
   const createMemoryProposal = new CreateMemoryProposal(
     workspaceMemoryRepository,
@@ -405,7 +407,7 @@ export async function createTestApp(
     };
   }
 
-  return createApp({
+  return createHttpApp({
     config: effectiveConfig,
     logger,
     readiness: new RuntimeReadinessProbe({

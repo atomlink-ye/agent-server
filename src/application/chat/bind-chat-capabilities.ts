@@ -1,4 +1,4 @@
-import type { ExecutionExtensionBinding } from '../ports/execution-plane.js';
+import type { ExecutionExtensionBinding } from '../ports/runtime-extension-binding.js';
 import type { RuntimeExtensionBinder } from '../extensions/runtime-extension-binder.js';
 import {
   AGENT_SERVER_LIST_AGENT_WORKFLOWS_TOOL_REF,

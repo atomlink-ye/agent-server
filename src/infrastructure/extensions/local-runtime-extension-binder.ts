@@ -13,7 +13,7 @@ import type { RuntimeExtensionBinder } from '../../application/extensions/runtim
 import {
   AGENT_SERVER_EXECUTION_MCP_SERVER_NAME,
   type ExecutionExtensionBinding,
-} from '../../application/ports/execution-plane.js';
+} from '../../application/ports/runtime-extension-binding.js';
 import type {
   RuntimeToolGrant,
   RuntimeToolGrantScopeQuery,

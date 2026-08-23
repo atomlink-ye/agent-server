@@ -1,10 +1,10 @@
 import type { RuntimeMemoryCandidateCategory } from '../../src/application/ports/runtime-memory-candidate-collector.js';
 import type { RuntimeSession } from '../../src/application/ports/runtime-session-repository.js';
 import type {
-  ExecutionExtensionBinding,
   ExecutionObservationSink,
   ExecutionPlaneHealth,
 } from '../../src/application/ports/execution-plane.js';
+import type { ExecutionExtensionBinding } from '../../src/application/ports/runtime-extension-binding.js';
 import type {
   ExecutionRuntimeService,
   ExecutionTurnOutcome,

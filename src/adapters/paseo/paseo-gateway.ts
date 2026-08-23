@@ -1,4 +1,4 @@
-import type { ExecutionMcpServerConfig } from '../../application/ports/execution-plane.js';
+import type { ExecutionMcpServerConfig } from '../../application/ports/runtime-extension-binding.js';
 import type { ManagedEnvironmentProvider } from '../../domain/environments/managed-environment-package.js';
 import type {
   PaseoAgentStreamEvent,

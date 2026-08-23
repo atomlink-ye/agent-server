@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import type { IssueRuntimeToolGrant } from '../ports/issue-runtime-tool-grant.js';
-import { AGENT_SERVER_EXECUTION_MCP_SERVER_NAME } from '../ports/execution-plane.js';
+import { AGENT_SERVER_EXECUTION_MCP_SERVER_NAME } from '../ports/runtime-extension-binding.js';
 import type {
   EnsureRuntimeSession,
   ReadyRuntime,

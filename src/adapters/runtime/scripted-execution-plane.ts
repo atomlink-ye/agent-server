@@ -6,7 +6,6 @@ import {
   type AttachExecutionSessionOutcome,
   type CreatedExecutionSession,
   type ExecutionAppliedSessionSpec,
-  type ExecutionMcpServerConfig,
   type ExecutionPlaneCapabilities,
   type ExecutionPlaneHealth,
   type ExecutionPlanePort,
@@ -16,6 +15,7 @@ import {
   type ExecutionSessionBinding,
   type ExecutionSessionSpec,
 } from '../../application/ports/execution-plane.js';
+import type { ExecutionMcpServerConfig } from '../../application/ports/runtime-extension-binding.js';
 
 const CAPABILITIES: ExecutionPlaneCapabilities = {
   supported: new Set([

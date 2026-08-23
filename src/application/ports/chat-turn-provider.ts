@@ -1,4 +1,4 @@
-import type { ExecutionExtensionBinding } from './execution-plane.js';
+import type { ExecutionExtensionBinding } from './runtime-extension-binding.js';
 import type { ResolvedChatBrain } from '../chat/chat-brain-resolver.js';
 
 export interface ChatTurnMessage {

@@ -1,8 +1,8 @@
 import type {
-  ExecutionExtensionBinding,
   ExecutionPlaneHealth,
   ExecutionSession,
 } from './execution-plane.js';
+import type { ExecutionExtensionBinding } from './runtime-extension-binding.js';
 import type {
   RuntimeSessionId,
   RuntimeSpecRevision,

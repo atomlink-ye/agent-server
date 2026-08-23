@@ -4,4 +4,6 @@ export interface RuntimeProviderCapabilities {
   readonly canReconfigure: boolean;
   /** Whether the provider can delete/archive one external provider session. */
   readonly canCloseSession: boolean;
+  /** Whether inspection can report all 11 RuntimeBootstrapDigestInput components. */
+  readonly canInspectBootstrapDigestComponents: boolean;
 }

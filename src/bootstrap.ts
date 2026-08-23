@@ -42,19 +42,10 @@ import {
 import { PostgresExecutionFactQuery } from './infrastructure/postgres/postgres-execution-fact-query.js';
 import { InvokeTaskExecutionAdmission } from './application/ports/execution-admission.js';
 import { createRuntimeModule } from './modules/runtime/runtime-module.js';
-import { createWorkModule } from './modules/work/work-module.js';
 import { ChatDeliveryReconciler } from './application/chat/chat-delivery-reconciler.js';
 import { MockChatTurnProvider } from './adapters/chat/mock-chat-turn-provider.js';
 import { ExecutionRuntimeChatTurnProvider } from './adapters/chat/execution-runtime-chat-turn-provider.js';
 import { ChatDeliveryWorker } from './entrypoints/chat/worker.js';
-import {
-  createWorkChatWakeWorker,
-  PostgresWorkChatConversationAgentResolver,
-  PostgresWorkChatWakeWorkSource,
-  type WorkChatWakeWorker,
-} from './entrypoints/work-chat/worker.js';
-import { PostgresWorkChatWakeStateRepository } from './infrastructure/postgres/postgres-work-chat-wake-state-repository.js';
-import { PostgresConversationWorkLinkRepository } from './modules/work/conversation-work-link-repository.js';
 import { ChatBrainResolver } from './application/chat/chat-brain-resolver.js';
 import { ListAgentHomeEntries } from './application/agents/agent-home.js';
 import { PostgresAgentHomeRepository } from './infrastructure/postgres/postgres-agent-home-repository.js';
@@ -67,12 +58,12 @@ import { createInfrastructure } from './composition/create-infrastructure.js';
 import { createHttpApi } from './composition/create-http-api.js';
 import { createResourceCapabilities } from './composition/create-resource-capabilities.js';
 import { createTeamCapabilities } from './composition/create-team-capabilities.js';
+import { createWorkCapabilities } from './composition/create-work-capabilities.js';
 import { createWorkers } from './composition/create-workers.js';
 import {
   closeRuntimeAndPool,
   createLifecycleSupervisor,
 } from './composition/lifecycle-supervisor.js';
-import type { ConversationWorkLinkRepository } from './domain/chat/chat-work-origin-ref.js';
 import type { PostgresChannelRepository } from './infrastructure/postgres/postgres-channel-repository.js';
 
 export function createLarkIngressWorker(
@@ -226,50 +217,29 @@ export async function createService(
         config.larkCanary.allowedOpenId,
       )
     : undefined;
-  let workModule: ReturnType<typeof createWorkModule> | undefined;
-  let workChatWorker: WorkChatWakeWorker | undefined;
-  let conversationWorkLinks: ConversationWorkLinkRepository | undefined =
-    undefined;
   const runtimeCapabilities = createConfiguredRuntimeCapabilities(config);
-  if (productWorkEnabled) {
-    workModule = createWorkModule({
-      database: pool,
-      definitions: resourceModule.definitionReadApi,
-      definitionResolution: resourceModule.workDefinitionResolution,
-      execution: new InvokeTaskExecutionAdmission(invokeTask),
-      executionFacts: new PostgresExecutionFactQuery(pool),
-      ...(directChatEnabled && conversations ? { conversations } : {}),
-      runtimeCapabilities,
-    });
-    const productConversationWorkLinks =
-      new PostgresConversationWorkLinkRepository(pool);
-    conversationWorkLinks = productConversationWorkLinks;
-    if (directChatEnabled && conversations) {
-      const chatWorkCardProjection = workModule.createChatWorkCardProjection();
-      workChatWorker = createWorkChatWakeWorker(
-        {
-          workSource: new PostgresWorkChatWakeWorkSource(pool),
-          state: new PostgresWorkChatWakeStateRepository(pool),
-          projection: chatWorkCardProjection,
-          conversationWorkLinks: productConversationWorkLinks,
-          conversations,
-          conversationAgentDefinitions:
-            new PostgresWorkChatConversationAgentResolver(pool),
-        },
-        {
-          workerId: `${workerId}:work-chat`,
-          leaseMs: leaseDurationMs,
-          onError: ({ phase, errorName }) => {
-            logger.log('error', 'work_chat.wake_worker.failed', {
-              phase,
-              error_name: errorName,
-              worker_id: `${workerId}:work-chat`,
-            });
-          },
-        },
-      );
-    }
-  }
+  const {
+    workModule,
+    workChatWorker,
+    conversationWorkLinks,
+  } = createWorkCapabilities({
+    database: pool,
+    definitions: resourceModule.definitionReadApi,
+    definitionResolution: resourceModule.workDefinitionResolution,
+    ...(productWorkEnabled
+      ? {
+          execution: new InvokeTaskExecutionAdmission(invokeTask),
+          executionFacts: new PostgresExecutionFactQuery(pool),
+          productWorkEnabled: true as const,
+        }
+      : { productWorkEnabled: false as const }),
+    ...(directChatEnabled && conversations ? { conversations } : {}),
+    runtimeCapabilities,
+    directChatEnabled,
+    workerId,
+    leaseMs: leaseDurationMs,
+    logger,
+  });
   const runtimeToolCatalog = createRuntimeToolCatalog([
     { ref: 'memory', contribute: memoryModule.contributeRuntime },
     {

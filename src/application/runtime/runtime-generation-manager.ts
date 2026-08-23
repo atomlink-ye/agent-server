@@ -74,7 +74,7 @@ export class RuntimeGenerationManager {
       throw new Error('Provisioning runtime generation could not activate.');
 
     const activeAt = this.now().toISOString();
-    await this.generationTransaction.replaceCurrentGeneration({
+    return this.generationTransaction.replaceCurrentGeneration({
       sessionId: provisioning.runtimeSessionId,
       previousGenerationId: input.expectedPreviousGenerationId,
       generation: {
@@ -89,11 +89,6 @@ export class RuntimeGenerationManager {
         activeAt,
       },
     });
-
-    const active = await this.generations.findById(input.generationId);
-    if (!active || active.status !== 'active')
-      throw new Error('Activated runtime generation could not be loaded.');
-    return active;
   }
 
   public async failProvisioning(
@@ -102,6 +97,21 @@ export class RuntimeGenerationManager {
     await this.generations.failProvisioning({
       id: generationId,
       failedAt: this.now().toISOString(),
+    });
+  }
+
+  public async close(generationId: RuntimeGenerationId): Promise<void> {
+    const generation = await this.generations.findById(generationId);
+    if (!generation) throw new Error('Runtime generation does not exist.');
+    if (generation.status === 'closed') return;
+    if (generation.status !== 'active' && generation.status !== 'superseded')
+      throw new Error(
+        'Runtime generation cannot close from its current state.',
+      );
+    await this.generations.close({
+      id: generation.id,
+      closedAt: this.now().toISOString(),
+      expectedStatus: generation.status,
     });
   }
 }

@@ -65,7 +65,7 @@ class FakeClient implements PaseoClientPort {
     if (this.timelineError) throw this.timelineError;
     return timeline;
   }
-  async closeSession() {
+  async close() {
     this.status = 'closed';
   }
 }

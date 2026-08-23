@@ -86,7 +86,7 @@ describe('managed single-agent minimum fault evidence', () => {
         tasks,
         definitions: invokables,
         executeTeamTask: team,
-        runtime,
+        runtimeTurns: runtime,
         runtimeProvider: runtime,
         logger,
       });

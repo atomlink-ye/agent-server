@@ -1778,7 +1778,7 @@ function createExecuteRun(input: {
     tasks,
     definitions: input.invokableRepository,
     executeTeamTask,
-    runtime: input.runtime,
+    runtimeTurns: input.runtime,
     runtimeProvider: input.runtime,
     logger: input.logger,
     now: input.now,

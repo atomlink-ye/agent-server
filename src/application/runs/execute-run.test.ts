@@ -228,7 +228,7 @@ describe('ExecuteRun', () => {
       } as never,
       definitions: {} as InvokableRepository,
       executeTeamTask: {} as never,
-      runtime,
+      runtimeTurns: runtime,
       runtimeProvider: runtime,
       logger: { log: vi.fn() },
       now: () => new Date('2026-07-23T00:00:00.000Z'),
@@ -325,7 +325,7 @@ describe('ExecuteRun', () => {
       tasks: { findById: vi.fn(async () => task), save: vi.fn() } as never,
       definitions: {} as never,
       executeTeamTask: {} as never,
-      runtime,
+      runtimeTurns: runtime,
       runtimeProvider: runtime,
       logger: { log: vi.fn() },
       now: () => new Date(),
@@ -333,7 +333,6 @@ describe('ExecuteRun', () => {
       events: events as never,
       fileStore: { readVerified: vi.fn(async () => 'pinned memory') } as never,
       createMemoryProposal: { executeBatch: batch } as never,
-      runtimeExtensionBinder: { bind: binder } as never,
     });
 
     const out = await executeRun.execute(claim);
@@ -464,21 +463,13 @@ describe('ExecuteRun', () => {
       } as never,
       definitions: {} as never,
       executeTeamTask: {} as never,
-      runtime,
+      runtimeTurns: runtime,
       runtimeProvider: runtime,
       logger: { log: vi.fn() },
       now: () => new Date('2026-07-23T00:00:00.000Z'),
       events: {
         append: vi.fn(async () => undefined),
         bind: vi.fn(async () => undefined),
-      } as never,
-      runtimeExtensionBinder: {
-        bind: vi.fn(),
-        getTeamMemberGrant,
-        refreshForTeamMember,
-        closeTeamMemberTurn,
-        activeToolCalls,
-        revoke: vi.fn(),
       } as never,
       runtimeSessions: {
         findByTeamMember: vi.fn(async () => ({
@@ -505,7 +496,7 @@ describe('ExecuteRun', () => {
           updatedAt: task.updatedAt,
         })),
       } as never,
-      collaborativeExecutions,
+      collaborativeExecutions: collaborativeExecutions as never,
       runs: {
         findByIdForOwner: vi.fn(async () => ({
           ...claim.run,
@@ -1236,7 +1227,6 @@ describe('ExecuteRun', () => {
           toolRefs: [],
         })),
       } as never,
-      runtimeExtensionBinder: { bind: vi.fn(async () => undefined) } as never,
       collaborativeExecutions: collaborativeExecutions as never,
     });
 
@@ -1368,7 +1358,7 @@ describe('ExecuteRun', () => {
     };
     const executeRun = createExecuteRun({
       completeRun,
-      runtimeTurns: createRuntime(),
+      runtime: createRuntime(),
       task,
       logger,
     });
@@ -1471,7 +1461,7 @@ describe('ExecuteRun', () => {
           { category: 'project_constraint', content: 'over limit candidate' },
         ],
       })),
-    } as FakeAgentRuntime;
+    } as unknown as FakeAgentRuntime;
     const completeRun = {
       execute: vi.fn(async ({ run }: { run: Run }) => run),
     } as unknown as CompleteRun;
@@ -1518,7 +1508,7 @@ describe('ExecuteRun', () => {
       tasks: { findById: vi.fn(async () => task), save: vi.fn() } as never,
       definitions: {} as never,
       executeTeamTask: {} as never,
-      runtime,
+      runtimeTurns: runtime,
       runtimeProvider: runtime,
       logger: { log: vi.fn() },
       now: () => new Date(),
@@ -1576,7 +1566,7 @@ describe('ExecuteRun', () => {
           ],
         };
       }),
-    } as FakeAgentRuntime;
+    } as unknown as FakeAgentRuntime;
     const batch = vi.fn(
       async (inputs: readonly { content: string }[]) => inputs as never,
     );
@@ -1628,7 +1618,7 @@ describe('ExecuteRun', () => {
       } as never,
       definitions: {} as never,
       executeTeamTask: {} as never,
-      runtime,
+      runtimeTurns: runtime,
       runtimeProvider: runtime,
       logger: { log: vi.fn() },
       now: () => new Date(),
@@ -1704,7 +1694,7 @@ describe('ExecuteRun', () => {
 
 function createExecuteRun(input: {
   readonly completeRun: CompleteRun;
-  readonly runtimeTurns: FakeAgentRuntime;
+  readonly runtime: FakeAgentRuntime;
   readonly task: Task;
   readonly logger?: Logger;
 }): ExecuteRun {
@@ -1717,7 +1707,7 @@ function createExecuteRun(input: {
     tasks,
     definitions: {} as InvokableRepository,
     executeTeamTask: {} as never,
-    runtimeTurns: input.runtimeTurns,
+    runtimeTurns: input.runtime,
     runtimeProvider: input.runtime,
     logger: input.logger ?? { log: vi.fn() },
     now: () => new Date('2026-07-23T00:00:00.000Z'),
@@ -1846,7 +1836,7 @@ function createLeadRuntimeFixture() {
     } as never,
     definitions: {} as never,
     executeTeamTask: {} as never,
-    runtime,
+    runtimeTurns: runtime,
     runtimeProvider: runtime,
     logger,
     now: () => new Date('2026-07-23T00:00:00.000Z'),
@@ -1854,7 +1844,6 @@ function createLeadRuntimeFixture() {
       append: vi.fn(async () => undefined),
       bind: vi.fn(async () => undefined),
     } as never,
-    runtimeExtensionBinder: binder as never,
     runtimeSessions: runtimeSessions as never,
     collaborativeExecutions: collaborativeExecutions as never,
   });
@@ -1874,7 +1863,7 @@ function createLeadRuntimeFixture() {
 
 function createDirectExecuteRun(input: {
   readonly completeRun: CompleteRun;
-  readonly runtimeTurns: FakeAgentRuntime;
+  readonly runtime: FakeAgentRuntime;
   readonly task: Task;
   readonly resolver: ResolveAgentVersion;
   readonly createMemoryProposal?: CreateMemoryProposal;
@@ -1888,12 +1877,14 @@ function createDirectExecuteRun(input: {
     tasks,
     definitions: {} as InvokableRepository,
     executeTeamTask: {} as never,
-    runtimeTurns: input.runtimeTurns,
+    runtimeTurns: input.runtime,
     runtimeProvider: input.runtime,
     logger: { log: vi.fn() },
     now: () => new Date('2026-07-23T00:00:00.000Z'),
     resolver: input.resolver,
-    createMemoryProposal: input.createMemoryProposal,
+    ...(input.createMemoryProposal
+      ? { createMemoryProposal: input.createMemoryProposal }
+      : {}),
   });
 }
 

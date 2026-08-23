@@ -7,6 +7,8 @@ import type {
 import type { ExecutionObservationSink } from '../../src/application/ports/runtime-execution-session.js';
 import type { ExecutionPlaneHealth } from '../../src/application/ports/execution-plane.js';
 import type { ExecutionExtensionBinding } from '../../src/application/ports/runtime-extension-binding.js';
+import type { ExecuteRuntimeTurnInput } from '../../src/application/runtime/execute-runtime-turn.js';
+import type { ExecutionOutput } from '../../src/application/ports/runtime-execution-session.js';
 
 type FakeRuntimeHealth = {
   readonly ready: boolean;
@@ -200,9 +202,23 @@ export class FakeAgentRuntime {
     };
   }
 
+  public execute(input: FakeRuntimeExecuteInput): Promise<FakeRuntimeExecution>;
+  public execute(input: ExecuteRuntimeTurnInput): Promise<ExecutionOutput>;
   public async execute(
-    input: FakeRuntimeExecuteInput,
-  ): Promise<FakeRuntimeExecution> {
+    input: FakeRuntimeExecuteInput | ExecuteRuntimeTurnInput,
+  ): Promise<FakeRuntimeExecution | ExecutionOutput> {
+    if (!('operation' in input)) {
+      const result = await this.executeTurn({
+        runId: input.source.kind === 'run' ? input.source.runId : input.runtimeSessionId,
+        prompt: input.prompt,
+      });
+      return {
+        provider: result.provider,
+        model: result.model,
+        text: result.text,
+        ...(result.usage ? { usage: result.usage } : {}),
+      };
+    }
     this.executeCalls += 1;
     this.executionRunIds.push(input.runId);
     this.prompts.push(input.prompt);

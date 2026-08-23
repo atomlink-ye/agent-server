@@ -52,12 +52,11 @@ export function createRuntimeOwner(input: {
   readonly logger: Logger;
   readonly toolCatalog: RuntimeToolCatalog;
 }): RuntimeOwner {
-  const runtimeProvider = input.config.runtime?.adapter === 'none'
-    ? new UnavailableRuntimeProvider()
-    : createPaseoRuntimeProvider(input.config, input.logger);
-  const oneShotCompletion = new PaseoOneShotRuntimeCompletion(
-    runtimeProvider,
-  );
+  const runtimeProvider =
+    input.config.runtime?.adapter === 'none'
+      ? new UnavailableRuntimeProvider()
+      : createPaseoRuntimeProvider(input.config, input.logger);
+  const oneShotCompletion = new PaseoOneShotRuntimeCompletion(runtimeProvider);
   const runtimeSessions = new PostgresRuntimeSessionStore(input.database);
   const specs = new PostgresRuntimeSpecStore(input.database);
   const generations = new PostgresRuntimeGenerationStore(input.database);
@@ -104,10 +103,7 @@ export function createRuntimeOwner(input: {
     ensureRuntimeSession,
     grants,
   );
-  const cancelRuntimeTurn = new CancelRuntimeTurn(
-    turns,
-    ensureRuntimeSession,
-  );
+  const cancelRuntimeTurn = new CancelRuntimeTurn(turns, ensureRuntimeSession);
   const sessionCreator = new AgentChatRuntimeSessionCreator(
     runtimeSessions,
     resolveRuntimeSpec,

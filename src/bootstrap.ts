@@ -1,6 +1,4 @@
-export {
-  createApplication,
-} from './composition/create-application.js';
+export { createApplication } from './composition/create-application.js';
 export {
   createLarkIngressWorker,
   createLarkOutboxWorker,

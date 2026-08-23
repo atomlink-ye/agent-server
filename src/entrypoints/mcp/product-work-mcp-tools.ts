@@ -463,7 +463,9 @@ export function registerProductWorkMcpTools(input: {
         readonly agent_definition_id: string;
         readonly definition_id: string;
       }) => {
-        const current = await authorize(PRODUCT_WORK_ASSOCIATE_AGENT_WORKFLOW_TOOL_REF);
+        const current = await authorize(
+          PRODUCT_WORK_ASSOCIATE_AGENT_WORKFLOW_TOOL_REF,
+        );
         if (!current)
           return {
             isError: true,
@@ -633,7 +635,9 @@ export function registerProductWorkMcpTools(input: {
         }),
       },
       async (args: { agent_definition_id: string }) => {
-        const current = await authorize(PRODUCT_WORK_LIST_AGENT_WORKFLOWS_TOOL_REF);
+        const current = await authorize(
+          PRODUCT_WORK_LIST_AGENT_WORKFLOWS_TOOL_REF,
+        );
         if (!current)
           return {
             isError: true,
@@ -718,7 +722,9 @@ export function registerProductWorkMcpTools(input: {
         }),
       },
       async (args: { definition_id: string; version_id?: string }) => {
-        const current = await authorize(PRODUCT_WORK_DESCRIBE_WORKFLOW_TOOL_REF);
+        const current = await authorize(
+          PRODUCT_WORK_DESCRIBE_WORKFLOW_TOOL_REF,
+        );
         if (!current)
           return {
             isError: true,

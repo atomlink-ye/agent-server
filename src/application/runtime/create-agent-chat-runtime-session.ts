@@ -13,16 +13,17 @@ export interface CreateAgentChatRuntimeSession {
     readonly runtimeEpoch: number;
     readonly agentOwner: ResourceOwner;
     readonly agentVersionId: string;
-    readonly resolvedSkills: readonly { readonly ref: string; readonly digest: string }[];
+    readonly resolvedSkills: readonly {
+      readonly ref: string;
+      readonly digest: string;
+    }[];
     readonly toolRefs: readonly string[];
     readonly desiredSystemPrompt: DesiredRuntimeSystemPrompt;
   }): Promise<RuntimeSession>;
 }
 
 /** Creates the stable RuntimeSession identity for one agent-chat runtime epoch. */
-export class AgentChatRuntimeSessionCreator
-  implements CreateAgentChatRuntimeSession
-{
+export class AgentChatRuntimeSessionCreator implements CreateAgentChatRuntimeSession {
   public constructor(
     private readonly sessions: RuntimeSessionStore,
     private readonly resolveSpec: ResolveRuntimeSessionSpec,

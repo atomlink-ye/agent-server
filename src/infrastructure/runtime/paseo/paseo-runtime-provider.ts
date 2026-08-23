@@ -156,7 +156,10 @@ export class PaseoRuntimeProvider implements RuntimeExecutionProvider {
       systemPrompt: input.systemPrompt,
       runId: invocationId,
     });
-    if (!agent.id) throw new ProtocolViolationError('Paseo one-shot session has no provider identity.');
+    if (!agent.id)
+      throw new ProtocolViolationError(
+        'Paseo one-shot session has no provider identity.',
+      );
     const session = this.#session({
       provider,
       providerWorkspaceId: workspaceId,
@@ -170,9 +173,14 @@ export class PaseoRuntimeProvider implements RuntimeExecutionProvider {
       model,
     });
     try {
-      const result = await session.run({ runId: invocationId, prompt: input.prompt });
+      const result = await session.run({
+        runId: invocationId,
+        prompt: input.prompt,
+      });
       if (result.status !== 'completed')
-        throw new ExecutionPlaneUnavailableError('Paseo one-shot completion failed.');
+        throw new ExecutionPlaneUnavailableError(
+          'Paseo one-shot completion failed.',
+        );
       return result.output;
     } finally {
       await session.close();
@@ -403,7 +411,10 @@ export class PaseoRuntimeProvider implements RuntimeExecutionProvider {
     readonly provider: string;
     readonly providerWorkspaceId: string;
     readonly providerSessionId: string;
-    readonly spec: Pick<ProviderRuntimeSpec, 'provider' | 'model' | 'cwd' | 'systemPrompt'>;
+    readonly spec: Pick<
+      ProviderRuntimeSpec,
+      'provider' | 'model' | 'cwd' | 'systemPrompt'
+    >;
     readonly model?: string;
   }): PaseoExecutionSession {
     const model = input.model ?? this.#resolveLaunch(input.spec).model;

@@ -36,14 +36,22 @@ export function evaluateRuntimeGrantPolicy(input: {
     return denied('grant_expired');
   if (grant.runtimeSessionId !== session.id)
     return denied('grant_session_mismatch');
-  if (generation.runtimeSessionId !== session.id || grant.generationId !== generation.id)
+  if (
+    generation.runtimeSessionId !== session.id ||
+    grant.generationId !== generation.id
+  )
     return denied('grant_generation_mismatch');
   if (generation.status !== 'active') return denied('generation_not_active');
   if (grant.runtimeTurnId !== null && grant.runtimeTurnId !== turn?.id)
     return denied('grant_turn_mismatch');
-  if (!turn || turn.runtimeSessionId !== session.id || turn.generationId !== generation.id)
+  if (
+    !turn ||
+    turn.runtimeSessionId !== session.id ||
+    turn.generationId !== generation.id
+  )
     return denied('grant_turn_mismatch');
-  if (!['preparing', 'running'].includes(turn.status)) return denied('turn_not_active');
+  if (!['preparing', 'running'].includes(turn.status))
+    return denied('turn_not_active');
   if (grant.catalogDigest !== input.currentCatalogDigest)
     return denied('catalog_digest_mismatch');
   if (!grant.allowedTools.includes(input.requestedTool))

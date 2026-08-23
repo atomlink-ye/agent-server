@@ -382,7 +382,9 @@ describe('ApplyMemoryReviewControl', () => {
       text: 'MARKER_A',
       usage: { inputTokens: 1, outputTokens: 1, totalCostUsd: 0 },
     });
-    const synthesize = new SynthesizeMemoryDocument({ complete: runtimeExecute });
+    const synthesize = new SynthesizeMemoryDocument({
+      complete: runtimeExecute,
+    });
     const review = {
       execute: vi.fn().mockResolvedValue({
         proposal: { status: 'accepted' },

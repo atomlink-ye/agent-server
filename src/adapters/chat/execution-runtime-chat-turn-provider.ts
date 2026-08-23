@@ -4,9 +4,7 @@ import type {
   ChatTurnProvider,
 } from '../../application/ports/chat-turn-provider.js';
 import type { ExecutionOutput } from '../../application/ports/runtime-execution-session.js';
-import type {
-  CreateAgentChatRuntimeSession,
-} from '../../application/runtime/create-agent-chat-runtime-session.js';
+import type { CreateAgentChatRuntimeSession } from '../../application/runtime/create-agent-chat-runtime-session.js';
 import type {
   ExecuteRuntimeTurn,
   ExecuteRuntimeTurnInput,

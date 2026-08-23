@@ -124,8 +124,7 @@ export function createMemoryReviewSurface(input: {
   );
 }
 
-export interface CreateMemoryCapabilitiesOptions
-  extends CreateMemoryModuleOptions {
+export interface CreateMemoryCapabilitiesOptions extends CreateMemoryModuleOptions {
   readonly sessions: SessionRepository;
   readonly teamTools: {
     readonly contextResolver: TeamToolContextResolver;

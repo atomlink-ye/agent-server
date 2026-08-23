@@ -27,8 +27,7 @@ describe('Work composition concrete import boundary', () => {
     for (const path of files) {
       if (
         path === 'src/composition/create-work-capabilities.ts' ||
-        path ===
-          'src/composition/postgres-conversation-work-link-repository.ts'
+        path === 'src/composition/postgres-conversation-work-link-repository.ts'
       )
         continue;
       if (protectedNames.some((name) => path.includes(name))) continue;

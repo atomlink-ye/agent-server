@@ -61,7 +61,10 @@ import {
   AGENT_SERVER_SYNTHETIC_EVENT_BATCH_TOOL_REF,
   AGENT_SERVER_SYNTHETIC_STOCK_SNAPSHOT_TOOL_REF,
 } from '../application/agents/built-in-skills.js';
-import { createCollaborationRuntimeContributor, createSyntheticRuntimeToolsContributor } from '../entrypoints/mcp/runtime-tool-contributors.js';
+import {
+  createCollaborationRuntimeContributor,
+  createSyntheticRuntimeToolsContributor,
+} from '../entrypoints/mcp/runtime-tool-contributors.js';
 import { createRuntimeOwner } from './create-runtime-owner.js';
 
 export interface SingleRunDebugControl {
@@ -169,39 +172,37 @@ export async function createApplication(
   const memoryDocument = config.larkCanary?.enabled
     ? createLarkMemoryDocumentAdapter(config.larkCanary)
     : undefined;
-  const memoryReviewSurface = config.larkCanary?.enabled && reviewTokenDeriver
-    ? createMemoryReviewSurface({
-        module: memoryModule,
-        channels: channelRepository,
-        reviewSurface: reviewSurfaceRepository,
-        config: config.larkCanary,
-        tokenDeriver: reviewTokenDeriver,
-        document: memoryDocument,
-      })
-    : undefined;
+  const memoryReviewSurface =
+    config.larkCanary?.enabled && reviewTokenDeriver
+      ? createMemoryReviewSurface({
+          module: memoryModule,
+          channels: channelRepository,
+          reviewSurface: reviewSurfaceRepository,
+          config: config.larkCanary,
+          tokenDeriver: reviewTokenDeriver,
+          document: memoryDocument,
+        })
+      : undefined;
   const runtimeCapabilities = createConfiguredRuntimeCapabilities(config);
-  const {
-    workModule,
-    workChatWorker,
-    conversationWorkLinks,
-  } = createWorkCapabilities({
-    database: pool,
-    definitions: resourceModule.definitionReadApi,
-    definitionResolution: resourceModule.workDefinitionResolution,
-    ...(productWorkEnabled
-      ? {
-          execution: createProductWorkExecutionAdmission(invokeTask),
-          executionFacts: createWorkExecutionFacts(pool),
-          productWorkEnabled: true as const,
-        }
-      : { productWorkEnabled: false as const }),
-    ...(directChatEnabled && conversations ? { conversations } : {}),
-    runtimeCapabilities,
-    directChatEnabled,
-    workerId,
-    leaseMs: leaseDurationMs,
-    logger,
-  });
+  const { workModule, workChatWorker, conversationWorkLinks } =
+    createWorkCapabilities({
+      database: pool,
+      definitions: resourceModule.definitionReadApi,
+      definitionResolution: resourceModule.workDefinitionResolution,
+      ...(productWorkEnabled
+        ? {
+            execution: createProductWorkExecutionAdmission(invokeTask),
+            executionFacts: createWorkExecutionFacts(pool),
+            productWorkEnabled: true as const,
+          }
+        : { productWorkEnabled: false as const }),
+      ...(directChatEnabled && conversations ? { conversations } : {}),
+      runtimeCapabilities,
+      directChatEnabled,
+      workerId,
+      leaseMs: leaseDurationMs,
+      logger,
+    });
   const runtimeToolCatalog = createRuntimeToolCatalog([
     {
       ref: 'memory',
@@ -231,16 +232,18 @@ export async function createApplication(
       }),
     },
     ...(workModule
-      ? [{
-          ref: 'work',
-          toolRefs: [
-            AGENT_SERVER_PRODUCT_WORK_CREATE_TOOL_REF,
-            AGENT_SERVER_PRODUCT_WORK_RUN_START_TOOL_REF,
-            AGENT_SERVER_LIST_AGENT_WORKFLOWS_TOOL_REF,
-            AGENT_SERVER_DESCRIBE_WORKFLOW_TOOL_REF,
-          ],
-          contribute: workModule.contributeRuntime,
-        }]
+      ? [
+          {
+            ref: 'work',
+            toolRefs: [
+              AGENT_SERVER_PRODUCT_WORK_CREATE_TOOL_REF,
+              AGENT_SERVER_PRODUCT_WORK_RUN_START_TOOL_REF,
+              AGENT_SERVER_LIST_AGENT_WORKFLOWS_TOOL_REF,
+              AGENT_SERVER_DESCRIBE_WORKFLOW_TOOL_REF,
+            ],
+            contribute: workModule.contributeRuntime,
+          },
+        ]
       : []),
   ]);
   const runtimeOwner = createRuntimeOwner({
@@ -282,10 +285,8 @@ export async function createApplication(
     managedMemory: memoryModule.reviewApi.managedMemory,
     profile: process.env.LARK_CLI_PROFILE ?? 'agent-test',
   });
-  const {
-    synthesizeMemoryDocument,
-    acceptMemoryFromDocument,
-  } = memoryChannelConsumers;
+  const { synthesizeMemoryDocument, acceptMemoryFromDocument } =
+    memoryChannelConsumers;
   const { cancelTask, getTask, getTaskTree } = createTaskExecutionConsumers({
     taskRepository,
     runRepository,
@@ -309,8 +310,11 @@ export async function createApplication(
     memoryReviewSurface
       ? { notifySucceeded: (input) => memoryReviewSurface.execute(input) }
       : options.memoryReviewNotifier
-        ? { notifySucceeded: (input) => options.memoryReviewNotifier!.execute(input) }
-      : undefined,
+        ? {
+            notifySucceeded: (input) =>
+              options.memoryReviewNotifier!.execute(input),
+          }
+        : undefined,
     {
       handleTerminalRun: async ({ run, task }) => {
         const team = await collaborativeTeamExecutions.findTeamRunByRootTaskId(
@@ -367,31 +371,31 @@ export async function createApplication(
     logger,
     concurrency: config.dispatcher?.concurrency ?? 4,
     onIdleMaintenance: async () => {
-        try {
-          const recovered =
-            await collaborativeTeamExecutions.recoverExpiredTeamRuns(
-              new Date().toISOString(),
-            );
-          for (const item of recovered) {
-            logger.log('warn', 'team.recovery.fail_closed', {
-              team_run_id: item.teamRunId,
-              child_run_id: item.childRunId,
-              team_task_kind: item.teamTaskKind,
-              affected_child_run_count: item.affectedChildRunCount,
-            });
-          }
-        } catch (error) {
-          logger.log('error', 'team.recovery.fail_closed_failed', {
-            error_name: error instanceof Error ? error.name : 'UnknownError',
+      try {
+        const recovered =
+          await collaborativeTeamExecutions.recoverExpiredTeamRuns(
+            new Date().toISOString(),
+          );
+        for (const item of recovered) {
+          logger.log('warn', 'team.recovery.fail_closed', {
+            team_run_id: item.teamRunId,
+            child_run_id: item.childRunId,
+            team_task_kind: item.teamTaskKind,
+            affected_child_run_count: item.affectedChildRunCount,
           });
         }
-        try {
-          await collaborationActivationReconciler.reconcilePendingRoots();
-        } catch (error) {
-          logger.log('error', 'team.wake_reconcile_failed', {
-            error_name: error instanceof Error ? error.name : 'UnknownError',
-          });
-        }
+      } catch (error) {
+        logger.log('error', 'team.recovery.fail_closed_failed', {
+          error_name: error instanceof Error ? error.name : 'UnknownError',
+        });
+      }
+      try {
+        await collaborationActivationReconciler.reconcilePendingRoots();
+      } catch (error) {
+        logger.log('error', 'team.wake_reconcile_failed', {
+          error_name: error instanceof Error ? error.name : 'UnknownError',
+        });
+      }
     },
   });
   let larkWorker: LarkChannelWorkers['larkWorker'] | undefined;
@@ -498,7 +502,11 @@ export async function createApplication(
 
   return {
     app,
-    controls: { dispatcher, sessions, memoryModule } satisfies ApplicationControls,
+    controls: {
+      dispatcher,
+      sessions,
+      memoryModule,
+    } satisfies ApplicationControls,
     ...(singleRunDebug ? { singleRunDebug } : {}),
     close: () => lifecycle.stop(),
   };

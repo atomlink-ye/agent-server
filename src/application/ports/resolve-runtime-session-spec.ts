@@ -1,5 +1,8 @@
 import type { RuntimeSessionOwner } from '../../domain/runtime/runtime-session.js';
-import type { RuntimeResolvedSkill, RuntimeSessionSpec } from '../../domain/runtime/runtime-session-spec.js';
+import type {
+  RuntimeResolvedSkill,
+  RuntimeSessionSpec,
+} from '../../domain/runtime/runtime-session-spec.js';
 import type { DesiredRuntimeSystemPrompt } from '../../domain/runtime/desired-runtime-system-prompt.js';
 
 /**

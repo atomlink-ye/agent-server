@@ -67,9 +67,7 @@ describe('ExecutionRuntimeChatTurnProvider', () => {
     expect(executor.calls[0]?.prompt).toContain(
       'Always answer in terse Alpha format.',
     );
-    expect(executor.calls[0]?.prompt).toContain(
-      'Alpha persona home content.',
-    );
+    expect(executor.calls[0]?.prompt).toContain('Alpha persona home content.');
     expect(executor.calls[0]?.recoveryPrompt).toContain(
       'CHAT BOOTSTRAP SNAPSHOT',
     );
@@ -207,11 +205,12 @@ describe('ExecutionRuntimeChatTurnProvider', () => {
   });
 });
 
-type CreatorInput = Parameters<
-  CreateAgentChatRuntimeSession['execute']
->[0];
+type CreatorInput = Parameters<CreateAgentChatRuntimeSession['execute']>[0];
 
-class RecordingSessionCreator implements Pick<CreateAgentChatRuntimeSession, 'execute'> {
+class RecordingSessionCreator implements Pick<
+  CreateAgentChatRuntimeSession,
+  'execute'
+> {
   public readonly calls: CreatorInput[] = [];
 
   public constructor(private readonly sessions: readonly RuntimeSession[]) {}
@@ -227,7 +226,9 @@ class RecordingSessionCreator implements Pick<CreateAgentChatRuntimeSession, 'ex
 class RecordingTurnExecutor implements Pick<ExecuteRuntimeTurn, 'execute'> {
   public readonly calls: ExecuteRuntimeTurnInput[] = [];
 
-  public async execute(input: ExecuteRuntimeTurnInput): Promise<ExecutionOutput> {
+  public async execute(
+    input: ExecuteRuntimeTurnInput,
+  ): Promise<ExecutionOutput> {
     this.calls.push(input);
     return {
       provider: 'recording',

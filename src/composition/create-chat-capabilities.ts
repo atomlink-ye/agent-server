@@ -19,10 +19,7 @@ import { ChatDeliveryWorker } from '../entrypoints/chat/worker.js';
 import type { AppConfig } from '../shared/config.js';
 import type { Logger } from '../shared/observability/logger.js';
 
-type EnabledDirectChatPlane = Exclude<
-  AppConfig['directChatPlane'],
-  'absent'
->;
+type EnabledDirectChatPlane = Exclude<AppConfig['directChatPlane'], 'absent'>;
 
 interface CreateChatCapabilitiesDisabledOptions {
   readonly directChatPlane: 'absent';
@@ -42,21 +39,17 @@ interface CreateChatCapabilitiesEnabledOptions {
     'findManagedDefinitionByTenant'
   >;
   readonly agentResolutionApi: AgentResolutionApi;
-  readonly conversationWorkLinks: Pick<
-    ConversationWorkLinkRepository,
-    'findWorkIdsByOrigin'
-  > | undefined;
+  readonly conversationWorkLinks:
+    Pick<ConversationWorkLinkRepository, 'findWorkIdsByOrigin'> | undefined;
   readonly logger: Logger;
   readonly conversationWorkEntitlements:
-    | ConversationWorkEntitlementRepository
-    | undefined;
+    ConversationWorkEntitlementRepository | undefined;
   readonly workerId: string;
   readonly leaseMs: number;
 }
 
 export type CreateChatCapabilitiesOptions =
-  | CreateChatCapabilitiesDisabledOptions
-  | CreateChatCapabilitiesEnabledOptions;
+  CreateChatCapabilitiesDisabledOptions | CreateChatCapabilitiesEnabledOptions;
 
 export interface ChatCapabilities {
   readonly chatWorker?: ChatDeliveryWorker;

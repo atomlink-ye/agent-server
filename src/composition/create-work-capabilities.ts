@@ -160,9 +160,7 @@ export function installWorkHttpRoutes(
   });
 }
 
-export function createWorkModule(
-  options: CreateWorkModuleOptions,
-): WorkModule {
+export function createWorkModule(options: CreateWorkModuleOptions): WorkModule {
   const repository = new PostgresWorkIdentityRepository(options.database);
   const contextFiles = new PostgresLogicalFileStore(options.database);
   const contextViews = new ContextViewResolver();
@@ -302,10 +300,11 @@ export type WorkCapabilities = {
   readonly conversationWorkLinks?: ConversationWorkLinkRepository;
 };
 
-export function createWorkExecutionFacts(database: Pool): PostgresExecutionFactQuery {
+export function createWorkExecutionFacts(
+  database: Pool,
+): PostgresExecutionFactQuery {
   return new PostgresExecutionFactQuery(database);
 }
-
 
 interface CreateWorkCapabilitiesBaseOptions {
   readonly database: Pool;

@@ -86,7 +86,9 @@ export interface CreateTestAppOptions {
   readonly databaseControl?: { database?: TestDatabase };
   readonly database?: TestDatabase;
   readonly publishedAgentVersionId?: string;
-  readonly sessionRepositoryControl?: { repository?: PostgresSessionRepository };
+  readonly sessionRepositoryControl?: {
+    repository?: PostgresSessionRepository;
+  };
   readonly workspaceMemoryFixtureControl?: {
     seedAcceptedEntry?: (
       workspaceId: string,
@@ -120,7 +122,8 @@ export async function createTestApp(
 ) {
   const database = (options.database ?? new PGlite()) as TestDatabase;
   await applyDurableKernelMigrations(database as any);
-  if (options.seedPublishedEnvironment) await seedPublishedEnvironment(database);
+  if (options.seedPublishedEnvironment)
+    await seedPublishedEnvironment(database);
   if (options.databaseControl) options.databaseControl.database = database;
 
   const effectiveConfig = options.workspaceId
@@ -198,14 +201,17 @@ export async function createTestApp(
     },
   );
   const controls = application.controls as ApplicationControls;
-  if (options.dispatcherControl) options.dispatcherControl.dispatcher = controls.dispatcher;
+  if (options.dispatcherControl)
+    options.dispatcherControl.dispatcher = controls.dispatcher;
   if (options.sessionRepositoryControl)
     options.sessionRepositoryControl.repository = controls.sessions;
   if (options.memoryReviewControl) {
     options.memoryReviewControl.review = controls.memoryModule.reviewApi.review;
-    options.memoryReviewControl.managedMemory = controls.memoryModule.http.managedMemory;
+    options.memoryReviewControl.managedMemory =
+      controls.memoryModule.http.managedMemory;
   }
-  if (options.startDispatcher ?? true) application.singleRunDebug?.startDispatcher();
+  if (options.startDispatcher ?? true)
+    application.singleRunDebug?.startDispatcher();
 
   if (options.workspaceMemoryFixtureControl) {
     options.workspaceMemoryFixtureControl.seedAcceptedEntry = async (
@@ -220,20 +226,23 @@ export async function createTestApp(
         serviceAccountId: 'svc_enabled',
         policySnapshotVersion: 'policy-2026-07-22',
       };
-      const proposal = await controls.memoryModule.createMemoryProposal.execute({
-        content,
-        category: 'fact',
-        accessContext,
-      });
+      const proposal = await controls.memoryModule.createMemoryProposal.execute(
+        {
+          content,
+          category: 'fact',
+          accessContext,
+        },
+      );
       const reviewed = await controls.memoryModule.reviewApi.review.execute({
         proposalId: proposal.id,
         action: 'accept',
         accessContext,
       });
       if (!reviewed.entry) throw new Error('fixture entry was not accepted');
-      const snapshot = await controls.memoryModule.http.managedMemory.acceptEntry(
-        reviewed.entry,
-      );
+      const snapshot =
+        await controls.memoryModule.http.managedMemory.acceptEntry(
+          reviewed.entry,
+        );
       return {
         proposalId: proposal.id,
         entryId: reviewed.entry.id,

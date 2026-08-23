@@ -284,9 +284,11 @@ describe('North Star production runtime authority', () => {
     await waitForTurnStatus(database.pool, runId, 'running');
 
     const providerInput = paseo.agentInputs[0];
-    if (!providerInput) throw new Error('production provider did not create an agent');
+    if (!providerInput)
+      throw new Error('production provider did not create an agent');
     const mcp = providerInput.mcpServers?.[0];
-    if (!mcp) throw new Error('production provider did not receive an MCP binding');
+    if (!mcp)
+      throw new Error('production provider did not receive an MCP binding');
     const mcpEvidence = await exerciseMcp(mcp);
 
     paseo.complete();
@@ -295,7 +297,10 @@ describe('North Star production runtime authority', () => {
       10_000,
       'claimed Run did not complete',
     );
-    if (!executionResult.claimed || executionResult.terminalStatus !== 'succeeded')
+    if (
+      !executionResult.claimed ||
+      executionResult.terminalStatus !== 'succeeded'
+    )
       throw new Error(
         `single-run execution did not succeed: ${JSON.stringify(executionResult)}`,
       );
@@ -618,7 +623,9 @@ async function mcpRequest(
     body: JSON.stringify(body),
   });
   if (!response.ok)
-    throw new Error(`MCP request failed (${response.status}): ${await response.text()}`);
+    throw new Error(
+      `MCP request failed (${response.status}): ${await response.text()}`,
+    );
   const responseBody = parseBody
     ? await parseMcpBody(response)
     : Object.freeze({});
@@ -632,7 +639,9 @@ async function parseMcpBody(
   response: Response,
 ): Promise<Readonly<Record<string, unknown>>> {
   const text = await response.text();
-  const data = response.headers.get('content-type')?.includes('text/event-stream')
+  const data = response.headers
+    .get('content-type')
+    ?.includes('text/event-stream')
     ? text
         .split('\n')
         .find((line) => line.startsWith('data:'))
@@ -642,11 +651,14 @@ async function parseMcpBody(
   if (!data) throw new Error('MCP response body is empty');
   const parsed: unknown = JSON.parse(data);
   if (!isRecord(parsed)) throw new Error('MCP response is not an object');
-  if (parsed.error) throw new Error(`MCP response error: ${JSON.stringify(parsed.error)}`);
+  if (parsed.error)
+    throw new Error(`MCP response error: ${JSON.stringify(parsed.error)}`);
   return parsed;
 }
 
-function readToolNames(body: Readonly<Record<string, unknown>>): readonly string[] {
+function readToolNames(
+  body: Readonly<Record<string, unknown>>,
+): readonly string[] {
   const result = body.result;
   if (!isRecord(result) || !Array.isArray(result.tools))
     throw new Error('MCP tools/list result is invalid');
@@ -686,9 +698,15 @@ function requiredString(
   return candidate;
 }
 
-function assertStatus(response: Response, expected: number, label: string): void {
+function assertStatus(
+  response: Response,
+  expected: number,
+  label: string,
+): void {
   if (response.status !== expected)
-    throw new Error(`${label} returned ${response.status}, expected ${expected}`);
+    throw new Error(
+      `${label} returned ${response.status}, expected ${expected}`,
+    );
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {

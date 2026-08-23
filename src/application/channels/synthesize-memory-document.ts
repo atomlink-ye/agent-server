@@ -6,9 +6,7 @@ const MAX_OUTPUT_BYTES = 4096;
 const MAX_COMMENT_BYTES = 32768;
 
 export class SynthesizeMemoryDocument {
-  public constructor(
-    private readonly runtime: OneShotRuntimeCompletion,
-  ) {}
+  public constructor(private readonly runtime: OneShotRuntimeCompletion) {}
 
   public async execute(input: {
     readonly ingressId: string;

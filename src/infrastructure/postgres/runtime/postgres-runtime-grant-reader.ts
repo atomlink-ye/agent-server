@@ -1,4 +1,7 @@
-import type { RuntimeGrantReader, RuntimeGrantRecord } from '../../../application/ports/runtime-grant-reader.js';
+import type {
+  RuntimeGrantReader,
+  RuntimeGrantRecord,
+} from '../../../application/ports/runtime-grant-reader.js';
 import type { RuntimeGrantId } from '../../../domain/runtime/runtime-session.js';
 
 interface Queryable {
@@ -27,7 +30,9 @@ const COLUMNS = `id,runtime_session_id,generation_id,runtime_turn_id,token_hash,
 export class PostgresRuntimeGrantReader implements RuntimeGrantReader {
   public constructor(private readonly database: Queryable) {}
 
-  public async findByTokenHash(tokenHash: string): Promise<RuntimeGrantRecord | null> {
+  public async findByTokenHash(
+    tokenHash: string,
+  ): Promise<RuntimeGrantRecord | null> {
     const result = await this.database.query<GrantRow>(
       `SELECT ${COLUMNS} FROM runtime_tool_grants WHERE token_hash=$1`,
       [tokenHash],
@@ -35,7 +40,9 @@ export class PostgresRuntimeGrantReader implements RuntimeGrantReader {
     return result.rows?.[0] ? mapGrant(result.rows[0]) : null;
   }
 
-  public async findById(id: RuntimeGrantId): Promise<RuntimeGrantRecord | null> {
+  public async findById(
+    id: RuntimeGrantId,
+  ): Promise<RuntimeGrantRecord | null> {
     const result = await this.database.query<GrantRow>(
       `SELECT ${COLUMNS} FROM runtime_tool_grants WHERE id=$1`,
       [id],
@@ -47,7 +54,8 @@ export class PostgresRuntimeGrantReader implements RuntimeGrantReader {
 function mapGrant(row: GrantRow): RuntimeGrantRecord {
   return Object.freeze({
     id: row.id as RuntimeGrantId,
-    runtimeSessionId: row.runtime_session_id as RuntimeGrantRecord['runtimeSessionId'],
+    runtimeSessionId:
+      row.runtime_session_id as RuntimeGrantRecord['runtimeSessionId'],
     generationId: row.generation_id as RuntimeGrantRecord['generationId'],
     runtimeTurnId: row.runtime_turn_id as RuntimeGrantRecord['runtimeTurnId'],
     tokenHash: row.token_hash,

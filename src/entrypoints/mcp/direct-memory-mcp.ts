@@ -155,7 +155,8 @@ function readBearer(req: IncomingMessage): string | null {
 function requestedTool(body: unknown): string | null {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return null;
   const params = Reflect.get(body, 'params');
-  if (!params || typeof params !== 'object' || Array.isArray(params)) return null;
+  if (!params || typeof params !== 'object' || Array.isArray(params))
+    return null;
   const name = Reflect.get(params, 'name');
   return typeof name === 'string' ? name : null;
 }

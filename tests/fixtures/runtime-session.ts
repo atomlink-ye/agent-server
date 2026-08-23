@@ -35,7 +35,8 @@ export function makeRuntimeSession(
       principalId: 'agent-owner',
     },
     scope,
-    desiredSpecRevision: (overrides.desiredSpecRevision ?? 1) as RuntimeSpecRevision,
+    desiredSpecRevision: (overrides.desiredSpecRevision ??
+      1) as RuntimeSpecRevision,
     currentGenerationId: null,
     status: 'provisioning',
     createdAt: now,

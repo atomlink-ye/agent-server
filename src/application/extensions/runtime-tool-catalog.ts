@@ -49,7 +49,9 @@ export function createRuntimeToolCatalog(
     const toolRefs = Object.freeze([...tool.toolRefs]);
     for (const toolRef of toolRefs) {
       if (publicToolRefs.has(toolRef))
-        throw new Error(`Runtime tool catalog has duplicate tool ref: ${toolRef}`);
+        throw new Error(
+          `Runtime tool catalog has duplicate tool ref: ${toolRef}`,
+        );
       publicToolRefs.add(toolRef);
     }
     byRef.set(tool.ref, Object.freeze({ ...tool, toolRefs }));
@@ -75,7 +77,10 @@ export function computeRuntimeToolCatalogDigest(
 ): string {
   const canonical = JSON.stringify(
     tools
-      .map((tool) => ({ ref: tool.ref, toolRefs: [...tool.toolRefs].toSorted() }))
+      .map((tool) => ({
+        ref: tool.ref,
+        toolRefs: [...tool.toolRefs].toSorted(),
+      }))
       .toSorted((left, right) => left.ref.localeCompare(right.ref)),
   );
   return `sha256:${createHash('sha256').update(canonical, 'utf8').digest('hex')}`;

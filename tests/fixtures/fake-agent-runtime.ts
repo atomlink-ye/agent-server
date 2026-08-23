@@ -79,8 +79,14 @@ type FakeTurnOutput = {
   readonly provider: string;
   readonly model: string;
   readonly text: string;
-  readonly workspaceBinding: { readonly plane: string; readonly externalWorkspaceId: string };
-  readonly sessionBinding: { readonly plane: string; readonly externalSessionId: string };
+  readonly workspaceBinding: {
+    readonly plane: string;
+    readonly externalWorkspaceId: string;
+  };
+  readonly sessionBinding: {
+    readonly plane: string;
+    readonly externalSessionId: string;
+  };
   readonly usage?: FakeRuntimeExecution['usage'];
   readonly memoryCandidates?: FakeRuntimeExecution['memoryCandidates'];
 };
@@ -142,14 +148,22 @@ export class FakeAgentRuntime {
   public async complete(input: {
     readonly systemPrompt: string;
     readonly prompt: string;
-  }): Promise<{ readonly provider: string; readonly model: string; readonly text: string }> {
+  }): Promise<{
+    readonly provider: string;
+    readonly model: string;
+    readonly text: string;
+  }> {
     const result = await this.execute({
       operation: 'create',
       runId: `one-shot-${this.executeCalls + 1}`,
       prompt: input.prompt,
       systemPrompt: input.systemPrompt,
     });
-    return { provider: result.provider, model: result.model, text: result.text };
+    return {
+      provider: result.provider,
+      model: result.model,
+      text: result.text,
+    };
   }
 
   public async initialize(): Promise<void> {
@@ -169,16 +183,23 @@ export class FakeAgentRuntime {
     }
   }
 
-  public async ensureAgentChatRuntimeSession(
-    input: {
-      readonly agentChatRuntimeId: string;
-      readonly runtimeEpoch: number;
-      readonly agentOwner: { readonly scope: { readonly tenantId: string; readonly workspaceId: string }; readonly principal: { readonly type: string; readonly id: string } };
-      readonly agentVersionId: string;
-      readonly resolvedSkills: readonly { readonly ref: string; readonly digest: string }[];
-      readonly toolRefs: readonly string[];
-    },
-  ): Promise<RuntimeSession> {
+  public async ensureAgentChatRuntimeSession(input: {
+    readonly agentChatRuntimeId: string;
+    readonly runtimeEpoch: number;
+    readonly agentOwner: {
+      readonly scope: {
+        readonly tenantId: string;
+        readonly workspaceId: string;
+      };
+      readonly principal: { readonly type: string; readonly id: string };
+    };
+    readonly agentVersionId: string;
+    readonly resolvedSkills: readonly {
+      readonly ref: string;
+      readonly digest: string;
+    }[];
+    readonly toolRefs: readonly string[];
+  }): Promise<RuntimeSession> {
     const now = new Date(0).toISOString();
     return {
       id: input.agentChatRuntimeId as RuntimeSessionId,
@@ -209,7 +230,10 @@ export class FakeAgentRuntime {
   ): Promise<FakeRuntimeExecution | ExecutionOutput> {
     if (!('operation' in input)) {
       const result = await this.executeTurn({
-        runId: input.source.kind === 'run' ? input.source.runId : input.runtimeSessionId,
+        runId:
+          input.source.kind === 'run'
+            ? input.source.runId
+            : input.runtimeSessionId,
         prompt: input.prompt,
       });
       return {

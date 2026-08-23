@@ -2,9 +2,15 @@ import { AcceptMemoryFromBoundDocument } from '../application/channels/accept-me
 import { SynthesizeMemoryDocument } from '../application/channels/synthesize-memory-document.js';
 import type { OneShotRuntimeCompletion } from '../application/ports/one-shot-runtime-completion.js';
 import type { MemoryReviewApi } from '../application/ports/memory-review-api.js';
-import type { CreateChatCapabilitiesOptions, ChatCapabilities } from './create-chat-capabilities.js';
+import type {
+  CreateChatCapabilitiesOptions,
+  ChatCapabilities,
+} from './create-chat-capabilities.js';
 import { createChatCapabilities } from './create-chat-capabilities.js';
-import { ExecuteRun, type ExecuteRunOptions } from '../application/runs/execute-run.js';
+import {
+  ExecuteRun,
+  type ExecuteRunOptions,
+} from '../application/runs/execute-run.js';
 import { CompleteRun } from '../application/runs/complete-run.js';
 import { ExecutionRunRegistry } from '../application/runtime/execution-run-registry.js';
 import { ClaimNextRun } from '../application/runs/claim-next-run.js';

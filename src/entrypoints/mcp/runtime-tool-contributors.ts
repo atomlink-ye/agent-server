@@ -96,21 +96,21 @@ function registerTools(
     readonly market?: SyntheticMarketAdapter;
     readonly logger?: Logger;
   },
-  authorize: (
-    toolRef: string,
-  ) => Promise<AuthorizedRuntimeToolContext | null>,
+  authorize: (toolRef: string) => Promise<AuthorizedRuntimeToolContext | null>,
   mode: 'memory' | 'synthetic',
 ): Map<string, RegisteredTool> {
   const register = (
     toolRef: string,
     name: string,
     config: any,
-    operation: (args: any, currentGrant: AuthorizedRuntimeToolContext) => unknown,
+    operation: (
+      args: any,
+      currentGrant: AuthorizedRuntimeToolContext,
+    ) => unknown,
   ) => {
     (server.registerTool as any)(name, config, async (args: any) => {
       const currentGrant = await authorize(toolRef);
-      if (!currentGrant)
-        return notFound();
+      if (!currentGrant) return notFound();
       return operation(args, currentGrant);
     });
   };

@@ -1,5 +1,8 @@
 import type { ExecutionPlaneHealth } from './execution-plane.js';
-import type { ExecutionOutput, ExecutionSession } from './runtime-execution-session.js';
+import type {
+  ExecutionOutput,
+  ExecutionSession,
+} from './runtime-execution-session.js';
 import type { ExecutionExtensionBinding } from './runtime-extension-binding.js';
 import type {
   RuntimeSessionId,

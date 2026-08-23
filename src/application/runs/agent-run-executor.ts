@@ -9,7 +9,10 @@ import type { Logger } from '../../shared/observability/logger.js';
 import { AGENT_SERVER_COLLABORATION_TOOL_REFS } from '../agents/built-in-skills.js';
 import { resolveRuntimeModelPolicy } from '../agents/runtime-model-policy.js';
 import type { RuntimeSessionStore } from '../ports/runtime-session-store.js';
-import type { RuntimeScope, RuntimeSessionOwner } from '../../domain/runtime/runtime-session.js';
+import type {
+  RuntimeScope,
+  RuntimeSessionOwner,
+} from '../../domain/runtime/runtime-session.js';
 import type { ResolveRuntimeSessionSpec } from '../ports/resolve-runtime-session-spec.js';
 import type { EnvironmentReadApi } from '../ports/environment-read-api.js';
 import type { ExecutionObservation } from '../ports/runtime-execution-session.js';
@@ -177,9 +180,9 @@ export class AgentRunExecutor {
     const collaborationRefs = new Set<string>(
       Object.values(AGENT_SERVER_COLLABORATION_TOOL_REFS),
     );
-    const domainToolRefs = (
-      resolved.toolRefs
-    ).filter((ref) => !collaborationRefs.has(ref));
+    const domainToolRefs = resolved.toolRefs.filter(
+      (ref) => !collaborationRefs.has(ref),
+    );
     const runtimeToolRefs =
       collaborativeTeam != null && member ? domainToolRefs : resolved.toolRefs;
 
@@ -282,7 +285,6 @@ export class AgentRunExecutor {
         : undefined;
     if (cellCwd) await mkdir(cellCwd, { recursive: true });
 
-
     const runtimeObservationSink = this.events
       ? {
           emit: async (observation: ExecutionObservation) => {
@@ -376,7 +378,6 @@ export class AgentRunExecutor {
     }
     return `## Pinned Work Definition Memory\n\n${sections.join('\n\n')}`;
   }
-
 }
 
 function manifestEnvironmentVersionId(

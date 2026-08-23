@@ -2,15 +2,15 @@
 
 Components are ownership and contract boundaries, not deployment promises. The baseline is a modular monolith with a separate Paseo process; future services may be extracted only when durability, security, or scaling evidence requires it.
 
-| Component                                                                  | Responsibility                                  | Current status              |
-| -------------------------------------------------------------------------- | ----------------------------------------------- | --------------------------- |
-| [Control Plane](components/control-plane.md)                               | Definitions, policy, admission, review          | Planned                     |
-| [Orchestration Kernel](components/orchestration-kernel.md)                 | Task/Run lifecycle, Team coordination, recovery | Run seam baseline           |
+| Component                                                                  | Responsibility                                   | Current status              |
+| -------------------------------------------------------------------------- | ------------------------------------------------ | --------------------------- |
+| [Control Plane](components/control-plane.md)                               | Definitions, policy, admission, review           | Planned                     |
+| [Orchestration Kernel](components/orchestration-kernel.md)                 | Task/Run lifecycle, Team coordination, recovery  | Run seam baseline           |
 | [Runtime execution](components/paseo-execution-plane.md)                   | Provider lifecycle and durable session readiness | Replacement in progress     |
-| [Credential and Tool Gateway](components/credential-and-tool-gateway.md)   | Secret-safe tool authorization and receipts     | Planned                     |
-| [Workspace and Artifact Store](components/workspace-and-artifact-store.md) | Sources, scoped files, artifacts, evidence      | Paseo workspace baseline    |
-| [Channel, API, and Console](components/channel-api-console.md)             | Ingress, delivery, inspection                   | Agent Teams v2 project view |
-| [Data and Operations](components/data-and-operations.md)                   | Durable storage, queue, audit, observability    | Logging baseline            |
+| [Credential and Tool Gateway](components/credential-and-tool-gateway.md)   | Secret-safe tool authorization and receipts      | Planned                     |
+| [Workspace and Artifact Store](components/workspace-and-artifact-store.md) | Sources, scoped files, artifacts, evidence       | Paseo workspace baseline    |
+| [Channel, API, and Console](components/channel-api-console.md)             | Ingress, delivery, inspection                    | Agent Teams v2 project view |
+| [Data and Operations](components/data-and-operations.md)                   | Durable storage, queue, audit, observability     | Logging baseline            |
 
 Dependencies point inward: entrypoints and adapters depend on application ports; application depends on domain; domain imports neither frameworks nor Paseo.
 

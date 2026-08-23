@@ -6,13 +6,13 @@ The execution-plane implementation is being removed. This page records its repla
 
 ## Replacement ownership
 
-| Concern | Owner |
-| --- | --- |
-| Provider session lifecycle | `RuntimeExecutionProvider` |
-| Durable session readiness | `EnsureRuntimeSession` |
-| Durable provider identity | `RuntimeSessionGeneration` |
-| Immutable runtime tool definitions | `RuntimeToolCatalog` |
-| Runtime capability assembly | Composition-owned construction in `src/composition/` |
+| Concern                            | Owner                                                |
+| ---------------------------------- | ---------------------------------------------------- |
+| Provider session lifecycle         | `RuntimeExecutionProvider`                           |
+| Durable session readiness          | `EnsureRuntimeSession`                               |
+| Durable provider identity          | `RuntimeSessionGeneration`                           |
+| Immutable runtime tool definitions | `RuntimeToolCatalog`                                 |
+| Runtime capability assembly        | Composition-owned construction in `src/composition/` |
 
 `RuntimeSession` owns durable Agent Server identity. `RuntimeSessionGeneration` owns the provider binding for one applied runtime specification. Provider session IDs and host paths remain outside the product model.
 

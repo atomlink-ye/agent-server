@@ -2,7 +2,10 @@ import type { RuntimeGrantReader } from '../ports/runtime-grant-reader.js';
 import type { RuntimeGenerationStore } from '../ports/runtime-generation-store.js';
 import type { RuntimeSessionStore } from '../ports/runtime-session-store.js';
 import type { RuntimeTurnStore } from '../ports/runtime-turn-store.js';
-import { evaluateRuntimeGrantPolicy, type RuntimeGrantDenialReason } from './grant-policy.js';
+import {
+  evaluateRuntimeGrantPolicy,
+  type RuntimeGrantDenialReason,
+} from './grant-policy.js';
 import type { RuntimeTurn } from '../../domain/runtime/runtime-turn.js';
 import type { RuntimeSessionGeneration } from '../../domain/runtime/runtime-session-generation.js';
 import type { RuntimeSession } from '../../domain/runtime/runtime-session.js';
@@ -16,8 +19,15 @@ export type AuthorizedRuntimeToolContext = Readonly<{
   readonly principalId: string;
   readonly scopeId: string;
   readonly teamMemberRunId?: string;
-  readonly activeTurn?: Readonly<{ readonly taskId: string; readonly runId: string; readonly contextEpoch: string }>;
-  readonly chatContext?: Readonly<{ readonly conversationId: string; readonly triggerMessageId: string }>;
+  readonly activeTurn?: Readonly<{
+    readonly taskId: string;
+    readonly runId: string;
+    readonly contextEpoch: string;
+  }>;
+  readonly chatContext?: Readonly<{
+    readonly conversationId: string;
+    readonly triggerMessageId: string;
+  }>;
   readonly allowedTools: readonly string[];
   readonly catalogTools: readonly string[];
   readonly runtimeSession: RuntimeSession;
@@ -28,8 +38,14 @@ export type AuthorizedRuntimeToolContext = Readonly<{
 }>;
 
 export type AuthorizeRuntimeToolResult =
-  | Readonly<{ readonly kind: 'authorized'; readonly context: AuthorizedRuntimeToolContext }>
-  | Readonly<{ readonly kind: 'denied'; readonly reason: RuntimeGrantDenialReason }>;
+  | Readonly<{
+      readonly kind: 'authorized';
+      readonly context: AuthorizedRuntimeToolContext;
+    }>
+  | Readonly<{
+      readonly kind: 'denied';
+      readonly reason: RuntimeGrantDenialReason;
+    }>;
 
 /** Reads and policy-checks one bearer without retaining authorization state. */
 export class AuthorizeRuntimeTool {
@@ -47,12 +63,15 @@ export class AuthorizeRuntimeTool {
     readonly requestedTool: string;
     readonly currentCatalogDigest: string;
   }): Promise<AuthorizeRuntimeToolResult> {
-    const grant = await this.grants.findByTokenHash(this.hashBearer(input.bearerToken));
+    const grant = await this.grants.findByTokenHash(
+      this.hashBearer(input.bearerToken),
+    );
     if (!grant) return { kind: 'denied', reason: 'grant_revoked' };
     const session = await this.sessions.findById(grant.runtimeSessionId);
     if (!session) return { kind: 'denied', reason: 'grant_session_mismatch' };
     const generation = await this.generations.findById(grant.generationId);
-    if (!generation) return { kind: 'denied', reason: 'grant_generation_mismatch' };
+    if (!generation)
+      return { kind: 'denied', reason: 'grant_generation_mismatch' };
     if (!grant.runtimeTurnId)
       return { kind: 'denied', reason: 'grant_turn_mismatch' };
     const turn = await this.turns.findById(grant.runtimeTurnId);
@@ -76,7 +95,9 @@ export class AuthorizeRuntimeTool {
         principalType: session.owner.principalType,
         principalId: session.owner.principalId,
         scopeId: session.scope.id,
-        ...(session.scope.kind === 'team_member' ? { teamMemberRunId: session.scope.id } : {}),
+        ...(session.scope.kind === 'team_member'
+          ? { teamMemberRunId: session.scope.id }
+          : {}),
         ...(turn.source.kind === 'team_member'
           ? {
               activeTurn: {

@@ -31,22 +31,27 @@ import { makeRuntimeSession } from '../../../tests/fixtures/runtime-session.js';
 
 function testRuntimeSessions() {
   return {
-    findByScope: vi.fn(async (_owner: unknown, scope: { readonly kind: string; readonly id: string }) => ({
-      id: `runtime:${scope.kind}:${scope.id}`,
-      owner: {
-        tenantId: 'tenant-1',
-        workspaceId: 'workspace-1',
-        principalType: 'service_account',
-        principalId: 'principal-1',
-      },
-      scope,
-      desiredSpecRevision: 1,
-      currentGenerationId: null,
-      status: 'ready',
-      createdAt: '2026-01-01T00:00:00.000Z',
-      updatedAt: '2026-01-01T00:00:00.000Z',
-      closedAt: null,
-    })),
+    findByScope: vi.fn(
+      async (
+        _owner: unknown,
+        scope: { readonly kind: string; readonly id: string },
+      ) => ({
+        id: `runtime:${scope.kind}:${scope.id}`,
+        owner: {
+          tenantId: 'tenant-1',
+          workspaceId: 'workspace-1',
+          principalType: 'service_account',
+          principalId: 'principal-1',
+        },
+        scope,
+        desiredSpecRevision: 1,
+        currentGenerationId: null,
+        status: 'ready',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        closedAt: null,
+      }),
+    ),
   } as never;
 }
 import { collaborationToolRefsForRole } from '../../domain/collaboration/canonical-collaboration-tools.js';
@@ -55,7 +60,6 @@ import {
   createRuntimeExecutionReceipt,
   RunCompletionPersistenceError,
 } from './runtime-execution-receipt.js';
-
 
 describe('ExecuteRun', () => {
   it('fails a terminal run when the runtime rejects execution', async () => {
@@ -440,9 +444,9 @@ describe('ExecuteRun', () => {
         source: { kind: 'run', runId: claim.run.id },
       }),
     );
-    expect(
-      vi.mocked(runtime.execute).mock.calls[0]?.[0],
-    ).toHaveProperty('desiredSystemPrompt');
+    expect(vi.mocked(runtime.execute).mock.calls[0]?.[0]).toHaveProperty(
+      'desiredSystemPrompt',
+    );
   });
   it('ignores a stale Lead callback but preserves current-Lead no-progress and revision fences', async () => {
     const now = () => new Date('2026-07-23T00:00:00.000Z');
@@ -899,8 +903,7 @@ describe('ExecuteRun', () => {
         source: { kind: 'run', runId: claim.run.id },
         prompt: 'private prompt',
         desiredSystemPrompt: expect.objectContaining({
-          text:
-            'Runtime contract: execute the supplied task input using the published agent instructions. Do not infer or access other session history.\n\nPublished AgentVersion instructions:\nmanaged instructions',
+          text: 'Runtime contract: execute the supplied task input using the published agent instructions. Do not infer or access other session history.\n\nPublished AgentVersion instructions:\nmanaged instructions',
           digest: expect.any(String),
         }),
         recoveryPrompt: `private prompt\n\n${RUNTIME_RECOVERY_INSTRUCTION}`,
@@ -1325,8 +1328,8 @@ describe('ExecuteRun', () => {
       { resolve: vi.fn(async () => null) },
     );
     const executeBatch = vi.fn(async () => {
-        throw new Error('control plane down');
-      });
+      throw new Error('control plane down');
+    });
     const createMemoryProposal = { executeBatch } as never;
     const executeRun = createDirectExecuteRun({
       completeRun,

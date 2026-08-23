@@ -2,7 +2,10 @@ import type { OneShotRuntimeCompletion } from '../../../application/ports/one-sh
 /** Provider-only completion for bounded channel synthesis; it owns no Agent Server state. */
 export class PaseoOneShotRuntimeCompletion implements OneShotRuntimeCompletion {
   public constructor(
-    private readonly provider: Pick<import('../../../application/ports/runtime-execution-provider.js').RuntimeExecutionProvider, 'completeOneShot'>,
+    private readonly provider: Pick<
+      import('../../../application/ports/runtime-execution-provider.js').RuntimeExecutionProvider,
+      'completeOneShot'
+    >,
   ) {}
 
   public async complete(input: {

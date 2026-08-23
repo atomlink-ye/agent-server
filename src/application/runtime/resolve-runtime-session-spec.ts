@@ -65,7 +65,10 @@ export class ResolveRuntimeSessionSpecService implements ResolveRuntimeSessionSp
       input.resolvedSkills.map((skill, index) => copySkill(skill, index)),
     );
     const extensionSetDigest = requireText(
-      this.extensionSet.digest({ agentVersionId: input.agentVersionId, toolRefs }),
+      this.extensionSet.digest({
+        agentVersionId: input.agentVersionId,
+        toolRefs,
+      }),
       'extensionSetDigest',
     );
 
@@ -83,7 +86,10 @@ export class ResolveRuntimeSessionSpecService implements ResolveRuntimeSessionSp
       systemPromptDigest: configuration.desiredSystemPrompt.digest,
       skillSetDigest: digest(
         'skill-set',
-        resolvedSkills.map((skill) => `${skill.ref}:${skill.digest}`).toSorted().join(','),
+        resolvedSkills
+          .map((skill) => `${skill.ref}:${skill.digest}`)
+          .toSorted()
+          .join(','),
       ),
       toolCatalogDigest: requireText(this.catalog.digest, 'toolCatalogDigest'),
       extensionSetDigest,

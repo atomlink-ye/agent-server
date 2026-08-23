@@ -48,10 +48,7 @@ function make(
     acceptEntry: vi.fn().mockResolvedValue({ projectionStatus: 'ready' }),
   };
   return {
-    service: new AcceptMemoryFromBoundDocument(
-      review,
-      managedMemory,
-    ),
+    service: new AcceptMemoryFromBoundDocument(review, managedMemory),
     runtime,
     events,
     review,

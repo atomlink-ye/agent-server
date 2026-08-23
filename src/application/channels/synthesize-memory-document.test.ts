@@ -3,9 +3,11 @@ import { SynthesizeMemoryDocument } from './synthesize-memory-document.js';
 
 describe('SynthesizeMemoryDocument', () => {
   it('calls the runtime once with server-owned instructions and no candidates', async () => {
-    const complete = vi
-      .fn()
-      .mockResolvedValue({ provider: 'fake', model: 'fake', text: 'Synthesized memory' });
+    const complete = vi.fn().mockResolvedValue({
+      provider: 'fake',
+      model: 'fake',
+      text: 'Synthesized memory',
+    });
     const result = await new SynthesizeMemoryDocument({ complete }).execute({
       ingressId: 'ingress-1',
       category: 'policy',
@@ -31,7 +33,9 @@ describe('SynthesizeMemoryDocument', () => {
     async (text) => {
       await expect(
         new SynthesizeMemoryDocument({
-          complete: vi.fn().mockResolvedValue({ provider: 'fake', model: 'fake', text }),
+          complete: vi
+            .fn()
+            .mockResolvedValue({ provider: 'fake', model: 'fake', text }),
         }).execute({
           ingressId: 'i',
           category: 'policy',

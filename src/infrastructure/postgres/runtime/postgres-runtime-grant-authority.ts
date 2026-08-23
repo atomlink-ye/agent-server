@@ -1,13 +1,19 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { IssueRuntimeToolGrant } from '../../../application/ports/issue-runtime-tool-grant.js';
-import type { RotateRuntimeGrant, RotateRuntimeGrantResult } from '../../../application/ports/rotate-runtime-grant.js';
+import type {
+  RotateRuntimeGrant,
+  RotateRuntimeGrantResult,
+} from '../../../application/ports/rotate-runtime-grant.js';
 import type { RuntimeGrantId } from '../../../domain/runtime/runtime-session.js';
 
 interface Queryable {
   query<Row extends Record<string, unknown> = Record<string, unknown>>(
     sql: string,
     values?: readonly unknown[],
-  ): Promise<{ readonly rows?: readonly Row[]; readonly rowCount?: number | null }>;
+  ): Promise<{
+    readonly rows?: readonly Row[];
+    readonly rowCount?: number | null;
+  }>;
 }
 
 interface Client extends Queryable {
@@ -21,7 +27,9 @@ interface Connectable extends Queryable {
 type Database = Queryable | Connectable;
 
 /** Writes only the 0056-shaped grant authority; bearer plaintext is returned once. */
-export class PostgresRuntimeGrantAuthority implements IssueRuntimeToolGrant, RotateRuntimeGrant {
+export class PostgresRuntimeGrantAuthority
+  implements IssueRuntimeToolGrant, RotateRuntimeGrant
+{
   public constructor(
     private readonly database: Database,
     private readonly now: () => Date = () => new Date(),
@@ -75,7 +83,10 @@ export class PostgresRuntimeGrantAuthority implements IssueRuntimeToolGrant, Rot
           FOR UPDATE`,
         [input.runtimeTurnId, input.runtimeSessionId, input.generationId],
       );
-      if (!turn.rows?.[0] || !['preparing', 'running'].includes(turn.rows[0].status)) {
+      if (
+        !turn.rows?.[0] ||
+        !['preparing', 'running'].includes(turn.rows[0].status)
+      ) {
         await client.query('ROLLBACK');
         return { kind: 'denied', reason: 'runtime_turn_not_active' };
       }
@@ -90,7 +101,9 @@ export class PostgresRuntimeGrantAuthority implements IssueRuntimeToolGrant, Rot
         [input.runtimeSessionId, input.generationId, timestamp],
       );
       const current = grants.rows?.find(
-        (grant) => grant.runtime_turn_id === null || grant.runtime_turn_id === input.runtimeTurnId,
+        (grant) =>
+          grant.runtime_turn_id === null ||
+          grant.runtime_turn_id === input.runtimeTurnId,
       );
       if (!current) {
         await client.query('ROLLBACK');
@@ -120,8 +133,13 @@ export class PostgresRuntimeGrantAuthority implements IssueRuntimeToolGrant, Rot
   }
 
   private async transactionClient(): Promise<Client> {
-    if (!('connect' in this.database) || typeof this.database.connect !== 'function')
-      throw new Error('Runtime grant rotation requires a Postgres transaction client.');
+    if (
+      !('connect' in this.database) ||
+      typeof this.database.connect !== 'function'
+    )
+      throw new Error(
+        'Runtime grant rotation requires a Postgres transaction client.',
+      );
     return this.database.connect();
   }
 }

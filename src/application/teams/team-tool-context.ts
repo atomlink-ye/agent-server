@@ -59,7 +59,9 @@ export class TeamToolContextResolver {
     private readonly runs: Pick<RunRepository, 'findByIdForOwner'>,
   ) {}
 
-  public async resolve(grant: AuthorizedRuntimeToolContext): Promise<TeamToolContext> {
+  public async resolve(
+    grant: AuthorizedRuntimeToolContext,
+  ): Promise<TeamToolContext> {
     if (!grant.teamMemberRunId) throw new TeamContextError('not_allowed');
     const activeTurn = grant.activeTurn;
     if (!activeTurn) throw new TeamContextError('stale_state');

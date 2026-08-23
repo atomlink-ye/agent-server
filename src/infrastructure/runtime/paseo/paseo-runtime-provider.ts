@@ -203,7 +203,7 @@ export class PaseoRuntimeProvider implements RuntimeExecutionProvider {
     try {
       await this.#initialize();
       const timeline = this.#gateway.fetchTimeline(
-        binding.generation.providerSessionId,
+        binding.generation.providerSessionId!,
       );
       if (!timeline)
         return this.#inspectionUnavailable(
@@ -226,7 +226,7 @@ export class PaseoRuntimeProvider implements RuntimeExecutionProvider {
     }
 
     const observed: ProviderObservedState = {
-      providerSessionId: binding.generation.providerSessionId,
+      providerSessionId: binding.generation.providerSessionId!,
       bootstrapDigestComponents: null,
     };
     return { status: 'available', observed };
@@ -251,7 +251,7 @@ export class PaseoRuntimeProvider implements RuntimeExecutionProvider {
     return this.#session({
       provider,
       providerWorkspaceId: binding.generation.providerWorkspaceId!,
-      providerSessionId: binding.generation.providerSessionId,
+      providerSessionId: binding.generation.providerSessionId!,
       spec: binding.applied,
       model,
     });

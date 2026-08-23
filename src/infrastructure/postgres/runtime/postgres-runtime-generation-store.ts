@@ -44,7 +44,7 @@ interface GenerationRow extends Record<string, unknown> {
   readonly endpoint_epoch: string;
   readonly status: RuntimeSessionGenerationStatus;
   readonly created_at: string | Date;
-  readonly ready_at: string | Date | null;
+  readonly active_at: string | Date | null;
   readonly superseded_at: string | Date | null;
   readonly closed_at: string | Date | null;
 }
@@ -60,12 +60,12 @@ const GENERATION_SELECT_COLUMNS = `rsg.id AS id,
   rsg.endpoint_epoch AS endpoint_epoch,
   rsg.status AS status,
   rsg.created_at AS created_at,
-  rsg.ready_at AS ready_at,
+  rsg.active_at AS active_at,
   rsg.superseded_at AS superseded_at,
   rsg.closed_at AS closed_at`;
 const GENERATION_INSERT_COLUMNS = `id,runtime_session_id,generation,provider,
   provider_workspace_id,provider_session_id,applied_spec_revision,
-  applied_bootstrap_digest,endpoint_epoch,status,created_at,ready_at,
+  applied_bootstrap_digest,endpoint_epoch,status,created_at,active_at,
   superseded_at,closed_at`;
 
 export class PostgresRuntimeGenerationStore
@@ -115,7 +115,7 @@ export class PostgresRuntimeGenerationStore
         generation.endpointEpoch,
         generation.status,
         generation.createdAt,
-        generation.readyAt,
+        generation.activeAt,
         generation.supersededAt,
         generation.closedAt,
       ],
@@ -177,7 +177,7 @@ export class PostgresRuntimeGenerationStore
       readonly appliedBootstrapDigest: string;
       readonly endpointEpoch: string;
       readonly createdAt: string;
-      readonly readyAt: string;
+      readonly activeAt: string;
     };
   }): Promise<void> {
     const database = await this.transactionClient();
@@ -218,7 +218,7 @@ export class PostgresRuntimeGenerationStore
                 applied_bootstrap_digest=$6,
                 endpoint_epoch=$7,
                 status='active',
-                ready_at=$8
+                active_at=$8
           WHERE id=$1
             AND runtime_session_id=$2
             AND status='provisioning'`,
@@ -230,7 +230,7 @@ export class PostgresRuntimeGenerationStore
           input.generation.appliedSpecRevision,
           input.generation.appliedBootstrapDigest,
           input.generation.endpointEpoch,
-          input.generation.readyAt,
+          input.generation.activeAt,
         ],
       );
       if (activated.rowCount !== 1)
@@ -281,7 +281,7 @@ function mapGeneration(row: GenerationRow): RuntimeSessionGeneration {
     endpointEpoch: row.endpoint_epoch,
     status: row.status,
     createdAt: iso(row.created_at),
-    readyAt: row.ready_at === null ? null : iso(row.ready_at),
+    activeAt: row.active_at === null ? null : iso(row.active_at),
     supersededAt: row.superseded_at === null ? null : iso(row.superseded_at),
     closedAt: row.closed_at === null ? null : iso(row.closed_at),
   });

@@ -130,7 +130,7 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
       endpointEpoch: input.desired.extensionSetDigest,
       status: 'provisioning' as const,
       createdAt: now,
-      readyAt: null,
+      activeAt: null,
       supersededAt: null,
       closedAt: null,
     });
@@ -170,7 +170,7 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
           appliedBootstrapDigest: input.desired.bootstrapDigest,
           endpointEpoch: input.desired.extensionSetDigest,
           createdAt: now,
-          readyAt: this.now().toISOString(),
+          activeAt: this.now().toISOString(),
         },
       });
     } catch (error) {
@@ -198,7 +198,7 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
       providerWorkspaceId: created!.providerWorkspaceId,
       providerSessionId: created!.providerSessionId,
       status: 'active' as const,
-      readyAt: this.now().toISOString(),
+      activeAt: this.now().toISOString(),
     });
     return {
       generation: active,

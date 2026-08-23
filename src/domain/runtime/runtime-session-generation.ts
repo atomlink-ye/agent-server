@@ -25,7 +25,7 @@ export interface RuntimeSessionGeneration {
   readonly status: RuntimeSessionGenerationStatus;
 
   readonly createdAt: string;
-  readonly readyAt: string | null;
+  readonly activeAt: string | null;
   readonly supersededAt: string | null;
   readonly closedAt: string | null;
 }

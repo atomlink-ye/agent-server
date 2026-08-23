@@ -12,7 +12,10 @@ export interface IssueRuntimeToolGrant {
     readonly runtimeSessionId: RuntimeSessionId;
     readonly generationId: RuntimeGenerationId;
     readonly tenantId: string;
-    readonly principal: Pick<RuntimeSessionOwner, 'principalType' | 'principalId'>;
+    readonly principal: Pick<
+      RuntimeSessionOwner,
+      'principalType' | 'principalId'
+    >;
     readonly scope: RuntimeScope;
     readonly catalogDigest: string;
     readonly allowedTools: readonly string[];

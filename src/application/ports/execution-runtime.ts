@@ -57,10 +57,7 @@ export interface ExecutionTurnOutcome {
   readonly workspaceBinding: ExecutionWorkspaceBinding;
   readonly sessionBinding: ExecutionSessionBinding;
   readonly sessionResolution?:
-    | 'created'
-    | 'reused'
-    | 'reconfigured'
-    | 'replaced';
+    'created' | 'reused' | 'reconfigured' | 'replaced';
   readonly usedRecoveryPrompt?: boolean;
   readonly usage?: RunUsage;
   readonly memoryCandidates?: readonly RuntimeMemoryCandidate[];
@@ -73,7 +70,10 @@ export interface ExecutionRuntimeService {
     readonly runtimeEpoch: number;
     readonly agentOwner: ResourceOwner;
     readonly agentVersionId: string;
-    readonly resolvedSkills: readonly { readonly ref: string; readonly digest: string }[];
+    readonly resolvedSkills: readonly {
+      readonly ref: string;
+      readonly digest: string;
+    }[];
     readonly toolRefs: readonly string[];
   }): Promise<RuntimeSession>;
   executeTurn(

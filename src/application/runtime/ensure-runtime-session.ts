@@ -225,6 +225,7 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
     if (this.provider.capabilities().canCloseSession) {
       try {
         await this.provider.closeSession(binding);
+        await this.generationManager.close(previous.id);
         return;
       } catch {
         // The switch is already durable; report the provider orphan below.

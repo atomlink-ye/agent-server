@@ -120,12 +120,32 @@ export class PostgresRuntimeTurnStore implements RuntimeTurnStore {
     const database = await this.transactionClient();
     try {
       await database.query('BEGIN');
-      const turnResult = await database.query<RuntimeTurnRow>(
-        `SELECT ${TURN_COLUMNS} FROM runtime_turns WHERE id=$1 FOR UPDATE`,
-        [input.id],
+      const turnIdentityResult = await database.query<{
+        readonly runtime_session_id: string;
+      }>(`SELECT runtime_session_id FROM runtime_turns WHERE id=$1`, [
+        input.id,
+      ]);
+      const turnIdentity = turnIdentityResult.rows?.[0];
+      if (!turnIdentity) {
+        await database.query('ROLLBACK');
+        return false;
+      }
+
+      const session = await database.query<{
+        readonly id: string;
+        readonly current_generation_id: string | null;
+      }>(
+        `SELECT id,current_generation_id
+           FROM runtime_sessions
+          WHERE id=$1
+          FOR UPDATE`,
+        [turnIdentity.runtime_session_id],
       );
-      const turn = turnResult.rows?.[0];
-      if (!turn || turn.status !== 'pending') {
+      const lockedSession = session.rows?.[0];
+      if (
+        !lockedSession ||
+        lockedSession.current_generation_id !== input.generationId
+      ) {
         await database.query('ROLLBACK');
         return false;
       }
@@ -142,18 +162,19 @@ export class PostgresRuntimeTurnStore implements RuntimeTurnStore {
       const generation = generationResult.rows?.[0];
       if (
         !generation ||
-        generation.runtime_session_id !== turn.runtime_session_id ||
+        generation.runtime_session_id !== turnIdentity.runtime_session_id ||
         generation.status !== 'active'
       ) {
         await database.query('ROLLBACK');
         return false;
       }
 
-      const session = await database.query(
-        `SELECT id FROM runtime_sessions WHERE id=$1 FOR UPDATE`,
-        [turn.runtime_session_id],
+      const turnResult = await database.query<RuntimeTurnRow>(
+        `SELECT ${TURN_COLUMNS} FROM runtime_turns WHERE id=$1 FOR UPDATE`,
+        [input.id],
       );
-      if (!session.rows?.[0]) {
+      const turn = turnResult.rows?.[0];
+      if (!turn || turn.status !== 'pending') {
         await database.query('ROLLBACK');
         return false;
       }
@@ -166,7 +187,7 @@ export class PostgresRuntimeTurnStore implements RuntimeTurnStore {
             AND id <> $2
           LIMIT 1
           FOR UPDATE`,
-        [turn.runtime_session_id, input.id],
+        [turnIdentity.runtime_session_id, input.id],
       );
       if ((busy.rows?.length ?? 0) > 0) {
         await database.query('ROLLBACK');

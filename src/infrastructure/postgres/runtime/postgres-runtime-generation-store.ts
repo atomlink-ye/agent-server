@@ -165,6 +165,21 @@ export class PostgresRuntimeGenerationStore
       throw new Error('Provisioning runtime generation could not fail.');
   }
 
+  public async close(input: {
+    readonly id: RuntimeGenerationId;
+    readonly closedAt: string;
+    readonly expectedStatus: 'active' | 'superseded';
+  }): Promise<void> {
+    const result = await this.database.query(
+      `UPDATE runtime_session_generations
+          SET status='closed', closed_at=COALESCE(closed_at,$2)
+        WHERE id=$1 AND status=$3`,
+      [input.id, input.closedAt, input.expectedStatus],
+    );
+    if (result.rowCount === 0)
+      throw new Error('Runtime generation could not close.');
+  }
+
   public async replaceCurrentGeneration(input: {
     readonly sessionId: RuntimeSessionId;
     readonly previousGenerationId: RuntimeGenerationId | null;
@@ -179,7 +194,7 @@ export class PostgresRuntimeGenerationStore
       readonly createdAt: string;
       readonly activeAt: string;
     };
-  }): Promise<void> {
+  }): Promise<RuntimeSessionGeneration> {
     const database = await this.transactionClient();
     try {
       await database.query('BEGIN');
@@ -202,7 +217,7 @@ export class PostgresRuntimeGenerationStore
         const superseded = await database.query(
           `UPDATE runtime_session_generations
               SET status='superseded', superseded_at=COALESCE(superseded_at,NOW())
-            WHERE id=$1 AND runtime_session_id=$2 AND status <> 'closed'`,
+            WHERE id=$1 AND runtime_session_id=$2 AND status='active'`,
           [input.previousGenerationId, input.sessionId],
         );
         if (superseded.rowCount === 0)
@@ -245,7 +260,18 @@ export class PostgresRuntimeGenerationStore
         throw new Error(
           'Runtime session generation binding could not be replaced.',
         );
+      const active = await database.query<GenerationRow>(
+        `SELECT ${GENERATION_SELECT_COLUMNS}
+           FROM runtime_session_generations rsg
+          WHERE rsg.id=$1 AND rsg.runtime_session_id=$2
+            AND rsg.status='active'`,
+        [input.generation.id, input.sessionId],
+      );
+      const committed = active.rows?.[0];
+      if (!committed)
+        throw new Error('Activated runtime generation could not be loaded.');
       await database.query('COMMIT');
+      return mapGeneration(committed);
     } catch (error) {
       await database.query('ROLLBACK').catch(() => undefined);
       throw error;

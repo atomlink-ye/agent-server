@@ -24,6 +24,11 @@ export interface RuntimeGenerationStore {
     readonly id: RuntimeGenerationId;
     readonly failedAt: string;
   }): Promise<void>;
+  close(input: {
+    readonly id: RuntimeGenerationId;
+    readonly closedAt: string;
+    readonly expectedStatus: 'active' | 'superseded';
+  }): Promise<void>;
 }
 
 /** Explicit transaction boundary for atomically replacing the current binding. */
@@ -43,5 +48,5 @@ export interface RuntimeGenerationTransaction {
       readonly createdAt: string;
       readonly activeAt: string;
     };
-  }): Promise<void>;
+  }): Promise<RuntimeSessionGeneration>;
 }

@@ -443,8 +443,7 @@ describe('Chat delivery reconciler on real PostgreSQL', () => {
       );
       expect(spec.rows).toEqual([{ agent_version_id: agentVersionId }]);
 
-      const provisioningGenerationId =
-        '75000000-0000-4000-8000-000000000001';
+      const provisioningGenerationId = '75000000-0000-4000-8000-000000000001';
       await client.query(
         `INSERT INTO runtime_session_generations
           (id,runtime_session_id,generation,provider,provider_workspace_id,
@@ -463,11 +462,7 @@ describe('Chat delivery reconciler on real PostgreSQL', () => {
              provider_session_id,applied_spec_revision,applied_bootstrap_digest,
              endpoint_epoch,status,created_at)
            VALUES($1,$2,2,'paseo',NULL,NULL,1,'bootstrap','endpoint-2','active',$3)`,
-          [
-            '75000000-0000-4000-8000-000000000002',
-            runtimeSessionId,
-            createdAt,
-          ],
+          ['75000000-0000-4000-8000-000000000002', runtimeSessionId, createdAt],
         ),
       ).rejects.toThrow(/check constraint|violates check/i);
       await client.query('ROLLBACK TO SAVEPOINT active_provider_check');

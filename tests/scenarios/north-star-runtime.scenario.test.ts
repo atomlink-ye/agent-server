@@ -9,6 +9,15 @@ import { AGENT_SERVER_SYNTHETIC_STOCK_SNAPSHOT_TOOL_REF } from '../../src/applic
 import type { ExecutionMcpServerConfig } from '../../src/application/ports/runtime-extension-binding.js';
 import { createApplication } from '../../src/composition/create-application.js';
 import { SYNTHETIC_MARKET_FIXTURE_REF } from '../../src/adapters/demo-market/synthetic-market-adapter.js';
+import type { PaseoSdkClient as PaseoSdkClientImplementation } from '../../src/adapters/paseo/paseo-sdk-client.js';
+import type {
+  PaseoClientPort,
+  PaseoCreatedAgent,
+  PaseoFinishedAgent,
+} from '../../src/adapters/paseo/paseo-client-port.js';
+import type { PaseoModelDescriptor } from '../../src/adapters/paseo/model-selector.js';
+import type { ManagedEnvironmentProvider } from '../../src/domain/environments/managed-environment-package.js';
+import { buildTurnPrompt } from '../../src/application/context/runtime-prompts.js';
 import { createLogger } from '../../src/shared/observability/logger.js';
 import { loadConfig } from '../../src/shared/config.js';
 import { seedCanonicalPublishedAgent } from '../fixtures/canonical-agent.js';
@@ -23,16 +32,12 @@ type CapturedAgentInput = Readonly<{
   mcpServers?: readonly ExecutionMcpServerConfig[];
 }>;
 
-type FinishedAgent = Readonly<{
-  status: 'idle';
-  error: null;
-  lastMessage: string;
-  usage: Readonly<{
-    inputTokens: number;
-    outputTokens: number;
-    totalCostUsd: number;
-  }>;
-}>;
+type PaseoCreateAgentInput = Parameters<PaseoClientPort['createAgent']>[0];
+type PaseoSdkClientOptions = ConstructorParameters<
+  typeof PaseoSdkClientImplementation
+>[0];
+type SentAgentMessage = Readonly<{ agentId: string; text: string }>;
+type FinishedAgent = PaseoFinishedAgent;
 
 const paseo = vi.hoisted(() => {
   let resolveWaitStarted!: () => void;
@@ -45,6 +50,8 @@ const paseo = vi.hoisted(() => {
   });
   return {
     agentInputs: [] as CapturedAgentInput[],
+    createdAgents: [] as PaseoCreatedAgent[],
+    sendAgentMessageCalls: [] as SentAgentMessage[],
     waitStarted,
     finished,
     markWaitStarted: resolveWaitStarted,
@@ -58,25 +65,42 @@ const paseo = vi.hoisted(() => {
   };
 });
 
-vi.mock('../../src/adapters/paseo/paseo-sdk-client.js', () => {
-  class PaseoSdkClient {
+vi.mock(import('../../src/adapters/paseo/paseo-sdk-client.js'), async () => {
+  const actual = await vi.importActual<
+    typeof import('../../src/adapters/paseo/paseo-sdk-client.js')
+  >('../../src/adapters/paseo/paseo-sdk-client.js');
+
+  class PaseoSdkClient
+    extends actual.PaseoSdkClient
+    implements PaseoClientPort
+  {
+    public constructor(_options: PaseoSdkClientOptions) {
+      super(_options);
+    }
+
     public async connect(): Promise<void> {}
 
     public connectionStatus(): string {
       return 'connected';
     }
 
-    public async openWorkspace(): Promise<string> {
+    public async openWorkspace(_cwd: string): Promise<string> {
       return 'north-star-provider-workspace';
     }
 
-    public async createIndependentWorkspace(): Promise<string> {
+    public async createIndependentWorkspace(_cwd: string): Promise<string> {
       return 'north-star-provider-workspace';
     }
 
-    public async setWorkspaceTitle(): Promise<void> {}
+    public async setWorkspaceTitle(
+      _workspaceId: string,
+      _title: string,
+    ): Promise<void> {}
 
-    public async listModels() {
+    public async listModels(
+      _provider: ManagedEnvironmentProvider,
+      _cwd: string,
+    ): Promise<readonly PaseoModelDescriptor[]> {
       return [
         {
           id: 'opencode/deepseek-v4-flash-free',
@@ -85,18 +109,34 @@ vi.mock('../../src/adapters/paseo/paseo-sdk-client.js', () => {
       ];
     }
 
-    public async createAgent(input: CapturedAgentInput) {
-      paseo.agentInputs.push(input);
-      return {
+    public async createAgent(
+      input: PaseoCreateAgentInput,
+    ): Promise<PaseoCreatedAgent> {
+      paseo.agentInputs.push({
+        systemPrompt: input.systemPrompt,
+        initialPrompt: input.initialPrompt,
+        ...(input.mcpServers ? { mcpServers: input.mcpServers } : {}),
+      });
+      const createdAgent: PaseoCreatedAgent = {
         id: 'north-star-provider-session',
         provider: 'opencode',
         model: 'opencode/deepseek-v4-flash-free',
       };
+      paseo.createdAgents.push(createdAgent);
+      return createdAgent;
     }
 
-    public async sendAgentMessage(): Promise<void> {}
+    public async sendAgentMessage(
+      agentId: string,
+      text: string,
+    ): Promise<void> {
+      paseo.sendAgentMessageCalls.push({ agentId, text });
+    }
 
-    public async waitForFinish(): Promise<FinishedAgent> {
+    public async waitForFinish(
+      _agentId: string,
+      _timeoutMs: number,
+    ): Promise<FinishedAgent> {
       paseo.markWaitStarted();
       return paseo.finished;
     }
@@ -104,7 +144,7 @@ vi.mock('../../src/adapters/paseo/paseo-sdk-client.js', () => {
     public async close(): Promise<void> {}
   }
 
-  return { PaseoSdkClient };
+  return { PaseoSdkClient } satisfies typeof actual;
 });
 
 const serviceAccountId = 'north-star-service-account';
@@ -115,6 +155,13 @@ const authorizationHeaders = {
   authorization: `Bearer ${serviceAccountToken}`,
   'content-type': 'application/json',
 } as const;
+const formalMessageInput = {
+  text: 'Execute the durable runtime turn.',
+} as const;
+const expectedDeliveredTurnPrompt = buildTurnPrompt({
+  taskInput: formalMessageInput.text,
+  memory: null,
+});
 
 interface ScenarioState {
   workspaceId: string;
@@ -242,7 +289,7 @@ describe('North Star production runtime authority', () => {
           ...authorizationHeaders,
           'idempotency-key': `north-star-runtime-${randomUUID()}`,
         },
-        body: JSON.stringify({ text: 'Execute the durable runtime turn.' }),
+        body: JSON.stringify(formalMessageInput),
       },
     );
     assertStatus(messageResponse, 202, 'submit Product Session message');
@@ -402,6 +449,8 @@ describe('North Star production runtime authority', () => {
 
   it('activates one provider generation owned by that RuntimeSession', () => {
     const current = scenario();
+    const createdAgent = paseo.createdAgents[0];
+    if (!createdAgent) throw new Error('provider create result missing');
     expect(current.generation).toMatchObject({
       runtime_session_id: current.runtimeSession.id,
       generation: 1,
@@ -410,6 +459,7 @@ describe('North Star production runtime authority', () => {
       provider_workspace_id: 'north-star-provider-workspace',
       provider_session_id: 'north-star-provider-session',
     });
+    expect(current.generation.provider_session_id).toBe(createdAgent.id);
     expect(current.runtimeSession.current_generation_id).toBe(
       current.generation.id,
     );
@@ -432,6 +482,13 @@ describe('North Star production runtime authority', () => {
 
   it('completes a RuntimeTurn with session, generation, and Run identity', () => {
     const current = scenario();
+    const createdAgent = paseo.createdAgents[0];
+    if (!createdAgent) throw new Error('provider create result missing');
+    const sentMessage = paseo.sendAgentMessageCalls[0];
+    if (!sentMessage) throw new Error('provider message call missing');
+    expect(paseo.sendAgentMessageCalls).toEqual([
+      { agentId: createdAgent.id, text: expectedDeliveredTurnPrompt },
+    ]);
     expect(current.turn).toMatchObject({
       runtime_session_id: current.runtimeSession.id,
       generation_id: current.generation.id,
@@ -439,7 +496,9 @@ describe('North Star production runtime authority', () => {
       source_id: current.runId,
       status: 'succeeded',
     });
-    expect(typeof current.turn.prompt_digest).toBe('string');
+    expect(current.turn.prompt_digest).toBe(
+      createHash('sha256').update(sentMessage.text, 'utf8').digest('hex'),
+    );
   });
 
   it('returns the provider result through the formal Run completion path', () => {

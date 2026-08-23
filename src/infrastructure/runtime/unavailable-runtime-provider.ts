@@ -68,6 +68,7 @@ export class UnavailableRuntimeProvider implements RuntimeExecutionProvider {
 
   public async open(
     _binding: ProviderSessionBinding,
+    _command: ProviderRuntimeSpec,
   ): Promise<ExecutionSession> {
     throw new ExecutionPlaneUnavailableError();
   }

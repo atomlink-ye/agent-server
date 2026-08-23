@@ -28,7 +28,11 @@ export interface ProviderRuntimeSpec {
   readonly endpointEpoch?: string;
 }
 
-export type ProviderAppliedRuntimeSpec = ProviderRuntimeSpec & {
+export type ProviderAppliedRuntimeSpec = Omit<
+  ProviderRuntimeSpec,
+  'systemPrompt'
+> & {
+  readonly systemPromptDigest: string;
   readonly revision: RuntimeSpecRevision;
 };
 
@@ -109,7 +113,10 @@ export interface RuntimeExecutionProvider {
     desired: ProviderRuntimeSpec,
   ): Promise<ProviderSessionHandle>;
 
-  open(binding: ProviderSessionBinding): Promise<ExecutionSession>;
+  open(
+    binding: ProviderSessionBinding,
+    command: ProviderRuntimeSpec,
+  ): Promise<ExecutionSession>;
 
   /** Closes one provider session when the provider supports that operation. */
   closeSession(binding: ProviderSessionBinding): Promise<void>;

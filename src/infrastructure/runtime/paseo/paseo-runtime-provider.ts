@@ -293,16 +293,17 @@ export class PaseoRuntimeProvider implements RuntimeExecutionProvider {
 
   public async open(
     binding: ProviderSessionBinding,
+    command: ProviderRuntimeSpec,
   ): Promise<ExecutionSession> {
     const structuralFailure = this.#validateBinding(binding);
     if (structuralFailure) throw this.#bindingError(structuralFailure);
     await this.#initialize();
-    const { provider, model } = this.#resolveLaunch(binding.applied);
+    const { provider, model } = this.#resolveLaunch(command);
     return this.#session({
       provider,
       providerWorkspaceId: binding.generation.providerWorkspaceId!,
       providerSessionId: binding.generation.providerSessionId!,
-      spec: binding.applied,
+      spec: command,
       model,
     });
   }

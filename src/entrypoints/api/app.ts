@@ -26,7 +26,7 @@ import type { InvokeTask } from '../../application/tasks/invoke-task.js';
 import { HttpError, type ErrorResponse } from '../../contracts/http.js';
 import type { AppConfig } from '../../shared/config.js';
 import type { Logger } from '../../shared/observability/logger.js';
-import type { ApiEnvironment } from '../../platform/http-types.js';
+import type { ApiEnvironment } from './http-types.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerRunRoutes } from './routes/runs.js';
 import { registerTaskRoutes } from './routes/tasks.js';

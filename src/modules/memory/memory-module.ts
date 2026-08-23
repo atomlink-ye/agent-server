@@ -40,7 +40,7 @@ import { registerWorkspaceMemoryRoutes } from '../../entrypoints/api/routes/work
 import { registerContextFileRoutes } from '../../entrypoints/api/routes/context-files.js';
 import { createMemoryRuntimeContributor } from '../../entrypoints/mcp/runtime-tool-contributors.js';
 import type { RuntimeToolContributor } from '../../platform/runtime-tool-registry.js';
-import type { ApiEnvironment } from '../../platform/http-types.js';
+import type { ApiEnvironment } from '../../entrypoints/api/http-types.js';
 import type { AppConfig } from '../../shared/config.js';
 import { ContextFsFileStore } from '../../infrastructure/files/context-fs-file-store.js';
 import { PostgresLearningProposalRepository } from '../../infrastructure/postgres/postgres-learning-proposal-repository.js';

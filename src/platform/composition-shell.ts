@@ -6,7 +6,7 @@ import type {
 } from './access-context.js';
 import type { ErrorResponse } from '../contracts/http.js';
 import type { Logger } from '../shared/observability/logger.js';
-import type { ApiEnvironment } from './http-types.js';
+import type { ApiEnvironment } from '../entrypoints/api/http-types.js';
 
 export type PlatformHttpInstaller = (
   app: Hono<ApiEnvironment>,

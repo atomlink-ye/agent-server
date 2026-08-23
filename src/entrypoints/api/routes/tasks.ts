@@ -24,7 +24,7 @@ import {
   getAuthenticatedAccessContext,
   requireServiceAccountAccess,
 } from '../authentication.js';
-import type { ApiEnvironment } from '../../../platform/http-types.js';
+import type { ApiEnvironment } from '../http-types.js';
 import type { CancelTask } from '../../../application/tasks/cancel-task.js';
 
 interface TaskRouteDependencies {

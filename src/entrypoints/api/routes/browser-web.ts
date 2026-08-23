@@ -24,7 +24,7 @@ import {
   WorkListResponseSchema,
   WorkRunListResponseSchema,
 } from '../../../contracts/product-accepted-subset/index.js';
-import type { ApiEnvironment } from '../../../platform/http-types.js';
+import type { ApiEnvironment } from '../http-types.js';
 import type { AppConfig } from '../../../shared/config.js';
 import { decodeProductResponse } from '../browser-product-decoder.js';
 

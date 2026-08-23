@@ -17,7 +17,7 @@ import type { WorkDefinitionSourceRepository } from '../../application/ports/wor
 import type { WorkDefinitionResolutionPort } from '../../application/ports/work-definition-resolution.js';
 import { ProductWorkDefinitionApi } from '../../application/work/product-work-definition-api.js';
 import { ResolveWorkDefinition } from '../../application/work/resolve-work-definition.js';
-import type { ApiEnvironment } from '../../platform/http-types.js';
+import type { ApiEnvironment } from '../../entrypoints/api/http-types.js';
 import type { AppConfig } from '../../shared/config.js';
 import { registerAgentRoutes } from '../../entrypoints/api/routes/agents.js';
 import { registerAgentProfileRoute } from '../../entrypoints/api/routes/agent-profile.js';

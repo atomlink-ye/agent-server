@@ -1,5 +1,3 @@
-'use client';
-
 import { useState } from 'react';
 import { diagnosticsFrom } from '@/features/work/components/definition-panel';
 import { workTabHref } from '@/features/work/components/work-presentation';

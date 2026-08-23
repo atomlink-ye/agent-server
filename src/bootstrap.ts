@@ -81,6 +81,7 @@ import { noExternalDependencies } from './application/health/readiness.js';
 import { createConfiguredRuntimeCapabilities } from './composition/create-runtime-capabilities.js';
 import { createInfrastructure } from './composition/create-infrastructure.js';
 import { createHttpApi } from './composition/create-http-api.js';
+import { createWorkers } from './composition/create-workers.js';
 import {
   closeRuntimeAndPool,
   createLifecycleSupervisor,
@@ -636,13 +637,16 @@ export async function createService(
     memoryModule,
     resourceModule,
   });
-  const lifecycle = createLifecycleSupervisor({
-    dispatcher,
+  const workers = createWorkers({
     ...(larkWorker ? { larkWorker } : {}),
     ...(larkOutboxWorker ? { larkOutboxWorker } : {}),
     ...(chatWorker ? { chatWorker } : {}),
     ...(workChatWorker ? { workChatWorker } : {}),
     ...(larkReceiver ? { larkReceiver } : {}),
+  });
+  const lifecycle = createLifecycleSupervisor({
+    dispatcher,
+    ...workers,
     executionRuntime,
     runtimeProvider: runtimeModule.runtimeProvider,
     runtimeMcpServer,

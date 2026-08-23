@@ -7,8 +7,8 @@ import type {
   WorkListResponse,
 } from '@atomlink-ye/agent-server/product-contract';
 import { WorkListPage } from '@/features/work/pages/WorkListPage';
-import parallelRecording from '@/lib/__fixtures__/product-recordings/parallel-success.json';
-import { projectWorkList } from '@/lib/product-recording-projections';
+import parallelRecording from '@/test-support/fixtures/product-recordings/parallel-success.json';
+import { projectWorkList } from '@/test-support/product-recording-test-helpers';
 
 (
   globalThis as typeof globalThis & {

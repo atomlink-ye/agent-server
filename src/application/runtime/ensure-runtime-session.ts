@@ -16,6 +16,8 @@ import type { RuntimeSpecStore } from '../ports/runtime-spec-store.js';
 import type { RuntimeSessionGeneration } from '../../domain/runtime/runtime-session-generation.js';
 import { computeRuntimeBootstrapDigest } from '../../domain/runtime/runtime-session-spec.js';
 import type { RuntimeSessionId } from '../../domain/runtime/runtime-session.js';
+import type { DesiredRuntimeSystemPrompt } from '../../domain/runtime/desired-runtime-system-prompt.js';
+import { assertDesiredRuntimeSystemPrompt } from '../../domain/runtime/desired-runtime-system-prompt.js';
 import { buildReconciliationPlan } from './reconciliation/build-reconciliation-plan.js';
 import type { Logger } from '../../shared/observability/logger.js';
 import { RuntimeGenerationManager } from './runtime-generation-manager.js';
@@ -56,7 +58,11 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
     this.now = options.now;
   }
 
-  public async execute(sessionId: RuntimeSessionId): Promise<ReadyRuntime> {
+  public async execute(
+    sessionId: RuntimeSessionId,
+    desiredSystemPrompt: DesiredRuntimeSystemPrompt,
+  ): Promise<ReadyRuntime> {
+    assertDesiredRuntimeSystemPrompt(desiredSystemPrompt);
     const session = await this.sessions.findById(sessionId);
     if (!session) throw new Error('runtime_session_not_found');
     if (session.status === 'closed') throw new Error('runtime_session_closed');
@@ -64,6 +70,8 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
     const desired = await this.specs.getDesired(session).catch(() => {
       throw new Error('runtime_spec_not_found');
     });
+    if (desired.systemPromptDigest !== desiredSystemPrompt.digest)
+      throw new Error('runtime_system_prompt_digest_mismatch');
     const current = await this.generations.findCurrent(sessionId);
     if (current && current.status !== 'active')
       throw new Error('runtime_provider_session_missing');
@@ -82,14 +90,21 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
     if (plan.kind === 'fail') throw new Error('runtime_provider_unavailable');
 
     const effectivePlan = current
-      ? await this.planAfterInspection({ current, applied, plan })
+      ? await this.planAfterInspection({
+          current,
+          applied,
+          plan,
+          desiredSystemPrompt,
+        })
       : plan;
 
     if (effectivePlan.kind === 'reuse') {
       if (!current) throw new Error('runtime_provider_session_missing');
       return {
         generation: current,
-        session: await this.provider.open(this.binding(current, applied)),
+        session: await this.provider.open(
+          this.binding(current, applied, desiredSystemPrompt),
+        ),
         resolution: 'reused',
       };
     }
@@ -106,6 +121,7 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
       desired,
       previous: current,
       previousApplied: applied,
+      desiredSystemPrompt,
     });
   }
 
@@ -116,6 +132,7 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
     readonly previousApplied: Awaited<
       ReturnType<RuntimeSpecStore['getDesired']>
     > | null;
+    readonly desiredSystemPrompt: DesiredRuntimeSystemPrompt;
   }): Promise<ReadyRuntime> {
     if (!input.session) throw new Error('runtime_session_not_found');
     const generation = await this.generationManager.beginReplacement({
@@ -146,7 +163,7 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
       grantId = grant.grantId;
       const endpoint = await this.mcpEndpoint.current();
       created = await this.provider.create(
-        this.providerSpec(input.desired, {
+        this.providerSpec(input.desired, input.desiredSystemPrompt, {
           url: endpoint.url,
           token: grant.token,
         }),
@@ -174,6 +191,7 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
         input.previous,
         input.previousApplied,
         active!,
+        input.desiredSystemPrompt,
       );
     return {
       generation: active!,
@@ -186,9 +204,10 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
     readonly current: RuntimeSessionGeneration;
     readonly applied: Awaited<ReturnType<RuntimeSpecStore['getDesired']>>;
     readonly plan: ReturnType<typeof buildReconciliationPlan>;
+    readonly desiredSystemPrompt: DesiredRuntimeSystemPrompt;
   }): Promise<ReturnType<typeof buildReconciliationPlan>> {
     const inspection = await this.provider.inspect(
-      this.binding(input.current, input.applied),
+      this.binding(input.current, input.applied, input.desiredSystemPrompt),
     );
     if (inspection.status !== 'available') {
       if (inspection.status === 'unavailable')
@@ -220,9 +239,10 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
     previous: RuntimeSessionGeneration,
     previousApplied: Awaited<ReturnType<RuntimeSpecStore['getDesired']>> | null,
     replacement: RuntimeSessionGeneration,
+    desiredSystemPrompt: DesiredRuntimeSystemPrompt,
   ): Promise<void> {
     if (!previousApplied) throw new Error('runtime_spec_not_found');
-    const binding = this.binding(previous, previousApplied);
+    const binding = this.binding(previous, previousApplied, desiredSystemPrompt);
     if (this.provider.capabilities().canCloseSession) {
       try {
         await this.provider.closeSession(binding);
@@ -243,6 +263,7 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
 
   private providerSpec(
     spec: Awaited<ReturnType<RuntimeSpecStore['getDesired']>>,
+    desiredSystemPrompt: DesiredRuntimeSystemPrompt,
     grant?: { readonly url: string; readonly token: string },
   ): ProviderRuntimeSpec {
     return {
@@ -250,7 +271,7 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
       provider: spec.provider,
       model: spec.model,
       cwd: spec.cwd,
-      systemPrompt: spec.systemPromptDigest,
+      systemPrompt: desiredSystemPrompt.text,
       workspaceId: spec.workspaceId,
       revision: spec.revision,
       desiredRevision: spec.revision,
@@ -275,6 +296,7 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
   private binding(
     generation: RuntimeSessionGeneration,
     applied: Awaited<ReturnType<RuntimeSpecStore['getDesired']>>,
+    desiredSystemPrompt: DesiredRuntimeSystemPrompt,
   ): ProviderSessionBinding {
     if (!generation.providerWorkspaceId || !generation.providerSessionId)
       throw new Error('runtime_provider_session_missing');
@@ -287,7 +309,7 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
         providerSessionId: generation.providerSessionId,
         appliedSpecRevision: generation.appliedSpecRevision,
       },
-      applied: this.providerSpec(applied) as ProviderSessionBinding['applied'],
+      applied: this.providerSpec(applied, desiredSystemPrompt) as ProviderSessionBinding['applied'],
     };
   }
 }

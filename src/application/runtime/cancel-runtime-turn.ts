@@ -2,9 +2,11 @@ import type { ExecutionSession } from '../ports/runtime-execution-session.js';
 import type { EnsureRuntimeSession } from '../ports/ensure-runtime-session.js';
 import type { RuntimeTurnStore } from '../ports/runtime-turn-store.js';
 import type { RuntimeTurnId } from '../../domain/runtime/runtime-turn.js';
+import type { DesiredRuntimeSystemPrompt } from '../../domain/runtime/desired-runtime-system-prompt.js';
 
 export interface CancelRuntimeTurnInput {
   readonly turnId: RuntimeTurnId;
+  readonly desiredSystemPrompt: DesiredRuntimeSystemPrompt;
 }
 
 export class CancelRuntimeTurn {
@@ -34,6 +36,7 @@ export class CancelRuntimeTurn {
 
     const ready = await this.ensureRuntimeSession.execute(
       turn.runtimeSessionId,
+      input.desiredSystemPrompt,
     );
     if (ready.generation.id !== turn.generationId)
       throw new Error('runtime_provider_session_missing');

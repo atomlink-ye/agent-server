@@ -15,6 +15,7 @@ import {
   type RuntimeSessionId,
 } from '../../domain/runtime/runtime-session.js';
 import type { RuntimeToolCatalog } from '../extensions/runtime-tool-catalog.js';
+import { assertDesiredRuntimeSystemPrompt } from '../../domain/runtime/desired-runtime-system-prompt.js';
 
 /** The extension owner supplies its opaque desired-state component. */
 export interface RuntimeExtensionSetDigest {
@@ -48,6 +49,7 @@ export class ResolveRuntimeSessionSpecService implements ResolveRuntimeSessionSp
 
   public execute(input: ResolveRuntimeSessionSpecInput): RuntimeSessionSpec {
     const configuration = requireConfiguration(input.configuration);
+    assertDesiredRuntimeSystemPrompt(configuration.desiredSystemPrompt);
     assertIdentity(input);
     assertConfiguration(configuration);
     for (const toolRef of input.toolRefs) {
@@ -78,7 +80,7 @@ export class ResolveRuntimeSessionSpecService implements ResolveRuntimeSessionSp
       provider: configuration.provider,
       model: configuration.model,
       cwd: configuration.cwd,
-      systemPromptDigest: digest('system-prompt', input.agentVersionId),
+      systemPromptDigest: configuration.desiredSystemPrompt.digest,
       skillSetDigest: digest(
         'skill-set',
         resolvedSkills.map((skill) => `${skill.ref}:${skill.digest}`).toSorted().join(','),

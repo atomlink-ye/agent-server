@@ -32,6 +32,7 @@ import { executionObservationPayload } from './execution-observation-payload.js'
 import type { RunTeamContext } from './run-team-coordinator.js';
 import { RunPromptContext } from './run-prompt-context.js';
 import { RuntimeMemoryProposalWriter } from './runtime-memory-proposal-writer.js';
+import { createDesiredRuntimeSystemPrompt } from '../../domain/runtime/desired-runtime-system-prompt.js';
 
 /**
  * Executes one leaf Agent Run after ExecuteRun has established durable Task/Run
@@ -252,6 +253,9 @@ export class AgentRunExecutor {
           model: null,
           cwd: this.runtimeCellRoot ?? process.cwd(),
           contextEpoch: 0,
+          desiredSystemPrompt: createDesiredRuntimeSystemPrompt(
+            prompts.systemPrompt,
+          ),
         },
       });
       sessionRuntime = await this.runtimeSessions.createWithInitialSpec({

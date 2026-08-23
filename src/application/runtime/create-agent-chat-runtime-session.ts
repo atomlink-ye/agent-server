@@ -5,6 +5,7 @@ import type {
 import type { RuntimeSessionStore } from '../ports/runtime-session-store.js';
 import type { RuntimeSession } from '../../domain/runtime/runtime-session.js';
 import type { ResourceOwner } from '../../domain/tenancy/product-context.js';
+import type { DesiredRuntimeSystemPrompt } from '../../domain/runtime/desired-runtime-system-prompt.js';
 
 export interface CreateAgentChatRuntimeSession {
   execute(input: {
@@ -14,6 +15,7 @@ export interface CreateAgentChatRuntimeSession {
     readonly agentVersionId: string;
     readonly resolvedSkills: readonly { readonly ref: string; readonly digest: string }[];
     readonly toolRefs: readonly string[];
+    readonly desiredSystemPrompt: DesiredRuntimeSystemPrompt;
   }): Promise<RuntimeSession>;
 }
 
@@ -26,7 +28,7 @@ export class AgentChatRuntimeSessionCreator
     private readonly resolveSpec: ResolveRuntimeSessionSpec,
     private readonly configuration: Omit<
       RuntimeSessionSpecConfiguration,
-      'contextEpoch'
+      'contextEpoch' | 'desiredSystemPrompt'
     >,
   ) {}
 
@@ -56,6 +58,7 @@ export class AgentChatRuntimeSessionCreator
       configuration: {
         ...this.configuration,
         contextEpoch: input.runtimeEpoch,
+        desiredSystemPrompt: input.desiredSystemPrompt,
       },
     });
     return this.sessions.createWithInitialSpec({ owner, scope, spec });

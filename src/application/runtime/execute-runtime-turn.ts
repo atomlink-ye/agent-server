@@ -14,11 +14,13 @@ import type {
   RuntimeTurnSource,
 } from '../../domain/runtime/runtime-turn.js';
 import type { RuntimeSessionId } from '../../domain/runtime/runtime-session.js';
+import type { DesiredRuntimeSystemPrompt } from '../../domain/runtime/desired-runtime-system-prompt.js';
 
 export interface ExecuteRuntimeTurnInput {
   readonly runtimeSessionId: RuntimeSessionId;
   readonly source: RuntimeTurnSource;
   readonly prompt: string;
+  readonly desiredSystemPrompt: DesiredRuntimeSystemPrompt;
   readonly recoveryPrompt?: string;
   readonly observer?: ExecutionObservationSink;
   /** Supplying this makes retries reuse the same durable turn identity. */
@@ -53,7 +55,10 @@ export class ExecuteRuntimeTurn {
 
     let ready: Awaited<ReturnType<EnsureRuntimeSession['execute']>>;
     try {
-      ready = await this.ensureRuntimeSession.execute(input.runtimeSessionId);
+      ready = await this.ensureRuntimeSession.execute(
+        input.runtimeSessionId,
+        input.desiredSystemPrompt,
+      );
     } catch (error) {
       const code = mapFailureCode(error);
       await this.fail(created.id, code);

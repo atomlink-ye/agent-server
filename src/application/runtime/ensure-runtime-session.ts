@@ -223,12 +223,13 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
         generationId: input.current.id,
         reason: 'provider_missing',
       };
+    const components = inspection.observed.bootstrapDigestComponents;
+    if (components.status === 'indeterminate')
+      throw new Error('runtime_provider_bootstrap_digest_indeterminate');
     if (
       inspection.observed.providerSessionId !== input.current.providerSessionId ||
-      (inspection.observed.bootstrapDigestComponents !== null &&
-        computeRuntimeBootstrapDigest(
-          inspection.observed.bootstrapDigestComponents,
-        ) !== input.current.appliedBootstrapDigest)
+      computeRuntimeBootstrapDigest(components.value) !==
+        input.current.appliedBootstrapDigest
     )
       return {
         kind: 'replace',

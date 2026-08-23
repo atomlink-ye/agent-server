@@ -1,19 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type {
-  ProductExecutionDetailResponse,
-  ProductRunTrace,
-} from '@atomlink-ye/agent-server/product-contract';
+import type { ProductExecutionDetailResponse } from '@atomlink-ye/agent-server/product-contract';
 
 import { AssistantMarkdown } from '@/features/conversations/components/assistant-markdown';
 import { ActivityRow } from './activity-row';
 import { projectTranscript } from './transcript-projection';
 import { loadExecutionDetail, RunTraceReadError } from './run-trace-gateway';
+import type { NormalizedTrace } from './normalized';
 import './execution-transcript.css';
 
-type Trace = Extract<
-  ProductRunTrace,
-  { projection_status: 'internally_anchored' }
->;
+type Trace = NormalizedTrace;
 type AttemptEntry = {
   readonly actorName: string;
   readonly workItemId: string;
@@ -67,11 +62,7 @@ export function ExecutionTranscript({
       lastAttemptIdRef.current = selectedAttemptId;
       setDetailState({ status: 'loading' });
     }
-    void loadExecutionDetail(
-      trace.work.id,
-      trace.work_run.id,
-      selectedAttemptId,
-    )
+    void loadExecutionDetail(trace.work.id, trace.workRun.id, selectedAttemptId)
       .then((detail) => {
         if (active) setDetailState({ status: 'ready', detail });
       })
@@ -87,7 +78,7 @@ export function ExecutionTranscript({
     return () => {
       active = false;
     };
-  }, [selectedAttemptId, trace.work.id, trace.work_run.id]);
+  }, [selectedAttemptId, trace.work.id, trace.workRun.id]);
 
   // Polling effect: when live=true, refetch every 2-3 seconds without resetting UI state
   useEffect(() => {
@@ -101,7 +92,7 @@ export function ExecutionTranscript({
     const timer = setInterval(() => {
       void loadExecutionDetail(
         trace.work.id,
-        trace.work_run.id,
+        trace.workRun.id,
         selectedAttemptId,
       )
         .then((detail) => {
@@ -117,7 +108,7 @@ export function ExecutionTranscript({
     live,
     selectedAttemptId,
     trace.work.id,
-    trace.work_run.id,
+    trace.workRun.id,
     detailState.status,
   ]);
 
@@ -279,37 +270,32 @@ function ExecutionEvents({
 }
 
 function attemptEntries(trace: Trace): readonly AttemptEntry[] {
-  const actors = new Map(
-    trace.actors.map((actor) => [actor.id, actor.name ?? 'Name not captured']),
-  );
-  return trace.work_items.flatMap((workItem) =>
-    workItem.attempts.map((attempt) => ({
-      actorName: workItem.actor_id
-        ? (actors.get(workItem.actor_id) ?? 'Name not captured')
+  return [...trace.attempts.values()].map((attempt) => {
+    const workItem = trace.workItems.get(attempt.workItemId)!;
+    return {
+      actorName: workItem.actorId
+        ? (trace.actors.get(workItem.actorId)?.name ?? 'Name not captured')
         : 'Unassigned',
       workItemId: workItem.id,
       workItemSubject: workItem.subject,
       attemptId: attempt.id,
-      attemptNo: attempt.attempt_no,
-    })),
-  );
+      attemptNo: attempt.attemptNo,
+    };
+  });
 }
 
 function collaborationMessages(trace: Trace, workItemId: string) {
-  const messages = new Map(
-    trace.messages.map((message) => [message.id, message]),
-  );
   return trace.edges.flatMap((edge) => {
-    if (edge.kind !== 'observed_message' || edge.work_item_id !== workItemId)
+    if (edge.kind !== 'observed_message' || edge.workItemId !== workItemId)
       return [];
-    const message = messages.get(edge.message_id);
+    const message = trace.messages.get(edge.messageId);
     return [
       {
-        id: edge.message_id,
-        sender: message?.sender_name ?? 'Agent',
-        recipient: message?.recipient_name ?? 'Agent',
+        id: edge.messageId,
+        sender: message?.senderName ?? 'Agent',
+        recipient: message?.recipientName ?? 'Agent',
         summary: message?.summary ?? 'Message content was not captured.',
-        createdAt: edge.source_created_at,
+        createdAt: edge.sourceCreatedAt,
       },
     ];
   });

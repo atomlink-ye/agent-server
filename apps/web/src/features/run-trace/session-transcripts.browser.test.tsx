@@ -132,9 +132,14 @@ const MOCK_RESPONSE: ProductSessionTranscriptsResponse = {
 
 it('renders per-session transcripts with switching between sessions that share a role, truncation warning, permission honesty, and derived summary labeling', async () => {
   const trace = parseRecordedTrace(reworkRecording);
+  const response = {
+    ...MOCK_RESPONSE,
+    work_id: trace.work.id,
+    work_run_id: trace.workRun.id,
+  } satisfies ProductSessionTranscriptsResponse;
   const fetchMock = vi.fn().mockResolvedValue({
     ok: true,
-    json: async () => MOCK_RESPONSE,
+    json: async () => response,
   });
   vi.stubGlobal('fetch', fetchMock);
 
@@ -241,6 +246,8 @@ it('renders per-session transcripts with switching between sessions that share a
     if (!toolEntry)
       throw new Error('Fixture must contain a tool_status entry.');
     toolEntry.tool_name = null;
+    withoutPlatform.work_id = trace.work.id;
+    withoutPlatform.work_run_id = trace.workRun.id;
     fetchMock.mockResolvedValueOnce({
       ok: true,
       json: async () => withoutPlatform,

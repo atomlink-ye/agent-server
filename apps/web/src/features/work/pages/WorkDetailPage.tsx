@@ -31,6 +31,7 @@ export function WorkDetailPage({
     workId,
     selectedRunId,
     preferCurrentDefinition,
+    includeTrace: activeTab !== 'definition',
   });
   const detail = query.detail;
   const runId = detail?.run?.work_run.id;

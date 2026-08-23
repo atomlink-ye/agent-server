@@ -1,5 +1,4 @@
 import type {
-  ProductRunTrace,
   ProductWorkRun,
   WorkRunListResponse,
   WorkRunSummary,
@@ -38,10 +37,6 @@ export type RoleSummary = {
 
 export type AnchoredRun = Extract<
   ProductWorkRun,
-  { projection_status: 'internally_anchored' }
->;
-export type AnchoredTrace = Extract<
-  ProductRunTrace,
   { projection_status: 'internally_anchored' }
 >;
 
@@ -83,7 +78,7 @@ export class WorkRunClient {
     return body;
   }
 
-  async trace(workId: string, runId: string): Promise<ProductRunTrace> {
+  async trace(workId: string, runId: string) {
     const body = parseProduct(
       ProductRunTraceResponseSchema,
       await readProductJson(

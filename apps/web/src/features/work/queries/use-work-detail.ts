@@ -12,10 +12,12 @@ export function useWorkDetail({
   workId,
   selectedRunId,
   preferCurrentDefinition,
+  includeTrace,
 }: {
   readonly workId: string;
   readonly selectedRunId?: string;
   readonly preferCurrentDefinition: boolean;
+  readonly includeTrace: boolean;
 }): WorkDetailQuery {
   const [status, setStatus] = useState<WorkDetailQuery['status']>('loading');
   const [detail, setDetail] = useState<WorkDetailData | null>(null);
@@ -38,6 +40,7 @@ export function useWorkDetail({
           workId,
           selectedRunId,
           preferCurrentDefinition,
+          includeTrace,
         );
         if (!active) return;
         setDetail(loaded);
@@ -67,7 +70,7 @@ export function useWorkDetail({
     };
     // The refresh lifecycle is intentionally scoped to this Work selection.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workId, selectedRunId, preferCurrentDefinition]);
+  }, [workId, selectedRunId, preferCurrentDefinition, includeTrace]);
 
   return { status, detail };
 }

@@ -4,7 +4,7 @@ import { performance } from 'node:perf_hooks';
 import { Hono } from 'hono';
 
 import type { ReadinessProbe } from '../../application/health/readiness.js';
-import type { ExecutionRuntimeService } from '../../application/ports/execution-runtime.js';
+import type { RuntimeExecutionProvider } from '../../application/ports/runtime-execution-provider.js';
 import type { GetRun } from '../../application/runs/get-run.js';
 import type { SubmitRun } from '../../application/runs/submit-run.js';
 import type { GetTask } from '../../application/tasks/get-task.js';
@@ -41,7 +41,7 @@ export interface AppDependencies {
   readonly config: AppConfig;
   readonly logger: Logger;
   readonly readiness: ReadinessProbe;
-  readonly runtime: ExecutionRuntimeService;
+  readonly runtime: Pick<RuntimeExecutionProvider, 'health'>;
   readonly submitRun: SubmitRun;
   readonly getRun: GetRun;
   readonly invokeTask: InvokeTask;

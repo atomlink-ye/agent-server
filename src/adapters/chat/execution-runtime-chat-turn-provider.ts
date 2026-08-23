@@ -14,6 +14,10 @@ import type {
 import type { RuntimeSession } from '../../domain/runtime/runtime-session.js';
 import type { RuntimeTurnId } from '../../domain/runtime/runtime-session.js';
 import { renderScopedMemory } from '../../application/context/scoped-memory-resolver.js';
+import {
+  AGENT_SERVER_LIST_AGENT_WORKFLOWS_TOOL_REF,
+  AGENT_SERVER_PRODUCT_WORK_RUN_START_TOOL_REF,
+} from '../../application/agents/built-in-skills.js';
 
 /**
  * Chat adapter over the durable runtime-session and runtime-turn use cases.
@@ -42,7 +46,13 @@ export class ExecutionRuntimeChatTurnProvider implements ChatTurnProvider {
       agentOwner: input.brain.agentOwner,
       agentVersionId: turnContext.agentVersionId,
       resolvedSkills: input.brain.resolvedSkills,
-      toolRefs: input.brain.toolRefs,
+      toolRefs: [
+        ...new Set([
+          ...input.brain.toolRefs,
+          AGENT_SERVER_LIST_AGENT_WORKFLOWS_TOOL_REF,
+          AGENT_SERVER_PRODUCT_WORK_RUN_START_TOOL_REF,
+        ]),
+      ],
     });
 
     const requested = input.turn?.modeHint ?? 'bootstrap';

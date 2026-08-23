@@ -2,15 +2,11 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { WorkIdentityApi } from '../../application/work/work-identity-api.js';
 import type { StartWorkRun } from '../../application/work/start-work-run.js';
-import type {
-  RuntimeToolGrant,
-  RuntimeToolGrantService,
-} from '../../application/extensions/runtime-tool-grant-service.js';
+import type { AuthorizedRuntimeToolContext } from '../../application/runtime/authorize-runtime-tool.js';
 import { ListAgentWorkflows } from '../../application/work/list-agent-workflows.js';
 import { DescribeWorkflow } from '../../application/work/describe-workflow.js';
 import type { WorkDefinitionSourceRepository } from '../../application/ports/work-definition-source-repository.js';
 import type { ConversationRepository } from '../../application/ports/conversation-repository.js';
-import type { RuntimeToolChatContext } from '../../application/extensions/runtime-tool-grant-service.js';
 import type {
   ConversationWorkLinkRepository,
   ConversationWorkOrigin,
@@ -68,7 +64,13 @@ export interface WorkReference {
 }
 
 function toConversationOrigin(
-  chatContext: RuntimeToolChatContext | null | undefined,
+  chatContext:
+    | Readonly<{
+        readonly conversationId: string;
+        readonly triggerMessageId: string;
+      }>
+    | null
+    | undefined,
 ): ConversationWorkOrigin | undefined {
   return chatContext
     ? {
@@ -373,9 +375,10 @@ async function executeContinueWork(
 
 export function registerProductWorkMcpTools(input: {
   readonly server: McpServer;
-  readonly grant: RuntimeToolGrant;
-  readonly grants: RuntimeToolGrantService;
-  readonly chatContext?: RuntimeToolChatContext | null;
+  readonly grant: AuthorizedRuntimeToolContext;
+  readonly authorize: (
+    toolRef: string,
+  ) => Promise<AuthorizedRuntimeToolContext | null>;
   readonly workIdentity: Pick<
     WorkIdentityApi,
     'createWork' | 'findWorkById' | 'findLatestWorkRun'
@@ -391,13 +394,13 @@ export function registerProductWorkMcpTools(input: {
     | 'findRecentWorkByConversation'
   >;
 }): void {
-  const { server, grant, grants } = input;
-  const fallbackConversationOrigin = toConversationOrigin(input.chatContext);
+  const { server, grant, authorize } = input;
+  const fallbackConversationOrigin = toConversationOrigin(grant.chatContext);
   const currentConversationOrigin = (
-    current: RuntimeToolGrant,
+    current: AuthorizedRuntimeToolContext,
   ): ConversationWorkOrigin | undefined => {
     if (current.chatContext) return toConversationOrigin(current.chatContext);
-    if (input.chatContext)
+    if (grant.chatContext)
       throw new Error('Chat runtime grant context is unavailable.');
     return fallbackConversationOrigin;
   };
@@ -409,16 +412,12 @@ export function registerProductWorkMcpTools(input: {
         inputSchema: strictCreateInput,
       },
       async (args: CreateInput) => {
-        const current = grants.get(grant.grantId);
-        if (
-          !current ||
-          !grants.isToolAllowed(current.grantId, PRODUCT_WORK_CREATE_TOOL_REF)
-        )
+        const current = await authorize(PRODUCT_WORK_CREATE_TOOL_REF);
+        if (!current)
           return {
             isError: true,
             content: [{ type: 'text', text: 'not_found' }],
           };
-        grants.beginToolCall(current.grantId);
         try {
           const work = await input.workIdentity.createWork({
             owner: {
@@ -445,7 +444,6 @@ export function registerProductWorkMcpTools(input: {
             ],
           };
         } finally {
-          grants.endToolCall(current.grantId);
         }
       },
     );
@@ -465,19 +463,12 @@ export function registerProductWorkMcpTools(input: {
         readonly agent_definition_id: string;
         readonly definition_id: string;
       }) => {
-        const current = grants.get(grant.grantId);
-        if (
-          !current ||
-          !grants.isToolAllowed(
-            current.grantId,
-            PRODUCT_WORK_ASSOCIATE_AGENT_WORKFLOW_TOOL_REF,
-          )
-        )
+        const current = await authorize(PRODUCT_WORK_ASSOCIATE_AGENT_WORKFLOW_TOOL_REF);
+        if (!current)
           return {
             isError: true,
             content: [{ type: 'text', text: 'not_found' }],
           };
-        grants.beginToolCall(current.grantId);
         try {
           const definitions = input.definitions;
           if (
@@ -526,7 +517,6 @@ export function registerProductWorkMcpTools(input: {
             ],
           };
         } finally {
-          grants.endToolCall(current.grantId);
         }
       },
     );
@@ -539,19 +529,12 @@ export function registerProductWorkMcpTools(input: {
         inputSchema: strictOneCallStartInput,
       },
       async (args: OneCallStartInput) => {
-        const current = grants.get(grant.grantId);
-        if (
-          !current ||
-          !grants.isToolAllowed(
-            current.grantId,
-            PRODUCT_WORK_RUN_START_TOOL_REF,
-          )
-        )
+        const current = await authorize(PRODUCT_WORK_RUN_START_TOOL_REF);
+        if (!current)
           return {
             isError: true,
             content: [{ type: 'text', text: 'not_found' }],
           };
-        grants.beginToolCall(current.grantId);
         try {
           const conversationOrigin = currentConversationOrigin(current);
           return await executeOneCallWorkStart(args, {
@@ -569,7 +552,6 @@ export function registerProductWorkMcpTools(input: {
             },
           });
         } finally {
-          grants.endToolCall(current.grantId);
         }
       },
     );
@@ -581,19 +563,12 @@ export function registerProductWorkMcpTools(input: {
         inputSchema: strictStartInput,
       },
       async (args: StartInput) => {
-        const current = grants.get(grant.grantId);
-        if (
-          !current ||
-          !grants.isToolAllowed(
-            current.grantId,
-            PRODUCT_WORK_RUN_START_TOOL_REF,
-          )
-        )
+        const current = await authorize(PRODUCT_WORK_RUN_START_TOOL_REF);
+        if (!current)
           return {
             isError: true,
             content: [{ type: 'text', text: 'not_found' }],
           };
-        grants.beginToolCall(current.grantId);
         try {
           const conversationOrigin = currentConversationOrigin(current);
           return await executeProductWorkRunStart(args, {
@@ -612,7 +587,6 @@ export function registerProductWorkMcpTools(input: {
             },
           });
         } finally {
-          grants.endToolCall(current.grantId);
         }
       },
     );
@@ -624,19 +598,12 @@ export function registerProductWorkMcpTools(input: {
         inputSchema: strictContinueInput,
       },
       async (args: ContinueInput) => {
-        const current = grants.get(grant.grantId);
-        if (
-          !current ||
-          !grants.isToolAllowed(
-            current.grantId,
-            PRODUCT_WORK_RUN_START_TOOL_REF,
-          )
-        )
+        const current = await authorize(PRODUCT_WORK_RUN_START_TOOL_REF);
+        if (!current)
           return {
             isError: true,
             content: [{ type: 'text', text: 'not_found' }],
           };
-        grants.beginToolCall(current.grantId);
         try {
           const conversationOrigin = currentConversationOrigin(current);
           return await executeContinueWork(args, {
@@ -653,7 +620,6 @@ export function registerProductWorkMcpTools(input: {
             },
           });
         } finally {
-          grants.endToolCall(current.grantId);
         }
       },
     );
@@ -667,19 +633,12 @@ export function registerProductWorkMcpTools(input: {
         }),
       },
       async (args: { agent_definition_id: string }) => {
-        const current = grants.get(grant.grantId);
-        if (
-          !current ||
-          !grants.isToolAllowed(
-            current.grantId,
-            PRODUCT_WORK_LIST_AGENT_WORKFLOWS_TOOL_REF,
-          )
-        )
+        const current = await authorize(PRODUCT_WORK_LIST_AGENT_WORKFLOWS_TOOL_REF);
+        if (!current)
           return {
             isError: true,
             content: [{ type: 'text', text: 'not_found' }],
           };
-        grants.beginToolCall(current.grantId);
         try {
           if (!input.definitions) {
             return {
@@ -745,7 +704,6 @@ export function registerProductWorkMcpTools(input: {
             ],
           };
         } finally {
-          grants.endToolCall(current.grantId);
         }
       },
     );
@@ -760,19 +718,12 @@ export function registerProductWorkMcpTools(input: {
         }),
       },
       async (args: { definition_id: string; version_id?: string }) => {
-        const current = grants.get(grant.grantId);
-        if (
-          !current ||
-          !grants.isToolAllowed(
-            current.grantId,
-            PRODUCT_WORK_DESCRIBE_WORKFLOW_TOOL_REF,
-          )
-        )
+        const current = await authorize(PRODUCT_WORK_DESCRIBE_WORKFLOW_TOOL_REF);
+        if (!current)
           return {
             isError: true,
             content: [{ type: 'text', text: 'not_found' }],
           };
-        grants.beginToolCall(current.grantId);
         try {
           if (!input.definitions) {
             return {
@@ -820,7 +771,6 @@ export function registerProductWorkMcpTools(input: {
             ],
           };
         } finally {
-          grants.endToolCall(current.grantId);
         }
       },
     );

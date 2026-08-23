@@ -19,15 +19,12 @@ import {
 } from '../../application/agents/built-in-skills.js';
 import { normalizeMemoryPath } from '../../domain/memory-api/memory-api.js';
 import type { Logger } from '../../shared/observability/logger.js';
-import {
-  AGENT_SERVER_MEMORY_READ_MCP_NAME,
-  AGENT_SERVER_MEMORY_READ_TOOL_REF,
-  RuntimeToolGrantService,
-  type RuntimeToolGrant,
-} from '../../application/extensions/runtime-tool-grant-service.js';
+import { AGENT_SERVER_MEMORY_READ_TOOL_REF } from '../../application/agents/built-in-skills.js';
+import type { AuthorizedRuntimeToolContext } from '../../application/runtime/authorize-runtime-tool.js';
 import type { RuntimeToolContributor } from '../../application/extensions/runtime-tool-catalog.js';
 
 const UUID = z.string().uuid();
+const AGENT_SERVER_MEMORY_READ_MCP_NAME = 'agent_server_memory_read';
 const memoryReadInput = {
   memory_store_id: UUID,
   path: z.string(),
@@ -55,8 +52,8 @@ export function createMemoryRuntimeContributor(input: {
     contextResolver: TeamToolContextResolver;
   };
 }): RuntimeToolContributor {
-  return ({ server, grant, grants }) => {
-    registerTools(server, grant, input.repository, input, grants, 'memory');
+  return ({ server, grant, authorize }) => {
+    registerTools(server, grant, input.repository, input, authorize, 'memory');
   };
 }
 
@@ -65,16 +62,12 @@ export function createCollaborationRuntimeContributor(input: {
   readonly contextResolver: TeamToolContextResolver;
   readonly kernel: CollaborationKernel;
 }): RuntimeToolContributor {
-  return ({ server, grant, grants }) => {
+  return ({ server, grant, authorize }) => {
     if (!grant.teamMemberRunId) return;
     registerCollaborationMcpTools(server, {
       resolve: (currentGrant) => input.contextResolver.resolve(currentGrant),
-      grantId: grant.grantId,
-      currentGrant: () => grants.get(grant.grantId),
-      begin: (grantId) => {
-        grants.beginToolCall(grantId);
-      },
-      end: (grantId) => grants.endToolCall(grantId),
+      grant,
+      authorize,
       kernel: input.kernel,
     });
   };
@@ -86,14 +79,14 @@ export function createSyntheticRuntimeToolsContributor(
     readonly logger?: Logger;
   } = {},
 ): RuntimeToolContributor {
-  return ({ server, grant, grants }) => {
-    registerTools(server, grant, undefined, input, grants, 'synthetic');
+  return ({ server, grant, authorize }) => {
+    registerTools(server, grant, undefined, input, authorize, 'synthetic');
   };
 }
 
 function registerTools(
   server: McpServer,
-  grant: RuntimeToolGrant,
+  grant: AuthorizedRuntimeToolContext,
   repository: MemoryApiRepository | undefined,
   input: {
     readonly createLearningProposal?: CreateLearningProposal;
@@ -103,25 +96,22 @@ function registerTools(
     readonly market?: SyntheticMarketAdapter;
     readonly logger?: Logger;
   },
-  grants: RuntimeToolGrantService,
+  authorize: (
+    toolRef: string,
+  ) => Promise<AuthorizedRuntimeToolContext | null>,
   mode: 'memory' | 'synthetic',
 ): Map<string, RegisteredTool> {
   const register = (
     toolRef: string,
     name: string,
     config: any,
-    operation: (args: any, currentGrant: RuntimeToolGrant) => unknown,
+    operation: (args: any, currentGrant: AuthorizedRuntimeToolContext) => unknown,
   ) => {
     (server.registerTool as any)(name, config, async (args: any) => {
-      const currentGrant = grants.get(grant.grantId);
-      if (!currentGrant || !grants.isToolAllowed(currentGrant.grantId, toolRef))
+      const currentGrant = await authorize(toolRef);
+      if (!currentGrant)
         return notFound();
-      grants.beginToolCall(currentGrant.grantId);
-      try {
-        return await operation(args, currentGrant);
-      } finally {
-        grants.endToolCall(currentGrant.grantId);
-      }
+      return operation(args, currentGrant);
     });
   };
   if (
@@ -220,7 +210,7 @@ function registerTools(
 
 async function readMemory(
   args: { readonly memory_store_id: string; readonly path: string },
-  grant: RuntimeToolGrant,
+  grant: AuthorizedRuntimeToolContext,
   repository: MemoryApiRepository,
 ) {
   let path: string;
@@ -302,7 +292,7 @@ async function createProposal(
     proposed_content: string;
     evidence_refs: string[];
   },
-  grant: RuntimeToolGrant,
+  grant: AuthorizedRuntimeToolContext,
   repository: MemoryApiRepository,
   create: CreateLearningProposal,
   teamTools?: { contextResolver: TeamToolContextResolver },

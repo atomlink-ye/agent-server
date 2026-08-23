@@ -2,10 +2,10 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import {
-  RuntimeToolGrantService,
-  type RuntimeToolGrant,
-} from '../../application/extensions/runtime-tool-grant-service.js';
+import type {
+  AuthorizeRuntimeTool,
+  AuthorizedRuntimeToolContext,
+} from '../../application/runtime/authorize-runtime-tool.js';
 import type { RuntimeToolCatalog } from '../../application/extensions/runtime-tool-catalog.js';
 
 export const MCP_PATH = '/mcp/agent-runtime';
@@ -14,11 +14,10 @@ type McpSession = Readonly<{
   readonly server: McpServer;
   readonly transport: StreamableHTTPServerTransport;
   readonly grantId: string;
-  readonly refreshTools: (allowedTools: readonly string[]) => void;
 }>;
 
 export function createDirectMemoryMcpHandler(input: {
-  readonly grants: RuntimeToolGrantService;
+  readonly authorize: AuthorizeRuntimeTool;
   readonly toolCatalog: RuntimeToolCatalog;
 }): (req: IncomingMessage, res: ServerResponse) => Promise<void> {
   const sessions = new Map<string, McpSession>();
@@ -31,11 +30,6 @@ export function createDirectMemoryMcpHandler(input: {
       sendJson(res, 405, { error: 'method_not_allowed' });
       return;
     }
-    const grant = authenticate(req, input.grants);
-    if (!grant) {
-      sendJson(res, 401, { error: 'unauthorized' });
-      return;
-    }
     let body: unknown;
     try {
       body = await readJson(req);
@@ -45,6 +39,14 @@ export function createDirectMemoryMcpHandler(input: {
         return;
       }
       sendJson(res, 400, { error: 'invalid_request' });
+      return;
+    }
+    const bearer = readBearer(req);
+    const grant = bearer
+      ? await authenticate(bearer, body, input.authorize, input.toolCatalog)
+      : null;
+    if (!grant) {
+      sendJson(res, 401, { error: 'unauthorized' });
       return;
     }
     const sessionId = req.headers['mcp-session-id'];
@@ -68,8 +70,6 @@ export function createDirectMemoryMcpHandler(input: {
         name: 'agent-server-memory-mcp',
         version: '0.1.0',
       });
-    let refreshTools: (allowedTools: readonly string[]) => void =
-      existing?.refreshTools ?? (() => undefined);
     let transport!: StreamableHTTPServerTransport;
     transport =
       existing?.transport ??
@@ -80,7 +80,6 @@ export function createDirectMemoryMcpHandler(input: {
             server,
             transport,
             grantId: grant.grantId,
-            refreshTools,
           });
         },
       });
@@ -88,12 +87,15 @@ export function createDirectMemoryMcpHandler(input: {
       input.toolCatalog.contribute({
         server,
         grant,
-        grants: input.grants,
-        ...(grant.chatContext ? { chatContext: grant.chatContext } : {}),
+        authorize: async (toolRef) => {
+          const authorized = await input.authorize.execute({
+            bearerToken: bearer!,
+            requestedTool: toolRef,
+            currentCatalogDigest: input.toolCatalog.digest,
+          });
+          return authorized.kind === 'authorized' ? authorized.context : null;
+        },
       });
-      refreshTools = (allowedTools) => {
-        void allowedTools;
-      };
     }
     const newSession = !existing;
     if (newSession) {
@@ -123,13 +125,39 @@ export function createDirectMemoryMcpHandler(input: {
   };
 }
 
-function authenticate(
-  req: IncomingMessage,
-  grants: RuntimeToolGrantService,
-): RuntimeToolGrant | null {
+async function authenticate(
+  bearer: string,
+  body: unknown,
+  authorize: AuthorizeRuntimeTool,
+  catalog: RuntimeToolCatalog,
+): Promise<AuthorizedRuntimeToolContext | null> {
+  const requested = requestedTool(body);
+  const candidates = requested
+    ? [requested, ...catalog.list().map((item) => item.ref)]
+    : catalog.list().map((item) => item.ref);
+  for (const requestedTool of new Set(candidates)) {
+    const result = await authorize.execute({
+      bearerToken: bearer,
+      requestedTool,
+      currentCatalogDigest: catalog.digest,
+    });
+    if (result.kind === 'authorized') return result.context;
+  }
+  return null;
+}
+
+function readBearer(req: IncomingMessage): string | null {
   const value = req.headers.authorization;
   if (!value || !/^Bearer\s+[^\s]+$/i.test(value)) return null;
-  return grants.resolve(value.slice(value.indexOf(' ') + 1).trim());
+  return value.slice(value.indexOf(' ') + 1).trim();
+}
+
+function requestedTool(body: unknown): string | null {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return null;
+  const params = Reflect.get(body, 'params');
+  if (!params || typeof params !== 'object' || Array.isArray(params)) return null;
+  const name = Reflect.get(params, 'name');
+  return typeof name === 'string' ? name : null;
 }
 
 function readJson(req: IncomingMessage): Promise<unknown> {

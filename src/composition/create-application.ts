@@ -30,10 +30,6 @@ import { ApplyMemoryReviewCommand } from '../application/channels/apply-memory-r
 import { ApplyMemoryReviewControl } from '../application/channels/apply-memory-review-control.js';
 import { AcceptMemoryFromBoundDocument } from '../application/channels/accept-memory-from-bound-document.js';
 import { TeamDriver } from '../application/teams/team-driver.js';
-import {
-  revokeForRecoveredTeamRuns,
-  revokeForTerminalTeamRun,
-} from '../application/teams/runtime-grant-lifecycle.js';
 import { PostgresExecutionFactQuery } from '../infrastructure/postgres/postgres-execution-fact-query.js';
 import { InvokeTaskExecutionAdmission } from '../application/ports/execution-admission.js';
 import { noExternalDependencies } from '../application/health/readiness.js';
@@ -51,6 +47,123 @@ import { createLifecycleSupervisor } from './lifecycle-supervisor.js';
 import type { PostgresChannelRepository } from '../infrastructure/postgres/postgres-channel-repository.js';
 import type { FileStore } from '../application/ports/file-store.js';
 import type { PostgresSessionRepository } from '../infrastructure/postgres/postgres-session-repository.js';
+import { createRuntimeToolCatalog } from '../application/extensions/runtime-tool-catalog.js';
+import { createCollaborationRuntimeContributor, createSyntheticRuntimeToolsContributor } from '../entrypoints/mcp/runtime-tool-contributors.js';
+import { SyntheticMarketAdapter } from '../adapters/demo-market/synthetic-market-adapter.js';
+import { PostgresRuntimeSessionStore } from '../infrastructure/postgres/runtime/postgres-runtime-session-store.js';
+import { PostgresRuntimeSpecStore } from '../infrastructure/postgres/runtime/postgres-runtime-spec-store.js';
+import { PostgresRuntimeGenerationStore } from '../infrastructure/postgres/runtime/postgres-runtime-generation-store.js';
+import { PostgresRuntimeTurnStore } from '../infrastructure/postgres/runtime/postgres-runtime-turn-store.js';
+import { PostgresRuntimeGrantReader } from '../infrastructure/postgres/runtime/postgres-runtime-grant-reader.js';
+import { PostgresRuntimeGrantAuthority } from '../infrastructure/postgres/runtime/postgres-runtime-grant-authority.js';
+import { AuthorizeRuntimeTool } from '../application/runtime/authorize-runtime-tool.js';
+import { EnsureRuntimeSessionService } from '../application/runtime/ensure-runtime-session.js';
+import { ExecuteRuntimeTurn } from '../application/runtime/execute-runtime-turn.js';
+import { AgentChatRuntimeSessionCreator } from '../application/runtime/create-agent-chat-runtime-session.js';
+import { ResolveRuntimeSessionSpecService } from '../application/runtime/resolve-runtime-session-spec.js';
+import { RuntimeGenerationManager } from '../application/runtime/runtime-generation-manager.js';
+import { createRuntimeMcpEndpoint } from './create-runtime-mcp-endpoint.js';
+import { RuntimeMcpServer } from '../infrastructure/extensions/runtime-mcp-server.js';
+import { createPaseoRuntimeProvider } from '../infrastructure/runtime/paseo/paseo-runtime-provider.js';
+import { UnavailableRuntimeProvider } from '../infrastructure/runtime/unavailable-runtime-provider.js';
+import { hashBearerToken } from '../infrastructure/security/hash-bearer-token.js';
+import type { RuntimeExecutionProvider } from '../application/ports/runtime-execution-provider.js';
+import type { RuntimeSessionStore } from '../application/ports/runtime-session-store.js';
+import type { ResolveRuntimeSessionSpec } from '../application/ports/resolve-runtime-session-spec.js';
+import type { EnsureRuntimeSession } from '../application/ports/ensure-runtime-session.js';
+import type { RuntimeMcpEndpoint } from '../application/ports/runtime-mcp-endpoint.js';
+import type { ExecuteRuntimeTurn as ExecuteRuntimeTurnUseCase } from '../application/runtime/execute-runtime-turn.js';
+import { ExecutionRunRegistry } from '../application/runtime/execution-run-registry.js';
+
+interface RuntimeOwner {
+  readonly runtimeProvider: RuntimeExecutionProvider;
+  readonly runtimeSessions: RuntimeSessionStore;
+  readonly resolveRuntimeSpec: ResolveRuntimeSessionSpec;
+  readonly ensureRuntimeSession: EnsureRuntimeSession;
+  readonly executeRuntimeTurn: Pick<ExecuteRuntimeTurnUseCase, 'execute'>;
+  readonly chatRuntime: {
+    readonly sessionCreator: Pick<AgentChatRuntimeSessionCreator, 'execute'>;
+    readonly turnExecutor: Pick<ExecuteRuntimeTurnUseCase, 'execute'>;
+  };
+  readonly runtimeMcpServer: RuntimeMcpServer;
+  readonly runtimeMcpEndpoint: RuntimeMcpEndpoint;
+}
+
+function createRuntimeOwner(input: {
+  readonly database: Pool;
+  readonly config: AppConfig;
+  readonly logger: Logger;
+  readonly toolCatalog: ReturnType<typeof createRuntimeToolCatalog>;
+}): RuntimeOwner {
+  const runtimeProvider = input.config.runtime?.adapter === 'none'
+    ? new UnavailableRuntimeProvider()
+    : createPaseoRuntimeProvider(input.config, input.logger);
+  const runtimeSessions = new PostgresRuntimeSessionStore(input.database);
+  const specs = new PostgresRuntimeSpecStore(input.database);
+  const generations = new PostgresRuntimeGenerationStore(input.database);
+  const turns = new PostgresRuntimeTurnStore(input.database);
+  const grants = new PostgresRuntimeGrantAuthority(input.database);
+  const reader = new PostgresRuntimeGrantReader(input.database);
+  const authorizeRuntimeTool = new AuthorizeRuntimeTool(
+    reader,
+    runtimeSessions,
+    generations,
+    turns,
+    hashBearerToken,
+  );
+  const runtimeMcpServer = new RuntimeMcpServer(
+    input.toolCatalog,
+    authorizeRuntimeTool,
+    input.config.runtimeMcp?.listenHost,
+    input.config.runtimeMcp?.advertisedHost,
+    input.config.runtimeMcp?.port,
+  );
+  const runtimeMcpEndpoint = createRuntimeMcpEndpoint(runtimeMcpServer);
+  const resolveRuntimeSpec = new ResolveRuntimeSessionSpecService(
+    input.toolCatalog,
+    { digest: () => input.toolCatalog.digest },
+  );
+  const generationManager = new RuntimeGenerationManager({
+    generations,
+    generationTransaction: generations,
+    now: () => new Date(),
+  });
+  const ensureRuntimeSession = new EnsureRuntimeSessionService({
+    provider: runtimeProvider,
+    sessions: runtimeSessions,
+    specs,
+    generations,
+    generationManager,
+    grants,
+    mcpEndpoint: createRuntimeMcpEndpoint(runtimeMcpServer),
+    logger: input.logger,
+    now: () => new Date(),
+  });
+  const executeRuntimeTurn = new ExecuteRuntimeTurn(
+    turns,
+    ensureRuntimeSession,
+    grants,
+  );
+  const sessionCreator = new AgentChatRuntimeSessionCreator(
+    runtimeSessions,
+    resolveRuntimeSpec,
+    {
+      provider: input.config.paseo.provider,
+      model: input.config.paseo.model ?? null,
+      cwd: input.config.paseo.agentCwd,
+    },
+  );
+  return {
+    runtimeProvider,
+    runtimeSessions,
+    resolveRuntimeSpec,
+    ensureRuntimeSession,
+    executeRuntimeTurn,
+    chatRuntime: { sessionCreator, turnExecutor: executeRuntimeTurn },
+    runtimeMcpServer,
+    runtimeMcpEndpoint,
+  };
+}
 
 export function createLarkIngressWorker(
   repository: Pick<
@@ -233,13 +346,47 @@ export async function createApplication(
     leaseMs: leaseDurationMs,
     logger,
   });
+  const runtimeToolCatalog = createRuntimeToolCatalog([
+    { ref: 'memory', contribute: memoryModule.contributeRuntime },
+    {
+      ref: 'collaboration',
+      contribute: createCollaborationRuntimeContributor({
+        contextResolver: teamToolContextResolver,
+        kernel: collaboration,
+      }),
+    },
+    {
+      ref: 'synthetic',
+      contribute: createSyntheticRuntimeToolsContributor({
+        market: new SyntheticMarketAdapter(),
+        logger,
+      }),
+    },
+    ...(workModule
+      ? [{ ref: 'work', contribute: workModule.contributeRuntime }]
+      : []),
+  ]);
+  const runtimeOwner = createRuntimeOwner({
+    database: pool,
+    config,
+    logger,
+    toolCatalog: runtimeToolCatalog,
+  });
+  const {
+    runtimeProvider,
+    runtimeSessions,
+    resolveRuntimeSpec,
+    runtimeMcpServer,
+    chatRuntime,
+  } = runtimeOwner;
+  const executionRuns = new ExecutionRunRegistry();
   const chatCapabilities =
     directChatPlane === 'absent'
       ? createChatCapabilities({ directChatPlane })
       : createChatCapabilities({
           directChatPlane,
           database: pool,
-          executionRuntime,
+          chatRuntime,
           conversations: conversations!,
           chatDispatches: chatDispatches!,
           managedAgentDefinitions: resourceModule.managedAgentDefinitions,
@@ -247,7 +394,6 @@ export async function createApplication(
           conversationWorkLinks,
           logger,
           conversationWorkEntitlements,
-          runtimeExtensionBinder,
           workerId,
           leaseMs: leaseDurationMs,
         });
@@ -314,12 +460,6 @@ export async function createApplication(
               principalId: task.principalId,
             },
           );
-          revokeForTerminalTeamRun({
-            teamRunId: team.id,
-            status: terminal?.status,
-            revokeForTeamRun: (teamRunId) =>
-              runtimeExtensionBinder.revokeForTeamRun(teamRunId),
-          });
         }
       },
     },
@@ -340,8 +480,9 @@ export async function createApplication(
     events,
     fileStore: memoryModule.fileStore,
     createMemoryProposal: memoryModule.createMemoryProposal,
-    runtimeExtensionBinder,
     sessions,
+    runtimeSessions,
+    resolveRuntimeSpec,
     environments: resourceModule.environmentReadApi,
     collaborativeExecutions: collaborativeTeamExecutions,
     runs: runRepository,
@@ -364,9 +505,6 @@ export async function createApplication(
             await collaborativeTeamExecutions.recoverExpiredTeamRuns(
               new Date().toISOString(),
             );
-          revokeForRecoveredTeamRuns(recovered, (teamRunId) =>
-            runtimeExtensionBinder.revokeForTeamRun(teamRunId),
-          );
           for (const item of recovered) {
             logger.log('warn', 'team.recovery.fail_closed', {
               team_run_id: item.teamRunId,
@@ -464,7 +602,7 @@ export async function createApplication(
     config,
     logger,
     readiness,
-    runtime: executionRuntime,
+    runtime: runtimeProvider,
     submitRun,
     getRun,
     invokeTask,
@@ -497,7 +635,6 @@ export async function createApplication(
   const lifecycle = createLifecycleSupervisor({
     dispatcher,
     ...workers,
-    executionRuntime,
     runtimeProvider,
     runtimeMcpServer,
     pool,
@@ -538,7 +675,6 @@ export async function createApplication(
 
   return {
     app,
-    runtime: executionRuntime,
     controls: { dispatcher, sessions, memoryModule } satisfies ApplicationControls,
     ...(singleRunDebug ? { singleRunDebug } : {}),
     close: () => lifecycle.stop(),

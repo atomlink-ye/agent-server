@@ -21,10 +21,11 @@ import type { EnvironmentReadApi } from '../ports/environment-read-api.js';
 import type { TeamExecutionRepository } from '../ports/team-execution-repository.js';
 import type { WorkRunResourceManifestRead } from '../ports/work-run-resource-manifest-read.js';
 import type { CreateMemoryProposal } from '../memory/create-memory-proposal.js';
-import type { RuntimeExtensionBinder } from '../extensions/runtime-extension-binder.js';
 import { RuntimeTimedOutError } from '../runtime/execution-runtime-errors.js';
 import type { ExecutionRuntimeService } from '../ports/execution-runtime.js';
 import type { RuntimeExecutionProvider } from '../ports/runtime-execution-provider.js';
+import type { RuntimeSessionStore } from '../ports/runtime-session-store.js';
+import type { ResolveRuntimeSessionSpec } from '../ports/resolve-runtime-session-spec.js';
 import { ExecuteTeamTask } from '../tasks/execute-team-task.js';
 import type { CollaborationActivationReconciler } from '../collaboration/collaboration-activation-reconciler.js';
 import { AgentRunExecutor } from './agent-run-executor.js';
@@ -56,8 +57,8 @@ export interface ExecuteRunOptions {
   readonly events?: RunEventRepository;
   readonly fileStore?: FileStore;
   readonly createMemoryProposal?: CreateMemoryProposal;
-  readonly runtimeExtensionBinder?: RuntimeExtensionBinder;
-  readonly runtimeSessions?: unknown;
+  readonly runtimeSessions?: RuntimeSessionStore;
+  readonly resolveRuntimeSpec?: ResolveRuntimeSessionSpec;
   readonly sessions?: Pick<SessionRepository, 'getSession'>;
   readonly environments?: EnvironmentReadApi;
   readonly runtimeCellRoot?: string;
@@ -99,8 +100,8 @@ export class ExecuteRun {
       events,
       fileStore,
       createMemoryProposal,
-      runtimeExtensionBinder,
       runtimeSessions,
+      resolveRuntimeSpec,
       sessions,
       environments,
       runtimeCellRoot,
@@ -149,8 +150,8 @@ export class ExecuteRun {
       memoryWriter,
       logger,
       events,
-      runtimeExtensionBinder,
       runtimeSessions,
+      resolveRuntimeSpec,
       sessions,
       environments,
       runtimeCellRoot,

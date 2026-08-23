@@ -2,18 +2,14 @@ import { createHash } from 'node:crypto';
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
-import type {
-  RuntimeToolChatContext,
-  RuntimeToolGrant,
-  RuntimeToolGrantService,
-} from './runtime-tool-grant-service.js';
+import type { AuthorizedRuntimeToolContext } from '../runtime/authorize-runtime-tool.js';
 
 export interface RuntimeToolContributionContext {
   readonly server: McpServer;
-  readonly grant: RuntimeToolGrant;
-  readonly grants: RuntimeToolGrantService;
-  /** Trusted Chat origin, never sourced from MCP tool arguments. */
-  readonly chatContext?: RuntimeToolChatContext;
+  readonly grant: AuthorizedRuntimeToolContext;
+  readonly authorize: (
+    toolRef: string,
+  ) => Promise<AuthorizedRuntimeToolContext | null>;
 }
 
 export type RuntimeToolContributor = (

@@ -5,8 +5,8 @@ import { MockChatTurnProvider } from '../adapters/chat/mock-chat-turn-provider.j
 import { ListAgentHomeEntries } from '../application/agents/agent-home.js';
 import { ChatBrainResolver } from '../application/chat/chat-brain-resolver.js';
 import { ChatDeliveryReconciler } from '../application/chat/chat-delivery-reconciler.js';
-import type { RuntimeExtensionBinder } from '../application/extensions/runtime-extension-binder.js';
-import type { ExecutionRuntimeService } from '../application/ports/execution-runtime.js';
+import type { CreateAgentChatRuntimeSession } from '../application/runtime/create-agent-chat-runtime-session.js';
+import type { ExecuteRuntimeTurn } from '../application/runtime/execute-runtime-turn.js';
 import type { AgentResolutionApi } from '../application/ports/agent-resolution-api.js';
 import type { ManagedAgentDefinitionRead } from '../application/ports/agent-registry.js';
 import type { ChatDispatchRepository } from '../application/ports/chat-dispatch-repository.js';
@@ -31,7 +31,10 @@ interface CreateChatCapabilitiesDisabledOptions {
 interface CreateChatCapabilitiesEnabledOptions {
   readonly directChatPlane: EnabledDirectChatPlane;
   readonly database: Pool;
-  readonly executionRuntime: ExecutionRuntimeService;
+  readonly chatRuntime: {
+    readonly sessionCreator: Pick<CreateAgentChatRuntimeSession, 'execute'>;
+    readonly turnExecutor: Pick<ExecuteRuntimeTurn, 'execute'>;
+  };
   readonly conversations: ConversationRepository;
   readonly chatDispatches: ChatDispatchRepository;
   readonly managedAgentDefinitions: Pick<
@@ -47,7 +50,6 @@ interface CreateChatCapabilitiesEnabledOptions {
   readonly conversationWorkEntitlements:
     | ConversationWorkEntitlementRepository
     | undefined;
-  readonly runtimeExtensionBinder: RuntimeExtensionBinder;
   readonly workerId: string;
   readonly leaseMs: number;
 }
@@ -68,7 +70,10 @@ export function createChatCapabilities(
 
   const chatTurnProvider =
     options.directChatPlane === 'execution_runtime'
-      ? new ExecutionRuntimeChatTurnProvider(options.executionRuntime)
+      ? new ExecutionRuntimeChatTurnProvider(
+          options.chatRuntime.sessionCreator,
+          options.chatRuntime.turnExecutor,
+        )
       : new MockChatTurnProvider();
   const chatBrainResolver = new ChatBrainResolver(
     options.managedAgentDefinitions,
@@ -87,7 +92,6 @@ export function createChatCapabilities(
     options.logger,
     undefined,
     options.conversationWorkEntitlements,
-    options.runtimeExtensionBinder,
   );
   const chatWorker = new ChatDeliveryWorker(
     options.chatDispatches,

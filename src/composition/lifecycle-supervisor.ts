@@ -1,5 +1,4 @@
 import type { RuntimeExecutionProvider } from '../application/ports/runtime-execution-provider.js';
-import type { ExecutionRuntimeService } from '../application/ports/execution-runtime.js';
 import type { RunDispatcher } from '../application/ports/run-dispatcher.js';
 import type { ChatDeliveryWorker } from '../entrypoints/chat/worker.js';
 import type { LarkIngressWorker } from '../entrypoints/lark/worker.js';
@@ -17,11 +16,6 @@ export interface LifecycleResources {
     ReturnType<typeof createLarkWebsocketReceiver>,
     'stop'
   >;
-  /**
-   * Remove this legacy connection when L2c deletes PaseoExecutionPlane. Until
-   * then it is independently constructed and must be closed with the provider.
-   */
-  readonly executionRuntime: Pick<ExecutionRuntimeService, 'close'>;
   readonly runtimeProvider: Pick<RuntimeExecutionProvider, 'close'>;
   readonly runtimeMcpServer?: { stop(): Promise<void> };
   readonly pool: { end(): Promise<void> };
@@ -89,11 +83,6 @@ export async function closeServiceResources(
   );
   await cleanup('dispatcher', () => resources.dispatcher.stop(), failures);
   await cleanup(
-    'legacy execution runtime',
-    () => resources.executionRuntime.close(),
-    failures,
-  );
-  await cleanup(
     'runtime provider',
     () => resources.runtimeProvider.close(),
     failures,
@@ -131,22 +120,6 @@ export async function startServiceResources(
     }
     throw startupFailure;
   }
-}
-
-export async function closeRuntimeAndPool(
-  executionRuntime: Pick<ExecutionRuntimeService, 'close'>,
-  runtimeProvider: Pick<RuntimeExecutionProvider, 'close'>,
-  pool: { end(): Promise<void> },
-): Promise<void> {
-  const failures: Error[] = [];
-  await cleanup(
-    'legacy execution runtime',
-    () => executionRuntime.close(),
-    failures,
-  );
-  await cleanup('runtime provider', () => runtimeProvider.close(), failures);
-  await cleanup('pool', () => pool.end(), failures);
-  throwFailures(failures, 'startup cleanup failed');
 }
 
 async function cleanup(

@@ -290,7 +290,6 @@ export function createWorkModule(
           ? { conversations: options.conversations }
           : {}),
         conversationWorkLinks,
-        ...(context.chatContext ? { chatContext: context.chatContext } : {}),
       });
     },
   };

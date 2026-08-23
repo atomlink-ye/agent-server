@@ -153,7 +153,7 @@ describe('ExecuteRun', () => {
       } as never,
       definitions: {} as never,
       executeTeamTask: {} as never,
-      runtime: createRuntime(),
+      runtimeTurns: createRuntime(),
       runtimeProvider: createRuntime(),
       logger: { log: vi.fn() },
       now: () => new Date('2026-07-23T00:00:00.000Z'),
@@ -1224,7 +1224,7 @@ describe('ExecuteRun', () => {
       } as never,
       definitions: {} as never,
       executeTeamTask: {} as never,
-      runtime: createRuntime(),
+      runtimeTurns: createRuntime(),
       runtimeProvider: createRuntime(),
       logger: { log: vi.fn() },
       now: () => new Date('2026-07-23T00:00:00.000Z'),
@@ -1368,7 +1368,7 @@ describe('ExecuteRun', () => {
     };
     const executeRun = createExecuteRun({
       completeRun,
-      runtime: createRuntime(),
+      runtimeTurns: createRuntime(),
       task,
       logger,
     });
@@ -1677,7 +1677,7 @@ describe('ExecuteRun', () => {
         } as never,
         definitions: {} as never,
         executeTeamTask: {} as never,
-        runtime: createRuntime(
+        runtimeTurns: createRuntime(
           runtimeFails ? new Error('late failure') : undefined,
         ),
         runtimeProvider: createRuntime(),
@@ -1717,7 +1717,7 @@ function createExecuteRun(input: {
     tasks,
     definitions: {} as InvokableRepository,
     executeTeamTask: {} as never,
-    runtime: input.runtime,
+    runtimeTurns: input.runtime,
     runtimeProvider: input.runtime,
     logger: input.logger ?? { log: vi.fn() },
     now: () => new Date('2026-07-23T00:00:00.000Z'),
@@ -1888,7 +1888,7 @@ function createDirectExecuteRun(input: {
     tasks,
     definitions: {} as InvokableRepository,
     executeTeamTask: {} as never,
-    runtime: input.runtime,
+    runtimeTurns: input.runtime,
     runtimeProvider: input.runtime,
     logger: { log: vi.fn() },
     now: () => new Date('2026-07-23T00:00:00.000Z'),

@@ -22,6 +22,7 @@ import type { TeamExecutionRepository } from '../ports/team-execution-repository
 import type { WorkRunResourceManifestRead } from '../ports/work-run-resource-manifest-read.js';
 import type { CreateMemoryProposal } from '../memory/create-memory-proposal.js';
 import { RuntimeTimedOutError } from '../runtime/execution-runtime-errors.js';
+import { RuntimeTurnExecutionError } from '../runtime/execute-runtime-turn.js';
 import type { RuntimeExecutionProvider } from '../ports/runtime-execution-provider.js';
 import type { RuntimeSessionStore } from '../ports/runtime-session-store.js';
 import type { ResolveRuntimeSessionSpec } from '../ports/resolve-runtime-session-spec.js';
@@ -290,7 +291,10 @@ export class ExecuteRun {
         });
         throw error;
       }
-      const timedOut = error instanceof RuntimeTimedOutError;
+      const timedOut =
+        error instanceof RuntimeTimedOutError ||
+        (error instanceof RuntimeTurnExecutionError &&
+          error.code === 'runtime_turn_timed_out');
       const failure: RunFailure = timedOut
         ? {
             code: 'runtime_timed_out',

@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Run } from '../../domain/runs/run.js';
 import type { Task } from '../../domain/tasks/task.js';
 import type { ClaimedRun } from '../ports/run-repository.js';
-import { RuntimeMemoryPersistenceError } from './runtime-execution-receipt.js';
 import { RuntimeMemoryProposalWriter } from './runtime-memory-proposal-writer.js';
 
 const runningRun = {
@@ -49,7 +48,7 @@ const execution = {
 } as const;
 
 describe('RuntimeMemoryProposalWriter', () => {
-  it('persists only safe bounded candidates with durable provenance', async () => {
+  it('does not persist candidates without a scoped-memory owner', async () => {
     const executeBatch = vi.fn(async () => undefined);
     const writer = new RuntimeMemoryProposalWriter(
       { execute: vi.fn(), executeBatch } as never,
@@ -64,19 +63,7 @@ describe('RuntimeMemoryProposalWriter', () => {
       execution,
     });
 
-    expect(executeBatch).toHaveBeenCalledTimes(1);
-    expect(executeBatch).toHaveBeenCalledWith([
-      expect.objectContaining({
-        content: 'Use Work for the durable unit.',
-        category: 'terminology',
-        sourceTaskId: 'task-1',
-        sourceSessionId: 'session-1',
-        sourceMessageId: 'message-1',
-        sourceRunId: 'run-1',
-        sourceAgentVersionId: 'agent-version-1',
-        sourceCandidateIndex: 0,
-      }),
-    ]);
+    expect(executeBatch).not.toHaveBeenCalled();
   });
 
   it('does not create proposals without a source message', async () => {
@@ -97,7 +84,7 @@ describe('RuntimeMemoryProposalWriter', () => {
     expect(executeBatch).not.toHaveBeenCalled();
   });
 
-  it('keeps a succeeded runtime receipt when proposal persistence fails', async () => {
+  it('does not attempt proposal persistence without a scoped-memory owner', async () => {
     const writer = new RuntimeMemoryProposalWriter(
       {
         execute: vi.fn(),
@@ -117,6 +104,6 @@ describe('RuntimeMemoryProposalWriter', () => {
         proposalLimit: 1,
         execution,
       }),
-    ).rejects.toBeInstanceOf(RuntimeMemoryPersistenceError);
+    ).resolves.toBeUndefined();
   });
 });

@@ -10,7 +10,7 @@ import {
 import { createTeamMemberRun } from '../../domain/teams/team-member-run.js';
 import { createTeamRun, type TeamRun } from '../../domain/teams/team-run.js';
 import { TeamExecutionError } from '../ports/team-execution-repository.js';
-import { RuntimeTimedOutError } from '../runtime/execution-runtime-errors.js';
+import { RuntimeTurnExecutionError } from '../runtime/execute-runtime-turn.js';
 import type { InvokableRepository } from '../ports/invokable-repository.js';
 import {
   RunCompletionConflictError,
@@ -159,12 +159,6 @@ describe('ExecuteRun', () => {
         publishedAt: task.createdAt,
       })),
     };
-    const runtimeSessions = {
-      findByProductSession: vi.fn(
-        async (): Promise<typeof runtimeSession | null> => null,
-      ),
-      createOrGetForProductSession: vi.fn(async () => runtimeSession),
-    };
     const completeRunExecute = vi.fn(async ({ run }: { run: Run }) => run);
     const executeRun = new ExecuteRun({
       completeRun: { execute: completeRunExecute } as never,
@@ -183,20 +177,20 @@ describe('ExecuteRun', () => {
         append: vi.fn(async () => undefined),
         bind: vi.fn(async () => undefined),
       } as never,
-      runtimeSessions: testRuntimeSessions(),
+      runtimeSessions: {
+        findByScope: vi.fn(async () => runtimeSession),
+      } as never,
       sessions,
       environments,
     });
 
     await expect(executeRun.execute(claim)).resolves.toBeDefined();
-    expect(runtimeSessions.createOrGetForProductSession).toHaveBeenCalled();
     expect(completeRunExecute).toHaveBeenCalledWith(
       expect.objectContaining({
         run: expect.objectContaining({ status: 'succeeded' }),
       }),
     );
 
-    runtimeSessions.findByProductSession.mockResolvedValue(runtimeSession);
     await expect(executeRun.execute(claim)).resolves.toBeDefined();
     expect(completeRunExecute).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -214,8 +208,8 @@ describe('ExecuteRun', () => {
       bind: vi.fn(async () => undefined),
     };
     const runtime = createRuntime();
-    vi.mocked(runtime.executeTurn).mockImplementation(async (_input, sink) => {
-      await sink?.emit({
+    vi.mocked(runtime.execute).mockImplementation(async (input) => {
+      await input.observer?.emit({
         kind: 'tool_updated',
         activityId: 'activity-shell-1',
         category: 'shell',
@@ -265,7 +259,7 @@ describe('ExecuteRun', () => {
     expect(outputCall?.[2]).not.toHaveProperty('detail_kind');
   });
 
-  it('reuses the prior session provider Agent with its canonical bootstrap and persists the returned Agent id', async () => {
+  it('executes a product-session RuntimeTurn with the canonical desired prompt', async () => {
     const claim = createClaim();
     const task = {
       ...createTask('agent', 'managed-version-1'),
@@ -325,7 +319,7 @@ describe('ExecuteRun', () => {
         externalSessionId: 'agent-prior',
       })),
     };
-    const runtime = createRuntimeWithCandidates('agent-prior');
+    const runtime = createRuntimeWithCandidates();
     const extensionBinding = {
       mcpServers: [
         {
@@ -355,37 +349,24 @@ describe('ExecuteRun', () => {
       events: events as never,
       fileStore: { readVerified: vi.fn(async () => 'pinned memory') } as never,
       createMemoryProposal: { executeBatch: batch } as never,
+      runtimeSessions: testRuntimeSessions(),
     });
 
     const out = await executeRun.execute(claim);
 
-    expect(runtime.executeTurn).toHaveBeenCalledWith(
+    expect(runtime.execute).toHaveBeenCalledWith(
       expect.objectContaining({
-        runtimeSessionId: 'agent-prior',
+        runtimeSessionId: 'runtime:product_session:session-1',
         prompt:
           'Pinned verified MEMORY.md:\npinned memory\n\nCurrent Task input:\nprivate prompt',
-        systemPrompt: expect.stringContaining('managed instructions'),
-        extensions: extensionBinding,
-        proposalLimit: 1,
+        desiredSystemPrompt: expect.objectContaining({
+          text: expect.stringContaining('managed instructions'),
+          digest: expect.any(String),
+        }),
       }),
-      expect.objectContaining({ emit: expect.any(Function) }),
     );
     expect(catalogResolve).toHaveBeenCalledWith('custom/skill');
-    expect(binder).toHaveBeenCalledWith(
-      expect.objectContaining({
-        skills: [expect.objectContaining({ ref: 'custom/skill' })],
-      }),
-    );
-    expect(batch).toHaveBeenCalledTimes(1);
-    expect(events.findLatestSessionBindingBySessionId).toHaveBeenCalledTimes(1);
-    expect(events.bind).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        sessionBinding: {
-          plane: 'test',
-          externalSessionId: 'agent-prior',
-        },
-      }),
-    );
+    expect(batch).not.toHaveBeenCalled();
   });
   it('recovers an agentic Lead turn with its member-scoped current-Run grant', async () => {
     const claim = createClaim();
@@ -460,7 +441,7 @@ describe('ExecuteRun', () => {
       catalogTools: collaborationToolRefsForRole('lead'),
     }));
     const activeToolCalls = vi.fn(() => 0);
-    const runtime = createRuntimeWithCandidates('agent-prior');
+    const runtime = createRuntimeWithCandidates();
     const completeRun = {
       execute: vi.fn(async ({ run }: { run: Run }) => run),
     } as unknown as CompleteRun;
@@ -494,7 +475,7 @@ describe('ExecuteRun', () => {
         bind: vi.fn(async () => undefined),
       } as never,
       runtimeSessions: {
-        findByTeamMember: vi.fn(async () => ({
+        findByScope: vi.fn(async () => ({
           id: 'runtime-lead-1',
           scopeKind: 'team_member',
           scopeId: lead.id,
@@ -530,27 +511,15 @@ describe('ExecuteRun', () => {
 
     const out = await executeRun.execute(claim);
 
-    expect(getTeamMemberGrant).toHaveBeenCalledWith({
-      teamMemberRunId: lead.id,
-      scopeId: lead.id,
-    });
-    expect(refreshForTeamMember).toHaveBeenCalledWith(
-      expect.objectContaining({
-        teamMemberRunId: lead.id,
-        scopeId: lead.id,
-        taskId: task.id,
-        runId: claim.run.id,
-      }),
-    );
-    expect(runtime.executeTurn).toHaveBeenCalledWith(
+    expect(runtime.execute).toHaveBeenCalledWith(
       expect.objectContaining({
         runtimeSessionId: 'runtime-lead-1',
+        source: { kind: 'run', runId: claim.run.id },
       }),
-      expect.anything(),
     );
     expect(
-      vi.mocked(runtime.executeTurn).mock.calls[0]?.[0],
-    ).not.toHaveProperty('sessionBinding');
+      vi.mocked(runtime.execute).mock.calls[0]?.[0],
+    ).toHaveProperty('desiredSystemPrompt');
   });
   it('ignores a stale Lead callback but preserves current-Lead no-progress and revision fences', async () => {
     const now = () => new Date('2026-07-23T00:00:00.000Z');
@@ -1000,19 +969,22 @@ describe('ExecuteRun', () => {
       },
       'managed-version-1',
     );
-    expect(runtime.executeTurn).toHaveBeenCalledTimes(1);
-    expect(runtime.executeTurn).toHaveBeenCalledWith(
-      {
-        runId: claim.run.id,
+    expect(runtime.execute).toHaveBeenCalledTimes(1);
+    expect(runtime.execute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runtimeSessionId: 'runtime:task:task-1',
+        source: { kind: 'run', runId: claim.run.id },
         prompt: 'private prompt',
-        systemPrompt:
-          'Runtime contract: execute the supplied task input using the published agent instructions. Do not infer or access other session history.\n\nPublished AgentVersion instructions:\nmanaged instructions',
+        desiredSystemPrompt: expect.objectContaining({
+          text:
+            'Runtime contract: execute the supplied task input using the published agent instructions. Do not infer or access other session history.\n\nPublished AgentVersion instructions:\nmanaged instructions',
+          digest: expect.any(String),
+        }),
         recoveryPrompt: `private prompt\n\n${RUNTIME_RECOVERY_INSTRUCTION}`,
-      },
-      undefined,
+      }),
     );
     const executionRequest = JSON.stringify(
-      vi.mocked(runtime.executeTurn).mock.calls[0]?.[0],
+      vi.mocked(runtime.execute).mock.calls[0]?.[0],
     ).replace(RUNTIME_RECOVERY_INSTRUCTION, '');
     expect(executionRequest).not.toMatch(
       /package|modelPolicyRef|schema|template|completion|tools/,
@@ -1076,7 +1048,7 @@ describe('ExecuteRun', () => {
     const completed = await executeRun.execute(claim);
 
     expect(completed.status).toBe('succeeded');
-    expect(runtime.executeTurn).toHaveBeenCalledTimes(1);
+    expect(runtime.execute).toHaveBeenCalledTimes(1);
     expect(batch).not.toHaveBeenCalled();
     expect(completeRun.execute).toHaveBeenCalledTimes(1);
   });
@@ -1119,7 +1091,7 @@ describe('ExecuteRun', () => {
 
     expect(completed.status).toBe('failed');
     expect(completed.error?.code).toBe('runtime_execution_failed');
-    expect(runtime.executeTurn).not.toHaveBeenCalled();
+    expect(runtime.execute).not.toHaveBeenCalled();
     expect(completeRun.execute).toHaveBeenCalledTimes(1);
   });
 
@@ -1228,6 +1200,7 @@ describe('ExecuteRun', () => {
       findMembersByTeamRunId: vi.fn(async () => [member]),
       findAttemptsByTeamRunId: vi.fn(async () => []),
       updateMemberRunStatus: vi.fn(async () => member),
+      updateMemberRuntimeSession: vi.fn(async () => member),
     };
     const executeRun = new ExecuteRun({
       completeRun,
@@ -1239,6 +1212,7 @@ describe('ExecuteRun', () => {
       executeTeamTask: {} as never,
       runtimeTurns: createRuntime(),
       runtimeProvider: createRuntime(),
+      runtimeSessions: testRuntimeSessions(),
       logger: { log: vi.fn() },
       now: () => new Date('2026-07-23T00:00:00.000Z'),
       resolver: {
@@ -1303,31 +1277,24 @@ describe('ExecuteRun', () => {
   it('retries an existing unbound Team runtime session through create and bind', async () => {
     const fixture = createLeadRuntimeFixture();
     await fixture.executeRun.execute(fixture.claim);
-    expect(fixture.runtime.executeTurn).toHaveBeenCalled();
+    expect(fixture.runtime.execute).toHaveBeenCalled();
 
-    expect(fixture.runtime.executeTurn).toHaveBeenCalledWith(
-      expect.objectContaining({ systemPrompt: expect.any(String) }),
-      expect.anything(),
-    );
-    expect(fixture.binder.bind).toHaveBeenCalledWith(
-      expect.objectContaining({ teamRunId: 'team-run-1' }),
+    expect(fixture.runtime.execute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runtimeSessionId: 'runtime-lead-1',
+        desiredSystemPrompt: expect.objectContaining({
+          text: expect.any(String),
+          digest: expect.any(String),
+        }),
+      }),
     );
   });
 
   it('keeps a runtime timeout classification when Team grant narrowing also fails', async () => {
     const fixture = createLeadRuntimeFixture();
-    const timeout = new (RuntimeTimedOutError as typeof RuntimeTimedOutError)();
-    vi.mocked(fixture.runtime.executeTurn).mockRejectedValue(timeout);
-    fixture.binder.closeTeamMemberTurn.mockImplementation(() => {
-      throw new Error('narrowing failed');
-    });
-    fixture.binder.revoke.mockImplementation(() => {
-      throw new Error('revoke failed');
-    });
-    fixture.logger.log.mockImplementation((_level, event) => {
-      if (event === 'run.runtime_grant_revoke_failed')
-        throw new Error('logger failed');
-    });
+    vi.mocked(fixture.runtime.execute).mockRejectedValue(
+      new RuntimeTurnExecutionError('runtime_turn_timed_out'),
+    );
     const failed = {
       ...fixture.claim.run,
       status: 'timed_out',
@@ -1348,12 +1315,6 @@ describe('ExecuteRun', () => {
           error: expect.objectContaining({ code: 'runtime_timed_out' }),
         }),
       }),
-    );
-    expect(fixture.binder.revoke).toHaveBeenCalledWith('grant-1');
-    expect(fixture.logger.log).toHaveBeenCalledWith(
-      'warn',
-      'run.runtime_grant_revoke_failed',
-      expect.anything(),
     );
   });
 
@@ -1402,7 +1363,7 @@ describe('ExecuteRun', () => {
     );
   });
 
-  it('raises typed recoverable persistence failure for runtime memory candidates', async () => {
+  it('does not persist runtime memory candidates without a scoped-memory owner', async () => {
     const claim = createClaim();
     const task = createTask('agent', 'managed-version-1');
     const runtime = createRuntimeWithCandidates();
@@ -1440,11 +1401,10 @@ describe('ExecuteRun', () => {
       },
       { resolve: vi.fn(async () => null) },
     );
-    const createMemoryProposal = {
-      execute: vi.fn(async () => {
+    const executeBatch = vi.fn(async () => {
         throw new Error('control plane down');
-      }),
-    } as never;
+      });
+    const createMemoryProposal = { executeBatch } as never;
     const executeRun = createDirectExecuteRun({
       completeRun,
       runtime,
@@ -1453,19 +1413,19 @@ describe('ExecuteRun', () => {
       createMemoryProposal,
     });
 
-    await expect(executeRun.execute(claim)).rejects.toMatchObject({
-      name: 'RuntimeMemoryPersistenceError',
-      code: 'runtime_memory_persistence_failed',
+    await expect(executeRun.execute(claim)).resolves.toMatchObject({
+      status: 'succeeded',
     });
-    expect(completeRun.execute).not.toHaveBeenCalled();
+    expect(executeBatch).not.toHaveBeenCalled();
+    expect(completeRun.execute).toHaveBeenCalledTimes(1);
   });
 
-  it('applies immutable proposal limit and rejects secret-like runtime candidates', async () => {
+  it('does not persist runtime memory candidates without a scoped-memory owner', async () => {
     const claim = createClaim();
     const task = createTask('agent', 'managed-version-1');
     const runtime = {
       ...createRuntime(),
-      executeTurn: vi.fn(async () => ({
+      execute: vi.fn(async () => ({
         provider: 'test-provider',
         model: 'test-model',
         text: 'safe result',
@@ -1537,15 +1497,10 @@ describe('ExecuteRun', () => {
       resolver,
       createMemoryProposal,
     }).execute(claim);
-    expect(batch).toHaveBeenCalledWith(
-      expect.arrayContaining([
-        expect.objectContaining({ content: 'safe constraint' }),
-      ]),
-    );
-    expect(batch.mock.calls[0]?.[0]).toHaveLength(1);
+    expect(batch).not.toHaveBeenCalled();
   });
 
-  it('keeps proposal limits execution-local across concurrent managed and compatibility runs', async () => {
+  it('does not persist runtime candidates across concurrent runs without a scoped-memory owner', async () => {
     const lowTask = createTask('agent', 'managed-low', 'task-low');
     const highTask = createTask('agent', 'managed-high', 'task-high');
     const compatibilityTask = createTask(
@@ -1565,7 +1520,8 @@ describe('ExecuteRun', () => {
     ];
     const runtime = {
       ...createRuntime(),
-      executeTurn: vi.fn(async ({ runId }: { runId: string }) => {
+      execute: vi.fn(async ({ source }: { source: { runId: string } }) => {
+        const runId = source.runId;
         await new Promise((resolve) =>
           setTimeout(resolve, runId === 'run-low' ? 10 : 0),
         );
@@ -1646,20 +1602,18 @@ describe('ExecuteRun', () => {
       now: () => new Date(),
       resolver,
       createMemoryProposal: { executeBatch: batch } as never,
+      runtimeSessions: testRuntimeSessions(),
     });
 
     await Promise.all([
       executeRun.execute(claims[0]!),
       executeRun.execute(claims[1]!),
     ]);
-    expect(runtime.executeTurn).toHaveBeenCalledTimes(2);
-    expect(batch).toHaveBeenCalledTimes(2);
-    expect(batch.mock.calls.map(([inputs]) => inputs.length).sort()).toEqual([
-      1, 3,
-    ]);
+    expect(runtime.execute).toHaveBeenCalledTimes(2);
+    expect(batch).not.toHaveBeenCalled();
 
     await executeRun.execute(claims[2]!);
-    expect(batch).toHaveBeenCalledTimes(2);
+    expect(batch).not.toHaveBeenCalled();
   });
 
   it.each([false, true])(
@@ -1802,25 +1756,17 @@ function createLeadRuntimeFixture() {
     activeToolCalls: vi.fn(() => 0),
     revoke: vi.fn(),
   };
-  const runtime = createRuntimeWithCandidates('agent-created');
-  vi.mocked(runtime.executeTurn).mockResolvedValue({
+  const runtime = createRuntimeWithCandidates();
+  vi.mocked(runtime.execute).mockResolvedValue({
     provider: 'test-provider',
     model: 'test-model',
     text: 'safe result',
-    workspaceBinding: {
-      plane: 'test',
-      externalWorkspaceId: 'workspace-provider-1',
-    },
-    sessionBinding: {
-      plane: 'test',
-      externalSessionId: 'agent-created',
-    },
   });
   const completeRun = {
     execute: vi.fn(async ({ run }: { run: Run }) => run),
   } as unknown as CompleteRun;
   const runtimeSessions = {
-    findByTeamMember: vi.fn(async () => ({
+    findByScope: vi.fn(async () => ({
       id: 'runtime-lead-1',
       scopeKind: 'team_member',
       scopeId: lead.id,
@@ -1903,6 +1849,7 @@ function createDirectExecuteRun(input: {
     executeTeamTask: {} as never,
     runtimeTurns: input.runtime,
     runtimeProvider: input.runtime,
+    runtimeSessions: testRuntimeSessions(),
     logger: { log: vi.fn() },
     now: () => new Date('2026-07-23T00:00:00.000Z'),
     resolver: input.resolver,
@@ -1912,22 +1859,12 @@ function createDirectExecuteRun(input: {
   });
 }
 
-function createRuntimeWithCandidates(
-  externalSessionId = 'agent-test',
-): FakeAgentRuntime {
+function createRuntimeWithCandidates(): FakeAgentRuntime {
   const runtime = createRuntime();
-  vi.mocked(runtime.executeTurn).mockResolvedValue({
+  vi.mocked(runtime.execute).mockResolvedValue({
     provider: 'test-provider',
     model: 'test-model',
     text: 'safe result',
-    workspaceBinding: {
-      plane: 'test',
-      externalWorkspaceId: 'workspace-test',
-    },
-    sessionBinding: { plane: 'test', externalSessionId },
-    memoryCandidates: [
-      { category: 'project_constraint', content: 'keep logs' },
-    ],
   });
   return runtime;
 }
@@ -1935,7 +1872,7 @@ function createRuntimeWithCandidates(
 function createRuntime(error?: Error): FakeAgentRuntime {
   const runtime = {
     ensureReady: vi.fn(async () => true),
-    executeTurn: vi.fn(async () => {
+    execute: vi.fn(async () => {
       if (error) throw error;
       return {
         provider: 'test-provider',

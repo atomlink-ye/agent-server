@@ -2,7 +2,7 @@ import type {
   ExecutionObservation,
   ExecutionToolDetail,
 } from '../ports/execution-plane.js';
-import { AGENT_SERVER_EXECUTION_MCP_SERVER_NAME } from '../ports/execution-plane.js';
+import { AGENT_SERVER_EXECUTION_MCP_SERVER_NAME } from '../ports/runtime-extension-binding.js';
 import type { RunEventPayload } from '../ports/run-events.js';
 import { canonicalCollaborationMcpName } from '../../domain/collaboration/canonical-collaboration-tools.js';
 import { SERVER_AUTHORIZED_TEAM_MCP_CATALOG } from '../../contracts/product-projection/edges.js';

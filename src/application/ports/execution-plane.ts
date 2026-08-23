@@ -1,7 +1,6 @@
 import type { RunUsage } from '../../domain/runs/run.js';
 import type { RuntimeInvocationContext } from '../../domain/runtime/runtime-invocation-context.js';
-
-export const AGENT_SERVER_EXECUTION_MCP_SERVER_NAME = 'agent-server';
+import type { ExecutionExtensionBinding } from './runtime-extension-binding.js';
 
 export type ExecutionPlaneCapability =
   | 'streaming'
@@ -51,20 +50,6 @@ export interface ExecutionWorkspaceBinding {
 export interface ExecutionSessionBinding {
   readonly plane: string;
   readonly externalSessionId: string;
-}
-
-export interface ExecutionMcpServerConfig {
-  readonly name: string;
-  readonly url: string;
-  readonly headers: Readonly<Record<string, string>>;
-}
-
-/** Runtime extension identity excludes bearer plaintext from its stable digest. */
-export interface ExecutionExtensionBinding {
-  readonly mcpServers?: readonly ExecutionMcpServerConfig[];
-  readonly endpointEpoch?: string;
-  readonly digest?: string;
-  readonly grantId?: string;
 }
 
 export interface ExecutionWorkspaceSpec {

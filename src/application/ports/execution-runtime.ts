@@ -2,12 +2,12 @@ import type { RunUsage } from '../../domain/runs/run.js';
 import type { RuntimeInvocationContext } from '../../domain/runtime/runtime-invocation-context.js';
 import type { ResourceOwner } from '../../domain/tenancy/product-context.js';
 import type {
-  ExecutionExtensionBinding,
   ExecutionObservationSink,
   ExecutionPlaneHealth,
   ExecutionSessionBinding,
   ExecutionWorkspaceBinding,
 } from './execution-plane.js';
+import type { ExecutionExtensionBinding } from './runtime-extension-binding.js';
 import type { RuntimeMemoryCandidate } from './runtime-memory-candidate-collector.js';
 import type { RuntimeSession } from '../../domain/runtime/runtime-session.js';
 

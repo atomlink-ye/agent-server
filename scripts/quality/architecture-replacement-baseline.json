@@ -683,81 +683,11 @@
     },
     {
       "rule": "backend.platform-import",
-      "path": "src/entrypoints/api/app.ts",
-      "line": 16,
-      "symbol": "../../platform/http-types.js",
+      "path": "src/entrypoints/api/http-types.ts",
+      "line": 1,
+      "symbol": "../../platform/access-context.js",
       "occurrence": 1,
-      "key": "backend.platform-import|src/entrypoints/api/app.ts|../../platform/http-types.js|000001",
-      "why": "Production code still imports the legacy platform tree.",
-      "phase": "Phase 5 — composition graph"
-    },
-    {
-      "rule": "backend.platform-import",
-      "path": "src/entrypoints/api/authentication.ts",
-      "line": 5,
-      "symbol": "../../platform/http-types.js",
-      "occurrence": 1,
-      "key": "backend.platform-import|src/entrypoints/api/authentication.ts|../../platform/http-types.js|000001",
-      "why": "Production code still imports the legacy platform tree.",
-      "phase": "Phase 5 — composition graph"
-    },
-    {
-      "rule": "backend.platform-import",
-      "path": "src/entrypoints/api/routes/agent-home.ts",
-      "line": 9,
-      "symbol": "../../../platform/http-types.js",
-      "occurrence": 1,
-      "key": "backend.platform-import|src/entrypoints/api/routes/agent-home.ts|../../../platform/http-types.js|000001",
-      "why": "Production code still imports the legacy platform tree.",
-      "phase": "Phase 5 — composition graph"
-    },
-    {
-      "rule": "backend.platform-import",
-      "path": "src/entrypoints/api/routes/agent-profile.ts",
-      "line": 14,
-      "symbol": "../../../platform/http-types.js",
-      "occurrence": 1,
-      "key": "backend.platform-import|src/entrypoints/api/routes/agent-profile.ts|../../../platform/http-types.js|000001",
-      "why": "Production code still imports the legacy platform tree.",
-      "phase": "Phase 5 — composition graph"
-    },
-    {
-      "rule": "backend.platform-import",
-      "path": "src/entrypoints/api/routes/agents.ts",
-      "line": 43,
-      "symbol": "../../../platform/http-types.js",
-      "occurrence": 1,
-      "key": "backend.platform-import|src/entrypoints/api/routes/agents.ts|../../../platform/http-types.js|000001",
-      "why": "Production code still imports the legacy platform tree.",
-      "phase": "Phase 5 — composition graph"
-    },
-    {
-      "rule": "backend.platform-import",
-      "path": "src/entrypoints/api/routes/browser-context.ts",
-      "line": 2,
-      "symbol": "../../../platform/http-types.js",
-      "occurrence": 1,
-      "key": "backend.platform-import|src/entrypoints/api/routes/browser-context.ts|../../../platform/http-types.js|000001",
-      "why": "Production code still imports the legacy platform tree.",
-      "phase": "Phase 5 — composition graph"
-    },
-    {
-      "rule": "backend.platform-import",
-      "path": "src/entrypoints/api/routes/browser-coworkers.ts",
-      "line": 9,
-      "symbol": "../../../platform/http-types.js",
-      "occurrence": 1,
-      "key": "backend.platform-import|src/entrypoints/api/routes/browser-coworkers.ts|../../../platform/http-types.js|000001",
-      "why": "Production code still imports the legacy platform tree.",
-      "phase": "Phase 5 — composition graph"
-    },
-    {
-      "rule": "backend.platform-import",
-      "path": "src/entrypoints/api/routes/browser-web.ts",
-      "line": 27,
-      "symbol": "../../../platform/http-types.js",
-      "occurrence": 1,
-      "key": "backend.platform-import|src/entrypoints/api/routes/browser-web.ts|../../../platform/http-types.js|000001",
+      "key": "backend.platform-import|src/entrypoints/api/http-types.ts|../../platform/access-context.js|000001",
       "why": "Production code still imports the legacy platform tree.",
       "phase": "Phase 5 — composition graph"
     },
@@ -768,176 +698,6 @@
       "symbol": "../../../platform/access-context.js",
       "occurrence": 1,
       "key": "backend.platform-import|src/entrypoints/api/routes/collaboration-runs.ts|../../../platform/access-context.js|000001",
-      "why": "Production code still imports the legacy platform tree.",
-      "phase": "Phase 5 — composition graph"
-    },
-    {
-      "rule": "backend.platform-import",
-      "path": "src/entrypoints/api/routes/collaboration-runs.ts",
-      "line": 8,
-      "symbol": "../../../platform/http-types.js",
-      "occurrence": 1,
-      "key": "backend.platform-import|src/entrypoints/api/routes/collaboration-runs.ts|../../../platform/http-types.js|000001",
-      "why": "Production code still imports the legacy platform tree.",
-      "phase": "Phase 5 — composition graph"
-    },
-    {
-      "rule": "backend.platform-import",
-      "path": "src/entrypoints/api/routes/context-files.ts",
-      "line": 23,
-      "symbol": "../../../platform/http-types.js",
-      "occurrence": 1,
-      "key": "backend.platform-import|src/entrypoints/api/routes/context-files.ts|../../../platform/http-types.js|000001",
-      "why": "Production code still imports the legacy platform tree.",
-      "phase": "Phase 5 — composition graph"
-    },
-    {
-      "rule": "backend.platform-import",
-      "path": "src/entrypoints/api/routes/conversations.ts",
-      "line": 18,
-      "symbol": "../../../platform/http-types.js",
-      "occurrence": 1,
-      "key": "backend.platform-import|src/entrypoints/api/routes/conversations.ts|../../../platform/http-types.js|000001",
-      "why": "Production code still imports the legacy platform tree.",
-      "phase": "Phase 5 — composition graph"
-    },
-    {
-      "rule": "backend.platform-import",
-      "path": "src/entrypoints/api/routes/environments.ts",
-      "line": 23,
-      "symbol": "../../../platform/http-types.js",
-      "occurrence": 1,
-      "key": "backend.platform-import|src/entrypoints/api/routes/environments.ts|../../../platform/http-types.js|000001",
-      "why": "Production code still imports the legacy platform tree.",
-      "phase": "Phase 5 — composition graph"
-    },
-    {
-      "rule": "backend.platform-import",
-      "path": "src/entrypoints/api/routes/health.ts",
-      "line": 9,
-      "symbol": "../../../platform/http-types.js",
-      "occurrence": 1,
-      "key": "backend.platform-import|src/entrypoints/api/routes/health.ts|../../../platform/http-types.js|000001",
-      "why": "Production code still imports the legacy platform tree.",
-      "phase": "Phase 5 — composition graph"
-    },
-    {
-      "rule": "backend.platform-import",
-      "path": "src/entrypoints/api/routes/learning-proposals.ts",
-      "line": 26,
-      "symbol": "../../../platform/http-types.js",
-      "occurrence": 1,
-      "key": "backend.platform-import|src/entrypoints/api/routes/learning-proposals.ts|../../../platform/http-types.js|000001",
-      "why": "Production code still imports the legacy platform tree.",
-      "phase": "Phase 5 — composition graph"
-    },
-    {
-      "rule": "backend.platform-import",
-      "path": "src/entrypoints/api/routes/memory-api.ts",
-      "line": 9,
-      "symbol": "../../../platform/http-types.js",
-      "occurrence": 1,
-      "key": "backend.platform-import|src/entrypoints/api/routes/memory-api.ts|../../../platform/http-types.js|000001",
-      "why": "Production code still imports the legacy platform tree.",
-      "phase": "Phase 5 — composition graph"
-    },
-    {
-      "rule": "backend.platform-import",
-      "path": "src/entrypoints/api/routes/product-work-commands.ts",
-      "line": 53,
-      "symbol": "../../../platform/http-types.js",
-      "occurrence": 1,
-      "key": "backend.platform-import|src/entrypoints/api/routes/product-work-commands.ts|../../../platform/http-types.js|000001",
-      "why": "Production code still imports the legacy platform tree.",
-      "phase": "Phase 5 — composition graph"
-    },
-    {
-      "rule": "backend.platform-import",
-      "path": "src/entrypoints/api/routes/product-work-definitions.ts",
-      "line": 28,
-      "symbol": "../../../platform/http-types.js",
-      "occurrence": 1,
-      "key": "backend.platform-import|src/entrypoints/api/routes/product-work-definitions.ts|../../../platform/http-types.js|000001",
-      "why": "Production code still imports the legacy platform tree.",
-      "phase": "Phase 5 — composition graph"
-    },
-    {
-      "rule": "backend.platform-import",
-      "path": "src/entrypoints/api/routes/product-work.ts",
-      "line": 23,
-      "symbol": "../../../platform/http-types.js",
-      "occurrence": 1,
-      "key": "backend.platform-import|src/entrypoints/api/routes/product-work.ts|../../../platform/http-types.js|000001",
-      "why": "Production code still imports the legacy platform tree.",
-      "phase": "Phase 5 — composition graph"
-    },
-    {
-      "rule": "backend.platform-import",
-      "path": "src/entrypoints/api/routes/runs.ts",
-      "line": 21,
-      "symbol": "../../../platform/http-types.js",
-      "occurrence": 1,
-      "key": "backend.platform-import|src/entrypoints/api/routes/runs.ts|../../../platform/http-types.js|000001",
-      "why": "Production code still imports the legacy platform tree.",
-      "phase": "Phase 5 — composition graph"
-    },
-    {
-      "rule": "backend.platform-import",
-      "path": "src/entrypoints/api/routes/sessions.ts",
-      "line": 14,
-      "symbol": "../../../platform/http-types.js",
-      "occurrence": 1,
-      "key": "backend.platform-import|src/entrypoints/api/routes/sessions.ts|../../../platform/http-types.js|000001",
-      "why": "Production code still imports the legacy platform tree.",
-      "phase": "Phase 5 — composition graph"
-    },
-    {
-      "rule": "backend.platform-import",
-      "path": "src/entrypoints/api/routes/tasks.ts",
-      "line": 27,
-      "symbol": "../../../platform/http-types.js",
-      "occurrence": 1,
-      "key": "backend.platform-import|src/entrypoints/api/routes/tasks.ts|../../../platform/http-types.js|000001",
-      "why": "Production code still imports the legacy platform tree.",
-      "phase": "Phase 5 — composition graph"
-    },
-    {
-      "rule": "backend.platform-import",
-      "path": "src/entrypoints/api/routes/team-runs.ts",
-      "line": 24,
-      "symbol": "../../../platform/http-types.js",
-      "occurrence": 1,
-      "key": "backend.platform-import|src/entrypoints/api/routes/team-runs.ts|../../../platform/http-types.js|000001",
-      "why": "Production code still imports the legacy platform tree.",
-      "phase": "Phase 5 — composition graph"
-    },
-    {
-      "rule": "backend.platform-import",
-      "path": "src/entrypoints/api/routes/teams.ts",
-      "line": 31,
-      "symbol": "../../../platform/http-types.js",
-      "occurrence": 1,
-      "key": "backend.platform-import|src/entrypoints/api/routes/teams.ts|../../../platform/http-types.js|000001",
-      "why": "Production code still imports the legacy platform tree.",
-      "phase": "Phase 5 — composition graph"
-    },
-    {
-      "rule": "backend.platform-import",
-      "path": "src/entrypoints/api/routes/work-cards.ts",
-      "line": 11,
-      "symbol": "../../../platform/http-types.js",
-      "occurrence": 1,
-      "key": "backend.platform-import|src/entrypoints/api/routes/work-cards.ts|../../../platform/http-types.js|000001",
-      "why": "Production code still imports the legacy platform tree.",
-      "phase": "Phase 5 — composition graph"
-    },
-    {
-      "rule": "backend.platform-import",
-      "path": "src/entrypoints/api/routes/workspace-memory.ts",
-      "line": 30,
-      "symbol": "../../../platform/http-types.js",
-      "occurrence": 1,
-      "key": "backend.platform-import|src/entrypoints/api/routes/workspace-memory.ts|../../../platform/http-types.js|000001",
       "why": "Production code still imports the legacy platform tree.",
       "phase": "Phase 5 — composition graph"
     },
@@ -1034,30 +794,10 @@
     {
       "rule": "backend.platform-import",
       "path": "src/modules/memory/memory-module.ts",
-      "line": 43,
-      "symbol": "../../platform/http-types.js",
-      "occurrence": 1,
-      "key": "backend.platform-import|src/modules/memory/memory-module.ts|../../platform/http-types.js|000001",
-      "why": "Production code still imports the legacy platform tree.",
-      "phase": "Phase 5 — composition graph"
-    },
-    {
-      "rule": "backend.platform-import",
-      "path": "src/modules/memory/memory-module.ts",
       "line": 42,
       "symbol": "../../platform/runtime-tool-registry.js",
       "occurrence": 1,
       "key": "backend.platform-import|src/modules/memory/memory-module.ts|../../platform/runtime-tool-registry.js|000001",
-      "why": "Production code still imports the legacy platform tree.",
-      "phase": "Phase 5 — composition graph"
-    },
-    {
-      "rule": "backend.platform-import",
-      "path": "src/modules/resource/resource-module.ts",
-      "line": 20,
-      "symbol": "../../platform/http-types.js",
-      "occurrence": 1,
-      "key": "backend.platform-import|src/modules/resource/resource-module.ts|../../platform/http-types.js|000001",
       "why": "Production code still imports the legacy platform tree.",
       "phase": "Phase 5 — composition graph"
     },
@@ -1068,16 +808,6 @@
       "symbol": "../../platform/runtime-tool-registry.js",
       "occurrence": 1,
       "key": "backend.platform-import|src/modules/runtime/runtime-module.ts|../../platform/runtime-tool-registry.js|000001",
-      "why": "Production code still imports the legacy platform tree.",
-      "phase": "Phase 5 — composition graph"
-    },
-    {
-      "rule": "backend.platform-import",
-      "path": "src/modules/work/work-module.ts",
-      "line": 52,
-      "symbol": "../../platform/http-types.js",
-      "occurrence": 1,
-      "key": "backend.platform-import|src/modules/work/work-module.ts|../../platform/http-types.js|000001",
       "why": "Production code still imports the legacy platform tree.",
       "phase": "Phase 5 — composition graph"
     },
@@ -1140,66 +870,6 @@
       "key": "backend.register-tool-contributor|src/modules/runtime/runtime-module.ts|registerToolContributor|000002",
       "why": "Tool contributor registration remains on the legacy module seam.",
       "phase": "Phase 6 — delete modules/resource"
-    },
-    {
-      "rule": "frontend.use-client",
-      "path": "apps/web/src/features/run-trace/execution-transcript.tsx",
-      "line": 1,
-      "symbol": "use client",
-      "occurrence": 1,
-      "key": "frontend.use-client|apps/web/src/features/run-trace/execution-transcript.tsx|use client|000001",
-      "why": "The browser source still carries framework-specific client directives.",
-      "phase": "Phase 8 — frontend work"
-    },
-    {
-      "rule": "frontend.use-client",
-      "path": "apps/web/src/features/run-trace/run-trace.tsx",
-      "line": 1,
-      "symbol": "use client",
-      "occurrence": 1,
-      "key": "frontend.use-client|apps/web/src/features/run-trace/run-trace.tsx|use client|000001",
-      "why": "The browser source still carries framework-specific client directives.",
-      "phase": "Phase 8 — frontend work"
-    },
-    {
-      "rule": "frontend.use-client",
-      "path": "apps/web/src/features/run-trace/session-transcripts.tsx",
-      "line": 1,
-      "symbol": "use client",
-      "occurrence": 1,
-      "key": "frontend.use-client|apps/web/src/features/run-trace/session-transcripts.tsx|use client|000001",
-      "why": "The browser source still carries framework-specific client directives.",
-      "phase": "Phase 8 — frontend work"
-    },
-    {
-      "rule": "frontend.use-client",
-      "path": "apps/web/src/features/work/components/definition-panel.tsx",
-      "line": 1,
-      "symbol": "use client",
-      "occurrence": 1,
-      "key": "frontend.use-client|apps/web/src/features/work/components/definition-panel.tsx|use client|000001",
-      "why": "The browser source still carries framework-specific client directives.",
-      "phase": "Phase 8 — frontend work"
-    },
-    {
-      "rule": "frontend.use-client",
-      "path": "apps/web/src/features/work/components/new-work.tsx",
-      "line": 1,
-      "symbol": "use client",
-      "occurrence": 1,
-      "key": "frontend.use-client|apps/web/src/features/work/components/new-work.tsx|use client|000001",
-      "why": "The browser source still carries framework-specific client directives.",
-      "phase": "Phase 8 — frontend work"
-    },
-    {
-      "rule": "frontend.use-client",
-      "path": "apps/web/src/features/work/components/work-shell.tsx",
-      "line": 1,
-      "symbol": "use client",
-      "occurrence": 1,
-      "key": "frontend.use-client|apps/web/src/features/work/components/work-shell.tsx|use client|000001",
-      "why": "The browser source still carries framework-specific client directives.",
-      "phase": "Phase 8 — frontend work"
     },
     {
       "rule": "frontend.work-shell-overrides",

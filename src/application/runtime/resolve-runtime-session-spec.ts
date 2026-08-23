@@ -27,7 +27,7 @@ export interface RuntimeExtensionSetDigest {
 
 /** Raised when an owner did not supply a required desired-state component. */
 export class RuntimeSessionSpecResolutionError extends Error {
-  public constructor(component: string) {
+  public constructor(public readonly component: string) {
     super(`Runtime session spec requires ${component}.`);
     this.name = 'RuntimeSessionSpecResolutionError';
   }
@@ -53,7 +53,7 @@ export class ResolveRuntimeSessionSpecService implements ResolveRuntimeSessionSp
     assertIdentity(input);
     assertConfiguration(configuration);
     for (const toolRef of input.toolRefs) {
-      if (!this.catalog.get(toolRef))
+      if (!this.catalog.hasTool(toolRef))
         throw new RuntimeSessionSpecResolutionError(`toolRefs:${toolRef}`);
     }
     const toolRefs = Object.freeze(

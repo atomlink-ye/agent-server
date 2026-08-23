@@ -133,8 +133,8 @@ async function authenticate(
 ): Promise<AuthorizedRuntimeToolContext | null> {
   const requested = requestedTool(body);
   const candidates = requested
-    ? [requested, ...catalog.list().map((item) => item.ref)]
-    : catalog.list().map((item) => item.ref);
+    ? [requested, ...catalog.toolRefs()]
+    : catalog.toolRefs();
   for (const requestedTool of new Set(candidates)) {
     const result = await authorize.execute({
       bearerToken: bearer,

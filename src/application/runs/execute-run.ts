@@ -26,6 +26,7 @@ import { RuntimeTurnExecutionError } from '../runtime/execute-runtime-turn.js';
 import type { RuntimeExecutionProvider } from '../ports/runtime-execution-provider.js';
 import type { RuntimeSessionStore } from '../ports/runtime-session-store.js';
 import type { ResolveRuntimeSessionSpec } from '../ports/resolve-runtime-session-spec.js';
+import { RuntimeSessionSpecResolutionError } from '../runtime/resolve-runtime-session-spec.js';
 import type { ExecuteRuntimeTurn } from '../runtime/execute-runtime-turn.js';
 import { ExecuteTeamTask } from '../tasks/execute-team-task.js';
 import type { CollaborationActivationReconciler } from '../collaboration/collaboration-activation-reconciler.js';
@@ -295,6 +296,16 @@ export class ExecuteRun {
         error instanceof RuntimeTimedOutError ||
         (error instanceof RuntimeTurnExecutionError &&
           error.code === 'runtime_turn_timed_out');
+      this.logger.log('error', 'run.execution_failed', {
+        run_id: claim.run.id,
+        error_name: error instanceof Error ? error.name : 'UnknownError',
+        ...(error instanceof RuntimeTurnExecutionError
+          ? { runtime_failure_code: error.code }
+          : {}),
+        ...(error instanceof RuntimeSessionSpecResolutionError
+          ? { runtime_spec_component: error.component }
+          : {}),
+      });
       const failure: RunFailure = timedOut
         ? {
             code: 'runtime_timed_out',

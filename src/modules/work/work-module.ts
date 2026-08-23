@@ -16,7 +16,7 @@ import { WorkProjectionFactsSource } from '../../application/product-projection/
 import type { ExecutionAdmission } from '../../application/ports/execution-admission.js';
 import type { ExecutionFactQuery } from '../../application/ports/execution-fact-query.js';
 import type { DefinitionReadApi } from '../../application/ports/definition-read-api.js';
-import type { ExecutionPlaneCapabilities } from '../../application/ports/execution-plane.js';
+import type { RuntimeCapabilities } from '../../application/runtime/runtime-capabilities.js';
 import type { ProductWorkListQuery } from '../../application/ports/product-work-list-query.js';
 import type { ConversationRepository } from '../../application/ports/conversation-repository.js';
 import type { WorkDefinitionResolutionPort } from '../../application/ports/work-definition-resolution.js';
@@ -142,9 +142,7 @@ export function createWorkModule(options: {
   readonly execution: ExecutionAdmission;
   readonly executionFacts: ExecutionFactQuery;
   readonly conversations?: Pick<ConversationRepository, 'appendMessage'>;
-  readonly runtimeCapabilities?: {
-    capabilities(): ExecutionPlaneCapabilities;
-  };
+  readonly runtimeCapabilities?: RuntimeCapabilities;
 }): WorkModule {
   const repository = new PostgresWorkIdentityRepository(options.database);
   const contextFiles = new PostgresLogicalFileStore(options.database);

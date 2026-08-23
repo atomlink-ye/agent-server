@@ -86,7 +86,7 @@ function harness() {
   const start = new StartWorkRun({
     identity,
     execution: { admitRoot },
-    runtimeCapabilities: { capabilities: () => ({ supported: new Set() }) },
+    runtimeCapabilities: { supported: new Set() },
     productDefinitions: {
       getInputContract: vi.fn().mockResolvedValue({
         name: 'earnings-research',

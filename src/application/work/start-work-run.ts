@@ -1,9 +1,7 @@
 import type { AccessContext } from '../../domain/access-context.js';
 import type { ExecutionAdmission } from '../ports/execution-admission.js';
-import type {
-  ExecutionPlaneCapabilities,
-  ExecutionPlaneCapability,
-} from '../ports/execution-plane.js';
+import type { ExecutionPlaneCapability } from '../ports/execution-plane.js';
+import type { RuntimeCapabilities } from '../runtime/runtime-capabilities.js';
 import type { WorkRunInputStore } from '../ports/work-run-input-store.js';
 import type { WorkRun } from '../../domain/work/work-run.js';
 import {
@@ -51,9 +49,7 @@ export interface StartWorkRunResult {
 export interface StartWorkRunOptions {
   readonly identity: WorkIdentityApi;
   readonly execution: ExecutionAdmission;
-  readonly runtimeCapabilities?: {
-    capabilities(): ExecutionPlaneCapabilities;
-  };
+  readonly runtimeCapabilities?: RuntimeCapabilities;
   readonly productDefinitions?: Pick<
     ProductWorkDefinitionApi,
     'getInputContract'
@@ -62,10 +58,8 @@ export interface StartWorkRunOptions {
   readonly now?: () => Date;
 }
 
-const NO_RUNTIME_CAPABILITIES = Object.freeze({
-  capabilities(): ExecutionPlaneCapabilities {
-    return { supported: new Set() };
-  },
+const NO_RUNTIME_CAPABILITIES: RuntimeCapabilities = Object.freeze({
+  supported: new Set(),
 });
 
 export class StartWorkRun {
@@ -229,7 +223,7 @@ export class StartWorkRun {
   }
 
   private assertRuntimeCapabilities(definition: ResolvedWorkDefinition): void {
-    const supported = this.runtimeCapabilities.capabilities().supported;
+    const supported = this.runtimeCapabilities.supported;
     for (const required of definition.executionPolicy
       .requiredRuntimeCapabilities) {
       if (!supported.has(asExecutionPlaneCapability(required)))

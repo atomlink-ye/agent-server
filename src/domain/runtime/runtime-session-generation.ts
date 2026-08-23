@@ -5,7 +5,7 @@ import type {
 } from './runtime-session.js';
 
 export type RuntimeSessionGenerationStatus =
-  'provisioning' | 'ready' | 'superseded' | 'failed' | 'closed';
+  'provisioning' | 'active' | 'superseded' | 'failed' | 'closed';
 
 /** The sole owner of external provider/session binding facts. */
 export interface RuntimeSessionGeneration {
@@ -15,7 +15,7 @@ export interface RuntimeSessionGeneration {
 
   readonly provider: string;
   readonly providerWorkspaceId: string | null;
-  readonly providerSessionId: string;
+  readonly providerSessionId: string | null;
 
   readonly appliedSpecRevision: RuntimeSpecRevision;
   readonly appliedBootstrapDigest: string;

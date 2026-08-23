@@ -4,7 +4,7 @@ import { performance } from 'node:perf_hooks';
 import { Hono } from 'hono';
 
 import type { ReadinessProbe } from '../../application/health/readiness.js';
-import type { ExecutionRuntimeService } from '../../application/runtime/execution-plane-runtime-facade.js';
+import type { ExecutionRuntimeService } from '../../application/ports/execution-runtime.js';
 import type { GetRun } from '../../application/runs/get-run.js';
 import type { SubmitRun } from '../../application/runs/submit-run.js';
 import type { GetTask } from '../../application/tasks/get-task.js';

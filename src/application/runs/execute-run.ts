@@ -15,7 +15,6 @@ import {
   type ClaimedRun,
   type RunRepository,
 } from '../ports/run-repository.js';
-import type { RuntimeSessionRepository } from '../ports/runtime-session-repository.js';
 import type { SessionRepository } from '../ports/session-repository.js';
 import type { TaskRepository } from '../ports/task-repository.js';
 import type { EnvironmentReadApi } from '../ports/environment-read-api.js';
@@ -24,7 +23,7 @@ import type { WorkRunResourceManifestRead } from '../ports/work-run-resource-man
 import type { CreateMemoryProposal } from '../memory/create-memory-proposal.js';
 import type { RuntimeExtensionBinder } from '../extensions/runtime-extension-binder.js';
 import { RuntimeTimedOutError } from '../runtime/execution-runtime-errors.js';
-import type { ExecutionRuntimeService } from '../runtime/execution-plane-runtime-facade.js';
+import type { ExecutionRuntimeService } from '../ports/execution-runtime.js';
 import { ExecuteTeamTask } from '../tasks/execute-team-task.js';
 import type { CollaborationActivationReconciler } from '../collaboration/collaboration-activation-reconciler.js';
 import { AgentRunExecutor } from './agent-run-executor.js';
@@ -60,7 +59,7 @@ export class ExecuteRun {
     fileStore?: FileStore,
     createMemoryProposal?: CreateMemoryProposal,
     runtimeExtensionBinder?: RuntimeExtensionBinder,
-    runtimeSessions?: RuntimeSessionRepository,
+    runtimeSessions?: unknown,
     sessions?: Pick<SessionRepository, 'getSession'>,
     environments?: EnvironmentReadApi,
     runtimeCellRoot?: string,

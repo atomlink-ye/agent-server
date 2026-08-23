@@ -2,7 +2,7 @@ import type { RuntimeInvocationContext } from '../../domain/runtime/runtime-invo
 import type {
   ExecutionRuntimeService,
   ExecutionTurnRequest,
-} from './execution-plane-runtime-facade.js';
+} from '../ports/execution-runtime.js';
 import type { ExecutionObservationSink } from '../ports/execution-plane.js';
 import {
   renderScopedMemory,

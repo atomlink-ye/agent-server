@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import type { ExecutionRuntimeService } from './application/runtime/execution-plane-runtime-facade.js';
+import type { ExecutionRuntimeService } from './application/ports/execution-runtime.js';
 import type { RunDispatcher } from './application/ports/run-dispatcher.js';
 import { ClaimNextRun } from './application/runs/claim-next-run.js';
 import { CompleteRun } from './application/runs/complete-run.js';

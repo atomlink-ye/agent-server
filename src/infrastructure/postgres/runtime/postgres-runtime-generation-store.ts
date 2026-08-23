@@ -38,7 +38,7 @@ interface GenerationRow extends Record<string, unknown> {
   readonly generation: number | string;
   readonly provider: string;
   readonly provider_workspace_id: string | null;
-  readonly provider_session_id: string;
+  readonly provider_session_id: string | null;
   readonly applied_spec_revision: number | string;
   readonly applied_bootstrap_digest: string;
   readonly endpoint_epoch: string;
@@ -151,6 +151,20 @@ export class PostgresRuntimeGenerationStore
       throw new Error('Runtime generation could not be superseded.');
   }
 
+  public async failProvisioning(input: {
+    readonly id: RuntimeGenerationId;
+    readonly failedAt: string;
+  }): Promise<void> {
+    const result = await this.database.query(
+      `UPDATE runtime_session_generations
+          SET status='failed', closed_at=COALESCE(closed_at,$2)
+        WHERE id=$1 AND status='provisioning'`,
+      [input.id, input.failedAt],
+    );
+    if (result.rowCount === 0)
+      throw new Error('Provisioning runtime generation could not fail.');
+  }
+
   public async replaceCurrentGeneration(input: {
     readonly sessionId: RuntimeSessionId;
     readonly previousGenerationId: RuntimeGenerationId | null;
@@ -184,18 +198,6 @@ export class PostgresRuntimeGenerationStore
           'Runtime generation replacement must change generation.',
         );
 
-      const next = await database.query<{ next_generation: number | string }>(
-        `SELECT COALESCE(MAX(generation),0)+1 AS next_generation
-           FROM runtime_session_generations
-          WHERE runtime_session_id=$1`,
-        [input.sessionId],
-      );
-      const nextGeneration = next.rows?.[0]?.next_generation;
-      if (nextGeneration === undefined)
-        throw new Error(
-          'Replacement runtime generation number could not be allocated.',
-        );
-
       if (input.previousGenerationId) {
         const superseded = await database.query(
           `UPDATE runtime_session_generations
@@ -208,24 +210,31 @@ export class PostgresRuntimeGenerationStore
             'Previous runtime generation could not be superseded.',
           );
       }
-      await database.query(
-        `INSERT INTO runtime_session_generations
-         (${GENERATION_INSERT_COLUMNS})
-         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'ready',$10,$11,NULL,NULL)`,
+      const activated = await database.query(
+        `UPDATE runtime_session_generations
+            SET provider_workspace_id=$3,
+                provider_session_id=$4,
+                applied_spec_revision=$5,
+                applied_bootstrap_digest=$6,
+                endpoint_epoch=$7,
+                status='active',
+                ready_at=$8
+          WHERE id=$1
+            AND runtime_session_id=$2
+            AND status='provisioning'`,
         [
           input.generation.id,
           input.sessionId,
-          Number(nextGeneration),
-          input.generation.provider,
           input.generation.providerWorkspaceId,
           input.generation.providerSessionId,
           input.generation.appliedSpecRevision,
           input.generation.appliedBootstrapDigest,
           input.generation.endpointEpoch,
-          input.generation.createdAt,
           input.generation.readyAt,
         ],
       );
+      if (activated.rowCount !== 1)
+        throw new Error('Provisioning runtime generation could not activate.');
       const updated = await database.query(
         `UPDATE runtime_sessions
             SET current_generation_id=$2, status='ready', updated_at=NOW()

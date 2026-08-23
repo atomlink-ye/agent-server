@@ -142,7 +142,7 @@ export class PostgresRuntimeTurnStore implements RuntimeTurnStore {
       if (
         !generation ||
         generation.runtime_session_id !== turn.runtime_session_id ||
-        generation.status !== 'ready'
+        generation.status !== 'active'
       ) {
         await database.query('ROLLBACK');
         return false;

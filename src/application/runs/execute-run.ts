@@ -22,6 +22,7 @@ import type { TeamExecutionRepository } from '../ports/team-execution-repository
 import type { WorkRunResourceManifestRead } from '../ports/work-run-resource-manifest-read.js';
 import type { CreateMemoryProposal } from '../memory/create-memory-proposal.js';
 import type { RuntimeExtensionBinder } from '../extensions/runtime-extension-binder.js';
+import type { AgentRunRuntimeSessions } from '../ports/agent-run-runtime-sessions.js';
 import { RuntimeTimedOutError } from '../runtime/execution-runtime-errors.js';
 import type { ExecutionRuntimeService } from '../ports/execution-runtime.js';
 import type { RuntimeExecutionProvider } from '../ports/runtime-execution-provider.js';
@@ -57,7 +58,7 @@ export interface ExecuteRunOptions {
   readonly fileStore?: FileStore;
   readonly createMemoryProposal?: CreateMemoryProposal;
   readonly runtimeExtensionBinder?: RuntimeExtensionBinder;
-  readonly runtimeSessions?: unknown;
+  readonly runtimeSessions?: AgentRunRuntimeSessions;
   readonly sessions?: Pick<SessionRepository, 'getSession'>;
   readonly environments?: EnvironmentReadApi;
   readonly runtimeCellRoot?: string;

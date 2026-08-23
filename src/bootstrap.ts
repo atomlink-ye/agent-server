@@ -85,143 +85,11 @@ import { PostgresAgentHomeRepository } from './infrastructure/postgres/postgres-
 import { PostgresAgentHomeDefinitionSource } from './infrastructure/postgres/postgres-agent-home-definition-source.js';
 import { noExternalDependencies } from './application/health/readiness.js';
 import { createConfiguredRuntimeCapabilities } from './composition/create-runtime-capabilities.js';
+import {
+  closeRuntimeAndPool,
+  createLifecycleSupervisor,
+} from './composition/lifecycle-supervisor.js';
 import type { ConversationWorkLinkRepository } from './domain/chat/chat-work-origin-ref.js';
-
-export interface ServiceResources {
-  readonly dispatcher: Pick<RunDispatcher, 'stop'>;
-  readonly larkWorker?: Pick<LarkIngressWorker, 'stop'>;
-  readonly larkOutboxWorker?: Pick<LarkOutboxWorker, 'stop'>;
-  readonly chatWorker?: Pick<ChatDeliveryWorker, 'stop'>;
-  readonly workChatWorker?: Pick<WorkChatWakeWorker, 'stop'>;
-  readonly larkReceiver?: Pick<
-    ReturnType<typeof createLarkWebsocketReceiver>,
-    'stop'
-  >;
-  readonly runtime: Pick<ExecutionRuntimeService, 'close'>;
-  readonly runtimeMcpServer?: { stop(): Promise<void> };
-  readonly pool: { end(): Promise<void> };
-}
-
-type StartableServiceResources = ServiceResources & {
-  readonly dispatcher: Pick<RunDispatcher, 'start' | 'stop'>;
-  readonly larkWorker?: Pick<LarkIngressWorker, 'start' | 'stop'>;
-  readonly larkOutboxWorker?: Pick<LarkOutboxWorker, 'start' | 'stop'>;
-  readonly chatWorker?: Pick<ChatDeliveryWorker, 'start' | 'stop'>;
-  readonly workChatWorker?: Pick<WorkChatWakeWorker, 'start' | 'stop'>;
-  readonly larkReceiver?: Pick<
-    ReturnType<typeof createLarkWebsocketReceiver>,
-    'start' | 'stop'
-  >;
-};
-
-export async function closeServiceResources(
-  resources: ServiceResources,
-): Promise<void> {
-  const failures: Error[] = [];
-  await cleanup(
-    'lark receiver',
-    resources.larkReceiver ? () => resources.larkReceiver!.stop() : undefined,
-    failures,
-  );
-  await cleanup(
-    'lark worker',
-    resources.larkWorker ? () => resources.larkWorker!.stop() : undefined,
-    failures,
-  );
-  await cleanup(
-    'lark outbox worker',
-    resources.larkOutboxWorker
-      ? () => resources.larkOutboxWorker!.stop()
-      : undefined,
-    failures,
-  );
-  await cleanup(
-    'chat worker',
-    resources.chatWorker ? () => resources.chatWorker!.stop() : undefined,
-    failures,
-  );
-  await cleanup(
-    'work chat worker',
-    resources.workChatWorker
-      ? () => resources.workChatWorker!.stop()
-      : undefined,
-    failures,
-  );
-  await cleanup('dispatcher', () => resources.dispatcher.stop(), failures);
-  await cleanup('runtime', () => resources.runtime.close(), failures);
-  await cleanup(
-    'runtime MCP server',
-    resources.runtimeMcpServer
-      ? () => resources.runtimeMcpServer!.stop()
-      : undefined,
-    failures,
-  );
-  await cleanup('pool', () => resources.pool.end(), failures);
-  throwFailures(failures, 'service shutdown failed');
-}
-
-export async function startServiceResources(
-  resources: StartableServiceResources,
-): Promise<void> {
-  try {
-    resources.dispatcher.start();
-    await resources.larkReceiver?.start();
-    resources.larkWorker?.start();
-    resources.larkOutboxWorker?.start();
-    resources.chatWorker?.start();
-    resources.workChatWorker?.start();
-  } catch (error: unknown) {
-    const startupFailure = safeLifecycleError('service startup', error);
-    try {
-      await closeServiceResources(resources);
-    } catch (cleanupError: unknown) {
-      throw new AggregateError(
-        [startupFailure, cleanupError],
-        'service startup failed',
-      );
-    }
-    throw startupFailure;
-  }
-}
-
-async function cleanup(
-  label: string,
-  operation: (() => Promise<void>) | undefined,
-  failures: Error[],
-): Promise<void> {
-  if (!operation) return;
-  try {
-    await operation();
-  } catch (error: unknown) {
-    failures.push(safeLifecycleError(label, error));
-  }
-}
-
-function throwFailures(failures: readonly Error[], message: string): void {
-  if (failures.length === 0) return;
-  if (failures.length === 1) throw failures[0];
-  throw new AggregateError(failures, message);
-}
-
-function safeLifecycleError(label: string, error: unknown): Error {
-  const safe = new Error(`${label} failed`);
-  safe.name = 'ServiceLifecycleError';
-  return safe;
-}
-
-async function closeRuntimeAndPool(
-  runtime: Pick<ExecutionRuntimeService, 'close'>,
-  pool: { end(): Promise<void> },
-): Promise<void> {
-  const failures: Error[] = [];
-  await cleanup('runtime', () => runtime.close(), failures);
-  await cleanup('pool', () => pool.end(), failures);
-  throwFailures(failures, 'startup cleanup failed');
-}
-
-function turnLeaseDurationMs(executionTimeoutMs: number): number {
-  return Math.max(executionTimeoutMs * 2 + 300_000, 30_000);
-}
 
 export function createLarkIngressWorker(
   repository: Pick<
@@ -768,19 +636,20 @@ export async function createService(
     memoryModule,
     resourceModule,
   });
+  const lifecycle = createLifecycleSupervisor({
+    dispatcher,
+    ...(larkWorker ? { larkWorker } : {}),
+    ...(larkOutboxWorker ? { larkOutboxWorker } : {}),
+    ...(chatWorker ? { chatWorker } : {}),
+    ...(workChatWorker ? { workChatWorker } : {}),
+    ...(larkReceiver ? { larkReceiver } : {}),
+    runtime: executionRuntime,
+    runtimeMcpServer,
+    pool,
+  });
   if (!options.singleRunDebug) {
     await collaborationActivationReconciler.reconcilePendingRoots();
-    await startServiceResources({
-      dispatcher,
-      ...(larkWorker ? { larkWorker } : {}),
-      ...(larkOutboxWorker ? { larkOutboxWorker } : {}),
-      ...(chatWorker ? { chatWorker } : {}),
-      ...(workChatWorker ? { workChatWorker } : {}),
-      ...(larkReceiver ? { larkReceiver } : {}),
-      runtime: executionRuntime,
-      runtimeMcpServer,
-      pool,
-    });
+    await lifecycle.start();
   }
 
   const singleRunDebug: SingleRunDebugControl | undefined =
@@ -816,18 +685,6 @@ export async function createService(
     app,
     runtime: executionRuntime,
     ...(singleRunDebug ? { singleRunDebug } : {}),
-    close: async () => {
-      await closeServiceResources({
-        dispatcher,
-        ...(larkWorker ? { larkWorker } : {}),
-        ...(larkOutboxWorker ? { larkOutboxWorker } : {}),
-        ...(chatWorker ? { chatWorker } : {}),
-        ...(workChatWorker ? { workChatWorker } : {}),
-        ...(larkReceiver ? { larkReceiver } : {}),
-        runtime: executionRuntime,
-        runtimeMcpServer,
-        pool,
-      });
-    },
+    close: () => lifecycle.stop(),
   };
 }

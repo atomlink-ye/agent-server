@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
-  closeServiceResources,
   createLarkIngressWorker,
-  startServiceResources,
 } from './bootstrap.js';
+import {
+  closeServiceResources,
+  startServiceResources,
+} from './composition/lifecycle-supervisor.js';
 import type { ChannelIngress } from './domain/channels/channel-event.js';
 import { ProcessLarkIngress } from './application/channels/process-lark-ingress.js';
 import { ApplyMemoryReviewControl } from './application/channels/apply-memory-review-control.js';

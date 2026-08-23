@@ -38,7 +38,10 @@ export function fetchAuthenticated(
   });
 }
 
-export async function readJson(response: Response): Promise<unknown> {
+export async function readJson(
+  response: Response,
+  options: { readonly emptyValue?: unknown } = {},
+): Promise<unknown> {
   const declared = Number.parseInt(
     response.headers.get('content-length') ?? '0',
     10,
@@ -50,6 +53,8 @@ export async function readJson(response: Response): Promise<unknown> {
 
   const reader = response.body?.getReader();
   if (!reader) {
+    if (options.emptyValue !== undefined && declared === 0)
+      return options.emptyValue;
     try {
       return await response.json();
     } catch {
@@ -88,7 +93,7 @@ export async function readJson(response: Response): Promise<unknown> {
       bytes.set(chunk, offset);
       offset += chunk.byteLength;
     }
-    if (bytes.byteLength === 0) return undefined;
+    if (bytes.byteLength === 0) return options.emptyValue;
 
     const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
     return JSON.parse(text) as unknown;
@@ -111,6 +116,6 @@ export function jsonResponse(
   });
 }
 
-export function safeStatus(status: number): number {
-  return status >= 400 && status < 600 ? status : 502;
+export function safeStatus(status: number, minimum = 400): number {
+  return status >= minimum && status < 600 ? status : 502;
 }

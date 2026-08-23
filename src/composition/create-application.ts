@@ -220,6 +220,7 @@ export async function createApplication(
     runtimeSessions,
     resolveRuntimeSpec,
     executeRuntimeTurn: runtimeTurns,
+    oneShotCompletion,
     runtimeMcpServer,
     chatRuntime,
   } = runtimeOwner;
@@ -242,6 +243,7 @@ export async function createApplication(
           leaseMs: leaseDurationMs,
         });
   const memoryChannelConsumers = createMemoryChannelExecutionConsumers({
+    runtime: oneShotCompletion,
     review: memoryModule.reviewApi.review,
     managedMemory: memoryModule.reviewApi.managedMemory,
     profile: process.env.LARK_CLI_PROFILE ?? 'agent-test',

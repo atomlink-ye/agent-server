@@ -19,6 +19,8 @@ import { createRuntimeMcpEndpoint } from './create-runtime-mcp-endpoint.js';
 import { RuntimeMcpServer } from '../infrastructure/extensions/runtime-mcp-server.js';
 import { createPaseoRuntimeProvider } from '../infrastructure/runtime/paseo/paseo-runtime-provider.js';
 import { UnavailableRuntimeProvider } from '../infrastructure/runtime/unavailable-runtime-provider.js';
+import { PaseoOneShotRuntimeCompletion } from '../infrastructure/runtime/paseo/paseo-one-shot-runtime-completion.js';
+import type { OneShotRuntimeCompletion } from '../application/ports/one-shot-runtime-completion.js';
 import { hashBearerToken } from '../infrastructure/security/hash-bearer-token.js';
 import type { RuntimeExecutionProvider } from '../application/ports/runtime-execution-provider.js';
 import type { RuntimeSessionStore } from '../application/ports/runtime-session-store.js';
@@ -41,6 +43,7 @@ export interface RuntimeOwner {
   };
   readonly runtimeMcpServer: RuntimeMcpServer;
   readonly runtimeMcpEndpoint: RuntimeMcpEndpoint;
+  readonly oneShotCompletion: OneShotRuntimeCompletion;
 }
 
 export function createRuntimeOwner(input: {
@@ -52,6 +55,11 @@ export function createRuntimeOwner(input: {
   const runtimeProvider = input.config.runtime?.adapter === 'none'
     ? new UnavailableRuntimeProvider()
     : createPaseoRuntimeProvider(input.config, input.logger);
+  const oneShotCompletion = new PaseoOneShotRuntimeCompletion(runtimeProvider, {
+    provider: input.config.paseo.provider,
+    model: input.config.paseo.model ?? null,
+    cwd: input.config.paseo.agentCwd,
+  });
   const runtimeSessions = new PostgresRuntimeSessionStore(input.database);
   const specs = new PostgresRuntimeSpecStore(input.database);
   const generations = new PostgresRuntimeGenerationStore(input.database);
@@ -121,5 +129,6 @@ export function createRuntimeOwner(input: {
     chatRuntime: { sessionCreator, turnExecutor: executeRuntimeTurn },
     runtimeMcpServer,
     runtimeMcpEndpoint,
+    oneShotCompletion,
   };
 }

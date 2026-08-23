@@ -6,7 +6,7 @@ Components are ownership and contract boundaries, not deployment promises. The b
 | -------------------------------------------------------------------------- | ----------------------------------------------- | --------------------------- |
 | [Control Plane](components/control-plane.md)                               | Definitions, policy, admission, review          | Planned                     |
 | [Orchestration Kernel](components/orchestration-kernel.md)                 | Task/Run lifecycle, Team coordination, recovery | Run seam baseline           |
-| [Paseo Runtime Adapter](components/paseo-execution-plane.md)               | Leaf-agent provider translation                 | Implemented baseline        |
+| [Runtime execution](components/paseo-execution-plane.md)                   | Provider lifecycle and durable session readiness | Replacement in progress     |
 | [Credential and Tool Gateway](components/credential-and-tool-gateway.md)   | Secret-safe tool authorization and receipts     | Planned                     |
 | [Workspace and Artifact Store](components/workspace-and-artifact-store.md) | Sources, scoped files, artifacts, evidence      | Paseo workspace baseline    |
 | [Channel, API, and Console](components/channel-api-console.md)             | Ingress, delivery, inspection                   | Agent Teams v2 project view |
@@ -132,6 +132,6 @@ the Project and selected Agent Session on refresh. This is local/single-operator
 only; production or multi-user deployment requires a new authentication Human
 Gate. ProductSession Chat remains a separate unchanged path.
 
-## Execution Plane boundary
+## Runtime execution boundary
 
-Paseo is the primary Execution Plane. RuntimeWorkspace owns ProductSession/TeamRun workspace binding, RuntimeSession owns sticky ProductSession/TeamMember session binding, and Run remains durable execution truth. See [Paseo Execution Plane](./components/paseo-execution-plane.md) and [Runtime Contract](./contracts/runtime-contract.md).
+Runtime execution is converging on `RuntimeExecutionProvider` for provider lifecycle, `EnsureRuntimeSession` for durable session readiness, and `RuntimeToolCatalog` for immutable tool definitions. `RuntimeSession` and `RuntimeSessionGeneration` remain the durable identity and provider-binding records; `Run` remains durable execution truth. The retiring execution-plane implementation is documented only as a transition in [Runtime execution](./components/paseo-execution-plane.md); the current boundary is defined by the [Runtime Contract](./contracts/runtime-contract.md).

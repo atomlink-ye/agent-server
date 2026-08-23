@@ -1,23 +1,14 @@
 import type { RuntimeSessionOwner } from '../../domain/runtime/runtime-session.js';
-import type {
-  RuntimeDigestComponent,
-  RuntimeResolvedSkill,
-  RuntimeSessionSpec,
-} from '../../domain/runtime/runtime-session-spec.js';
+import type { RuntimeResolvedSkill, RuntimeSessionSpec } from '../../domain/runtime/runtime-session-spec.js';
 
 /**
- * Owner-provided desired-state values required to assemble a runtime spec.
- * Each digest is a stable opaque fingerprint; this port neither derives nor
- * substitutes any component value.
+ * The only external desired runtime values. Digest components are assembled by
+ * ResolveRuntimeSessionSpec and must never be supplied by its caller.
  */
 export interface RuntimeSessionSpecConfiguration {
   readonly provider: string;
   readonly model: string | null;
   readonly cwd: string;
-  readonly systemPromptDigest: RuntimeDigestComponent;
-  readonly skillSetDigest: RuntimeDigestComponent;
-  readonly toolCatalogDigest: RuntimeDigestComponent;
-  readonly extensionSetDigest: RuntimeDigestComponent;
   readonly contextEpoch: number;
 }
 

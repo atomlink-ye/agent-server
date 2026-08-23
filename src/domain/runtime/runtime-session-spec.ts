@@ -10,6 +10,13 @@ export interface RuntimeResolvedSkill {
   readonly digest: string;
 }
 
+/**
+ * A stable opaque fingerprint supplied by the owner of one desired-state
+ * component. Runtime only combines these values; it never defines how a
+ * catalog, skill set, prompt, or extension owner derives its own fingerprint.
+ */
+export type RuntimeDigestComponent = string;
+
 /** Immutable desired execution state for one RuntimeSession revision. */
 export interface RuntimeSessionSpec {
   readonly runtimeSessionId: RuntimeSessionId;
@@ -25,10 +32,10 @@ export interface RuntimeSessionSpec {
   readonly model: string | null;
   readonly cwd: string;
 
-  readonly systemPromptDigest: string;
-  readonly skillSetDigest: string;
-  readonly toolCatalogDigest: string;
-  readonly extensionSetDigest: string;
+  readonly systemPromptDigest: RuntimeDigestComponent;
+  readonly skillSetDigest: RuntimeDigestComponent;
+  readonly toolCatalogDigest: RuntimeDigestComponent;
+  readonly extensionSetDigest: RuntimeDigestComponent;
   readonly contextEpoch: number;
 
   readonly bootstrapDigest: string;
@@ -41,8 +48,12 @@ export type RuntimeSessionSpecInput = Omit<
 >;
 
 /**
- * Inputs that define desired bootstrap identity. Runtime/provider bindings,
- * endpoint epochs, and authorization leases are deliberately not accepted.
+ * The complete runtime-owned bootstrap-digest contract. Bootstrap identity is
+ * the canonical combination of resolved provider/model/cwd and product
+ * identity with four owner-provided opaque component fingerprints. The applied
+ * digest persisted on a generation is exactly this value for the spec it
+ * applied; provider workspace/session bindings, endpoint epochs, grants, and
+ * tokens are actual/authorization state and are deliberately excluded.
  */
 export interface RuntimeBootstrapDigestInput {
   readonly provider: string;
@@ -51,10 +62,10 @@ export interface RuntimeBootstrapDigestInput {
   readonly workspaceId: string;
   readonly agentVersionId: string;
   readonly environmentVersionId: string | null;
-  readonly systemPromptDigest: string;
-  readonly skillSetDigest: string;
-  readonly toolCatalogDigest: string;
-  readonly extensionSetDigest: string;
+  readonly systemPromptDigest: RuntimeDigestComponent;
+  readonly skillSetDigest: RuntimeDigestComponent;
+  readonly toolCatalogDigest: RuntimeDigestComponent;
+  readonly extensionSetDigest: RuntimeDigestComponent;
   readonly contextEpoch: number;
 }
 

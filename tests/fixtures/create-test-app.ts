@@ -274,6 +274,7 @@ export async function createTestApp(
     sessions,
     config: effectiveConfig as any,
   });
+  Object.assign(memoryModule.http, { managedMemory });
   const resourceModule = await createResourceModule({
     database: repositoryDatabase,
     // Keep each fixture's registry isolated so concurrent tests cannot race on

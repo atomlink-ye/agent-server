@@ -48,23 +48,7 @@ import {
 import { createWorkers } from './create-workers.js';
 import type { FileStore } from '../application/ports/file-store.js';
 import type { PostgresSessionRepository } from '../infrastructure/postgres/postgres-session-repository.js';
-import { createRuntimeToolCatalog } from '../application/extensions/runtime-tool-catalog.js';
-import {
-  AGENT_SERVER_DESCRIBE_WORKFLOW_TOOL_REF,
-  AGENT_SERVER_LEARNING_PROPOSAL_CREATE_TOOL_REF,
-  AGENT_SERVER_LIST_AGENT_WORKFLOWS_TOOL_REF,
-  AGENT_SERVER_MEMORY_READ_TOOL_REF,
-  AGENT_SERVER_PLATFORM_COLLABORATION_TOOL_REFS,
-  AGENT_SERVER_PRODUCT_WORK_CREATE_TOOL_REF,
-  AGENT_SERVER_PRODUCT_WORK_RUN_START_TOOL_REF,
-  AGENT_SERVER_SYNTHETIC_ANALOG_SUMMARY_TOOL_REF,
-  AGENT_SERVER_SYNTHETIC_EVENT_BATCH_TOOL_REF,
-  AGENT_SERVER_SYNTHETIC_STOCK_SNAPSHOT_TOOL_REF,
-} from '../application/agents/built-in-skills.js';
-import {
-  createCollaborationRuntimeContributor,
-  createSyntheticRuntimeToolsContributor,
-} from '../entrypoints/mcp/runtime-tool-contributors.js';
+import { createRuntimeToolCatalog } from '../entrypoints/mcp/runtime-tool-composition.js';
 import { createRuntimeOwner } from './create-runtime-owner.js';
 
 export interface SingleRunDebugControl {
@@ -203,49 +187,15 @@ export async function createApplication(
       leaseMs: leaseDurationMs,
       logger,
     });
-  const runtimeToolCatalog = createRuntimeToolCatalog([
-    {
-      ref: 'memory',
-      toolRefs: [
-        AGENT_SERVER_MEMORY_READ_TOOL_REF,
-        AGENT_SERVER_LEARNING_PROPOSAL_CREATE_TOOL_REF,
-      ],
-      contribute: memoryModule.contributeRuntime,
+  const runtimeToolCatalog = createRuntimeToolCatalog({
+    memory: memoryModule.contributeRuntime,
+    collaboration: {
+      contextResolver: teamToolContextResolver,
+      kernel: collaboration,
     },
-    {
-      ref: 'collaboration',
-      toolRefs: AGENT_SERVER_PLATFORM_COLLABORATION_TOOL_REFS,
-      contribute: createCollaborationRuntimeContributor({
-        contextResolver: teamToolContextResolver,
-        kernel: collaboration,
-      }),
-    },
-    {
-      ref: 'synthetic',
-      toolRefs: [
-        AGENT_SERVER_SYNTHETIC_STOCK_SNAPSHOT_TOOL_REF,
-        AGENT_SERVER_SYNTHETIC_EVENT_BATCH_TOOL_REF,
-        AGENT_SERVER_SYNTHETIC_ANALOG_SUMMARY_TOOL_REF,
-      ],
-      contribute: createSyntheticRuntimeToolsContributor({
-        logger,
-      }),
-    },
-    ...(workModule
-      ? [
-          {
-            ref: 'work',
-            toolRefs: [
-              AGENT_SERVER_PRODUCT_WORK_CREATE_TOOL_REF,
-              AGENT_SERVER_PRODUCT_WORK_RUN_START_TOOL_REF,
-              AGENT_SERVER_LIST_AGENT_WORKFLOWS_TOOL_REF,
-              AGENT_SERVER_DESCRIBE_WORKFLOW_TOOL_REF,
-            ],
-            contribute: workModule.contributeRuntime,
-          },
-        ]
-      : []),
-  ]);
+    logger,
+    ...(workModule ? { work: workModule.contributeRuntime } : {}),
+  });
   const runtimeOwner = createRuntimeOwner({
     database: pool,
     config,

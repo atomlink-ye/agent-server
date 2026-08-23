@@ -3,6 +3,9 @@ import {
   type RuntimeToolContributor,
   type RuntimeToolCatalog,
 } from '../../application/extensions/runtime-tool-catalog.js';
+import type { CollaborationKernel } from '../../application/collaboration/collaboration-kernel.js';
+import type { TeamToolContextResolver } from '../../application/teams/team-tool-context.js';
+import type { Logger } from '../../shared/observability/logger.js';
 import {
   AGENT_SERVER_DESCRIBE_WORKFLOW_TOOL_REF,
   AGENT_SERVER_LEARNING_PROPOSAL_CREATE_TOOL_REF,
@@ -15,24 +18,21 @@ import {
   AGENT_SERVER_SYNTHETIC_EVENT_BATCH_TOOL_REF,
   AGENT_SERVER_SYNTHETIC_STOCK_SNAPSHOT_TOOL_REF,
 } from '../../application/agents/built-in-skills.js';
+import {
+  createCollaborationRuntimeContributor,
+  createSyntheticRuntimeToolsContributor,
+} from './runtime-tool-contributors.js';
 
 export function createRuntimeToolCatalog(input: {
-  readonly work: RuntimeToolContributor;
   readonly memory: RuntimeToolContributor;
-  readonly collaboration: RuntimeToolContributor;
-  readonly synthetic: RuntimeToolContributor;
+  readonly collaboration: {
+    readonly contextResolver: TeamToolContextResolver;
+    readonly kernel: CollaborationKernel;
+  };
+  readonly logger: Logger;
+  readonly work?: RuntimeToolContributor;
 }): RuntimeToolCatalog {
   return createCatalog([
-    {
-      ref: 'work',
-      toolRefs: [
-        AGENT_SERVER_PRODUCT_WORK_CREATE_TOOL_REF,
-        AGENT_SERVER_PRODUCT_WORK_RUN_START_TOOL_REF,
-        AGENT_SERVER_LIST_AGENT_WORKFLOWS_TOOL_REF,
-        AGENT_SERVER_DESCRIBE_WORKFLOW_TOOL_REF,
-      ],
-      contribute: input.work,
-    },
     {
       ref: 'memory',
       toolRefs: [
@@ -44,7 +44,7 @@ export function createRuntimeToolCatalog(input: {
     {
       ref: 'collaboration',
       toolRefs: AGENT_SERVER_PLATFORM_COLLABORATION_TOOL_REFS,
-      contribute: input.collaboration,
+      contribute: createCollaborationRuntimeContributor(input.collaboration),
     },
     {
       ref: 'synthetic',
@@ -53,7 +53,23 @@ export function createRuntimeToolCatalog(input: {
         AGENT_SERVER_SYNTHETIC_EVENT_BATCH_TOOL_REF,
         AGENT_SERVER_SYNTHETIC_ANALOG_SUMMARY_TOOL_REF,
       ],
-      contribute: input.synthetic,
+      contribute: createSyntheticRuntimeToolsContributor({
+        logger: input.logger,
+      }),
     },
+    ...(input.work
+      ? [
+          {
+            ref: 'work',
+            toolRefs: [
+              AGENT_SERVER_PRODUCT_WORK_CREATE_TOOL_REF,
+              AGENT_SERVER_PRODUCT_WORK_RUN_START_TOOL_REF,
+              AGENT_SERVER_LIST_AGENT_WORKFLOWS_TOOL_REF,
+              AGENT_SERVER_DESCRIBE_WORKFLOW_TOOL_REF,
+            ],
+            contribute: input.work,
+          },
+        ]
+      : []),
   ]);
 }

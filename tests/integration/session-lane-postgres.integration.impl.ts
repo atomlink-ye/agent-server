@@ -140,19 +140,19 @@ describeRealPostgres('Phase C session lanes on PostgreSQL', () => {
         ],
       });
       const complete = new CompleteRun(runs, tasks, undefined, repository);
-      const execute = new ExecuteRun(
-        complete,
+      const execute = new ExecuteRun({
+        completeRun: complete,
         tasks,
-        invokables,
-        new ExecuteTeamTask(invokables, {} as never),
+        definitions: invokables,
+        executeTeamTask: new ExecuteTeamTask(invokables, {} as never),
         runtime,
-        createLogger({
+        runtimeProvider: runtime,
+        logger: createLogger({
           service: 'session-lane-test',
           minimumLevel: 'error',
           write: () => undefined,
         }),
-        undefined,
-        new ResolveAgentVersion(
+        resolver: new ResolveAgentVersion(
           {
             findVersion: async () =>
               ({
@@ -185,13 +185,11 @@ describeRealPostgres('Phase C session lanes on PostgreSQL', () => {
           },
           { resolve: async () => null },
         ),
-        undefined,
-        undefined,
-        new CreateMemoryProposal(
+        createMemoryProposal: new CreateMemoryProposal(
           new PostgresWorkspaceMemoryRepository(pool),
           tasks,
         ),
-      );
+      });
       await execute.execute(claim);
       const proposals = await new PostgresWorkspaceMemoryRepository(
         pool,

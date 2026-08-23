@@ -345,19 +345,19 @@ export async function createTestApp(
     events,
   );
   const executeTeamTask = new ExecuteTeamTask(invokableRepository, {} as never);
-  const executeRun = new ExecuteRun(
+  const executeRun = new ExecuteRun({
     completeRun,
-    taskRepository,
-    invokableRepository,
+    tasks: taskRepository,
+    definitions: invokableRepository,
     executeTeamTask,
     runtime,
+    runtimeProvider: runtime,
     logger,
-    undefined,
-    resolveAgentVersion,
+    resolver: resolveAgentVersion,
     events,
     fileStore,
     createMemoryProposal,
-  );
+  });
   const dispatcher = new PostgresRunDispatcher(
     new ClaimNextRun(runRepository, {
       workerId,

@@ -147,29 +147,27 @@ describe('ExecuteRun', () => {
       createOrGetForProductSession: vi.fn(async () => runtimeSession),
     };
     const completeRunExecute = vi.fn(async ({ run }: { run: Run }) => run);
-    const executeRun = new ExecuteRun(
-      { execute: completeRunExecute } as never,
-      {
+    const executeRun = new ExecuteRun({
+      completeRun: { execute: completeRunExecute } as never,
+      tasks: {
         findById: vi.fn(async () => task),
         save: vi.fn(async () => undefined),
       } as never,
-      {} as never,
-      {} as never,
-      createRuntime(),
-      { log: vi.fn() },
-      () => new Date('2026-07-23T00:00:00.000Z'),
+      definitions: {} as never,
+      executeTeamTask: {} as never,
+      runtime: createRuntime(),
+      runtimeProvider: createRuntime(),
+      logger: { log: vi.fn() },
+      now: () => new Date('2026-07-23T00:00:00.000Z'),
       resolver,
-      {
+      events: {
         append: vi.fn(async () => undefined),
         bind: vi.fn(async () => undefined),
       } as never,
-      undefined,
-      undefined,
-      undefined,
-      runtimeSessions as never,
+      runtimeSessions: runtimeSessions as never,
       sessions,
       environments,
-    );
+    });
 
     await expect(executeRun.execute(claim)).resolves.toBeDefined();
     expect(runtimeSessions.createOrGetForProductSession).toHaveBeenCalled();
@@ -224,20 +222,20 @@ describe('ExecuteRun', () => {
     const completeRun = {
       execute: vi.fn(async ({ run }: { run: Run }) => run),
     } as unknown as CompleteRun;
-    const executeRun = new ExecuteRun(
+    const executeRun = new ExecuteRun({
       completeRun,
-      {
+      tasks: {
         findById: vi.fn(async () => task),
         save: vi.fn(async () => undefined),
       } as never,
-      {} as InvokableRepository,
-      {} as never,
+      definitions: {} as InvokableRepository,
+      executeTeamTask: {} as never,
       runtime,
-      { log: vi.fn() },
-      () => new Date('2026-07-23T00:00:00.000Z'),
-      undefined,
-      events as never,
-    );
+      runtimeProvider: runtime,
+      logger: { log: vi.fn() },
+      now: () => new Date('2026-07-23T00:00:00.000Z'),
+      events: events as never,
+    });
 
     await executeRun.execute(claim);
 
@@ -322,20 +320,23 @@ describe('ExecuteRun', () => {
     };
     const binder = vi.fn(async () => extensionBinding);
     const batch = vi.fn(async () => undefined);
-    const executeRun = new ExecuteRun(
-      { execute: vi.fn(async ({ run }: { run: Run }) => run) } as never,
-      { findById: vi.fn(async () => task), save: vi.fn() } as never,
-      {} as never,
-      {} as never,
+    const executeRun = new ExecuteRun({
+      completeRun: {
+        execute: vi.fn(async ({ run }: { run: Run }) => run),
+      } as never,
+      tasks: { findById: vi.fn(async () => task), save: vi.fn() } as never,
+      definitions: {} as never,
+      executeTeamTask: {} as never,
       runtime,
-      { log: vi.fn() },
-      () => new Date(),
+      runtimeProvider: runtime,
+      logger: { log: vi.fn() },
+      now: () => new Date(),
       resolver,
-      events as never,
-      { readVerified: vi.fn(async () => 'pinned memory') } as never,
-      { executeBatch: batch } as never,
-      { bind: binder } as never,
-    );
+      events: events as never,
+      fileStore: { readVerified: vi.fn(async () => 'pinned memory') } as never,
+      createMemoryProposal: { executeBatch: batch } as never,
+      runtimeExtensionBinder: { bind: binder } as never,
+    });
 
     const out = await executeRun.execute(claim);
 
@@ -457,28 +458,26 @@ describe('ExecuteRun', () => {
       updateMemberRunStatus: vi.fn(async () => lead),
       updateMemberRuntimeSession: vi.fn(async () => lead),
     };
-    const executeRun = new ExecuteRun(
+    const executeRun = new ExecuteRun({
       completeRun,
-      {
+      tasks: {
         findById: vi.fn(async () => task),
         findByRootTaskIdForOwner: vi.fn(async () => [
           { task, latestRun: claim.run },
         ]),
         save: vi.fn(async () => undefined),
       } as never,
-      {} as never,
-      {} as never,
+      definitions: {} as never,
+      executeTeamTask: {} as never,
       runtime,
-      { log: vi.fn() },
-      () => new Date('2026-07-23T00:00:00.000Z'),
-      undefined,
-      {
+      runtimeProvider: runtime,
+      logger: { log: vi.fn() },
+      now: () => new Date('2026-07-23T00:00:00.000Z'),
+      events: {
         append: vi.fn(async () => undefined),
         bind: vi.fn(async () => undefined),
       } as never,
-      undefined,
-      undefined,
-      {
+      runtimeExtensionBinder: {
         bind: vi.fn(),
         getTeamMemberGrant,
         refreshForTeamMember,
@@ -486,7 +485,7 @@ describe('ExecuteRun', () => {
         activeToolCalls,
         revoke: vi.fn(),
       } as never,
-      {
+      runtimeSessions: {
         findByTeamMember: vi.fn(async () => ({
           id: 'runtime-lead-1',
           scopeKind: 'team_member',
@@ -511,18 +510,15 @@ describe('ExecuteRun', () => {
           updatedAt: task.updatedAt,
         })),
       } as never,
-      undefined,
-      undefined,
-      undefined,
-      collaborativeExecutions as never,
-      {
+      collaborativeExecutions,
+      runs: {
         findByIdForOwner: vi.fn(async () => ({
           ...claim.run,
           id: 'prior-run-id',
           status: 'succeeded',
         })),
       } as never,
-    );
+    });
 
     const out = await executeRun.execute(claim);
 
@@ -1225,18 +1221,19 @@ describe('ExecuteRun', () => {
       findAttemptsByTeamRunId: vi.fn(async () => []),
       updateMemberRunStatus: vi.fn(async () => member),
     };
-    const executeRun = new ExecuteRun(
+    const executeRun = new ExecuteRun({
       completeRun,
-      {
+      tasks: {
         findById: vi.fn(async () => task),
         save: vi.fn(async () => undefined),
       } as never,
-      {} as never,
-      {} as never,
-      createRuntime(),
-      { log: vi.fn() },
-      () => new Date('2026-07-23T00:00:00.000Z'),
-      {
+      definitions: {} as never,
+      executeTeamTask: {} as never,
+      runtime: createRuntime(),
+      runtimeProvider: createRuntime(),
+      logger: { log: vi.fn() },
+      now: () => new Date('2026-07-23T00:00:00.000Z'),
+      resolver: {
         resolvePublished: vi.fn(async () => ({
           instructions: 'Complete the assigned Team work.',
           skills: [],
@@ -1244,16 +1241,9 @@ describe('ExecuteRun', () => {
           toolRefs: [],
         })),
       } as never,
-      undefined,
-      undefined,
-      undefined,
-      { bind: vi.fn(async () => undefined) } as never,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      collaborativeExecutions as never,
-    );
+      runtimeExtensionBinder: { bind: vi.fn(async () => undefined) } as never,
+      collaborativeExecutions: collaborativeExecutions as never,
+    });
 
     await expect(executeRun.execute(claim)).rejects.toBe(conflict);
     expect(completeRun.execute).toHaveBeenCalledTimes(1);
@@ -1528,19 +1518,18 @@ describe('ExecuteRun', () => {
       },
       { resolve: vi.fn(async () => null) },
     );
-    await new ExecuteRun(
+    await new ExecuteRun({
       completeRun,
-      { findById: vi.fn(async () => task), save: vi.fn() } as never,
-      {} as never,
-      {} as never,
+      tasks: { findById: vi.fn(async () => task), save: vi.fn() } as never,
+      definitions: {} as never,
+      executeTeamTask: {} as never,
       runtime,
-      { log: vi.fn() },
-      () => new Date(),
+      runtimeProvider: runtime,
+      logger: { log: vi.fn() },
+      now: () => new Date(),
       resolver,
-      undefined,
-      undefined,
       createMemoryProposal,
-    ).execute(claim);
+    }).execute(claim);
     expect(batch).toHaveBeenCalledWith(
       expect.arrayContaining([
         expect.objectContaining({ content: 'safe constraint' }),
@@ -1634,22 +1623,23 @@ describe('ExecuteRun', () => {
       },
       { resolve: vi.fn(async () => null) },
     );
-    const executeRun = new ExecuteRun(
-      { execute: vi.fn(async ({ run }: { run: Run }) => run) } as never,
-      {
+    const executeRun = new ExecuteRun({
+      completeRun: {
+        execute: vi.fn(async ({ run }: { run: Run }) => run),
+      } as never,
+      tasks: {
         findById: vi.fn(async (id: string) => tasksById.get(id) ?? null),
         save: vi.fn(),
       } as never,
-      {} as never,
-      {} as never,
+      definitions: {} as never,
+      executeTeamTask: {} as never,
       runtime,
-      { log: vi.fn() },
-      () => new Date(),
+      runtimeProvider: runtime,
+      logger: { log: vi.fn() },
+      now: () => new Date(),
       resolver,
-      undefined,
-      undefined,
-      { executeBatch: batch } as never,
-    );
+      createMemoryProposal: { executeBatch: batch } as never,
+    });
 
     await Promise.all([
       executeRun.execute(claims[0]!),
@@ -1684,26 +1674,29 @@ describe('ExecuteRun', () => {
           ),
         ),
       } as unknown as CompleteRun;
-      const executeRun = new ExecuteRun(
+      const executeRun = new ExecuteRun({
         completeRun,
-        {
+        tasks: {
           findById: vi.fn(async () => task),
           save: vi.fn(async () => undefined),
         } as never,
-        {} as never,
-        {} as never,
-        createRuntime(runtimeFails ? new Error('late failure') : undefined),
-        { log: vi.fn() },
-        () => new Date('2026-07-23T00:00:01.000Z'),
-        new ResolveAgentVersion(
+        definitions: {} as never,
+        executeTeamTask: {} as never,
+        runtime: createRuntime(
+          runtimeFails ? new Error('late failure') : undefined,
+        ),
+        runtimeProvider: createRuntime(),
+        logger: { log: vi.fn() },
+        now: () => new Date('2026-07-23T00:00:01.000Z'),
+        resolver: new ResolveAgentVersion(
           {
             findVersion: vi.fn(async () => null),
             findVersionByTenant: vi.fn(async () => null),
           } as never,
           { resolve: vi.fn(async () => null) },
         ),
-        events as never,
-      );
+        events: events as never,
+      });
       await executeRun.execute(claim);
       expect(
         (events.append.mock.calls as unknown as Array<Array<unknown>>).map(
@@ -1724,15 +1717,16 @@ function createExecuteRun(input: {
     findById: vi.fn(async () => input.task),
     save: vi.fn(async () => undefined),
   } as unknown as TaskRepository;
-  return new ExecuteRun(
-    input.completeRun,
+  return new ExecuteRun({
+    completeRun: input.completeRun,
     tasks,
-    {} as InvokableRepository,
-    {} as never,
-    input.runtime,
-    input.logger ?? { log: vi.fn() },
-    () => new Date('2026-07-23T00:00:00.000Z'),
-  );
+    definitions: {} as InvokableRepository,
+    executeTeamTask: {} as never,
+    runtime: input.runtime,
+    runtimeProvider: input.runtime,
+    logger: input.logger ?? { log: vi.fn() },
+    now: () => new Date('2026-07-23T00:00:00.000Z'),
+  });
 }
 
 function createLeadRuntimeFixture() {
@@ -1846,34 +1840,29 @@ function createLeadRuntimeFixture() {
     updateMemberRuntimeSession: vi.fn(async () => lead),
   };
   const logger = { log: vi.fn() };
-  const executeRun = new ExecuteRun(
+  const executeRun = new ExecuteRun({
     completeRun,
-    {
+    tasks: {
       findById: vi.fn(async () => task),
       findByRootTaskIdForOwner: vi.fn(async () => [
         { task, latestRun: claim.run },
       ]),
       save: vi.fn(async () => undefined),
     } as never,
-    {} as never,
-    {} as never,
+    definitions: {} as never,
+    executeTeamTask: {} as never,
     runtime,
+    runtimeProvider: runtime,
     logger,
-    () => new Date('2026-07-23T00:00:00.000Z'),
-    undefined,
-    {
+    now: () => new Date('2026-07-23T00:00:00.000Z'),
+    events: {
       append: vi.fn(async () => undefined),
       bind: vi.fn(async () => undefined),
     } as never,
-    undefined,
-    undefined,
-    binder as never,
-    runtimeSessions as never,
-    undefined,
-    undefined,
-    undefined,
-    collaborativeExecutions as never,
-  );
+    runtimeExtensionBinder: binder as never,
+    runtimeSessions: runtimeSessions as never,
+    collaborativeExecutions: collaborativeExecutions as never,
+  });
   return {
     claim,
     task,
@@ -1899,19 +1888,18 @@ function createDirectExecuteRun(input: {
     findById: vi.fn(async () => input.task),
     save: vi.fn(async () => undefined),
   } as unknown as TaskRepository;
-  return new ExecuteRun(
-    input.completeRun,
+  return new ExecuteRun({
+    completeRun: input.completeRun,
     tasks,
-    {} as InvokableRepository,
-    {} as never,
-    input.runtime,
-    { log: vi.fn() },
-    () => new Date('2026-07-23T00:00:00.000Z'),
-    input.resolver,
-    undefined,
-    undefined,
-    input.createMemoryProposal,
-  );
+    definitions: {} as InvokableRepository,
+    executeTeamTask: {} as never,
+    runtime: input.runtime,
+    runtimeProvider: input.runtime,
+    logger: { log: vi.fn() },
+    now: () => new Date('2026-07-23T00:00:00.000Z'),
+    resolver: input.resolver,
+    createMemoryProposal: input.createMemoryProposal,
+  });
 }
 
 function createRuntimeWithCandidates(

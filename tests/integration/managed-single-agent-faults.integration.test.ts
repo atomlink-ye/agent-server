@@ -81,14 +81,15 @@ describe('managed single-agent minimum fault evidence', () => {
       });
       const complete = new CompleteRun(runs, tasks);
       const team = new ExecuteTeamTask(invokables, {} as never);
-      const execute = new ExecuteRun(
-        complete,
+      const execute = new ExecuteRun({
+        completeRun: complete,
         tasks,
-        invokables,
-        team,
+        definitions: invokables,
+        executeTeamTask: team,
         runtime,
+        runtimeProvider: runtime,
         logger,
-      );
+      });
       let available = true;
       const claim = {
         execute: async () => {

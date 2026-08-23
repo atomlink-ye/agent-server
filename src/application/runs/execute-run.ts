@@ -43,40 +43,81 @@ import {
 import { RuntimeMemoryProposalWriter } from './runtime-memory-proposal-writer.js';
 
 /** Durable Run process manager. */
+export interface ExecuteRunOptions {
+  readonly completeRun: CompleteRun;
+  readonly tasks: TaskRepository;
+  readonly definitions: DefinitionReadApi;
+  readonly executeTeamTask: ExecuteTeamTask;
+  readonly runtime: ExecutionRuntimeService;
+  readonly runtimeProvider: Pick<RuntimeExecutionProvider, 'ensureReady'>;
+  readonly logger: Logger;
+  readonly now?: () => Date;
+  readonly resolver?: AgentResolutionApi;
+  readonly events?: RunEventRepository;
+  readonly fileStore?: FileStore;
+  readonly createMemoryProposal?: CreateMemoryProposal;
+  readonly runtimeExtensionBinder?: RuntimeExtensionBinder;
+  readonly runtimeSessions?: unknown;
+  readonly sessions?: Pick<SessionRepository, 'getSession'>;
+  readonly environments?: EnvironmentReadApi;
+  readonly runtimeCellRoot?: string;
+  readonly collaborativeExecutions?: TeamExecutionRepository;
+  readonly runs?: Pick<RunRepository, 'findByIdForOwner'>;
+  readonly activationReconciler?: Pick<
+    CollaborationActivationReconciler,
+    'reconcileForRootTask'
+  >;
+  readonly workRunManifests?: WorkRunResourceManifestRead;
+  readonly memoryVersions?: MemoryVersionReadApi;
+}
+
 export class ExecuteRun {
+  private readonly completeRun: CompleteRun;
+  private readonly tasks: TaskRepository;
+  private readonly executeTeamTask: ExecuteTeamTask;
+  private readonly runtime: ExecutionRuntimeService;
+  private readonly runtimeProvider: Pick<
+    RuntimeExecutionProvider,
+    'ensureReady'
+  >;
+  private readonly logger: Logger;
+  private readonly now: () => Date;
+  private readonly events: RunEventRepository | undefined;
   private readonly teamCoordinator: RunTeamCoordinator | undefined;
   private readonly agentRunExecutor: AgentRunExecutor;
 
-  public constructor(
-    private readonly completeRun: CompleteRun,
-    private readonly tasks: TaskRepository,
-    _definitions: DefinitionReadApi,
-    private readonly executeTeamTask: ExecuteTeamTask,
-    private readonly runtime: ExecutionRuntimeService,
-    private readonly runtimeProvider: Pick<
-      RuntimeExecutionProvider,
-      'ensureReady'
-    >,
-    private readonly logger: Logger,
-    private readonly now: () => Date = () => new Date(),
-    resolver: AgentResolutionApi = { resolvePublished: async () => null },
-    private readonly events?: RunEventRepository,
-    fileStore?: FileStore,
-    createMemoryProposal?: CreateMemoryProposal,
-    runtimeExtensionBinder?: RuntimeExtensionBinder,
-    runtimeSessions?: unknown,
-    sessions?: Pick<SessionRepository, 'getSession'>,
-    environments?: EnvironmentReadApi,
-    runtimeCellRoot?: string,
-    collaborativeExecutions?: TeamExecutionRepository,
-    runs?: Pick<RunRepository, 'findByIdForOwner'>,
-    activationReconciler?: Pick<
-      CollaborationActivationReconciler,
-      'reconcileForRootTask'
-    >,
-    workRunManifests?: WorkRunResourceManifestRead,
-    memoryVersions?: MemoryVersionReadApi,
-  ) {
+  public constructor(options: ExecuteRunOptions) {
+    const {
+      completeRun,
+      tasks,
+      executeTeamTask,
+      runtime,
+      runtimeProvider,
+      logger,
+      now = () => new Date(),
+      resolver = { resolvePublished: async () => null },
+      events,
+      fileStore,
+      createMemoryProposal,
+      runtimeExtensionBinder,
+      runtimeSessions,
+      sessions,
+      environments,
+      runtimeCellRoot,
+      collaborativeExecutions,
+      runs,
+      activationReconciler,
+      workRunManifests,
+      memoryVersions,
+    } = options;
+    this.completeRun = completeRun;
+    this.tasks = tasks;
+    this.executeTeamTask = executeTeamTask;
+    this.runtime = runtime;
+    this.runtimeProvider = runtimeProvider;
+    this.logger = logger;
+    this.now = now;
+    this.events = events;
     this.teamCoordinator = collaborativeExecutions
       ? new RunTeamCoordinator(
           collaborativeExecutions,

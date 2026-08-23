@@ -1,4 +1,3 @@
-import { PaseoExecutionPlane } from '../../adapters/paseo/paseo-execution-plane.js';
 import { UnavailableExecutionPlane } from '../../adapters/runtime/unavailable-execution-plane.js';
 import type { RuntimeExtensionBinder } from '../../application/extensions/runtime-extension-binder.js';
 import type { RuntimeToolCatalog } from '../../application/extensions/runtime-tool-catalog.js';
@@ -34,7 +33,7 @@ import { PostgresRuntimeWorkspaceRepository } from '../../infrastructure/postgre
 import { PostgresWorkerRuntimeInvocationResolver } from '../../infrastructure/postgres/postgres-worker-runtime-invocation-resolver.js';
 import type { AppConfig } from '../../shared/config.js';
 import type { Logger } from '../../shared/observability/logger.js';
-import { mapPaseoConfig } from '../../infrastructure/runtime/paseo/paseo-config-mapper.js';
+import { createPaseoExecutionPlane } from '../../infrastructure/runtime/paseo/paseo-config-mapper.js';
 import { createPaseoRuntimeProvider } from '../../infrastructure/runtime/paseo/paseo-runtime-provider.js';
 import { UnavailableRuntimeProvider } from '../../infrastructure/runtime/unavailable-runtime-provider.js';
 
@@ -94,7 +93,6 @@ export function createRuntimeModule(options: {
   readonly scopedMemory?: Pick<ScopedMemoryResolver, 'resolve'>;
 }): RuntimeModule {
   const runtimeAdapter = options.config.runtime?.adapter ?? 'paseo';
-  const paseoConfig = mapPaseoConfig(options.config);
   const sessions = new PostgresRuntimeSessionRepository(options.database);
   const sessionLookup = new PostgresRuntimeSessionLookup(options.database);
   const workspaces = new PostgresRuntimeWorkspaceRepository(options.database);
@@ -102,7 +100,7 @@ export function createRuntimeModule(options: {
   const executionPlane: ExecutionPlanePort =
     runtimeAdapter === 'none'
       ? new UnavailableExecutionPlane()
-      : new PaseoExecutionPlane(paseoConfig, options.logger);
+      : createPaseoExecutionPlane(options.config, options.logger);
   const runtimeProvider = createRuntimeProvider({
     adapter: runtimeAdapter,
     config: options.config,

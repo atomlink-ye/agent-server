@@ -1,7 +1,10 @@
 import { randomUUID } from 'node:crypto';
 
 import type { IssueRuntimeToolGrant } from '../ports/issue-runtime-tool-grant.js';
-import type { EnsureRuntimeSession, ReadyRuntime } from '../ports/ensure-runtime-session.js';
+import type {
+  EnsureRuntimeSession,
+  ReadyRuntime,
+} from '../ports/ensure-runtime-session.js';
 import type {
   ExecutionAppliedSessionSpec,
   ExecutionPlanePort,
@@ -56,9 +59,9 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
       desired,
       generation: current,
       providerCapabilities: {
-        canReconfigure: this.provider.capabilities().supported.has(
-          'reusable_session',
-        ),
+        canReconfigure: this.provider
+          .capabilities()
+          .supported.has('reusable_session'),
       },
     });
 
@@ -72,7 +75,10 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
           appliedSpecRevision: desired.revision,
           appliedBootstrapDigest: desired.bootstrapDigest,
         });
-      return { generation: this.activeGeneration(current, desired), session: attached };
+      return {
+        generation: this.activeGeneration(current, desired),
+        session: attached,
+      };
     }
 
     return this.provision({
@@ -122,8 +128,11 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
     });
     await this.generations.insert(generation);
 
-    let grantId: Awaited<ReturnType<IssueRuntimeToolGrant['issue']>>['grantId'] | undefined;
-    let created: Awaited<ReturnType<ExecutionPlanePort['createSession']>> | undefined;
+    let grantId:
+      | Awaited<ReturnType<IssueRuntimeToolGrant['issue']>>['grantId']
+      | undefined;
+    let created:
+      Awaited<ReturnType<ExecutionPlanePort['createSession']>> | undefined;
     try {
       grantId = (
         await this.grants.issue({
@@ -157,7 +166,10 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
       await created?.session.close().catch(() => undefined);
       if (grantId) await this.grants.revoke(grantId).catch(() => undefined);
       await this.generations
-        .failProvisioning({ id: generationId, failedAt: this.now().toISOString() })
+        .failProvisioning({
+          id: generationId,
+          failedAt: this.now().toISOString(),
+        })
         .catch(() => undefined);
       throw error;
     }
@@ -170,7 +182,11 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
         reason: 'replacement_without_per_agent_close_support',
       });
     }
-    await this.sessions.markStatus(input.sessionId, 'ready', this.now().toISOString());
+    await this.sessions.markStatus(
+      input.sessionId,
+      'ready',
+      this.now().toISOString(),
+    );
     const active = Object.freeze({
       ...generation,
       providerWorkspaceId: created!.workspaceBinding.externalWorkspaceId,
@@ -202,7 +218,9 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
     };
   }
 
-  private appliedSpec(generation: RuntimeSessionGeneration): ExecutionAppliedSessionSpec {
+  private appliedSpec(
+    generation: RuntimeSessionGeneration,
+  ): ExecutionAppliedSessionSpec {
     return {
       appliedRevision: generation.appliedSpecRevision,
       appliedSpecDigest: generation.appliedBootstrapDigest,

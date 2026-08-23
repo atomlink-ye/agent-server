@@ -63,8 +63,6 @@ export function createRuntimeToolCatalog(
 export function computeRuntimeToolCatalogDigest(
   tools: readonly Pick<RuntimeToolDefinition, 'ref'>[],
 ): string {
-  const canonical = JSON.stringify(
-    tools.map((tool) => tool.ref).toSorted(),
-  );
+  const canonical = JSON.stringify(tools.map((tool) => tool.ref).toSorted());
   return `sha256:${createHash('sha256').update(canonical, 'utf8').digest('hex')}`;
 }

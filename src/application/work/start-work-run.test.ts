@@ -203,10 +203,7 @@ describe('StartWorkRun composition admission', () => {
       identity,
       execution: { admitRoot },
       runtimeCapabilities: {
-        supported: new Set([
-          'reusable_session',
-          'external_workspace',
-        ] as const),
+        supported: new Set(['reusable_session', 'external_workspace'] as const),
       },
       now: () => new Date(now),
     });

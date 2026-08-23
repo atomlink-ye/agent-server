@@ -483,28 +483,27 @@ export async function createService(
     resourceModule.definitionReadApi,
     teamDriver,
   );
-  const executeRun = new ExecuteRun(
+  const executeRun = new ExecuteRun({
     completeRun,
-    taskRepository,
-    resourceModule.definitionReadApi,
+    tasks: taskRepository,
+    definitions: resourceModule.definitionReadApi,
     executeTeamTask,
-    executionRuntime,
-    runtimeModule.runtimeProvider,
+    runtime: executionRuntime,
+    runtimeProvider: runtimeModule.runtimeProvider,
     logger,
-    undefined,
-    resourceModule.agentResolutionApi,
+    resolver: resourceModule.agentResolutionApi,
     events,
-    memoryModule.fileStore,
-    memoryModule.createMemoryProposal,
+    fileStore: memoryModule.fileStore,
+    createMemoryProposal: memoryModule.createMemoryProposal,
     runtimeExtensionBinder,
     runtimeSessions,
     sessions,
-    resourceModule.environmentReadApi,
-    runtimeModule.runtimeCellRoot,
-    collaborativeTeamExecutions,
-    runRepository,
-    terminalActivationReconciler,
-  );
+    environments: resourceModule.environmentReadApi,
+    runtimeCellRoot: runtimeModule.runtimeCellRoot,
+    collaborativeExecutions: collaborativeTeamExecutions,
+    runs: runRepository,
+    activationReconciler: terminalActivationReconciler,
+  });
   const dispatcher = new PostgresRunDispatcher(
     new ClaimNextRun(runRepository, {
       workerId,

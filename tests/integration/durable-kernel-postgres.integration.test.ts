@@ -1773,15 +1773,16 @@ function createExecuteRun(input: {
     {} as never,
   );
 
-  return new ExecuteRun(
+  return new ExecuteRun({
     completeRun,
     tasks,
-    input.invokableRepository,
+    definitions: input.invokableRepository,
     executeTeamTask,
-    input.runtime,
-    input.logger,
-    input.now,
-  );
+    runtime: input.runtime,
+    runtimeProvider: input.runtime,
+    logger: input.logger,
+    now: input.now,
+  });
 }
 
 async function waitFor(check: () => Promise<boolean>): Promise<void> {

@@ -409,21 +409,21 @@ describe('North Star host-native deterministic harness', () => {
       leaseExpiresAt: '2026-08-21T00:01:00.000Z',
     });
     if (!claim) throw new Error('expected technical Run claim');
-    await new ExecuteRun(
-      new CompleteRun(product.runs, product.tasks),
-      product.tasks,
-      product.invokables,
-      new ExecuteTeamTask(product.invokables, {} as never),
-      new FakeAgentRuntime(),
-      createLogger({
+    const runtime = new FakeAgentRuntime();
+    await new ExecuteRun({
+      completeRun: new CompleteRun(product.runs, product.tasks),
+      tasks: product.tasks,
+      definitions: product.invokables,
+      executeTeamTask: new ExecuteTeamTask(product.invokables, {} as never),
+      runtime,
+      runtimeProvider: runtime,
+      logger: createLogger({
         service: 'north-star-host-trace',
         minimumLevel: 'error',
         write: () => undefined,
       }),
-      undefined,
-      undefined,
-      new PostgresRunEventRepository(h.db),
-    ).execute(claim);
+      events: new PostgresRunEventRepository(h.db),
+    }).execute(claim);
 
     const trace = await h.db.query<{
       root_task_id: string;

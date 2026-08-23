@@ -1,4 +1,4 @@
-import type { ExecutionRuntimeService } from '../runtime/execution-plane-runtime-facade.js';
+import type { ExecutionRuntimeService } from '../ports/execution-runtime.js';
 import type { RunEventRepository } from '../ports/run-events.js';
 import type { MemoryReviewApi } from '../ports/memory-review-api.js';
 import type { LarkMemoryReviewSurface } from '../../domain/channels/lark-memory-review-surface.js';

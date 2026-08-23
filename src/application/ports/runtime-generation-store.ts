@@ -20,6 +20,10 @@ export interface RuntimeGenerationStore {
     readonly id: RuntimeGenerationId;
     readonly supersededAt: string;
   }): Promise<void>;
+  failProvisioning(input: {
+    readonly id: RuntimeGenerationId;
+    readonly failedAt: string;
+  }): Promise<void>;
 }
 
 /** Explicit transaction boundary for atomically replacing the current binding. */
@@ -27,7 +31,7 @@ export interface RuntimeGenerationTransaction {
   replaceCurrentGeneration(input: {
     readonly sessionId: RuntimeSessionId;
     readonly previousGenerationId: RuntimeGenerationId | null;
-    /** Provider binding facts are inserted only after the session lock/CAS. */
+    /** Provisioning generation is activated only after the session lock/CAS. */
     readonly generation: {
       readonly id: RuntimeGenerationId;
       readonly provider: string;

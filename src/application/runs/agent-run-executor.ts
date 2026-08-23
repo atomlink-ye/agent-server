@@ -15,7 +15,6 @@ import type { InvokableOwnerScope } from '../ports/invokable-repository.js';
 import type { MemoryVersionReadApi } from '../ports/memory-version-read-api.js';
 import type { RunEventRepository } from '../ports/run-events.js';
 import type { RunRepository, ClaimedRun } from '../ports/run-repository.js';
-import type { RuntimeSessionRepository } from '../ports/runtime-session-repository.js';
 import type { SessionRepository } from '../ports/session-repository.js';
 import type { TaskRepository } from '../ports/task-repository.js';
 import type { TeamExecutionRepository } from '../ports/team-execution-repository.js';
@@ -26,7 +25,7 @@ import type {
 import type {
   ExecutionRuntimeService,
   ExecutionTurnOutcome,
-} from '../runtime/execution-plane-runtime-facade.js';
+} from '../ports/execution-runtime.js';
 import { deriveTeamContextEpoch } from '../teams/team-tool-context.js';
 import { executionObservationPayload } from './execution-observation-payload.js';
 import type { RunTeamContext } from './run-team-coordinator.js';

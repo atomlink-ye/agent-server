@@ -3,7 +3,7 @@ import type {
   ChatTurnMode,
   ChatTurnProvider,
 } from '../../application/ports/chat-turn-provider.js';
-import type { ExecutionRuntimeService } from '../../application/runtime/execution-plane-runtime-facade.js';
+import type { ExecutionRuntimeService } from '../../application/ports/execution-runtime.js';
 import type { RuntimeSession } from '../../application/ports/runtime-session-repository.js';
 import { renderScopedMemory } from '../../application/context/scoped-memory-resolver.js';
 

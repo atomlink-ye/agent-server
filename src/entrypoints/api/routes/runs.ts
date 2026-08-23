@@ -1,7 +1,7 @@
 import type { Hono } from 'hono';
 
 import { ServiceAccountAuthenticator } from '../../../application/control-plane/service-account-authenticator.js';
-import type { ExecutionRuntimeService } from '../../../application/runtime/execution-plane-runtime-facade.js';
+import type { ExecutionRuntimeService } from '../../../application/ports/execution-runtime.js';
 import { IdempotencyConflictError } from '../../../application/tasks/admit-root-task.js';
 import type { GetRun } from '../../../application/runs/get-run.js';
 import type { SubmitRun } from '../../../application/runs/submit-run.js';

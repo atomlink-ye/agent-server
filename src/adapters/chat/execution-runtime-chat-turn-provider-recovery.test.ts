@@ -1,21 +1,36 @@
 import { describe, expect, it } from 'vitest';
 
-import type { RuntimeSession } from '../../application/ports/runtime-session-repository.js';
-import { makeRuntimeSession } from '../../../tests/fixtures/runtime-session.js';
+import type { RuntimeSession } from '../../domain/runtime/runtime-session.js';
+import type { ExecutionOutput } from '../../application/ports/runtime-execution-session.js';
+import type {
+  ExecuteRuntimeTurn,
+  ExecuteRuntimeTurnInput,
+} from '../../application/runtime/execute-runtime-turn.js';
 import { ExecutionRuntimeChatTurnProvider } from './execution-runtime-chat-turn-provider.js';
 
-describe('ExecutionRuntimeChatTurnProvider N2 modes', () => {
-  it('sends only the admitted delta to a healthy same-epoch provider session', async () => {
-    const calls: any[] = [];
-    const provider = new ExecutionRuntimeChatTurnProvider({
-      async ensureAgentChatRuntimeSession() {
-        return durableSession(true);
-      },
-      async executeTurn(input) {
+describe('ExecutionRuntimeChatTurnProvider recovery handoff', () => {
+  it('leaves reuse versus replacement recovery selection to ExecuteRuntimeTurn', async () => {
+    const calls: ExecuteRuntimeTurnInput[] = [];
+    const executor: Pick<ExecuteRuntimeTurn, 'execute'> = {
+      async execute(input): Promise<ExecutionOutput> {
         calls.push(input);
-        return outcome();
+        // This simulates EnsureRuntimeSession finding a replacement provider
+        // generation. The application seam, rather than Chat, selects recovery.
+        return {
+          provider: 'recording',
+          model: 'deterministic',
+          text: input.recoveryPrompt ?? input.prompt,
+        };
       },
-    });
+    };
+    const provider = new ExecutionRuntimeChatTurnProvider(
+      {
+        async execute() {
+          return durableSession();
+        },
+      },
+      executor,
+    );
 
     const result = await provider.runTurn({
       ...identity(),
@@ -54,9 +69,18 @@ describe('ExecutionRuntimeChatTurnProvider N2 modes', () => {
 
     expect(result.mode).toBe('delta');
     expect(calls).toHaveLength(1);
-    expect(calls[0].prompt).toContain('CHAT DELTA');
-    expect(calls[0].prompt).toContain('NEW_DELTA_ONLY');
-    expect(calls[0].prompt).not.toContain('OLD_CANONICAL_CONTEXT');
+    expect(calls[0]?.runtimeSessionId).toBe('runtime-session-n2');
+    expect(calls[0]?.source).toEqual({
+      kind: 'conversation',
+      conversationId: 'conversation-n2',
+      triggerMessageId: 'message-n2',
+    });
+    expect(calls[0]?.prompt).toContain('CHAT DELTA');
+    expect(calls[0]?.prompt).toContain('NEW_DELTA_ONLY');
+    expect(calls[0]?.prompt).not.toContain('OLD_CANONICAL_CONTEXT');
+    expect(calls[0]?.recoveryPrompt).toContain('CHAT RECOVERY SNAPSHOT');
+    expect(calls[0]?.recoveryPrompt).toContain('OLD_CANONICAL_CONTEXT');
+    expect(result.body).toContain('CHAT RECOVERY SNAPSHOT');
   });
 });
 
@@ -73,17 +97,18 @@ function identity() {
 function brain() {
   const productScope = { tenantId: 'tenant-n2', workspaceId: 'workspace-n2' };
   const actor = { type: 'service_account' as const, id: 'principal-n2' };
+  const agentOwner = { scope: productScope, principal: actor };
   return {
     turnContext: {
-      tenantId: 'tenant-n2',
+      productScope,
+      actor,
+      agentOwner,
       agentDefinitionId: 'agent-n2',
       agentVersionId: 'version-n2',
       agentChatRuntimeId: 'runtime-n2',
       runtimeEpoch: 4,
       conversationId: 'conversation-n2',
       triggerMessageId: 'message-n2',
-      actor,
-      agentOwner: { scope: productScope, principal: actor },
     },
     invocationContext: {
       scope: {
@@ -93,13 +118,13 @@ function brain() {
       },
       productScope,
       actor,
-      agentOwner: { scope: productScope, principal: actor },
+      agentOwner,
       agentDefinitionId: 'agent-n2',
       agentVersionId: 'version-n2',
       conversationId: 'conversation-n2',
       triggerMessageId: 'message-n2',
     },
-    agentOwner: { scope: productScope, principal: actor },
+    agentOwner,
     instructions: 'N2 deterministic instructions',
     capabilitySummary: {},
     agentHome: {},
@@ -108,65 +133,21 @@ function brain() {
   } as any;
 }
 
-function durableSession(bound: boolean): RuntimeSession {
-  const workspaceBinding = bound
-    ? { plane: 'paseo', externalWorkspaceId: 'workspace-provider-n2' }
-    : null;
-  const sessionBinding = bound
-    ? { plane: 'paseo', externalSessionId: 'session-provider-n2' }
-    : null;
-  return makeRuntimeSession({
-    id: 'runtime-session-n2',
-    scope: {
-      kind: 'agent_chat',
-      agentChatRuntimeId: 'runtime-n2',
-      runtimeEpoch: 4,
-    },
-    scopeKind: 'agent_chat',
-    scopeId: 'runtime-n2:4',
-    productSessionId: null,
-    taskId: null,
-    launchSnapshotId: 'snapshot-n2',
-    workspaceId: 'workspace-n2',
-    agentVersionId: 'version-n2',
-    environmentVersionId: null,
-    resolvedSkills: [],
-    toolRefs: [],
-    status: bound ? 'ready' : 'pending',
-    currentGeneration:
-      bound && workspaceBinding && sessionBinding
-        ? {
-            id: 'generation-n2-1',
-            runtimeSessionId: 'runtime-session-n2',
-            generation: 1,
-            workspaceBinding,
-            sessionBinding,
-            appliedRevision: 1,
-            appliedSpecDigest: 'sha256:bootstrap-n2',
-            endpointEpoch: 'none',
-            extensionGrantId: null,
-            status: 'active',
-            createdAt: '2026-08-22T00:00:00.000Z',
-            supersededAt: null,
-          }
-        : null,
-    workspaceBinding,
-    sessionBinding,
-  });
-}
-
-function outcome() {
+function durableSession(): RuntimeSession {
   return {
-    provider: 'recording',
-    model: 'deterministic',
-    text: 'reply',
-    workspaceBinding: {
-      plane: 'recording',
-      externalWorkspaceId: 'workspace-recording',
+    id: 'runtime-session-n2',
+    owner: {
+      tenantId: 'tenant-n2',
+      workspaceId: 'workspace-n2',
+      principalType: 'service_account',
+      principalId: 'principal-n2',
     },
-    sessionBinding: {
-      plane: 'recording',
-      externalSessionId: 'session-recording',
-    },
-  };
+    scope: { kind: 'agent_chat', id: 'runtime-n2', epoch: 4 },
+    desiredSpecRevision: 1,
+    currentGenerationId: null,
+    status: 'ready',
+    createdAt: '2026-08-22T00:00:00.000Z',
+    updatedAt: '2026-08-22T00:00:00.000Z',
+    closedAt: null,
+  } as RuntimeSession;
 }

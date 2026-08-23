@@ -3,20 +3,28 @@ import type {
   ChatTurnMode,
   ChatTurnProvider,
 } from '../../application/ports/chat-turn-provider.js';
-import type { ExecutionRuntimeService } from '../../application/ports/execution-runtime.js';
-import type { RuntimeSession } from '../../application/ports/runtime-session-repository.js';
+import type { ExecutionOutput } from '../../application/ports/runtime-execution-session.js';
+import type {
+  CreateAgentChatRuntimeSession,
+} from '../../application/runtime/create-agent-chat-runtime-session.js';
+import type {
+  ExecuteRuntimeTurn,
+  ExecuteRuntimeTurnInput,
+} from '../../application/runtime/execute-runtime-turn.js';
+import type { RuntimeSession } from '../../domain/runtime/runtime-session.js';
+import type { RuntimeTurnId } from '../../domain/runtime/runtime-session.js';
 import { renderScopedMemory } from '../../application/context/scoped-memory-resolver.js';
 
 /**
- * Chat adapter over the application runtime facade. Provider selection and
- * credentials remain the ExecutionPlane's responsibility.
+ * Chat adapter over the durable runtime-session and runtime-turn use cases.
  */
 export class ExecutionRuntimeChatTurnProvider implements ChatTurnProvider {
   public constructor(
-    private readonly runtime: Pick<
-      ExecutionRuntimeService,
-      'executeTurn' | 'ensureAgentChatRuntimeSession'
+    private readonly sessionCreator: Pick<
+      CreateAgentChatRuntimeSession,
+      'execute'
     >,
+    private readonly turnExecutor: Pick<ExecuteRuntimeTurn, 'execute'>,
   ) {}
 
   public async runTurn(
@@ -27,91 +35,65 @@ export class ExecutionRuntimeChatTurnProvider implements ChatTurnProvider {
     readonly mode: ChatTurnMode;
   }> {
     const turnContext = input.brain.turnContext;
-    const durableSession = turnContext
-      ? await this.runtime.ensureAgentChatRuntimeSession({
-          agentChatRuntimeId: turnContext.agentChatRuntimeId,
-          runtimeEpoch: turnContext.runtimeEpoch,
-          agentOwner: input.brain.agentOwner,
-          agentVersionId: turnContext.agentVersionId,
-          resolvedSkills: input.brain.resolvedSkills,
-          toolRefs: input.brain.toolRefs,
-        })
-      : null;
-
-    const invocationContext = input.brain.invocationContext
-      ? {
-          ...input.brain.invocationContext,
-          conversationId: input.conversationId,
-          triggerMessageId: input.triggerMessageId,
-        }
-      : undefined;
+    if (!turnContext) throw new Error('chat_runtime_context_missing');
+    const durableSession = await this.sessionCreator.execute({
+      agentChatRuntimeId: turnContext.agentChatRuntimeId,
+      runtimeEpoch: turnContext.runtimeEpoch,
+      agentOwner: input.brain.agentOwner,
+      agentVersionId: turnContext.agentVersionId,
+      resolvedSkills: input.brain.resolvedSkills,
+      toolRefs: input.brain.toolRefs,
+    });
 
     const requested = input.turn?.modeHint ?? 'bootstrap';
-    const initialMode = resolveInitialMode(
-      requested,
-      durableSession,
-      input.extensions?.grantId,
-    );
-    const result = await this.execute(
-      input,
-      durableSession,
-      invocationContext,
-      initialMode,
-    );
+    const result = await this.execute(input, durableSession, requested);
     return {
       body: result.text,
       provider: result.provider,
-      mode: result.usedRecoveryPrompt ? 'recover' : initialMode,
+      mode: requested,
     };
   }
 
   private execute(
     input: Parameters<ChatTurnProvider['runTurn']>[0],
     durableSession: RuntimeSession | null,
-    invocationContext: Parameters<
-      ExecutionRuntimeService['executeTurn']
-    >[0]['invocationContext'],
     mode: ChatTurnMode,
-  ) {
-    return this.runtime.executeTurn({
-      runId: chatRunId(input.conversationId, input.triggerMessageId),
-      ...(durableSession ? { runtimeSessionId: durableSession.id } : {}),
-      ...(invocationContext ? { invocationContext } : {}),
-      systemPrompt: buildStableSystemPrompt(input),
-      prompt: buildTurnPrompt(input, mode),
-      ...(mode === 'delta'
-        ? { recoveryPrompt: buildTurnPrompt(input, 'recover') }
-        : {}),
-      sessionTitle: `Chat ${input.agentDefinitionId}`,
-      labels: {
-        scope: 'agent_chat',
-        agent_definition_id: input.agentDefinitionId,
-        agent_version_id: input.agentVersionId,
-        ...(input.brain.turnContext
-          ? { runtime_epoch: String(input.brain.turnContext.runtimeEpoch) }
-          : {}),
+  ): Promise<ExecutionOutput> {
+    if (!durableSession) throw new Error('chat_runtime_session_missing');
+    const prompt = buildExecutionPrompt(input, mode);
+    const recoveryPrompt = buildExecutionPrompt(
+      input,
+      mode === 'delta' ? 'recover' : mode,
+    );
+    const turn: ExecuteRuntimeTurnInput = {
+      runtimeSessionId: durableSession.id,
+      source: {
+        kind: 'conversation',
+        conversationId: input.conversationId,
+        triggerMessageId: input.triggerMessageId,
       },
-      ...(input.extensions ? { extensions: input.extensions } : {}),
-      proposalLimit: 0,
-    });
+      turnId: chatRunId(
+        input.conversationId,
+        input.triggerMessageId,
+      ) as RuntimeTurnId,
+      prompt,
+      recoveryPrompt,
+    };
+    return this.turnExecutor.execute(turn);
   }
-}
-
-function resolveInitialMode(
-  requested: ChatTurnMode,
-  durableSession: RuntimeSession | null,
-  currentGrantId: string | undefined,
-): ChatTurnMode {
-  if (requested !== 'delta' || !durableSession) return requested;
-  const generation = durableSession.currentGeneration;
-  if (!generation || durableSession.status !== 'ready') return 'recover';
-  if (currentGrantId && generation.extensionGrantId !== currentGrantId)
-    return 'recover';
-  return 'delta';
 }
 
 function chatRunId(conversationId: string, triggerMessageId: string): string {
   return `chat:${conversationId}:${triggerMessageId}`;
+}
+
+function buildExecutionPrompt(
+  input: Parameters<ChatTurnProvider['runTurn']>[0],
+  mode: ChatTurnMode,
+): string {
+  return [buildStableSystemPrompt(input), buildTurnPrompt(input, mode)].join(
+    '\n\n',
+  );
 }
 
 /** Provider bootstrap state must remain stable across turns in one chat epoch. */

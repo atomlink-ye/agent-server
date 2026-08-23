@@ -12,12 +12,7 @@ import { GetTask } from './application/tasks/get-task.js';
 import { GetTaskTree } from './application/tasks/get-task-tree.js';
 import { ExecuteTeamTask } from './application/tasks/execute-team-task.js';
 import { InvokeTask } from './application/tasks/invoke-task.js';
-import { createApp } from './entrypoints/api/app.js';
 import { PostgresAdmissionRepository } from './infrastructure/postgres/postgres-admission-repository.js';
-import {
-  applyDurableKernelMigrations,
-  createPostgresPool,
-} from './infrastructure/postgres/postgres.js';
 import { PostgresRunDispatcher } from './infrastructure/postgres/postgres-run-dispatcher.js';
 import { PostgresRunRepository } from './infrastructure/postgres/postgres-run-repository.js';
 import { PostgresTaskRepository } from './infrastructure/postgres/postgres-task-repository.js';
@@ -59,7 +54,6 @@ import {
   revokeForRecoveredTeamRuns,
   revokeForTerminalTeamRun,
 } from './application/teams/runtime-grant-lifecycle.js';
-import { ensureServiceAccountWorkspaces } from './infrastructure/postgres/postgres-service-account-workspace-bootstrap.js';
 import { PostgresExecutionFactQuery } from './infrastructure/postgres/postgres-execution-fact-query.js';
 import { InvokeTaskExecutionAdmission } from './application/ports/execution-admission.js';
 import { createMemoryModule } from './modules/memory/memory-module.js';
@@ -85,6 +79,8 @@ import { PostgresAgentHomeRepository } from './infrastructure/postgres/postgres-
 import { PostgresAgentHomeDefinitionSource } from './infrastructure/postgres/postgres-agent-home-definition-source.js';
 import { noExternalDependencies } from './application/health/readiness.js';
 import { createConfiguredRuntimeCapabilities } from './composition/create-runtime-capabilities.js';
+import { createInfrastructure } from './composition/create-infrastructure.js';
+import { createHttpApi } from './composition/create-http-api.js';
 import {
   closeRuntimeAndPool,
   createLifecycleSupervisor,
@@ -163,14 +159,7 @@ export async function createService(
     throw new Error('Debug service options require singleRunDebug.');
   const workerId = `agent-server:${process.pid}:${randomUUID()}`;
   const leaseDurationMs = turnLeaseDurationMs(config.paseo.executionTimeoutMs);
-  const pool = createPostgresPool();
-  pool.on('error', (error) => {
-    logger.log('error', 'postgres.pool.error', {
-      error_name: error instanceof Error ? error.name : 'UnknownError',
-    });
-  });
-  await applyDurableKernelMigrations(pool);
-  await ensureServiceAccountWorkspaces(pool, config.serviceAccounts ?? []);
+  const { pool } = await createInfrastructure(config, logger);
   const resourceModule = await createResourceModule({
     database: pool,
     config,
@@ -618,7 +607,7 @@ export async function createService(
   const readiness = runtimeRequiresReadiness
     ? runtimeModule.readiness
     : noExternalDependencies;
-  const app = createApp({
+  const app = createHttpApi({
     config,
     logger,
     readiness,

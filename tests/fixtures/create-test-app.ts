@@ -27,7 +27,7 @@ import { ExecuteTeamTask } from '../../src/application/tasks/execute-team-task.j
 import { InvokeTask } from '../../src/application/tasks/invoke-task.js';
 import { InvokeTaskExecutionAdmission } from '../../src/application/ports/execution-admission.js';
 import { CancelTask } from '../../src/application/tasks/cancel-task.js';
-import { createApp } from '../../src/entrypoints/api/app.js';
+import { createHttpApp } from '../../src/entrypoints/api/app.js';
 import { PostgresAdmissionRepository } from '../../src/infrastructure/postgres/postgres-admission-repository.js';
 import { PostgresInvokableRepository } from '../../src/infrastructure/postgres/postgres-invokable-repository.js';
 import { applyDurableKernelMigrations } from '../../src/infrastructure/postgres/postgres.js';
@@ -405,7 +405,7 @@ export async function createTestApp(
     };
   }
 
-  return createApp({
+  return createHttpApp({
     config: effectiveConfig,
     logger,
     readiness: new RuntimeReadinessProbe({

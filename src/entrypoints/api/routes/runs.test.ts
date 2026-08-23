@@ -9,7 +9,7 @@ import type { GetTask } from '../../../application/tasks/get-task.js';
 import type { GetTaskTree } from '../../../application/tasks/get-task-tree.js';
 import type { InvokeTask } from '../../../application/tasks/invoke-task.js';
 import { createRun } from '../../../domain/runs/run.js';
-import { createApp } from '../app.js';
+import { createHttpApp } from '../app.js';
 
 describe('run routes', () => {
   it('admits work without directly coupling the route to inline execution', async () => {
@@ -20,7 +20,7 @@ describe('run routes', () => {
     const executeCalls: string[] = [];
     let submitCalls = 0;
 
-    const app = createApp({
+    const app = createHttpApp({
       config: {
         nodeEnv: 'test',
         host: '127.0.0.1',

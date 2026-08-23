@@ -13,7 +13,7 @@ import {
 } from '../../src/infrastructure/postgres/postgres.js';
 import { ErrorResponseSchema } from '../../src/contracts/http.js';
 import type { AppConfig } from '../../src/shared/config.js';
-import { createApp } from '../../src/entrypoints/api/app.js';
+import { createHttpApp } from '../../src/entrypoints/api/app.js';
 import { createWorkModule } from '../../src/modules/work/work-module.js';
 import {
   AGENT_SERVER_PRODUCT_WORK_CREATE_TOOL_REF,
@@ -128,7 +128,7 @@ describe('Product API v1 OI-38 cross-scope existence oracle', () => {
       },
       executionFacts: new PostgresExecutionFactQuery(pool),
     });
-    const app = createApp(
+    const app = createHttpApp(
       Object.assign(minimalAppDependencies(config), { workModule }) as never,
     );
 

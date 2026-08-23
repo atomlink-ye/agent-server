@@ -48,6 +48,7 @@ import { createMemoryReviewActionTokenDeriver } from './application/channels/mem
 import { ApplyMemoryReviewCommand } from './application/channels/apply-memory-review-command.js';
 import { ApplyMemoryReviewControl } from './application/channels/apply-memory-review-control.js';
 import { AcceptMemoryFromBoundDocument } from './application/channels/accept-memory-from-bound-document.js';
+import { createRuntimeToolCatalog } from './application/extensions/runtime-tool-catalog.js';
 import {
   createCollaborationRuntimeContributor,
   createSyntheticRuntimeToolsContributor,
@@ -83,6 +84,7 @@ import { ListAgentHomeEntries } from './application/agents/agent-home.js';
 import { PostgresAgentHomeRepository } from './infrastructure/postgres/postgres-agent-home-repository.js';
 import { PostgresAgentHomeDefinitionSource } from './infrastructure/postgres/postgres-agent-home-definition-source.js';
 import { noExternalDependencies } from './application/health/readiness.js';
+import { createConfiguredRuntimeCapabilities } from './composition/create-runtime-capabilities.js';
 import type { ConversationWorkLinkRepository } from './domain/chat/chat-work-origin-ref.js';
 
 export interface ServiceResources {
@@ -383,50 +385,11 @@ export async function createService(
     resourceModule.definitionReadApi,
     resourceModule.agentResolutionApi,
   );
-  const runtimeModule = createRuntimeModule({
-    database: pool,
-    config,
-    logger,
-    toolContributors: [
-      memoryModule.contributeRuntime,
-      createCollaborationRuntimeContributor({
-        contextResolver: teamToolContextResolver,
-        kernel: collaboration,
-      }),
-      createSyntheticRuntimeToolsContributor({
-        market: new SyntheticMarketAdapter(),
-        logger,
-      }),
-    ],
-    ...(options.debugRuntime ? { debugRuntime: options.debugRuntime } : {}),
-  });
-  const runtimeRequiresReadiness =
-    directChatPlane === 'execution_runtime' ||
-    productWorkPlane === 'execution_runtime';
-  if (
-    !options.singleRunDebug &&
-    runtimeRequiresReadiness &&
-    config.runtime?.adapter === 'none'
-  ) {
-    await closeRuntimeAndPool(runtimeModule.executionRuntime, pool);
-    throw new Error(
-      'Declared Direct Chat/Product Work execution runtime requires a runtime adapter.',
-    );
-  }
-  if (!options.singleRunDebug && runtimeRequiresReadiness) {
-    const ready = await runtimeModule.executionRuntime.ensureReady();
-    if (!ready) {
-      await closeRuntimeAndPool(runtimeModule.executionRuntime, pool);
-      throw new Error(
-        'Declared Direct Chat/Product Work execution runtime is not ready.',
-      );
-    }
-  }
-
   let workModule: ReturnType<typeof createWorkModule> | undefined;
   let workChatWorker: WorkChatWakeWorker | undefined;
   let conversationWorkLinks: ConversationWorkLinkRepository | undefined =
     undefined;
+  const runtimeCapabilities = createConfiguredRuntimeCapabilities(config);
   if (productWorkEnabled) {
     workModule = createWorkModule({
       database: pool,
@@ -435,9 +398,8 @@ export async function createService(
       execution: new InvokeTaskExecutionAdmission(invokeTask),
       executionFacts: new PostgresExecutionFactQuery(pool),
       ...(directChatEnabled && conversations ? { conversations } : {}),
-      runtimeCapabilities: runtimeModule,
+      runtimeCapabilities,
     });
-    runtimeModule.registerToolContributor(workModule.contributeRuntime);
     const productConversationWorkLinks =
       new PostgresConversationWorkLinkRepository(pool);
     conversationWorkLinks = productConversationWorkLinks;
@@ -464,6 +426,57 @@ export async function createService(
             });
           },
         },
+      );
+    }
+  }
+  const runtimeToolCatalog = createRuntimeToolCatalog([
+    { ref: 'memory', contribute: memoryModule.contributeRuntime },
+    {
+      ref: 'collaboration',
+      contribute: createCollaborationRuntimeContributor({
+        contextResolver: teamToolContextResolver,
+        kernel: collaboration,
+      }),
+    },
+    {
+      ref: 'synthetic',
+      contribute: createSyntheticRuntimeToolsContributor({
+        market: new SyntheticMarketAdapter(),
+        logger,
+      }),
+    },
+    ...(workModule
+      ? [{ ref: 'work', contribute: workModule.contributeRuntime }]
+      : []),
+  ]);
+  const runtimeModule = createRuntimeModule({
+    database: pool,
+    config,
+    logger,
+    toolContributors: runtimeToolCatalog
+      .list()
+      .map(({ contribute }) => contribute),
+    ...(options.debugRuntime ? { debugRuntime: options.debugRuntime } : {}),
+  });
+  const runtimeRequiresReadiness =
+    directChatPlane === 'execution_runtime' ||
+    productWorkPlane === 'execution_runtime';
+  if (
+    !options.singleRunDebug &&
+    runtimeRequiresReadiness &&
+    config.runtime?.adapter === 'none'
+  ) {
+    await closeRuntimeAndPool(runtimeModule.executionRuntime, pool);
+    throw new Error(
+      'Declared Direct Chat/Product Work execution runtime requires a runtime adapter.',
+    );
+  }
+  if (!options.singleRunDebug && runtimeRequiresReadiness) {
+    const ready = await runtimeModule.executionRuntime.ensureReady();
+    if (!ready) {
+      await closeRuntimeAndPool(runtimeModule.executionRuntime, pool);
+      throw new Error(
+        'Declared Direct Chat/Product Work execution runtime is not ready.',
       );
     }
   }

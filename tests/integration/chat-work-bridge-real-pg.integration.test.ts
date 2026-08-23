@@ -211,9 +211,7 @@ describe('Chat-Work Bridge integration on real PostgreSQL', () => {
       executionFacts: new PostgresExecutionFactQuery(pool),
       conversations: new PostgresConversationRepository(pool),
       runtimeCapabilities: {
-        capabilities() {
-          return { supported: new Set(['external_workspace'] as const) };
-        },
+        supported: new Set(['external_workspace'] as const),
       },
     });
     const grants = new RuntimeToolGrantService();

@@ -27,7 +27,7 @@ import { PaseoTurnRunner } from './paseo-turn-runner.js';
 
 export const PASEO_EXECUTION_PLANE_ID = 'paseo';
 
-const PASEO_PLANE_CAPABILITIES: ExecutionPlaneCapabilities = {
+export const PASEO_PLANE_CAPABILITIES: ExecutionPlaneCapabilities = {
   supported: new Set([
     'streaming',
     'cancellation',

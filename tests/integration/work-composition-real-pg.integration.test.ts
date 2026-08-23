@@ -229,9 +229,7 @@ describe('Composition-first Work on real PostgreSQL', () => {
       identity,
       execution: { admitRoot },
       runtimeCapabilities: {
-        capabilities: () => ({
-          supported: new Set(['external_workspace', 'platform_mcp'] as const),
-        }),
+        supported: new Set(['external_workspace', 'platform_mcp'] as const),
       },
       now: () => new Date(at),
     });

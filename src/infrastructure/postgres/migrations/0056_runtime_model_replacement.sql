@@ -163,7 +163,8 @@ CREATE TABLE runtime_session_generations (
     )
   ),
 
-  UNIQUE (runtime_session_id, generation)
+  UNIQUE (runtime_session_id, generation),
+  UNIQUE (id, runtime_session_id)
 );
 
 CREATE TABLE runtime_turns (
@@ -172,8 +173,7 @@ CREATE TABLE runtime_turns (
   runtime_session_id uuid NOT NULL
     REFERENCES runtime_sessions(id) ON DELETE CASCADE,
 
-  generation_id uuid NULL
-    REFERENCES runtime_session_generations(id),
+  generation_id uuid NULL,
 
   source_kind text NOT NULL,
   source_id text NOT NULL,
@@ -195,7 +195,11 @@ CREATE TABLE runtime_turns (
 
   created_at timestamptz NOT NULL,
   started_at timestamptz NULL,
-  completed_at timestamptz NULL
+  completed_at timestamptz NULL,
+
+  UNIQUE (id, runtime_session_id, generation_id),
+  FOREIGN KEY (generation_id, runtime_session_id)
+    REFERENCES runtime_session_generations(id, runtime_session_id)
 );
 
 CREATE INDEX runtime_turns_session_created_idx
@@ -207,11 +211,9 @@ CREATE TABLE runtime_tool_grants (
   runtime_session_id uuid NOT NULL
     REFERENCES runtime_sessions(id) ON DELETE CASCADE,
 
-  generation_id uuid NOT NULL
-    REFERENCES runtime_session_generations(id),
+  generation_id uuid NOT NULL,
 
-  runtime_turn_id uuid NULL
-    REFERENCES runtime_turns(id),
+  runtime_turn_id uuid NULL,
 
   token_hash text NOT NULL UNIQUE,
 
@@ -225,7 +227,22 @@ CREATE TABLE runtime_tool_grants (
   revoked_at timestamptz NULL,
 
   created_at timestamptz NOT NULL,
-  updated_at timestamptz NOT NULL
+  updated_at timestamptz NOT NULL,
+
+  CHECK (
+    jsonb_typeof(allowed_tools) = 'array'
+    AND NOT jsonb_path_exists(
+      allowed_tools,
+      '$[*] ? (@.type() != "string")'
+    )
+  ),
+  CHECK (length(btrim(catalog_digest)) > 0),
+  CHECK (renewable_until IS NULL OR renewable_until >= expires_at),
+
+  FOREIGN KEY (generation_id, runtime_session_id)
+    REFERENCES runtime_session_generations(id, runtime_session_id),
+  FOREIGN KEY (runtime_turn_id, runtime_session_id, generation_id)
+    REFERENCES runtime_turns(id, runtime_session_id, generation_id)
 );
 
 -- Add the convenience projection only after its target table exists. This

@@ -1,4 +1,4 @@
-import type { ExecutionSession } from './execution-plane.js';
+import type { ExecutionSession } from './runtime-execution-session.js';
 import type { RuntimeSessionGeneration } from '../../domain/runtime/runtime-session-generation.js';
 import type { RuntimeSessionId } from '../../domain/runtime/runtime-session.js';
 

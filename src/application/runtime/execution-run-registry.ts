@@ -3,7 +3,7 @@ import type {
   ExecutionResult,
   ExecutionRunInput,
   ExecutionSession,
-} from '../ports/execution-plane.js';
+} from '../ports/runtime-execution-session.js';
 
 /**
  * Process-local active-turn registry. Durable Run state remains in RunRepository;

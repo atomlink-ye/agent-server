@@ -1,8 +1,8 @@
 import {
   ExecutionPlaneUnavailableError,
   type ExecutionPlaneHealth,
-  type ExecutionSession,
 } from '../../application/ports/execution-plane.js';
+import type { ExecutionSession } from '../../application/ports/runtime-execution-session.js';
 import type {
   ProviderRuntimeSpec,
   ProviderSessionBinding,

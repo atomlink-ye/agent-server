@@ -10,7 +10,7 @@ import { AGENT_SERVER_COLLABORATION_TOOL_REFS } from '../agents/built-in-skills.
 import { resolveRuntimeModelPolicy } from '../agents/runtime-model-policy.js';
 import type { RuntimeExtensionBinder } from '../extensions/runtime-extension-binder.js';
 import type { EnvironmentReadApi } from '../ports/environment-read-api.js';
-import type { ExecutionObservation } from '../ports/execution-plane.js';
+import type { ExecutionObservation } from '../ports/runtime-execution-session.js';
 import type { InvokableOwnerScope } from '../ports/invokable-repository.js';
 import type { MemoryVersionReadApi } from '../ports/memory-version-read-api.js';
 import type { RunEventRepository } from '../ports/run-events.js';

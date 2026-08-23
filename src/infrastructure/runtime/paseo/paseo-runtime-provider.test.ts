@@ -5,7 +5,7 @@ import type {
   PaseoTimelinePage,
 } from '../../../adapters/paseo/paseo-client-port.js';
 import { PaseoClientProjectionError } from '../../../adapters/paseo/paseo-client-port.js';
-import { UnsupportedCapabilityError } from '../../../application/ports/execution-plane.js';
+import { UnsupportedCapabilityError } from '../../../application/ports/runtime-execution-session.js';
 import type { ProviderSessionBinding } from '../../../application/ports/runtime-execution-provider.js';
 import type { Logger } from '../../../shared/observability/logger.js';
 import type {

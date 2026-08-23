@@ -3,11 +3,13 @@ import { mkdir } from 'node:fs/promises';
 import {
   ExecutionBindingUnavailableError,
   ExecutionPlaneUnavailableError,
+  type ExecutionPlaneHealth,
+} from '../../../application/ports/execution-plane.js';
+import {
   ProtocolViolationError,
   UnsupportedCapabilityError,
-  type ExecutionPlaneHealth,
   type ExecutionSession,
-} from '../../../application/ports/execution-plane.js';
+} from '../../../application/ports/runtime-execution-session.js';
 import type {
   ProviderRuntimeSpec,
   ProviderSessionBinding,

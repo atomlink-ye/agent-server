@@ -1,25 +1,6 @@
 import type { RuntimeInvocationContext } from '../../domain/runtime/runtime-invocation-context.js';
 import type { ExecutionExtensionBinding } from './runtime-extension-binding.js';
 import type { ExecutionSession } from './runtime-execution-session.js';
-export {
-  ProtocolViolationError,
-  UnsupportedCapabilityError,
-  supportsSessionCapability,
-} from './runtime-execution-session.js';
-export type {
-  ExecutionFailure,
-  ExecutionObservation,
-  ExecutionObservationSink,
-  ExecutionOutput,
-  ExecutionResult,
-  ExecutionRunInput,
-  ExecutionSession,
-  ExecutionSessionCapabilities,
-  ExecutionSessionCapability,
-  ExecutionToolCategory,
-  ExecutionToolDetail,
-  ExecutionToolStatus,
-} from './runtime-execution-session.js';
 
 export type ExecutionPlaneCapability =
   | 'streaming'

@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   ExecutionBindingUnavailableError,
   supportsPlaneCapability,
-  supportsSessionCapability,
 } from '../../application/ports/execution-plane.js';
+import { supportsSessionCapability } from '../../application/ports/runtime-execution-session.js';
 import type {
   PaseoClientPort,
   PaseoCreatedAgent,

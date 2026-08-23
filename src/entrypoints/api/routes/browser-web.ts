@@ -27,14 +27,15 @@ import {
 import type { ApiEnvironment } from '../../../platform/http-types.js';
 import type { AppConfig } from '../../../shared/config.js';
 import { decodeProductResponse } from '../browser-product-decoder.js';
+import {
+  fetchAuthenticated,
+  jsonResponse,
+  readJson,
+  safeStatus,
+} from './browser-bff-transport.js';
 
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const NO_STORE_HEADERS = {
-  'cache-control': 'no-store',
-  'content-type': 'application/json; charset=utf-8',
-} as const;
-
 const publicConversationSchema = z.object({
   conversation_id: z.string().min(1),
   kind: z.enum(['direct', 'group']),
@@ -462,18 +463,11 @@ async function forwardDecoded(
 ): Promise<Response> {
   let upstream: Response;
   try {
-    upstream = await fetch(upstreamUrl(config, path), {
-      ...init,
-      headers: {
-        accept: 'application/json',
-        authorization: `Bearer ${browserServiceToken(config)}`,
-        ...init.headers,
-      },
-    });
+    upstream = await fetchAuthenticated(config, path, init);
   } catch {
     return unavailable();
   }
-  const body = await upstream.json().catch(() => undefined);
+  const body = await readJson(upstream);
   if (upstream.ok) {
     const decoded = decodeProductResponse(body, successSchema);
     if (!decoded.success) return invalidUpstream();
@@ -497,22 +491,6 @@ async function forwardDecoded(
     );
   }
   return jsonResponse(decoded.data, safeStatus(upstream.status));
-}
-
-function upstreamUrl(config: AppConfig, path: string): string {
-  const configured = process.env.AGENT_SERVER_BASE_URL?.trim();
-  const base = configured || `http://127.0.0.1:${config.port}`;
-  return `${base.replace(/\/$/u, '')}${path}`;
-}
-
-function browserServiceToken(config: AppConfig): string {
-  const configured = process.env.AGENT_SERVER_SERVICE_TOKEN?.trim();
-  if (configured) return configured;
-  const active = (config.serviceAccounts ?? []).filter(
-    (account) => !account.disabled,
-  );
-  if (active.length === 1) return active[0]!.token;
-  throw new Error('browser_web_service_token_missing');
 }
 
 function workParams(params: Record<string, string>): {
@@ -584,19 +562,4 @@ function invalidUpstream(): Response {
     },
     502,
   );
-}
-
-function jsonResponse(
-  body: unknown,
-  status: number,
-  extraHeaders: Record<string, string> = {},
-): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...NO_STORE_HEADERS, ...extraHeaders },
-  });
-}
-
-function safeStatus(status: number): number {
-  return status >= 400 && status < 600 ? status : 502;
 }

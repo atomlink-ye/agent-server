@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import type { IssueRuntimeToolGrant } from '../ports/issue-runtime-tool-grant.js';
+import { AGENT_SERVER_EXECUTION_MCP_SERVER_NAME } from '../ports/execution-plane.js';
 import type {
   EnsureRuntimeSession,
   ReadyRuntime,
@@ -15,6 +16,7 @@ import type {
   RuntimeGenerationTransaction,
 } from '../ports/runtime-generation-store.js';
 import type { RuntimeSessionStore } from '../ports/runtime-session-store.js';
+import type { RuntimeMcpEndpoint } from '../ports/runtime-mcp-endpoint.js';
 import type { RuntimeSpecStore } from '../ports/runtime-spec-store.js';
 import type { RuntimeSessionGeneration } from '../../domain/runtime/runtime-session-generation.js';
 import { computeRuntimeBootstrapDigest } from '../../domain/runtime/runtime-session-spec.js';
@@ -34,6 +36,7 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
     private readonly generations: RuntimeGenerationStore,
     private readonly generationTransaction: RuntimeGenerationTransaction,
     private readonly grants: IssueRuntimeToolGrant,
+    private readonly mcpEndpoint: RuntimeMcpEndpoint,
     private readonly logger?: Logger,
     private readonly now: () => Date = () => new Date(),
   ) {}
@@ -145,8 +148,12 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
         allowedTools: input.desired.toolRefs,
       });
       grantId = grant.grantId;
+      const endpoint = await this.mcpEndpoint.current();
       created = await this.provider.create(
-        this.providerSpec(input.desired, grant.token),
+        this.providerSpec(input.desired, {
+          url: endpoint.url,
+          token: grant.token,
+        }),
       );
       if (!created.providerWorkspaceId || !created.providerSessionId)
         throw new Error('runtime_provider_session_missing');
@@ -257,7 +264,7 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
 
   private providerSpec(
     spec: Awaited<ReturnType<RuntimeSpecStore['getDesired']>>,
-    token?: string,
+    grant?: { readonly url: string; readonly token: string },
   ): ProviderRuntimeSpec {
     return {
       runtimeSessionId: spec.runtimeSessionId,
@@ -270,14 +277,20 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
       desiredRevision: spec.revision,
       bootstrapSpecDigest: spec.bootstrapDigest,
       endpointEpoch: spec.extensionSetDigest,
-      ...(token ? { extensions: this.requireExtensionTokenSeam(token) } : {}),
+      ...(grant
+        ? {
+            extensions: {
+              mcpServers: [
+                {
+                  name: AGENT_SERVER_EXECUTION_MCP_SERVER_NAME,
+                  url: grant.url,
+                  headers: { Authorization: `Bearer ${grant.token}` },
+                },
+              ],
+            },
+          }
+        : {}),
     };
-  }
-
-  private requireExtensionTokenSeam(
-    _token: string,
-  ): NonNullable<ProviderRuntimeSpec['extensions']> {
-    throw new Error('runtime_provider_extension_token_seam_unavailable');
   }
 
   private binding(

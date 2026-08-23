@@ -747,7 +747,6 @@ export async function createService(
     sessions,
     ...(conversations ? { conversations } : {}),
     ...(chatDispatches ? { chatDispatches } : {}),
-    managedAgentDefinitions: resourceModule.managedAgentDefinitions,
     ...(conversationWorkEntitlements ? { conversationWorkEntitlements } : {}),
     submitSessionTurn,
     events,

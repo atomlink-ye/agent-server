@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
 import type { ReadinessProbe } from '../../../application/health/readiness.js';
-import type { CreateMemoryProposal } from '../../../application/memory/create-memory-proposal.js';
-import type { ListMemoryEntries } from '../../../application/memory/list-memory-entries.js';
-import type { ListMemoryProposals } from '../../../application/memory/list-memory-proposals.js';
-import type { ReviewMemoryProposal } from '../../../application/memory/review-memory-proposal.js';
 import type { ExecutionRuntimeService } from '../../../application/runtime/execution-plane-runtime-facade.js';
 import { makeRuntimeSession } from '../../../../tests/fixtures/runtime-session.js';
 import type { GetRun } from '../../../application/runs/get-run.js';
@@ -79,35 +75,23 @@ describe('run routes', () => {
       getTaskTree: {
         execute: async () => null,
       } as unknown as GetTaskTree,
-      createMemoryProposal: {
-        execute: async () => {
-          throw new Error('not implemented in run route tests');
+      teamExecutions: {} as never,
+      teamDriver: {} as never,
+      teamMessages: {} as never,
+      tasks: {} as never,
+      sessions: {} as never,
+      submitSessionTurn: {} as never,
+      events: {} as never,
+      cancelTask: {} as never,
+      memoryModule: { installHttp() {} },
+      resourceModule: {
+        installHttp() {},
+        managedAgentDefinitions: {
+          findDefinition: async () => null,
+          findManagedDefinitionByTenant: async () => null,
+          findVersionByTenant: async () => null,
+          listVersionsByTenant: async () => ({ items: [], nextCursor: null }),
         },
-      } as unknown as CreateMemoryProposal,
-      listMemoryProposals: {
-        execute: async () => [],
-      } as unknown as ListMemoryProposals,
-      reviewMemoryProposal: {
-        execute: async () => {
-          throw new Error('not implemented in run route tests');
-        },
-      } as unknown as ReviewMemoryProposal,
-      listMemoryEntries: {
-        execute: async () => [],
-      } as unknown as ListMemoryEntries,
-      agentRegistry: {
-        importAgent: async () => {
-          throw new Error('not implemented in run route tests');
-        },
-        publishAgentVersion: async () => {
-          throw new Error('not implemented in run route tests');
-        },
-        findDefinition: async () => null,
-        findVersion: async () => null,
-        listVersionsForOwner: async () => null,
-        findManagedDefinitionByTenant: async () => null,
-        findVersionByTenant: async () => null,
-        listVersionsByTenant: async () => null,
       },
     });
 

@@ -1,4 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import { realpath } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import { PGlite } from '@electric-sql/pglite';
 
@@ -273,14 +276,14 @@ export async function createTestApp(
   });
   const resourceModule = await createResourceModule({
     database: repositoryDatabase,
-    // macOS exposes /tmp as a symlink; the production skill registry rejects
-    // symlinked path components, so point the fixture constructor at its real
-    // equivalent while preserving the public test config.
+    // Keep each fixture's registry isolated so concurrent tests cannot race on
+    // immutable skill objects or refs. Resolve the OS temp directory first;
+    // the registry rejects symlinked path components.
     config: {
       ...(effectiveConfig as any),
-      skillRegistryRoot: effectiveConfig.skillRegistryRoot.replace(
-        /^\/tmp/,
-        '/private/tmp',
+      skillRegistryRoot: join(
+        await realpath(tmpdir()),
+        `agent-server-test-skill-registry-${randomUUID()}`,
       ),
       serviceAccounts: [],
     },

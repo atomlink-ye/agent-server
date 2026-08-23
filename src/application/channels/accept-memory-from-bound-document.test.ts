@@ -49,8 +49,6 @@ function make(
   };
   return {
     service: new AcceptMemoryFromBoundDocument(
-      runtime,
-      events,
       review,
       managedMemory,
     ),

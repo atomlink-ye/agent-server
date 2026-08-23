@@ -47,8 +47,8 @@ jobs:
   real-runtime:
     runs-on: ubuntu-latest
     environment: test
-    # Four real-provider flows now run here, and the agent-team one may use up
-    # to its 900s budget on a slow day. A job kill would surface as an opaque
+    # Five real-provider flows run here, and the agent-team one may use up to
+    # its 900s budget on a slow day. A job kill would surface as an opaque
     # cancellation rather than as a flow's own assertion, which is the failure
     # mode this workflow exists to avoid.
     timeout-minutes: 45
@@ -158,15 +158,17 @@ jobs:
         if: steps.credentials.outputs.available == 'true'
         run: pnpm canary:runtime
 
+      - name: Real-provider Golden Path
+        if: steps.credentials.outputs.available == 'true'
+        run: pnpm canary:golden-path
+
       # The 300s default was calibrated before the Team collaboration flow grew
       # its message/checkpoint round-trips, each of which is a real provider
       # call. At 300s the smoke aborts before the run reaches any terminal
       # state, so every failure reports "did not complete" regardless of cause
       # — a lead that legitimately needs more turns and a lead that never
       # converges are indistinguishable. A larger budget lets a genuine
-      # non-convergence surface as a maxLeadTurns violation instead. The job
-      # timeout-minutes is 30 and the whole job currently runs in ~7 minutes,
-      # so this stays well inside the existing envelope.
+      # non-convergence surface as a maxLeadTurns violation instead.
       - name: Real-provider agent-team main flow
         if: steps.credentials.outputs.available == 'true'
         env:

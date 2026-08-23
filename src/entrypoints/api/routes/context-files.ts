@@ -14,10 +14,8 @@ import {
 } from '../../../domain/context/context-fs.js';
 import { principalRef } from '../../../domain/tenancy/product-context.js';
 import { ServiceAccountAuthenticator } from '../../../application/control-plane/service-account-authenticator.js';
-import {
-  getAuthenticatedAccessContext,
-  requireServiceAccountAccess,
-} from '../authentication.js';
+import { getAuthenticatedAccessContext } from '../access-context.js';
+import { requireServiceAccountAccess } from '../authentication.js';
 import { readBoundedJson } from '../read-bounded-json.js';
 import { HttpError } from '../../../contracts/http.js';
 import type { ApiEnvironment } from '../http-types.js';

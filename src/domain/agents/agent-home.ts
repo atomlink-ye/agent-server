@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { AccessContext } from '../../platform/access-context.js';
+import type { AccessContext } from '../access-context.js';
 
 export const MAX_AGENT_HOME_CONTENT_BYTES = 64 * 1024;
 export const MAX_AGENT_HOME_PATH_LENGTH = 512;

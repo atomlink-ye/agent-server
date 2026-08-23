@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { AccessContext } from '../../platform/access-context.js';
+import type { AccessContext } from '../../domain/access-context.js';
 import type { AgentRegistry } from '../ports/agent-registry.js';
 import { createManagedAgentDefinition } from '../../domain/agents/managed-agent-definition.js';
 import { createManagedAgentDraft } from '../../domain/agents/managed-agent-version.js';

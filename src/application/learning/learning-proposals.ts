@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { AccessContext } from '../../platform/access-context.js';
+import type { AccessContext } from '../../domain/access-context.js';
 import type { LearningProposal } from '../../domain/learning/learning-proposal.js';
 import {
   MAX_LEARNING_PROPOSAL_EVIDENCE_REFS,

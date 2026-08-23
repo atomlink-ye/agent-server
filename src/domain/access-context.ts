@@ -19,16 +19,3 @@ export interface UserAccessContext extends AccessContext {
   readonly principalType: typeof USER_PRINCIPAL_TYPE;
   readonly userId: string;
 }
-
-export interface AccessContextRequest {
-  get(key: 'accessContext'): ServiceAccountAccessContext | null;
-}
-
-export function getAuthenticatedAccessContext(
-  request: AccessContextRequest,
-): ServiceAccountAccessContext {
-  const accessContext = request.get('accessContext');
-  if (!accessContext)
-    throw new Error('Authenticated access context is not available');
-  return accessContext;
-}

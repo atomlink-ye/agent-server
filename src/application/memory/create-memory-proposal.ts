@@ -1,4 +1,4 @@
-import type { ServiceAccountAccessContext } from '../../platform/access-context.js';
+import type { ServiceAccountAccessContext } from '../../domain/access-context.js';
 import type { TaskRepository } from '../ports/task-repository.js';
 import type { WorkspaceMemoryRepository } from '../ports/workspace-memory-repository.js';
 import {

@@ -13,7 +13,7 @@ import {
   fingerprintWorkDefinitionSource,
   type WorkDefinitionSourceDefinition,
 } from '../../domain/work/work-definition-source.js';
-import type { AccessContext } from '../../platform/access-context.js';
+import type { AccessContext } from '../../domain/access-context.js';
 import {
   ProductWorkDefinitionInspector,
   ProductWorkDefinitionMaterializer,

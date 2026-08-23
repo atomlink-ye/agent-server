@@ -2,7 +2,7 @@ import {
   USER_PRINCIPAL_TYPE,
   type ServiceAccountAccessContext,
   type UserAccessContext,
-} from '../../platform/access-context.js';
+} from '../../domain/access-context.js';
 
 export class InvalidUserIdError extends Error {
   constructor() {

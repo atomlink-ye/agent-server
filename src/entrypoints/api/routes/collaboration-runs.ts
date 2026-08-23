@@ -7,7 +7,7 @@ import { CollaborationRunResponseSchema } from '../../../contracts/collaboration
 import type { AppConfig } from '../../../shared/config.js';
 import type { ApiEnvironment } from '../http-types.js';
 import { ServiceAccountAuthenticator } from '../../../application/control-plane/service-account-authenticator.js';
-import { getAuthenticatedAccessContext } from '../../../platform/access-context.js';
+import { getAuthenticatedAccessContext } from '../access-context.js';
 import { requireServiceAccountAccess } from '../authentication.js';
 
 export interface CollaborationRunRouteDependencies {

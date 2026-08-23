@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import type { RunOwnerScope } from '../ports/run-repository.js';
 import type { Run } from '../../domain/runs/run.js';
-import type { AccessContext } from '../../platform/access-context.js';
+import type { AccessContext } from '../../domain/access-context.js';
 import { AdmitRootTask } from '../tasks/admit-root-task.js';
 import type { RunRepository } from '../ports/run-repository.js';
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { ServiceAccountAccessContext } from '../../platform/access-context.js';
+import type { ServiceAccountAccessContext } from '../../domain/access-context.js';
 import type {
   ReviewMemoryProposalRepositoryInput,
   WorkspaceMemoryRepository,

@@ -7,7 +7,7 @@ import {
 } from './start-work-run.js';
 import type { ResolvedWorkDefinition } from '../../domain/work/work-composition.js';
 import type { WorkRun } from '../../domain/work/work-run.js';
-import type { AccessContext } from '../../platform/access-context.js';
+import type { AccessContext } from '../../domain/access-context.js';
 
 const access: AccessContext = {
   tenantId: 'tenant-a',

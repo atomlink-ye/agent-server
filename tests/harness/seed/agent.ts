@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { importAgent } from '../../../src/application/agents/import-agent.js';
 import { publishAgentVersion } from '../../../src/application/agents/publish-agent-version.js';
 import { PostgresAgentRegistry } from '../../../src/infrastructure/postgres/postgres-agent-registry.js';
-import type { AccessContext } from '../../../src/platform/access-context.js';
+import type { AccessContext } from '../../../src/domain/access-context.js';
 import type { HarnessOwner, SeedDatabase } from './types.js';
 import { HARNESS_NOW } from './types.js';
 

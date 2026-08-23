@@ -22,7 +22,7 @@ import {
   type TeamVersion,
 } from '../../domain/invokables/team-version.js';
 import type { WorkDefinitionCompositionSource } from '../../domain/work/work-definition-source.js';
-import type { AccessContext } from '../../platform/access-context.js';
+import type { AccessContext } from '../../domain/access-context.js';
 import type {
   ProductWorkDefinitionDocument,
   ProductWorkParticipantBinding,

@@ -1,7 +1,7 @@
 import type {
   AccessContext,
   ServiceAccountAccessContext,
-} from '../../platform/access-context.js';
+} from '../../domain/access-context.js';
 import type { LarkCanaryEnabledConfig } from '../../shared/config.js';
 import type {
   ChannelConversationBinding,

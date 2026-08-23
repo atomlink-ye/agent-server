@@ -1,4 +1,4 @@
-import type { AccessContext } from '../../platform/access-context.js';
+import type { AccessContext } from '../../domain/access-context.js';
 import { createRun } from '../../domain/runs/run.js';
 import { createRootTask } from '../../domain/tasks/task.js';
 import {

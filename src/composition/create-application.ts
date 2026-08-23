@@ -8,12 +8,8 @@ import { GetTaskTree } from '../application/tasks/get-task-tree.js';
 import { ExecuteTeamTask } from '../application/tasks/execute-team-task.js';
 import { PostgresRunDispatcher } from '../infrastructure/postgres/postgres-run-dispatcher.js';
 import { CancelTask } from '../application/tasks/cancel-task.js';
-import type { AppConfig, LarkCanaryEnabledConfig } from '../shared/config.js';
+import type { AppConfig } from '../shared/config.js';
 import type { Logger } from '../shared/observability/logger.js';
-import { LarkIngressWorker } from '../entrypoints/lark/worker.js';
-import { LarkOutboxWorker } from '../entrypoints/lark/outbox-worker.js';
-import { createLarkWebsocketReceiver } from '../adapters/lark/lark-websocket-receiver.js';
-import { DeliverChannelOutbox } from '../application/channels/deliver-channel-outbox.js';
 import {
   PublishMemoryReviewSurface,
 } from '../application/channels/publish-memory-review-surface.js';
@@ -29,7 +25,10 @@ import {
   createMemoryChannelExecutionConsumers,
   createRunExecutionConsumer,
 } from './create-execution-consumers.js';
-import { createLarkChannelWorkers } from './create-lark-channel-workers.js';
+import {
+  createLarkChannelWorkers,
+  type LarkChannelWorkers,
+} from './create-lark-channel-workers.js';
 import { createApplicationLifecycle } from './create-application-lifecycle.js';
 import { createMemoryCapabilities } from './create-memory-capabilities.js';
 import { createKernelCapabilities } from './create-kernel-capabilities.js';
@@ -39,174 +38,13 @@ import { createResourceCapabilities } from './create-resource-capabilities.js';
 import { createTeamCapabilities } from './create-team-capabilities.js';
 import { createWorkCapabilities } from './create-work-capabilities.js';
 import { createWorkers } from './create-workers.js';
-import type { PostgresChannelRepository } from '../infrastructure/postgres/postgres-channel-repository.js';
 import type { FileStore } from '../application/ports/file-store.js';
 import type { PostgresSessionRepository } from '../infrastructure/postgres/postgres-session-repository.js';
 import { createRuntimeToolCatalog } from '../application/extensions/runtime-tool-catalog.js';
 import { createCollaborationRuntimeContributor, createSyntheticRuntimeToolsContributor } from '../entrypoints/mcp/runtime-tool-contributors.js';
 import { SyntheticMarketAdapter } from '../adapters/demo-market/synthetic-market-adapter.js';
-import { PostgresRuntimeSessionStore } from '../infrastructure/postgres/runtime/postgres-runtime-session-store.js';
-import { PostgresRuntimeSpecStore } from '../infrastructure/postgres/runtime/postgres-runtime-spec-store.js';
-import { PostgresRuntimeGenerationStore } from '../infrastructure/postgres/runtime/postgres-runtime-generation-store.js';
-import { PostgresRuntimeTurnStore } from '../infrastructure/postgres/runtime/postgres-runtime-turn-store.js';
-import { PostgresRuntimeGrantReader } from '../infrastructure/postgres/runtime/postgres-runtime-grant-reader.js';
-import { PostgresRuntimeGrantAuthority } from '../infrastructure/postgres/runtime/postgres-runtime-grant-authority.js';
-import { AuthorizeRuntimeTool } from '../application/runtime/authorize-runtime-tool.js';
-import { EnsureRuntimeSessionService } from '../application/runtime/ensure-runtime-session.js';
-import { ExecuteRuntimeTurn } from '../application/runtime/execute-runtime-turn.js';
-import { CancelRuntimeTurn } from '../application/runtime/cancel-runtime-turn.js';
-import { AgentChatRuntimeSessionCreator } from '../application/runtime/create-agent-chat-runtime-session.js';
-import { ResolveRuntimeSessionSpecService } from '../application/runtime/resolve-runtime-session-spec.js';
-import { RuntimeGenerationManager } from '../application/runtime/runtime-generation-manager.js';
-import { createRuntimeMcpEndpoint } from './create-runtime-mcp-endpoint.js';
-import { RuntimeMcpServer } from '../infrastructure/extensions/runtime-mcp-server.js';
-import { createPaseoRuntimeProvider } from '../infrastructure/runtime/paseo/paseo-runtime-provider.js';
-import { UnavailableRuntimeProvider } from '../infrastructure/runtime/unavailable-runtime-provider.js';
-import { hashBearerToken } from '../infrastructure/security/hash-bearer-token.js';
-import type { RuntimeExecutionProvider } from '../application/ports/runtime-execution-provider.js';
-import type { RuntimeSessionStore } from '../application/ports/runtime-session-store.js';
-import type { ResolveRuntimeSessionSpec } from '../application/ports/resolve-runtime-session-spec.js';
-import type { EnsureRuntimeSession } from '../application/ports/ensure-runtime-session.js';
-import type { RuntimeMcpEndpoint } from '../application/ports/runtime-mcp-endpoint.js';
-import type { ExecuteRuntimeTurn as ExecuteRuntimeTurnUseCase } from '../application/runtime/execute-runtime-turn.js';
 import { ExecutionRunRegistry } from '../application/runtime/execution-run-registry.js';
-
-interface RuntimeOwner {
-  readonly runtimeProvider: RuntimeExecutionProvider;
-  readonly runtimeSessions: RuntimeSessionStore;
-  readonly resolveRuntimeSpec: ResolveRuntimeSessionSpec;
-  readonly ensureRuntimeSession: EnsureRuntimeSession;
-  readonly executeRuntimeTurn: Pick<ExecuteRuntimeTurnUseCase, 'execute'>;
-  readonly cancelRuntimeTurn: Pick<CancelRuntimeTurn, 'execute'>;
-  readonly chatRuntime: {
-    readonly sessionCreator: Pick<AgentChatRuntimeSessionCreator, 'execute'>;
-    readonly turnExecutor: Pick<ExecuteRuntimeTurnUseCase, 'execute'>;
-  };
-  readonly runtimeMcpServer: RuntimeMcpServer;
-  readonly runtimeMcpEndpoint: RuntimeMcpEndpoint;
-}
-
-function createRuntimeOwner(input: {
-  readonly database: Pool;
-  readonly config: AppConfig;
-  readonly logger: Logger;
-  readonly toolCatalog: ReturnType<typeof createRuntimeToolCatalog>;
-}): RuntimeOwner {
-  const runtimeProvider = input.config.runtime?.adapter === 'none'
-    ? new UnavailableRuntimeProvider()
-    : createPaseoRuntimeProvider(input.config, input.logger);
-  const runtimeSessions = new PostgresRuntimeSessionStore(input.database);
-  const specs = new PostgresRuntimeSpecStore(input.database);
-  const generations = new PostgresRuntimeGenerationStore(input.database);
-  const turns = new PostgresRuntimeTurnStore(input.database);
-  const grants = new PostgresRuntimeGrantAuthority(input.database);
-  const reader = new PostgresRuntimeGrantReader(input.database);
-  const authorizeRuntimeTool = new AuthorizeRuntimeTool(
-    reader,
-    runtimeSessions,
-    generations,
-    turns,
-    hashBearerToken,
-  );
-  const runtimeMcpServer = new RuntimeMcpServer(
-    input.toolCatalog,
-    authorizeRuntimeTool,
-    input.config.runtimeMcp?.listenHost,
-    input.config.runtimeMcp?.advertisedHost,
-    input.config.runtimeMcp?.port,
-  );
-  const runtimeMcpEndpoint = createRuntimeMcpEndpoint(runtimeMcpServer);
-  const resolveRuntimeSpec = new ResolveRuntimeSessionSpecService(
-    input.toolCatalog,
-    { digest: () => input.toolCatalog.digest },
-  );
-  const generationManager = new RuntimeGenerationManager({
-    generations,
-    generationTransaction: generations,
-    now: () => new Date(),
-  });
-  const ensureRuntimeSession = new EnsureRuntimeSessionService({
-    provider: runtimeProvider,
-    sessions: runtimeSessions,
-    specs,
-    generations,
-    generationManager,
-    grants,
-    mcpEndpoint: runtimeMcpEndpoint,
-    logger: input.logger,
-    now: () => new Date(),
-  });
-  const executeRuntimeTurn = new ExecuteRuntimeTurn(
-    turns,
-    ensureRuntimeSession,
-    grants,
-  );
-  const cancelRuntimeTurn = new CancelRuntimeTurn(
-    turns,
-    ensureRuntimeSession,
-  );
-  const sessionCreator = new AgentChatRuntimeSessionCreator(
-    runtimeSessions,
-    resolveRuntimeSpec,
-    {
-      provider: input.config.paseo.provider,
-      model: input.config.paseo.model ?? null,
-      cwd: input.config.paseo.agentCwd,
-    },
-  );
-  return {
-    runtimeProvider,
-    runtimeSessions,
-    resolveRuntimeSpec,
-    ensureRuntimeSession,
-    executeRuntimeTurn,
-    cancelRuntimeTurn,
-    chatRuntime: { sessionCreator, turnExecutor: executeRuntimeTurn },
-    runtimeMcpServer,
-    runtimeMcpEndpoint,
-  };
-}
-
-export function createLarkIngressWorker(
-  repository: Pick<
-    PostgresChannelRepository,
-    'claimIngress' | 'completeIngress'
-  >,
-  processor: {
-    execute: (
-      ingress: import('../domain/channels/channel-event.js').ChannelIngress,
-    ) => Promise<unknown>;
-  },
-  config: LarkCanaryEnabledConfig,
-  logger: Logger,
-  options: { readonly workerId?: string; readonly leaseMs?: number } = {},
-): LarkIngressWorker {
-  return new LarkIngressWorker(repository, processor, {
-    workerId: options.workerId ?? `agent-server:${process.pid}:lark`,
-    leaseMs: options.leaseMs ?? 30_000,
-    onError: ({ phase, errorName }) => {
-      logger.log('error', 'lark.ingress_worker.failed', {
-        phase,
-        errorName,
-      });
-    },
-  });
-}
-
-export function createLarkOutboxWorker(
-  repository: Pick<PostgresChannelRepository, 'claimOutbox'>,
-  delivery: Pick<DeliverChannelOutbox, 'execute'>,
-  logger: Logger,
-  options: { readonly workerId?: string; readonly leaseMs?: number } = {},
-): LarkOutboxWorker {
-  return new LarkOutboxWorker(repository, delivery, {
-    workerId: options.workerId ?? `agent-server:${process.pid}:lark-outbox`,
-    leaseMs: options.leaseMs ?? 30_000,
-    onError: ({ phase, errorName }) => {
-      logger.log('error', 'lark.outbox_worker.failed', { phase, errorName });
-    },
-  });
-}
+import { createRuntimeOwner } from './create-runtime-owner.js';
 
 export interface SingleRunDebugControl {
   claimAndExecute(runId: string): Promise<{
@@ -531,9 +369,9 @@ export async function createApplication(
       },
     },
   );
-  let larkWorker: LarkIngressWorker | undefined;
-  let larkOutboxWorker: LarkOutboxWorker | undefined;
-  let larkReceiver: ReturnType<typeof createLarkWebsocketReceiver> | undefined;
+  let larkWorker: LarkChannelWorkers['larkWorker'] | undefined;
+  let larkOutboxWorker: LarkChannelWorkers['larkOutboxWorker'] | undefined;
+  let larkReceiver: LarkChannelWorkers['larkReceiver'] | undefined;
   if (config.larkCanary?.enabled) {
     const larkConfig = config.larkCanary;
     if (!memoryReviewSurface || !reviewTokenDeriver)
@@ -640,5 +478,3 @@ export async function createApplication(
     close: () => lifecycle.stop(),
   };
 }
-
-export const createService = createApplication;

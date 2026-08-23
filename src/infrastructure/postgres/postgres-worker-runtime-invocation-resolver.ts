@@ -1,4 +1,4 @@
-import type { WorkerRuntimeInvocationResolver } from '../../application/runtime/context-aware-execution-runtime.js';
+import type { WorkerRuntimeInvocationResolver } from '../../application/ports/worker-runtime-invocation-resolver.js';
 import { ContextViewResolver } from '../../application/context/context-view-resolver.js';
 import type { RuntimeInvocationContext } from '../../domain/runtime/runtime-invocation-context.js';
 import {

@@ -1,4 +1,5 @@
 import type { RuntimeInvocationContext } from '../../domain/runtime/runtime-invocation-context.js';
+import type { WorkerRuntimeInvocationResolver } from '../ports/worker-runtime-invocation-resolver.js';
 import type {
   ExecutionRuntimeService,
   ExecutionTurnRequest,
@@ -8,10 +9,6 @@ import {
   renderScopedMemory,
   type ScopedMemoryResolver,
 } from '../context/scoped-memory-resolver.js';
-
-export interface WorkerRuntimeInvocationResolver {
-  resolve(runtimeSessionId: string): Promise<RuntimeInvocationContext | null>;
-}
 
 /**
  * Last common runtime seam for canonical ContextFS identity and scoped Memory.

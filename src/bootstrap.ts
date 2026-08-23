@@ -1,9 +1,10 @@
 export {
+  createApplication,
+} from './composition/create-application.js';
+export {
   createLarkIngressWorker,
   createLarkOutboxWorker,
-  createApplication,
-  createService,
-} from './composition/create-application.js';
+} from './composition/create-lark-channel-workers.js';
 export type {
   CreateServiceOptions,
   SingleRunDebugControl,

@@ -26,6 +26,38 @@ export interface LarkChannelWorkers {
   readonly larkReceiver: ReturnType<typeof createLarkWebsocketReceiver>;
 }
 
+export function createLarkIngressWorker(
+  repository: Pick<PostgresChannelRepository, 'claimIngress' | 'completeIngress'>,
+  processor: { execute(ingress: import('../domain/channels/channel-event.js').ChannelIngress): Promise<unknown> },
+  _config: LarkCanaryEnabledConfig,
+  logger: Logger,
+  options: { readonly workerId?: string; readonly leaseMs?: number } = {},
+): LarkIngressWorker {
+  return new LarkIngressWorker(repository, processor, {
+    workerId: options.workerId ?? `agent-server:${process.pid}:lark`,
+    leaseMs: options.leaseMs ?? 30_000,
+    onError: ({ phase, errorName }) =>
+      logger.log('error', 'lark.ingress_worker.failed', {
+        phase,
+        error_name: errorName,
+      }),
+  });
+}
+
+export function createLarkOutboxWorker(
+  repository: Pick<PostgresChannelRepository, 'claimOutbox'>,
+  delivery: Pick<DeliverChannelOutbox, 'execute'>,
+  logger: Logger,
+  options: { readonly workerId?: string; readonly leaseMs?: number } = {},
+): LarkOutboxWorker {
+  return new LarkOutboxWorker(repository, delivery, {
+    workerId: options.workerId ?? `agent-server:${process.pid}:lark-outbox`,
+    leaseMs: options.leaseMs ?? 30_000,
+    onError: ({ phase, errorName }) =>
+      logger.log('error', 'lark.outbox_worker.failed', { phase, error_name: errorName }),
+  });
+}
+
 export function createLarkChannelWorkers(input: {
   readonly config: LarkCanaryEnabledConfig;
   readonly repository: PostgresChannelRepository;

@@ -62,15 +62,6 @@ import type { TeamDriver } from '../../application/teams/team-driver.js';
 import type { WorkModule } from '../../modules/work/work-module.js';
 import type { MemoryModule } from '../../modules/memory/memory-module.js';
 import type { ResourceModule } from '../../modules/resource/resource-module.js';
-import {
-  composePlatform,
-  type PlatformContribution,
-  type PlatformHttpInstaller,
-  type PlatformRuntimeRegistry,
-} from '../../platform/composition-shell.js';
-import { requireServiceAccountAccess } from './authentication.js';
-import { getAuthenticatedAccessContext } from '../../platform/access-context.js';
-import { ServiceAccountAuthenticator } from '../../application/control-plane/service-account-authenticator.js';
 import type { ConversationRepository } from '../../application/ports/conversation-repository.js';
 import type { ChatDispatchRepository } from '../../application/ports/chat-dispatch-repository.js';
 import type { ConversationWorkEntitlementRepository } from '../../application/ports/conversation-work-entitlement-repository.js';
@@ -129,7 +120,6 @@ export interface AppDependencies {
     ResourceModule,
     'installHttp' | 'managedAgentDefinitions'
   >;
-  readonly installPlatformHttp?: PlatformHttpInstaller;
 }
 
 export function createApp(dependencies: AppDependencies): Hono<ApiEnvironment> {
@@ -162,21 +152,6 @@ export function createApp(dependencies: AppDependencies): Hono<ApiEnvironment> {
     config: dependencies.config,
     readiness: dependencies.readiness,
     version,
-  });
-  const platformAuthenticator = new ServiceAccountAuthenticator(
-    dependencies.config.serviceAccounts ?? [],
-  );
-  dependencies.installPlatformHttp?.(app, {
-    logger: dependencies.logger,
-    authenticate: requireServiceAccountAccess(platformAuthenticator),
-    accessContext: getAuthenticatedAccessContext,
-    safeError: errorResponse,
-    notFound: (requestId) =>
-      errorResponse(
-        'route_not_found',
-        'The requested route does not exist.',
-        requestId,
-      ),
   });
   registerRunRoutes(app, dependencies);
   registerTaskRoutes(app, dependencies);
@@ -348,33 +323,6 @@ export function createApp(dependencies: AppDependencies): Hono<ApiEnvironment> {
   });
 
   return app;
-}
-
-export function composePlatformApp(
-  dependencies: Omit<AppDependencies, 'installPlatformHttp'>,
-  contributions: readonly PlatformContribution[],
-  runtimeRegistry: PlatformRuntimeRegistry,
-  starts: readonly (() =>
-    | void
-    | (() => Promise<void> | void)
-    | Promise<void | (() => Promise<void> | void)>)[] = [],
-) {
-  let shell: ReturnType<typeof composePlatform> | undefined;
-  const app = createApp({
-    ...dependencies,
-    installPlatformHttp(hono, concerns) {
-      shell = composePlatform(contributions, concerns, starts);
-      shell.installHttp(hono);
-    },
-  });
-  if (!shell) throw new Error('platform_shell_not_installed');
-  const platform = shell;
-  platform.contributeRuntime(runtimeRegistry);
-  return {
-    app,
-    start: () => platform.start(),
-    stop: () => platform.stop(),
-  };
 }
 
 function errorResponse(

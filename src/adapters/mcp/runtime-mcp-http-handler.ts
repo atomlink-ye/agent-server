@@ -16,7 +16,7 @@ type McpSession = Readonly<{
   readonly grantId: string;
 }>;
 
-export function createDirectMemoryMcpHandler(input: {
+export function createRuntimeMcpHttpHandler(input: {
   readonly authorize: AuthorizeRuntimeTool;
   readonly toolCatalog: RuntimeToolCatalog;
 }): (req: IncomingMessage, res: ServerResponse) => Promise<void> {
@@ -107,9 +107,7 @@ export function createDirectMemoryMcpHandler(input: {
     }
     try {
       if (newSession)
-        await server.connect(
-          transport as unknown as Parameters<typeof server.connect>[0],
-        );
+        await server.connect(transport as Parameters<typeof server.connect>[0]);
       await transport.handleRequest(req, res, body);
     } catch {
       if (!res.headersSent) sendJson(res, 500, { error: 'internal_error' });

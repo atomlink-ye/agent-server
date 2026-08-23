@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
-import { createDirectMemoryMcpHandler } from '../../entrypoints/mcp/direct-memory-mcp.js';
+import { createRuntimeMcpHttpHandler } from '../../adapters/mcp/runtime-mcp-http-handler.js';
 import type { AuthorizeRuntimeTool } from '../../application/runtime/authorize-runtime-tool.js';
 import type { RuntimeToolCatalog } from '../../application/extensions/runtime-tool-catalog.js';
 
@@ -39,7 +39,7 @@ export class RuntimeMcpServer {
     this.#starting = (async () => {
       return new Promise<RuntimeMcpEndpoint>((resolve, reject) => {
         const server = createServer(
-          createDirectMemoryMcpHandler({
+          createRuntimeMcpHttpHandler({
             authorize: this.authorize,
             toolCatalog: this.toolCatalog,
           }),

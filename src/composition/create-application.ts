@@ -15,10 +15,7 @@ import { createConfiguredRuntimeCapabilities } from './create-runtime-capabiliti
 import {
   createChatExecutionConsumer,
   createMemoryChannelExecutionConsumers,
-  createRunExecutionConsumer,
   createRunExecutionRegistry,
-  createRunDispatcher,
-  createCompleteRunConsumer,
 } from './create-execution-consumers.js';
 import {
   createLarkChannelWorkers,
@@ -50,6 +47,7 @@ import type { FileStore } from '../application/ports/file-store.js';
 import type { PostgresSessionRepository } from '../infrastructure/postgres/postgres-session-repository.js';
 import { createRuntimeToolCatalog } from '../entrypoints/mcp/runtime-tool-composition.js';
 import { createRuntimeOwner } from './create-runtime-owner.js';
+import { createRunExecutionComposition } from './create-run-execution-composition.js';
 
 export interface SingleRunDebugControl {
   claimAndExecute(runId: string): Promise<{
@@ -252,101 +250,36 @@ export async function createApplication(
     activationReconciler: terminalActivationReconciler,
     completionApprovalRequired: config.teamCompletionApprovalRequired,
   });
-  const completeRun = createCompleteRunConsumer(
-    runRepository,
-    taskRepository,
-    events,
-    sessions,
-    memoryReviewSurface
-      ? { notifySucceeded: (input) => memoryReviewSurface.execute(input) }
-      : options.memoryReviewNotifier
-        ? {
-            notifySucceeded: (input) =>
-              options.memoryReviewNotifier!.execute(input),
-          }
-        : undefined,
-    {
-      handleTerminalRun: async ({ run, task }) => {
-        const team = await collaborativeTeamExecutions.findTeamRunByRootTaskId(
-          task.rootTaskId,
-          {
-            tenantId: task.tenantId,
-            workspaceId: task.workspaceId,
-            principalType: task.principalType,
-            principalId: task.principalId,
-          },
-        );
-        if (team) {
-          await teamDriver.handleTerminalRun({ team, task, run });
-          const terminal = await collaborativeTeamExecutions.findTeamRunById(
-            team.id,
-            {
-              tenantId: task.tenantId,
-              workspaceId: task.workspaceId,
-              principalType: task.principalType,
-              principalId: task.principalId,
-            },
-          );
-        }
-      },
+  const { executeRun, dispatcher } = createRunExecutionComposition({
+    kernel: {
+      runRepository,
+      taskRepository,
+      events,
+      sessions,
     },
-  );
-  const executeRun = createRunExecutionConsumer({
-    completeRun,
-    tasks: taskRepository,
-    definitions: resourceModule.definitionReadApi,
+    team: {
+      executions: collaborativeTeamExecutions,
+      activationReconciler: collaborationActivationReconciler,
+    },
+    teamDriver,
     executeTeamTask,
-    runtimeTurns,
-    runtimeProvider,
-    logger,
-    resolver: resourceModule.agentResolutionApi,
-    events,
-    fileStore: memoryModule.fileStore,
-    createMemoryProposal: memoryModule.createMemoryProposal,
-    sessions,
-    runtimeSessions,
-    resolveRuntimeSpec,
-    environments: resourceModule.environmentReadApi,
-    collaborativeExecutions: collaborativeTeamExecutions,
-    runs: runRepository,
-    ...(terminalActivationReconciler
-      ? { activationReconciler: terminalActivationReconciler }
+    resources: resourceModule,
+    runtime: {
+      runtimeProvider,
+      executeRuntimeTurn: runtimeTurns,
+      runtimeSessions,
+      resolveRuntimeSpec,
+    },
+    memory: memoryModule,
+    ...(memoryReviewSurface ? { memoryReviewSurface } : {}),
+    ...(options.memoryReviewNotifier
+      ? { memoryReviewNotifier: options.memoryReviewNotifier }
       : {}),
-  });
-  const dispatcher = createRunDispatcher({
-    runs: runRepository,
-    executeRun,
+    ...(terminalActivationReconciler ? { terminalActivationReconciler } : {}),
     workerId,
     leaseDurationMs,
-    logger,
     concurrency: config.dispatcher?.concurrency ?? 4,
-    onIdleMaintenance: async () => {
-      try {
-        const recovered =
-          await collaborativeTeamExecutions.recoverExpiredTeamRuns(
-            new Date().toISOString(),
-          );
-        for (const item of recovered) {
-          logger.log('warn', 'team.recovery.fail_closed', {
-            team_run_id: item.teamRunId,
-            child_run_id: item.childRunId,
-            team_task_kind: item.teamTaskKind,
-            affected_child_run_count: item.affectedChildRunCount,
-          });
-        }
-      } catch (error) {
-        logger.log('error', 'team.recovery.fail_closed_failed', {
-          error_name: error instanceof Error ? error.name : 'UnknownError',
-        });
-      }
-      try {
-        await collaborationActivationReconciler.reconcilePendingRoots();
-      } catch (error) {
-        logger.log('error', 'team.wake_reconcile_failed', {
-          error_name: error instanceof Error ? error.name : 'UnknownError',
-        });
-      }
-    },
+    logger,
   });
   let larkWorker: LarkChannelWorkers['larkWorker'] | undefined;
   let larkOutboxWorker: LarkChannelWorkers['larkOutboxWorker'] | undefined;

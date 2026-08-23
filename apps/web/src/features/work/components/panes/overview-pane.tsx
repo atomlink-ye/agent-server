@@ -2,15 +2,10 @@ import { useEffect, useState } from 'react';
 
 import {
   loadRunRoleSummaries,
-  type AnchoredRun,
-  type NormalizedTrace,
   type RoleSummary,
   type WorkDetailData,
 } from '../../queries/load-work-detail';
-import { MapView } from '@/features/run-trace/map';
 import { RunTrace } from '@/features/run-trace/run-trace-view';
-import { selectMapModel } from '@/features/run-trace/selectors';
-import type { TraceView } from '@/features/run-trace/use-run-trace-view-model';
 import {
   productStatePresentation,
   resultCaptureLabel,
@@ -24,10 +19,6 @@ export function OverviewPane({
   readonly data: WorkDetailData;
   readonly originConversationId?: string | null;
 }) {
-  const [selectedAttemptId, setSelectedAttemptId] = useState<string | null>(
-    null,
-  );
-  const [traceView, setTraceView] = useState<TraceView>('timeline');
   if (!data.run || !data.trace)
     return (
       <section className="work-detail-state" data-testid="work-no-runs">
@@ -64,38 +55,21 @@ export function OverviewPane({
           ) : null}
         </div>
       </div>
-      <RunTrace
-        live={live}
-        trace={trace}
-        selectedAttemptId={selectedAttemptId}
-        onSelectAttempt={setSelectedAttemptId}
-        view={traceView}
-        onViewChange={setTraceView}
-      />
+      <RunTrace live={live} trace={trace} />
       <RunRoleCards
-        trace={trace}
         workId={data.work.id}
         runId={run.work_run.id}
         originConversationId={originConversationId}
-      />
-      <RunReview
-        run={run}
-        trace={trace}
-        selectedAttemptId={selectedAttemptId}
-        onSelectAttempt={setSelectedAttemptId}
-        onRequestTimelineView={() => setTraceView('timeline')}
       />
     </section>
   );
 }
 
 function RunRoleCards({
-  trace: _trace,
   workId,
   runId,
   originConversationId,
 }: {
-  readonly trace: NormalizedTrace;
   readonly workId: string;
   readonly runId: string;
   readonly originConversationId?: string | null;
@@ -147,228 +121,6 @@ function RunRoleCards({
           </button>
         );
       })}
-    </div>
-  );
-}
-
-function scrollTestIdIntoViewAfterRender(
-  testId: string,
-  fallbackTestId?: string,
-) {
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      const el = document.querySelector(`[data-testid="${testId}"]`);
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        return;
-      }
-      if (fallbackTestId) {
-        document
-          .querySelector(`[data-testid="${fallbackTestId}"]`)
-          ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
-    });
-  });
-}
-
-function RunReview({
-  run,
-  trace,
-  selectedAttemptId,
-  onSelectAttempt,
-  onRequestTimelineView,
-}: {
-  readonly run: AnchoredRun;
-  readonly trace: NormalizedTrace;
-  readonly selectedAttemptId: string | null;
-  readonly onSelectAttempt: (attemptId: string) => void;
-  readonly onRequestTimelineView: () => void;
-}) {
-  const workItems = [...trace.workItems.values()];
-  const attemptCount = workItems.reduce(
-    (sum, item) => sum + item.attempts.length,
-    0,
-  );
-  const feedbackCount = trace.edges.filter(
-    (edge) => edge.kind === 'feedback',
-  ).length;
-  const messageCount = trace.edges.filter(
-    (edge) => edge.kind === 'observed_message' && edge.sourceCreatedAt,
-  ).length;
-  const reworkItems = workItems.filter((item) => item.attempts.length > 1);
-  const mcpOnlyItems = workItems.filter(
-    (item) =>
-      trace.activities.some((a) => a.workItemId === item.id) &&
-      !trace.edges.some(
-        (e) => e.kind === 'observed_message' && e.workItemId === item.id,
-      ),
-  );
-  const keyOutputs = workItems
-    .flatMap((item) =>
-      item.attempts
-        .filter((a) => a.resultSummary || a.feedbackSummary)
-        .map((a) => ({
-          subject: item.subject,
-          attemptNo: a.attemptNo,
-          result: a.resultSummary,
-          feedback: a.feedbackSummary,
-        })),
-    )
-    .slice(0, 5);
-
-  return (
-    <section className="work-review" data-testid="run-review">
-      <div className="work-section-heading">
-        <p className="work-shell-kicker">Review</p>
-        <h2>Run result and collaboration summary</h2>
-        <p>
-          This review uses captured Product facts only. No assistant text or
-          file is promoted to an Artifact.
-        </p>
-      </div>
-      <div className="work-review__grid">
-        <article className="work-review__result">
-          <span>Final result</span>
-          <p>
-            {run.work_run.result_summary ??
-              resultCaptureLabel(run.work_run.result_capture_status)}
-          </p>
-        </article>
-        <dl className="work-review__facts">
-          <ReviewFact label="Agents" value={trace.actors.length} />
-          <ReviewFact label="Work Items" value={workItems.length} />
-          <ReviewFact
-            label="Attempts"
-            value={attemptCount}
-            onClick={() => {
-              onRequestTimelineView();
-              scrollTestIdIntoViewAfterRender('trace-timeline');
-            }}
-          />
-          <ReviewFact
-            label="Rework"
-            value={feedbackCount}
-            onClick={() => {
-              const reworkItem = workItems.find(
-                (item) => item.attempts.length > 1,
-              );
-              if (reworkItem && reworkItem.attempts[0])
-                onSelectAttempt(reworkItem.attempts[0].id);
-              onRequestTimelineView();
-              scrollTestIdIntoViewAfterRender('trace-timeline');
-            }}
-          />
-          <ReviewFact
-            label="Agent messages"
-            value={messageCount}
-            onClick={() => {
-              onRequestTimelineView();
-              scrollTestIdIntoViewAfterRender(
-                'timeline-messages',
-                'trace-timeline',
-              );
-            }}
-          />
-          <ReviewFact label="MCP activities" value={trace.activities.length} />
-        </dl>
-      </div>
-      <div className="work-review__map" data-testid="review-mini-map">
-        <h3>Run Map</h3>
-        <MapView
-          model={selectMapModel(trace)}
-          selectedAttemptId={selectedAttemptId}
-          trace={trace}
-          onSelect={(attemptId) => {
-            onSelectAttempt(attemptId);
-            onRequestTimelineView();
-            scrollTestIdIntoViewAfterRender('trace-timeline');
-          }}
-          onSelectMessage={() => undefined}
-        />
-      </div>
-      <div className="work-review__problems" data-testid="review-problems">
-        <h3>Problems & capture gaps</h3>
-        <ul>
-          {reworkItems.length ? (
-            <li>
-              <strong>Rework:</strong>{' '}
-              {reworkItems.map((item) => item.subject).join(', ')} (
-              {reworkItems.length} item{reworkItems.length > 1 ? 's' : ''}{' '}
-              required multiple Attempts)
-            </li>
-          ) : null}
-          {mcpOnlyItems.length ? (
-            <li>
-              <strong>MCP-only coverage:</strong> {mcpOnlyItems.length} Work
-              Item{mcpOnlyItems.length > 1 ? 's have' : ' has'} MCP activity but
-              no observed Agent messages
-            </li>
-          ) : null}
-          <li>
-            <strong>Timeline scope:</strong>{' '}
-            {trace.coverage.scope.replaceAll('_', ' ')}
-            {trace.coverage.excludedExecution.length ? (
-              <>
-                {' '}
-                — excluded:{' '}
-                {trace.coverage.excludedExecution
-                  .map((e) => e.replaceAll('_', ' '))
-                  .join(', ')}
-              </>
-            ) : null}
-          </li>
-          {!reworkItems.length && !mcpOnlyItems.length ? (
-            <li>No problems or capture gaps detected in this Run.</li>
-          ) : null}
-        </ul>
-      </div>
-      {keyOutputs.length ? (
-        <div className="work-review__outputs" data-testid="review-key-outputs">
-          <h3>Key Agent outputs</h3>
-          {keyOutputs.map((output, index) => (
-            <article key={index}>
-              <strong>
-                {output.subject} (Attempt {output.attemptNo})
-              </strong>
-              {output.result ? <p>Result: {output.result}</p> : null}
-              {output.feedback ? <p>Feedback: {output.feedback}</p> : null}
-            </article>
-          ))}
-        </div>
-      ) : null}
-    </section>
-  );
-}
-
-function ReviewFact({
-  label,
-  value,
-  onClick,
-}: {
-  readonly label: string;
-  readonly value: number;
-  readonly onClick?: () => void;
-}) {
-  if (onClick) {
-    return (
-      <div
-        className="work-review__fact--clickable"
-        role="button"
-        tabIndex={0}
-        onClick={onClick}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') onClick();
-        }}
-      >
-        <dt>{label}</dt>
-        <dd>{value}</dd>
-      </div>
-    );
-  }
-  return (
-    <div>
-      <dt>{label}</dt>
-      <dd>{value}</dd>
     </div>
   );
 }

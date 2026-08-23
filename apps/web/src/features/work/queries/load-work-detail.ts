@@ -11,10 +11,7 @@ import {
 } from '../clients/work-run-client';
 import { workClient } from '../clients/work-client';
 import { workDefinitionClient } from '../clients/work-definition-client';
-import {
-  normalizeProductRunTrace,
-  type NormalizedTrace,
-} from '@/features/run-trace/normalized';
+import type { NormalizedTrace } from '@/features/run-trace/normalized';
 
 export type WorkDetailData = {
   readonly work: WorkResponse;
@@ -62,7 +59,10 @@ export async function loadWorkDetail(
 
   const run = await workRunClient.get(workId, selectedSummary.id);
   const definitionVersion = await definitionPromise;
-  if (run.projection_status !== 'internally_anchored') {
+  if (
+    !('projection_status' in run) ||
+    run.projection_status !== 'internally_anchored'
+  ) {
     throw new Error('The Product WorkRun projection was not captured.');
   }
   if (!includeTrace) {
@@ -76,15 +76,12 @@ export async function loadWorkDetail(
     };
   }
 
-  const productTrace = await workRunClient.trace(workId, selectedSummary.id);
-  if (productTrace.projection_status !== 'internally_anchored') {
-    throw new Error('The Product WorkRun projection was not captured.');
-  }
+  const trace = await workRunClient.trace(workId, selectedSummary.id);
   return {
     work,
     runs,
     run,
-    trace: normalizeProductRunTrace(productTrace),
+    trace,
     selectedDefinitionVersionId,
     definitionVersion,
   };

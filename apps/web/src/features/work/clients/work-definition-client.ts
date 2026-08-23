@@ -6,11 +6,7 @@ import {
 } from '@atomlink-ye/agent-server/product-contract';
 
 import { apiTransport } from '../../../api/transport';
-import {
-  parseProduct,
-  readOptionalProductJson,
-  readProductJson,
-} from './errors';
+import { parseProduct, readOptionalProductJson } from './errors';
 
 export type DefinitionDiagnostics = readonly {
   readonly path: string;
@@ -120,7 +116,7 @@ export class WorkDefinitionClient {
 export const workDefinitionClient = new WorkDefinitionClient();
 
 function decodeDefinitionValidation(value: unknown): DefinitionValidation {
-  const root = record(value);
+  const root = objectValue(value);
   const fingerprint = root?.fingerprint;
   if (typeof fingerprint !== 'string' || !fingerprint) {
     throw new Error('The Definition validation response was invalid.');
@@ -132,9 +128,9 @@ function decodeDefinitionValidation(value: unknown): DefinitionValidation {
 }
 
 function decodeDefinitionPlan(value: unknown): DefinitionPlan {
-  const root = record(value);
+  const root = objectValue(value);
   const fingerprint = root?.fingerprint;
-  const resolved = record(root?.resolved);
+  const resolved = objectValue(root?.resolved);
   if (
     typeof fingerprint !== 'string' ||
     !fingerprint ||
@@ -149,8 +145,7 @@ function decodeDefinitionPlan(value: unknown): DefinitionPlan {
   ) {
     throw new Error('The Definition plan response was invalid.');
   }
-  const participants = resolved.participants.map(decodeParticipant);
-  const environment = record(resolved.environment);
+  const environment = objectValue(resolved.environment);
   if (
     !environment ||
     (environment.source !== 'referenced' && environment.source !== 'inline') ||
@@ -163,7 +158,7 @@ function decodeDefinitionPlan(value: unknown): DefinitionPlan {
     fingerprint,
     resolved: {
       kind: resolved.kind,
-      participants,
+      participants: resolved.participants.map(decodeParticipant),
       environment: {
         source: environment.source,
         environment_version_id: environment.environment_version_id,
@@ -180,7 +175,7 @@ function decodeDiagnostics(value: unknown): DefinitionDiagnostics {
   if (!Array.isArray(value))
     throw new Error('The Definition diagnostics response was invalid.');
   return value.map((item) => {
-    const diagnostic = record(item);
+    const diagnostic = objectValue(item);
     if (
       typeof diagnostic?.path !== 'string' ||
       typeof diagnostic.code !== 'string' ||
@@ -199,7 +194,7 @@ function decodeDiagnostics(value: unknown): DefinitionDiagnostics {
 function decodeParticipant(
   value: unknown,
 ): DefinitionPlan['resolved']['participants'][number] {
-  const participant = record(value);
+  const participant = objectValue(value);
   if (
     !participant ||
     typeof participant.name !== 'string' ||
@@ -225,10 +220,11 @@ function decodeParticipant(
   };
 }
 
-function record(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
+function objectValue(value: unknown): Record<string, unknown> | null {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+  return Object.fromEntries(Object.entries(value));
 }
 
 function isString(value: unknown): value is string {

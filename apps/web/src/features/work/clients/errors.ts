@@ -14,7 +14,6 @@ export class ProductMutationError extends Error {
   constructor(
     message: string,
     readonly status: number,
-    readonly code?: string,
   ) {
     super(message);
     this.name = 'ProductMutationError';
@@ -37,7 +36,7 @@ export async function readProductJson(
 
 export function productMutationError(error: unknown): never {
   if (error instanceof ApiTransportError) {
-    throw new ProductMutationError(error.message, error.status, error.code);
+    throw new ProductMutationError(error.message, error.status);
   }
   throw error;
 }

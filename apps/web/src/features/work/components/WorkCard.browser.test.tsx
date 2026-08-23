@@ -2,8 +2,18 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
 
-import * as chatApi from '../../conversations/conversations-gateway';
+import {
+  loadWorkCard,
+  type WorkChatCard,
+} from '../../conversations/conversations-gateway';
 import { WorkCard } from './WorkCard';
+
+vi.mock('../../conversations/conversations-gateway', async () => {
+  const actual = await vi.importActual<
+    typeof import('../../conversations/conversations-gateway')
+  >('../../conversations/conversations-gateway');
+  return { ...actual, loadWorkCard: vi.fn() };
+});
 
 (
   globalThis as typeof globalThis & {
@@ -20,7 +30,7 @@ afterEach(() => {
 
 it('refreshes a live Work Card and stops polling once the Work becomes terminal', async () => {
   vi.useFakeTimers();
-  const load = vi.spyOn(chatApi, 'loadWorkCard');
+  const load = vi.mocked(loadWorkCard);
   load
     .mockResolvedValueOnce(card('running', null))
     .mockResolvedValueOnce(card('complete', 'Research complete.'));
@@ -58,7 +68,7 @@ it('refreshes a live Work Card and stops polling once the Work becomes terminal'
 function card(
   state: 'running' | 'complete',
   resultSummary: string | null,
-): chatApi.WorkChatCard {
+): WorkChatCard {
   return {
     workId,
     workRef: workId,

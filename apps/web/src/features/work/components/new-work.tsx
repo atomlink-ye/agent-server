@@ -2,9 +2,9 @@ import { useState } from 'react';
 import { diagnosticsFrom } from '@/features/work/components/definition-panel';
 import { workTabHref } from '@/features/work/components/work-presentation';
 import {
-  workDefinitionClient,
   type DefinitionDiagnostics,
   type DefinitionPlan,
+  workDefinitionClient,
 } from '@/features/work/clients/work-definition-client';
 import { workClient } from '@/features/work/clients/work-client';
 import { ApiTransportError } from '@/api/transport';

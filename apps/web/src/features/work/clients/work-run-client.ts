@@ -13,6 +13,10 @@ import {
 
 import { apiTransport } from '../../../api/transport';
 import {
+  normalizeProductRunTrace,
+  type NormalizedTrace,
+} from '@/features/run-trace/normalized';
+import {
   parseProduct,
   productMutationError,
   readProductJson,
@@ -67,6 +71,7 @@ export class WorkRunClient {
       ),
     );
     if (
+      'projection_status' in body &&
       body.projection_status === 'internally_anchored' &&
       (body.work?.id !== workId || body.work_run?.id !== runId)
     ) {
@@ -78,7 +83,7 @@ export class WorkRunClient {
     return body;
   }
 
-  async trace(workId: string, runId: string) {
+  async trace(workId: string, runId: string): Promise<NormalizedTrace> {
     const body = parseProduct(
       ProductRunTraceResponseSchema,
       await readProductJson(
@@ -87,15 +92,18 @@ export class WorkRunClient {
       ),
     );
     if (
-      body.projection_status === 'internally_anchored' &&
-      (body.work?.id !== workId || body.work_run?.id !== runId)
+      !('projection_status' in body) ||
+      body.projection_status !== 'internally_anchored'
     ) {
+      throw new Error('The Product WorkRun projection was not captured.');
+    }
+    if (body.work?.id !== workId || body.work_run?.id !== runId) {
       throw new ProductReadError(
         'The Product Trace response did not match the requested Run.',
         502,
       );
     }
-    return body;
+    return normalizeProductRunTrace(body);
   }
 
   async sessionTranscripts(

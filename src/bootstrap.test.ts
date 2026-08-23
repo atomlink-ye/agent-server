@@ -143,11 +143,6 @@ describe('closeServiceResources', () => {
           events.push('lark.worker.stop');
         }),
       },
-      executionRuntime: {
-        close: vi.fn(async () => {
-          events.push('runtime.close');
-        }),
-      },
       runtimeProvider: { close: vi.fn(async () => undefined) },
       pool: {
         end: vi.fn(async () => {

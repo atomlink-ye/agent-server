@@ -1704,7 +1704,7 @@ describe('ExecuteRun', () => {
 
 function createExecuteRun(input: {
   readonly completeRun: CompleteRun;
-  readonly runtime: FakeAgentRuntime;
+  readonly runtimeTurns: FakeAgentRuntime;
   readonly task: Task;
   readonly logger?: Logger;
 }): ExecuteRun {
@@ -1717,7 +1717,7 @@ function createExecuteRun(input: {
     tasks,
     definitions: {} as InvokableRepository,
     executeTeamTask: {} as never,
-    runtimeTurns: input.runtime,
+    runtimeTurns: input.runtimeTurns,
     runtimeProvider: input.runtime,
     logger: input.logger ?? { log: vi.fn() },
     now: () => new Date('2026-07-23T00:00:00.000Z'),
@@ -1874,7 +1874,7 @@ function createLeadRuntimeFixture() {
 
 function createDirectExecuteRun(input: {
   readonly completeRun: CompleteRun;
-  readonly runtime: FakeAgentRuntime;
+  readonly runtimeTurns: FakeAgentRuntime;
   readonly task: Task;
   readonly resolver: ResolveAgentVersion;
   readonly createMemoryProposal?: CreateMemoryProposal;
@@ -1888,7 +1888,7 @@ function createDirectExecuteRun(input: {
     tasks,
     definitions: {} as InvokableRepository,
     executeTeamTask: {} as never,
-    runtimeTurns: input.runtime,
+    runtimeTurns: input.runtimeTurns,
     runtimeProvider: input.runtime,
     logger: { log: vi.fn() },
     now: () => new Date('2026-07-23T00:00:00.000Z'),

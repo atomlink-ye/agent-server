@@ -15,7 +15,7 @@ import { ErrorResponseSchema } from '../../src/contracts/http.js';
 import type { AppConfig } from '../../src/shared/config.js';
 import { createRuntimeCapabilities } from '../../src/application/runtime/runtime-capabilities.js';
 import { createHttpApp } from '../../src/entrypoints/api/app.js';
-import { createWorkModule } from '../../src/modules/work/work-module.js';
+import { createWorkModule } from '../../src/composition/create-work-capabilities.js';
 import {
   AGENT_SERVER_PRODUCT_WORK_CREATE_TOOL_REF,
   AGENT_SERVER_SYNTHETIC_STOCK_SNAPSHOT_TOOL_REF,

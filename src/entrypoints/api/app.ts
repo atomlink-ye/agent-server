@@ -29,7 +29,7 @@ import { registerTeamRunRoutes } from './routes/team-runs.js';
 import { registerCollaborationRunRoutes } from './routes/collaboration-runs.js';
 import { ProjectAgenticTeam } from '../../application/teams/project-agentic-team.js';
 import type { TeamDriver } from '../../application/teams/team-driver.js';
-import type { WorkModule } from '../../modules/work/work-module.js';
+import type { WorkModule } from '../../composition/create-work-capabilities.js';
 import type { MemoryModule } from '../../composition/create-memory-capabilities.js';
 import type { ResourceModule } from '../../composition/create-resource-capabilities.js';
 import type { ConversationRepository } from '../../application/ports/conversation-repository.js';

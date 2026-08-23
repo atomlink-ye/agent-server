@@ -17,7 +17,7 @@ import { ChatDeliveryWorker } from '../../src/entrypoints/chat/worker.js';
 import { LocalRuntimeExtensionBinder } from '../../src/infrastructure/extensions/local-runtime-extension-binder.js';
 import { RuntimeMcpServer } from '../../src/infrastructure/extensions/runtime-mcp-server.js';
 import { PostgresChatDispatchRepository } from '../../src/infrastructure/postgres/postgres-chat-dispatch-repository.js';
-import { PostgresConversationWorkLinkRepository } from '../../src/modules/work/conversation-work-link-repository.js';
+import { PostgresConversationWorkLinkRepository } from '../../src/composition/postgres-conversation-work-link-repository.js';
 import { PostgresRunEventRepository } from '../../src/infrastructure/postgres/postgres-run-event-repository.js';
 import { PostgresWorkChatConversationAgentResolver } from '../../src/infrastructure/postgres/postgres-work-chat-conversation-agent-resolver.js';
 import { PostgresWorkChatWakeStateRepository } from '../../src/infrastructure/postgres/postgres-work-chat-wake-state-repository.js';

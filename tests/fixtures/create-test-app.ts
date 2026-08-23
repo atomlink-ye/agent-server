@@ -9,7 +9,7 @@ import { RuntimeReadinessProbe } from '../../src/application/health/readiness.js
 import { createConfiguredRuntimeCapabilities } from '../../src/composition/create-runtime-capabilities.js';
 import { createMemoryModule } from '../../src/composition/create-memory-capabilities.js';
 import { createResourceModule } from '../../src/composition/create-resource-capabilities.js';
-import { createWorkModule } from '../../src/modules/work/work-module.js';
+import { createWorkModule } from '../../src/composition/create-work-capabilities.js';
 import { CreateMemoryProposal } from '../../src/application/memory/create-memory-proposal.js';
 import { ListMemoryEntries } from '../../src/application/memory/list-memory-entries.js';
 import { ListMemoryProposals } from '../../src/application/memory/list-memory-proposals.js';

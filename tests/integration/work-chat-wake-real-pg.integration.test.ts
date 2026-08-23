@@ -7,7 +7,7 @@ import { createProductProjection } from '../../src/application/product-projectio
 import { WorkProjectionFactsSource } from '../../src/application/product-projection/work-projection-facts-source.js';
 import { createWorkChatWakeWorker } from '../../src/application/work-chat/work-chat-wake-worker.js';
 import { createWorkChatWakeDelivery } from '../../src/application/work-chat/work-chat-wake-delivery.js';
-import { PostgresConversationWorkLinkRepository } from '../../src/modules/work/conversation-work-link-repository.js';
+import { PostgresConversationWorkLinkRepository } from '../../src/composition/postgres-conversation-work-link-repository.js';
 import { PostgresConversationRepository } from '../../src/infrastructure/postgres/postgres-conversation-repository.js';
 import { PostgresExecutionFactQuery } from '../../src/infrastructure/postgres/postgres-execution-fact-query.js';
 import { PostgresWorkChatConversationAgentResolver } from '../../src/infrastructure/postgres/postgres-work-chat-conversation-agent-resolver.js';

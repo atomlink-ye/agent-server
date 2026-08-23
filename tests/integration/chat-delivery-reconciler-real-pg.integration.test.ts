@@ -6,7 +6,7 @@ import {
   createPostgresPool,
 } from '../../src/infrastructure/postgres/postgres.js';
 import { PostgresConversationRepository } from '../../src/infrastructure/postgres/postgres-conversation-repository.js';
-import { PostgresConversationWorkLinkRepository } from '../../src/modules/work/conversation-work-link-repository.js';
+import { PostgresConversationWorkLinkRepository } from '../../src/composition/postgres-conversation-work-link-repository.js';
 import { PostgresChatDispatchRepository } from '../../src/infrastructure/postgres/postgres-chat-dispatch-repository.js';
 import { ChatDeliveryReconciler } from '../../src/application/chat/chat-delivery-reconciler.js';
 import { ChatDeliveryWorker } from '../../src/entrypoints/chat/worker.js';

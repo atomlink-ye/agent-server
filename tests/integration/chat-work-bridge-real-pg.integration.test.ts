@@ -22,7 +22,7 @@ import {
   PRODUCT_WORK_LIST_AGENT_WORKFLOWS_TOOL_REF,
   PRODUCT_WORK_RUN_START_TOOL_REF,
 } from '../../src/entrypoints/mcp/product-work-mcp-tools.js';
-import { createWorkModule } from '../../src/modules/work/work-module.js';
+import { createWorkModule } from '../../src/composition/create-work-capabilities.js';
 import {
   applyDurableKernelMigrations,
   createPostgresPool,

@@ -1,17 +1,21 @@
 BEGIN;
 
 -- DECISION-006 / PLAN-V2 §§14-15: reset runtime execution state at the schema
--- boundary. RuntimeSession, launch-snapshot, generation, run binding, and
--- grant rows are external-provider live-binding state, not durable product
--- facts. They are intentionally discarded so the replacement model starts
--- without legacy provider bindings, endpoint epochs, or grant shapes.
+-- boundary. RuntimeSession, launch-snapshot, generation, and grant rows are
+-- external-provider live-binding state, not durable product facts. They are
+-- intentionally discarded so the replacement model starts without legacy
+-- provider bindings, endpoint epochs, or grant shapes. The legacy Work
+-- run_id provenance in runtime_session_bindings is preserved in Phase 1.
 --
--- This reset is deliberately limited to the four runtime authorities being
+-- This reset is deliberately limited to the runtime authorities being
 -- replaced: runtime_sessions bindings, runtime_session_generations' legacy
--- binding shape, runtime_session_bindings(run_id), and
--- session_launch_snapshots. Work, Run, Task, Agent, Team, Memory, and Chat
--- durable tables are not deleted, altered, backfilled, or used as compatibility
--- storage. There is no dual schema, compatibility view, or data backfill.
+-- binding shape, and session_launch_snapshots. The legacy Work run_id
+-- provenance in runtime_session_bindings is explicitly preserved in Phase 1;
+-- it is not a reset authority. Deleting it belongs to the Work/Team cutover,
+-- not to a Chat fallback. Work, Run, Task, Agent, Team, Memory, and Chat
+-- durable tables are not deleted, altered, backfilled, or used as
+-- compatibility storage. There is no dual schema, compatibility view, or
+-- data backfill.
 
 -- Remove the old dependency graph without CASCADE so no durable table can be
 -- changed implicitly. The old current-generation FK points at the generation
@@ -29,7 +33,6 @@ DROP TABLE IF EXISTS runtime_tool_grants;
 DROP TABLE IF EXISTS runtime_turns;
 DROP TABLE IF EXISTS runtime_session_generations;
 DROP TABLE IF EXISTS runtime_sessions;
-DROP TABLE IF EXISTS runtime_session_bindings;
 DROP TABLE IF EXISTS session_launch_snapshots;
 DROP FUNCTION IF EXISTS prevent_session_launch_snapshot_mutation();
 

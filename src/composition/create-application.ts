@@ -30,10 +30,10 @@ import {
   type LarkChannelWorkers,
 } from './create-lark-channel-workers.js';
 import { createApplicationLifecycle } from './create-application-lifecycle.js';
+import { createApplicationHttp } from './create-application-http.js';
 import { createMemoryCapabilities } from './create-memory-capabilities.js';
 import { createKernelCapabilities } from './create-kernel-capabilities.js';
 import { createInfrastructure } from './create-infrastructure.js';
-import { createHttpApi } from './create-http-api.js';
 import { createResourceCapabilities } from './create-resource-capabilities.js';
 import { createTeamCapabilities } from './create-team-capabilities.js';
 import { createWorkCapabilities } from './create-work-capabilities.js';
@@ -396,7 +396,7 @@ export async function createApplication(
     larkReceiver = larkWorkers.larkReceiver;
   }
   const readiness = noExternalDependencies;
-  const app = createHttpApi({
+  const app = createApplicationHttp({
     config,
     logger,
     readiness,

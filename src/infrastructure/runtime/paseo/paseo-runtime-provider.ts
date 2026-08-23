@@ -219,7 +219,10 @@ export class PaseoRuntimeProvider implements RuntimeExecutionProvider {
           status: 'missing',
           reason: 'Paseo reported that the provider session is missing.',
         };
-      return this.#inspectionUnavailable('Paseo session inspection failed.', error);
+      return this.#inspectionUnavailable(
+        'Paseo session inspection failed.',
+        error,
+      );
     }
 
     const observed: ProviderObservedState = {
@@ -238,7 +241,9 @@ export class PaseoRuntimeProvider implements RuntimeExecutionProvider {
     );
   }
 
-  public async open(binding: ProviderSessionBinding): Promise<ExecutionSession> {
+  public async open(
+    binding: ProviderSessionBinding,
+  ): Promise<ExecutionSession> {
     const structuralFailure = this.#validateBinding(binding);
     if (structuralFailure) throw this.#bindingError(structuralFailure);
     await this.#initialize();
@@ -327,17 +332,20 @@ export class PaseoRuntimeProvider implements RuntimeExecutionProvider {
     if (!binding.generation.providerSessionId)
       return {
         status: 'stale',
-        reason: 'The persisted provider session binding has no provider session id.',
+        reason:
+          'The persisted provider session binding has no provider session id.',
       };
     if (
       binding.generation.provider !== this.#options.provider ||
       binding.applied.provider !== binding.generation.provider ||
-      binding.generation.runtimeSessionId !== binding.applied.runtimeSessionId ||
+      binding.generation.runtimeSessionId !==
+        binding.applied.runtimeSessionId ||
       binding.applied.revision !== binding.generation.appliedSpecRevision
     )
       return {
         status: 'stale',
-        reason: 'The provider session binding belongs to a different provider or runtime session.',
+        reason:
+          'The provider session binding belongs to a different provider or runtime session.',
       };
     if (!binding.generation.providerWorkspaceId)
       return {
@@ -347,9 +355,7 @@ export class PaseoRuntimeProvider implements RuntimeExecutionProvider {
     return null;
   }
 
-  #bindingError(
-    failure: ProviderBindingInspectionFailure,
-  ): Error {
+  #bindingError(failure: ProviderBindingInspectionFailure): Error {
     return new ExecutionBindingUnavailableError(failure.reason);
   }
 

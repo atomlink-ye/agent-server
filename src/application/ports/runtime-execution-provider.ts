@@ -1,4 +1,7 @@
-import type { ExecutionExtensionBinding, ExecutionSession } from './execution-plane.js';
+import type {
+  ExecutionExtensionBinding,
+  ExecutionSession,
+} from './execution-plane.js';
 import type {
   RuntimeSessionId,
   RuntimeSpecRevision,

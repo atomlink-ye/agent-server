@@ -7,13 +7,13 @@ const NO_STORE_HEADERS = {
 
 const MAX_UPSTREAM_JSON_BYTES = 1 * 1024 * 1024;
 
-export function upstreamUrl(config: AppConfig, path: string): string {
+function upstreamUrl(config: AppConfig, path: string): string {
   const configured = process.env.AGENT_SERVER_BASE_URL?.trim();
   const base = configured || `http://127.0.0.1:${config.port}`;
   return `${base.replace(/\/$/u, '')}${path}`;
 }
 
-export function browserServiceToken(config: AppConfig): string {
+function browserServiceToken(config: AppConfig): string {
   const configured = process.env.AGENT_SERVER_SERVICE_TOKEN?.trim();
   if (configured) return configured;
   const active = (config.serviceAccounts ?? []).filter(

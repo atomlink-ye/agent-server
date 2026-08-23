@@ -10,7 +10,7 @@ import {
   evaluateCompletionFacts,
   formatSmokeOutcome,
 } from '../../scripts/smoke/agent-team-completion-line.mjs';
-import { createTeamModule } from '../../src/modules/team/team-module.js';
+import { createTeamModule } from '../../src/composition/create-team-capabilities.js';
 import {
   createRootTask,
   createChildTask,

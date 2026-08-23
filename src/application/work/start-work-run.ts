@@ -59,7 +59,7 @@ export interface StartWorkRunOptions {
 }
 
 const NO_RUNTIME_CAPABILITIES: RuntimeCapabilities = Object.freeze({
-  supported: new Set(),
+  supported: new Set<ExecutionPlaneCapability>(),
 });
 
 export class StartWorkRun {

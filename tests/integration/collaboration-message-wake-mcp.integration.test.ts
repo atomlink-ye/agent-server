@@ -29,7 +29,7 @@ import { PostgresRunRepository } from '../../src/infrastructure/postgres/postgre
 import { PostgresTaskRepository } from '../../src/infrastructure/postgres/postgres-task-repository.js';
 import { RuntimeMcpServer } from '../../src/infrastructure/extensions/runtime-mcp-server.js';
 import { createCollaborationRuntimeContributor } from '../../src/entrypoints/mcp/runtime-tool-contributors.js';
-import { RuntimeToolRegistry } from '../../src/platform/runtime-tool-registry.js';
+import { createRuntimeToolCatalog } from '../../src/application/extensions/runtime-tool-catalog.js';
 import { createLogger } from '../../src/shared/observability/logger.js';
 import { deriveTeamContextEpoch } from '../../src/application/teams/team-tool-context.js';
 import { ProjectAgenticTeam } from '../../src/application/teams/project-agentic-team.js';
@@ -161,11 +161,14 @@ async function createMessageWakeFixture(
   if (!leadClaim) throw new Error('smoke gate MCP lead run was not claimable');
 
   const server = new RuntimeMcpServer(
-    new RuntimeToolRegistry([
-      createCollaborationRuntimeContributor({
-        contextResolver: team.contextResolver,
-        kernel: team.collaboration,
-      }),
+    createRuntimeToolCatalog([
+      {
+        ref: 'collaboration',
+        contribute: createCollaborationRuntimeContributor({
+          contextResolver: team.contextResolver,
+          kernel: team.collaboration,
+        }),
+      },
     ]),
   );
   servers.push(server);

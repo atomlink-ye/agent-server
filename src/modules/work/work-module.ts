@@ -32,7 +32,7 @@ import { validateProductWorkDefinition } from '../../application/work/validate-p
 import { WorkIdentityApi } from '../../application/work/work-identity-api.js';
 import { ContextViewResolver } from '../../application/context/context-view-resolver.js';
 import { ConversationWorkContextLink } from '../../application/context/conversation-work-context-link.js';
-import type { RuntimeToolContributor } from '../../platform/runtime-tool-registry.js';
+import type { RuntimeToolContributor } from '../../application/extensions/runtime-tool-catalog.js';
 import { registerProductWorkCommandRoutes } from '../../entrypoints/api/routes/product-work-commands.js';
 import { registerProductWorkRoutes } from '../../entrypoints/api/routes/product-work.js';
 import { registerWorkCardRoutes } from '../../entrypoints/api/routes/work-cards.js';

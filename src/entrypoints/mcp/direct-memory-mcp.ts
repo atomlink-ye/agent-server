@@ -6,7 +6,7 @@ import {
   RuntimeToolGrantService,
   type RuntimeToolGrant,
 } from '../../application/extensions/runtime-tool-grant-service.js';
-import type { RuntimeToolRegistry } from '../../platform/runtime-tool-registry.js';
+import type { RuntimeToolCatalog } from '../../application/extensions/runtime-tool-catalog.js';
 
 export const MCP_PATH = '/mcp/agent-runtime';
 const MAX_REQUEST_BODY_BYTES = 64 * 1024;
@@ -19,7 +19,7 @@ type McpSession = Readonly<{
 
 export function createDirectMemoryMcpHandler(input: {
   readonly grants: RuntimeToolGrantService;
-  readonly registry: RuntimeToolRegistry;
+  readonly toolCatalog: RuntimeToolCatalog;
 }): (req: IncomingMessage, res: ServerResponse) => Promise<void> {
   const sessions = new Map<string, McpSession>();
   return async (req, res) => {
@@ -85,7 +85,7 @@ export function createDirectMemoryMcpHandler(input: {
         },
       });
     if (!existing) {
-      input.registry.contribute({
+      input.toolCatalog.contribute({
         server,
         grant,
         grants: input.grants,

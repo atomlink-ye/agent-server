@@ -1,6 +1,7 @@
 import { PaseoExecutionPlane } from '../../adapters/paseo/paseo-execution-plane.js';
 import { UnavailableExecutionPlane } from '../../adapters/runtime/unavailable-execution-plane.js';
 import type { RuntimeExtensionBinder } from '../../application/extensions/runtime-extension-binder.js';
+import type { RuntimeToolCatalog } from '../../application/extensions/runtime-tool-catalog.js';
 import { RuntimeToolGrantService } from '../../application/extensions/runtime-tool-grant-service.js';
 import {
   RuntimeReadinessProbe,
@@ -31,10 +32,6 @@ import { PostgresRuntimeSessionRepository } from '../../infrastructure/postgres/
 import { PostgresRuntimeToolGrantPersistence } from '../../infrastructure/postgres/postgres-runtime-tool-grant-persistence.js';
 import { PostgresRuntimeWorkspaceRepository } from '../../infrastructure/postgres/postgres-runtime-workspace-repository.js';
 import { PostgresWorkerRuntimeInvocationResolver } from '../../infrastructure/postgres/postgres-worker-runtime-invocation-resolver.js';
-import {
-  RuntimeToolRegistry,
-  type RuntimeToolContributor,
-} from '../../platform/runtime-tool-registry.js';
 import type { AppConfig } from '../../shared/config.js';
 import type { Logger } from '../../shared/observability/logger.js';
 import { mapPaseoConfig } from '../../infrastructure/runtime/paseo/paseo-config-mapper.js';
@@ -63,8 +60,6 @@ export interface RuntimeModule {
   readonly runtimeCellRoot?: string;
   readonly mcpHost: RuntimeMcpHostLifecycle;
   capabilities(): ExecutionPlaneCapabilities;
-  /** Composition-root only until R3 freezes the final contributor graph. */
-  registerToolContributor(contributor: RuntimeToolContributor): void;
 }
 
 export interface RuntimeModuleDatabase {
@@ -94,7 +89,7 @@ export function createRuntimeModule(options: {
     'paseo' | 'runtime' | 'runtimeMcp' | 'skillRegistryRoot'
   >;
   readonly logger: Logger;
-  readonly toolContributors: readonly RuntimeToolContributor[];
+  readonly toolCatalog: RuntimeToolCatalog;
   readonly debugRuntime?: ExecutionRuntimeService;
   readonly scopedMemory?: Pick<ScopedMemoryResolver, 'resolve'>;
 }): RuntimeModule {
@@ -137,12 +132,11 @@ export function createRuntimeModule(options: {
     scopedMemory,
   );
   const executionRuntime = options.debugRuntime ?? productionExecutionRuntime;
-  const toolRegistry = new RuntimeToolRegistry(options.toolContributors);
   const grantService = new RuntimeToolGrantService(
     new PostgresRuntimeToolGrantPersistence(options.database),
   );
   const mcpHost = new RuntimeMcpServer(
-    toolRegistry,
+    options.toolCatalog,
     grantService,
     options.config.runtimeMcp?.listenHost,
     options.config.runtimeMcp?.advertisedHost,
@@ -178,8 +172,5 @@ export function createRuntimeModule(options: {
       : {}),
     mcpHost,
     capabilities: () => executionPlane.capabilities(),
-    registerToolContributor(contributor) {
-      toolRegistry.register(contributor);
-    },
   };
 }

@@ -1,12 +1,19 @@
 import {
-  RuntimeToolRegistry,
+  createRuntimeToolCatalog as createCatalog,
   type RuntimeToolContributor,
-} from '../../platform/runtime-tool-registry.js';
+  type RuntimeToolCatalog,
+} from '../../application/extensions/runtime-tool-catalog.js';
 
-export function createRuntimeToolRegistry(input: {
+export function createRuntimeToolCatalog(input: {
   readonly work: RuntimeToolContributor;
   readonly memory: RuntimeToolContributor;
-  readonly legacy: RuntimeToolContributor;
-}): RuntimeToolRegistry {
-  return new RuntimeToolRegistry([input.work, input.memory, input.legacy]);
+  readonly collaboration: RuntimeToolContributor;
+  readonly synthetic: RuntimeToolContributor;
+}): RuntimeToolCatalog {
+  return createCatalog([
+    { ref: 'work', contribute: input.work },
+    { ref: 'memory', contribute: input.memory },
+    { ref: 'collaboration', contribute: input.collaboration },
+    { ref: 'synthetic', contribute: input.synthetic },
+  ]);
 }

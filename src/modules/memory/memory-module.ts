@@ -39,7 +39,7 @@ import { registerLearningProposalRoutes } from '../../entrypoints/api/routes/lea
 import { registerWorkspaceMemoryRoutes } from '../../entrypoints/api/routes/workspace-memory.js';
 import { registerContextFileRoutes } from '../../entrypoints/api/routes/context-files.js';
 import { createMemoryRuntimeContributor } from '../../entrypoints/mcp/runtime-tool-contributors.js';
-import type { RuntimeToolContributor } from '../../platform/runtime-tool-registry.js';
+import type { RuntimeToolContributor } from '../../application/extensions/runtime-tool-catalog.js';
 import type { ApiEnvironment } from '../../entrypoints/api/http-types.js';
 import type { AppConfig } from '../../shared/config.js';
 import { ContextFsFileStore } from '../../infrastructure/files/context-fs-file-store.js';

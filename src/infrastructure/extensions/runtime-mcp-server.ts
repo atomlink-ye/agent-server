@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
 import { createDirectMemoryMcpHandler } from '../../entrypoints/mcp/direct-memory-mcp.js';
 import { RuntimeToolGrantService } from '../../application/extensions/runtime-tool-grant-service.js';
-import type { RuntimeToolRegistry } from '../../platform/runtime-tool-registry.js';
+import type { RuntimeToolCatalog } from '../../application/extensions/runtime-tool-catalog.js';
 
 export interface RuntimeMcpEndpoint {
   readonly url: string;
@@ -16,7 +16,7 @@ export class RuntimeMcpServer {
   #starting: Promise<RuntimeMcpEndpoint> | null = null;
 
   public constructor(
-    private readonly registry: RuntimeToolRegistry,
+    private readonly toolCatalog: RuntimeToolCatalog,
     grants = new RuntimeToolGrantService(),
     private readonly listenHost = '127.0.0.1',
     private readonly advertisedHost = '127.0.0.1',
@@ -42,7 +42,7 @@ export class RuntimeMcpServer {
         const server = createServer(
           createDirectMemoryMcpHandler({
             grants: this.grants,
-            registry: this.registry,
+            toolCatalog: this.toolCatalog,
           }),
         );
         this.#server = server;

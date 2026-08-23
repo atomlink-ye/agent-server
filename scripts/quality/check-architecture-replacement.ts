@@ -272,15 +272,17 @@ function scanBackend(out: Violation[]): void {
 }
 
 /**
- * F5 protected-observability source allowlist. These keys are emitted
- * observability fields, never persistence columns, and must not be added to
- * the persistence rules below.
+ * Derived projection of reports/F5-delete-first-inventory.md, which is
+ * authoritative; F5 changes must update this mapping. These keys are emitted
+ * observability fields, never persistence columns.
  */
-const PROTECTED_OBSERVABILITY_FIELDS = new Set([
-  'desired_spec_digest_prefix',
-  'applied_extension_grant_id_prefix',
-  'extension_grant_id_prefix',
-]);
+const PROTECTED_OBSERVABILITY_FIELDS: Readonly<
+  Record<string, readonly string[]>
+> = {
+  desired_spec_digest_prefix: ['runtime.session.resolution'],
+  applied_extension_grant_id_prefix: ['runtime.session.resolution'],
+  extension_grant_id_prefix: ['runtime.session.timeout_diagnostics'],
+};
 
 type SqlTemplate = { readonly text: string; readonly start: number };
 
@@ -297,9 +299,10 @@ function sqlTemplates(text: string): readonly SqlTemplate[] {
 }
 
 function assertPersistenceField(field: string): void {
-  if (PROTECTED_OBSERVABILITY_FIELDS.has(field))
+  const events = PROTECTED_OBSERVABILITY_FIELDS[field];
+  if (events)
     throw new Error(
-      `F5 protected observability field ${field} is not a persistence column; keep it out of architecture-replacement persistence rules.`,
+      `F5 protected observability field ${field} (${events.join(', ')}) is not a persistence column; keep it out of architecture-replacement persistence rules.`,
     );
 }
 

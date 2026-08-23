@@ -5,26 +5,13 @@ import type { RunDispatcher } from './application/ports/run-dispatcher.js';
 import { ClaimNextRun } from './application/runs/claim-next-run.js';
 import { CompleteRun } from './application/runs/complete-run.js';
 import { ExecuteRun } from './application/runs/execute-run.js';
-import { GetRun } from './application/runs/get-run.js';
-import { SubmitRun } from './application/runs/submit-run.js';
-import { AdmitRootTask } from './application/tasks/admit-root-task.js';
 import { GetTask } from './application/tasks/get-task.js';
 import { GetTaskTree } from './application/tasks/get-task-tree.js';
 import { ExecuteTeamTask } from './application/tasks/execute-team-task.js';
-import { InvokeTask } from './application/tasks/invoke-task.js';
-import { PostgresAdmissionRepository } from './infrastructure/postgres/postgres-admission-repository.js';
 import { PostgresRunDispatcher } from './infrastructure/postgres/postgres-run-dispatcher.js';
-import { PostgresRunRepository } from './infrastructure/postgres/postgres-run-repository.js';
-import { PostgresTaskRepository } from './infrastructure/postgres/postgres-task-repository.js';
-import { PostgresSessionRepository } from './infrastructure/postgres/postgres-session-repository.js';
-import { PostgresRunEventRepository } from './infrastructure/postgres/postgres-run-event-repository.js';
-import { PostgresConversationRepository } from './infrastructure/postgres/postgres-conversation-repository.js';
-import { PostgresConversationWorkEntitlementRepository } from './infrastructure/postgres/postgres-conversation-work-entitlement-repository.js';
-import { PostgresChatDispatchRepository } from './infrastructure/postgres/postgres-chat-dispatch-repository.js';
 import { CancelTask } from './application/tasks/cancel-task.js';
 import type { AppConfig, LarkCanaryEnabledConfig } from './shared/config.js';
 import type { Logger } from './shared/observability/logger.js';
-import { SubmitSessionTurn } from './application/sessions/submit-session-turn.js';
 import { ResolveLarkBinding } from './application/channels/resolve-lark-binding.js';
 import { ProcessChannelIngress } from './application/channels/process-channel-ingress.js';
 import { LarkIngressWorker } from './entrypoints/lark/worker.js';
@@ -32,8 +19,6 @@ import { LarkOutboxWorker } from './entrypoints/lark/outbox-worker.js';
 import { createLarkWebsocketReceiver } from './adapters/lark/lark-websocket-receiver.js';
 import { createLarkDeliveryAdapter } from './adapters/lark/lark-delivery-adapter.js';
 import { larkMemoryReviewCardRenderer } from './adapters/lark/lark-memory-card.js';
-import { PostgresChannelRepository } from './infrastructure/postgres/postgres-channel-repository.js';
-import { PostgresLarkReviewSurfaceRepository } from './infrastructure/postgres/postgres-lark-review-surface-repository.js';
 import { DeliverChannelOutbox } from './application/channels/deliver-channel-outbox.js';
 import { ProcessLarkIngress } from './application/channels/process-lark-ingress.js';
 import { PublishMemoryReviewSurface } from './application/channels/publish-memory-review-surface.js';
@@ -79,6 +64,7 @@ import { PostgresAgentHomeRepository } from './infrastructure/postgres/postgres-
 import { PostgresAgentHomeDefinitionSource } from './infrastructure/postgres/postgres-agent-home-definition-source.js';
 import { noExternalDependencies } from './application/health/readiness.js';
 import { createConfiguredRuntimeCapabilities } from './composition/create-runtime-capabilities.js';
+import { createKernelCapabilities } from './composition/create-kernel-capabilities.js';
 import { createInfrastructure } from './composition/create-infrastructure.js';
 import { createHttpApi } from './composition/create-http-api.js';
 import { createWorkers } from './composition/create-workers.js';
@@ -87,6 +73,7 @@ import {
   createLifecycleSupervisor,
 } from './composition/lifecycle-supervisor.js';
 import type { ConversationWorkLinkRepository } from './domain/chat/chat-work-origin-ref.js';
+import type { PostgresChannelRepository } from './infrastructure/postgres/postgres-channel-repository.js';
 
 export function createLarkIngressWorker(
   repository: Pick<
@@ -170,28 +157,32 @@ export async function createService(
     config,
   });
 
-  const runRepository = new PostgresRunRepository(pool);
-  const taskRepository = new PostgresTaskRepository(pool);
-  const admissionRepository = new PostgresAdmissionRepository(pool);
-  const sessions = new PostgresSessionRepository(pool);
   const directChatPlane = config.directChatPlane;
   const productWorkPlane = config.productWorkPlane;
   const directChatEnabled = directChatPlane !== 'absent';
   const productWorkEnabled = productWorkPlane !== 'absent';
-  const conversations = directChatEnabled
-    ? new PostgresConversationRepository(pool)
-    : undefined;
-  const conversationWorkEntitlements =
-    directChatEnabled && productWorkEnabled
-      ? new PostgresConversationWorkEntitlementRepository(pool)
-      : undefined;
-  const chatDispatches = directChatEnabled
-    ? new PostgresChatDispatchRepository(pool)
-    : undefined;
-  const submitSessionTurn = new SubmitSessionTurn(sessions);
-  const channelRepository = new PostgresChannelRepository(pool);
-  const reviewSurfaceRepository = new PostgresLarkReviewSurfaceRepository(pool);
-  const events = new PostgresRunEventRepository(pool);
+  const {
+    runRepository,
+    taskRepository,
+    admissionRepository,
+    sessions,
+    conversations,
+    conversationWorkEntitlements,
+    chatDispatches,
+    submitSessionTurn,
+    channelRepository,
+    reviewSurfaceRepository,
+    events,
+    admitRootTask,
+    submitRun,
+    getRun,
+    invokeTask,
+  } = createKernelCapabilities({
+    pool,
+    config,
+    definitionReadApi: resourceModule.definitionReadApi,
+    agentResolutionApi: resourceModule.agentResolutionApi,
+  });
   const teamModule = createTeamModule({
     database: pool,
     tasks: taskRepository,
@@ -235,18 +226,6 @@ export async function createService(
         config.larkCanary.allowedOpenId,
       )
     : undefined;
-  const admitRootTask = new AdmitRootTask(
-    taskRepository,
-    runRepository,
-    admissionRepository,
-  );
-  const submitRun = new SubmitRun(admitRootTask, runRepository);
-  const getRun = new GetRun(runRepository);
-  const invokeTask = new InvokeTask(
-    admissionRepository,
-    resourceModule.definitionReadApi,
-    resourceModule.agentResolutionApi,
-  );
   let workModule: ReturnType<typeof createWorkModule> | undefined;
   let workChatWorker: WorkChatWakeWorker | undefined;
   let conversationWorkLinks: ConversationWorkLinkRepository | undefined =

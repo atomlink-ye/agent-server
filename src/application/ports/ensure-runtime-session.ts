@@ -5,6 +5,7 @@ import type { RuntimeSessionId } from '../../domain/runtime/runtime-session.js';
 export interface ReadyRuntime {
   readonly generation: RuntimeSessionGeneration;
   readonly session: ExecutionSession;
+  readonly resolution: 'reused' | 'reconfigured' | 'replaced';
 }
 
 /** Resolves a durable RuntimeSession to one ready provider generation. */

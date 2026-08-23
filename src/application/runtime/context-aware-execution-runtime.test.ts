@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { ContextAwareExecutionRuntime } from './context-aware-execution-runtime.js';
-import type { ExecutionRuntimeService } from './execution-plane-runtime-facade.js';
+import type { ExecutionRuntimeService } from '../ports/execution-runtime.js';
 import type { RuntimeInvocationContext } from '../../domain/runtime/runtime-invocation-context.js';
 import { makeRuntimeSession } from '../../../tests/fixtures/runtime-session.js';
 

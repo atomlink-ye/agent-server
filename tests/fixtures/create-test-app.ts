@@ -15,7 +15,7 @@ import { ListMemoryEntries } from '../../src/application/memory/list-memory-entr
 import { ListMemoryProposals } from '../../src/application/memory/list-memory-proposals.js';
 import { ReviewMemoryProposal } from '../../src/application/memory/review-memory-proposal.js';
 import { ManagedMemory } from '../../src/application/memory/managed-memory.js';
-import type { ExecutionRuntimeService } from '../../src/application/runtime/execution-plane-runtime-facade.js';
+import type { ExecutionRuntimeService } from '../../src/application/ports/execution-runtime.js';
 import { ClaimNextRun } from '../../src/application/runs/claim-next-run.js';
 import { CompleteRun } from '../../src/application/runs/complete-run.js';
 import { ExecuteRun } from '../../src/application/runs/execute-run.js';

@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 
-import type { AccessContext } from '../../platform/access-context.js';
+import type { AccessContext } from '../../domain/access-context.js';
 import type { AgentResolutionApi } from '../ports/agent-resolution-api.js';
 import type {
   AdmissionOwnerScope,

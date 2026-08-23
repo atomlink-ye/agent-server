@@ -14,10 +14,8 @@ import {
   EnvironmentPackageValidationError,
 } from '../../../application/environments/environment-use-cases.js';
 import type { EnvironmentRegistry } from '../../../application/ports/environment-registry.js';
-import {
-  getAuthenticatedAccessContext,
-  requireServiceAccountAccess,
-} from '../authentication.js';
+import { getAuthenticatedAccessContext } from '../access-context.js';
+import { requireServiceAccountAccess } from '../authentication.js';
 import { ServiceAccountAuthenticator } from '../../../application/control-plane/service-account-authenticator.js';
 import type { AppConfig } from '../../../shared/config.js';
 import type { ApiEnvironment } from '../http-types.js';

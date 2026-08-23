@@ -14,10 +14,8 @@ import {
 } from '../../../contracts/runs.js';
 import type { Run, RunUsage } from '../../../domain/runs/run.js';
 import type { AppConfig } from '../../../shared/config.js';
-import {
-  getAuthenticatedAccessContext,
-  requireServiceAccountAccess,
-} from '../authentication.js';
+import { getAuthenticatedAccessContext } from '../access-context.js';
+import { requireServiceAccountAccess } from '../authentication.js';
 import type { ApiEnvironment } from '../http-types.js';
 import type { RunEventRepository } from '../../../application/ports/run-events.js';
 

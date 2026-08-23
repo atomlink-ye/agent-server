@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import type { AccessContext } from '../../src/platform/access-context.js';
+import type { AccessContext } from '../../src/domain/access-context.js';
 import { DescribeWorkflow } from '../../src/application/work/describe-workflow.js';
 import { ProductWorkDefinitionQuery } from '../../src/application/work/product-work-definition-query.js';
 import { ResolveWorkDefinition } from '../../src/application/work/resolve-work-definition.js';

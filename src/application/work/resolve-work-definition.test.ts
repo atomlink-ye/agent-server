@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { AGENT_SERVER_COLLABORATION_TOOL_REFS } from '../../domain/collaboration/canonical-collaboration-tools.js';
 import { manifestEntriesForResolvedWorkDefinition } from '../../domain/work/work-composition.js';
-import type { AccessContext } from '../../platform/access-context.js';
+import type { AccessContext } from '../../domain/access-context.js';
 import { ResolveWorkDefinition } from './resolve-work-definition.js';
 
 const access: AccessContext = {

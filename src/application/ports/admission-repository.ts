@@ -1,4 +1,4 @@
-import type { AccessContext } from '../../platform/access-context.js';
+import type { AccessContext } from '../../domain/access-context.js';
 import type { RunRepository } from './run-repository.js';
 import type { TaskRepository } from './task-repository.js';
 import type { TeamExecutionRepository } from './team-execution-repository.js';

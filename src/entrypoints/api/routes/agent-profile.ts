@@ -13,10 +13,8 @@ import {
 import { HttpError } from '../../../contracts/http.js';
 import type { ApiEnvironment } from '../http-types.js';
 import type { AppConfig } from '../../../shared/config.js';
-import {
-  getAuthenticatedAccessContext,
-  requireServiceAccountAccess,
-} from '../authentication.js';
+import { getAuthenticatedAccessContext } from '../access-context.js';
+import { requireServiceAccountAccess } from '../authentication.js';
 
 export function registerAgentProfileRoute(
   app: Hono<ApiEnvironment>,

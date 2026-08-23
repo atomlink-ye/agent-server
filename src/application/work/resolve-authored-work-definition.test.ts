@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { fingerprintWorkDefinitionSource } from '../../domain/work/work-definition-source.js';
-import type { AccessContext } from '../../platform/access-context.js';
+import type { AccessContext } from '../../domain/access-context.js';
 import { ResolveWorkDefinition } from './resolve-work-definition.js';
 
 const access: AccessContext = {

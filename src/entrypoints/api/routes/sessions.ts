@@ -7,10 +7,8 @@ import {
 } from '../../../contracts/sessions.js';
 import type { SessionRepository } from '../../../application/ports/session-repository.js';
 import type { SubmitSessionTurn } from '../../../application/sessions/submit-session-turn.js';
-import {
-  getAuthenticatedAccessContext,
-  requireServiceAccountAccess,
-} from '../authentication.js';
+import { getAuthenticatedAccessContext } from '../access-context.js';
+import { requireServiceAccountAccess } from '../authentication.js';
 import type { ApiEnvironment } from '../http-types.js';
 import type { AppConfig } from '../../../shared/config.js';
 import { ServiceAccountAuthenticator } from '../../../application/control-plane/service-account-authenticator.js';

@@ -7,7 +7,7 @@ import {
   PostgresAgentRegistry,
   type PostgresQueryable,
 } from '../../src/infrastructure/postgres/postgres-agent-registry.js';
-import type { AccessContext } from '../../src/platform/access-context.js';
+import type { AccessContext } from '../../src/domain/access-context.js';
 
 export interface CanonicalAgentFixtureOptions {
   readonly definitionId?: string;

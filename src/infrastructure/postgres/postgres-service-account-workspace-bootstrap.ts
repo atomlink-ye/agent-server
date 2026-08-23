@@ -1,4 +1,4 @@
-import { SERVICE_ACCOUNT_PRINCIPAL_TYPE } from '../../platform/access-context.js';
+import { SERVICE_ACCOUNT_PRINCIPAL_TYPE } from '../../domain/access-context.js';
 import type { ServiceAccountRecord } from '../../application/control-plane/service-account-authenticator.js';
 
 const SERVICE_ACCOUNT_WORKSPACE_NAME = 'Service account workspace';

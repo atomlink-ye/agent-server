@@ -3,7 +3,7 @@ import type { RunEventRepository } from '../ports/run-events.js';
 import type { MemoryReviewApi } from '../ports/memory-review-api.js';
 import type { LarkMemoryReviewSurface } from '../../domain/channels/lark-memory-review-surface.js';
 import type { MemoryProposal } from '../../domain/workspace-memory/memory-proposal.js';
-import type { ServiceAccountAccessContext } from '../../platform/access-context.js';
+import type { ServiceAccountAccessContext } from '../../domain/access-context.js';
 import {
   evaluateMemoryPolicy,
   MEMORY_POLICY_CATEGORIES,

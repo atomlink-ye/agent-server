@@ -1,0 +1,107 @@
+import { randomUUID } from 'node:crypto';
+
+import type {
+  RuntimeGenerationStore,
+  RuntimeGenerationTransaction,
+} from '../ports/runtime-generation-store.js';
+import type { RuntimeSessionGeneration } from '../../domain/runtime/runtime-session-generation.js';
+import type {
+  RuntimeGenerationId,
+  RuntimeSessionId,
+} from '../../domain/runtime/runtime-session.js';
+import type { RuntimeSessionSpec } from '../../domain/runtime/runtime-session-spec.js';
+
+export interface BeginRuntimeGenerationReplacementInput {
+  readonly sessionId: RuntimeSessionId;
+  readonly previous: RuntimeSessionGeneration | null;
+  readonly desired: RuntimeSessionSpec;
+}
+
+export interface ActivateRuntimeGenerationReplacementInput {
+  readonly generationId: RuntimeGenerationId;
+  readonly expectedPreviousGenerationId: RuntimeGenerationId | null;
+  readonly providerWorkspaceId: string;
+  readonly providerSessionId: string;
+}
+
+export interface RuntimeGenerationManagerOptions {
+  readonly generations: RuntimeGenerationStore;
+  readonly generationTransaction: RuntimeGenerationTransaction;
+  readonly now: () => Date;
+}
+
+/** Owns durable RuntimeSession generation transitions, not provider execution. */
+export class RuntimeGenerationManager {
+  private readonly generations: RuntimeGenerationStore;
+  private readonly generationTransaction: RuntimeGenerationTransaction;
+  private readonly now: () => Date;
+
+  public constructor(options: RuntimeGenerationManagerOptions) {
+    this.generations = options.generations;
+    this.generationTransaction = options.generationTransaction;
+    this.now = options.now;
+  }
+
+  public async beginReplacement(
+    input: BeginRuntimeGenerationReplacementInput,
+  ): Promise<RuntimeSessionGeneration> {
+    const now = this.now().toISOString();
+    const generation = Object.freeze({
+      id: randomUUID() as RuntimeGenerationId,
+      runtimeSessionId: input.sessionId,
+      generation: (input.previous?.generation ?? 0) + 1,
+      provider: input.desired.provider,
+      providerWorkspaceId: null,
+      providerSessionId: null,
+      appliedSpecRevision: input.desired.revision,
+      appliedBootstrapDigest: input.desired.bootstrapDigest,
+      endpointEpoch: input.desired.extensionSetDigest,
+      status: 'provisioning' as const,
+      createdAt: now,
+      activeAt: null,
+      supersededAt: null,
+      closedAt: null,
+    });
+    await this.generations.insert(generation);
+    return generation;
+  }
+
+  public async activateReplacement(
+    input: ActivateRuntimeGenerationReplacementInput,
+  ): Promise<RuntimeSessionGeneration> {
+    const provisioning = await this.generations.findById(input.generationId);
+    if (!provisioning || provisioning.status !== 'provisioning')
+      throw new Error('Provisioning runtime generation could not activate.');
+
+    const activeAt = this.now().toISOString();
+    await this.generationTransaction.replaceCurrentGeneration({
+      sessionId: provisioning.runtimeSessionId,
+      previousGenerationId: input.expectedPreviousGenerationId,
+      generation: {
+        id: provisioning.id,
+        provider: provisioning.provider,
+        providerWorkspaceId: input.providerWorkspaceId,
+        providerSessionId: input.providerSessionId,
+        appliedSpecRevision: provisioning.appliedSpecRevision,
+        appliedBootstrapDigest: provisioning.appliedBootstrapDigest,
+        endpointEpoch: provisioning.endpointEpoch,
+        createdAt: provisioning.createdAt,
+        activeAt,
+      },
+    });
+
+    const active = await this.generations.findById(input.generationId);
+    if (!active || active.status !== 'active')
+      throw new Error('Activated runtime generation could not be loaded.');
+    return active;
+  }
+
+  public async failProvisioning(
+    generationId: RuntimeGenerationId,
+  ): Promise<void> {
+    await this.generations.failProvisioning({
+      id: generationId,
+      failedAt: this.now().toISOString(),
+    });
+  }
+}

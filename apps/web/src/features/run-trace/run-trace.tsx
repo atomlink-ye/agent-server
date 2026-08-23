@@ -1,5 +1,3 @@
-'use client';
-
 import { useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import type { ProductRunTrace } from '@atomlink-ye/agent-server/product-contract';
 import './run-trace.css';

@@ -40,7 +40,7 @@ import {
   getAuthenticatedAccessContext,
   requireServiceAccountAccess,
 } from '../authentication.js';
-import type { ApiEnvironment } from '../../../platform/http-types.js';
+import type { ApiEnvironment } from '../http-types.js';
 
 interface AgentRouteDependencies {
   readonly config: AppConfig;

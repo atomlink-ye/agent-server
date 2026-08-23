@@ -49,7 +49,7 @@ import { PostgresWorkDefinitionSourceRepository } from '../../infrastructure/pos
 import { PostgresProductWorkListQuery } from '../../infrastructure/postgres/postgres-product-work-list-query.js';
 import { PostgresWorkProjectionFactsQuery } from '../../infrastructure/postgres/postgres-work-projection-facts-query.js';
 import { PostgresWorkRunInputStore } from '../../infrastructure/postgres/postgres-work-run-input-store.js';
-import type { ApiEnvironment } from '../../platform/http-types.js';
+import type { ApiEnvironment } from '../../entrypoints/api/http-types.js';
 import type { AppConfig } from '../../shared/config.js';
 
 export interface WorkModule {

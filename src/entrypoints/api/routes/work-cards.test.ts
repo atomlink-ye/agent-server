@@ -7,7 +7,7 @@ import {
   type ChatWorkCard,
 } from '../../../application/product-projection/chat-work-card-projection.js';
 import type { AppConfig } from '../../../shared/config.js';
-import type { ApiEnvironment } from '../../../platform/http-types.js';
+import type { ApiEnvironment } from '../http-types.js';
 import { registerWorkCardRoutes } from './work-cards.js';
 
 const workId = '00000000-0000-4000-8000-000000000001';

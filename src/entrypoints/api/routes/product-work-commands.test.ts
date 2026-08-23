@@ -10,7 +10,7 @@ import {
   WorkListResponseSchema,
 } from '../../../contracts/product-work-commands.js';
 import type { AppConfig } from '../../../shared/config.js';
-import type { ApiEnvironment } from '../../../platform/http-types.js';
+import type { ApiEnvironment } from '../http-types.js';
 import {
   registerProductWorkCommandRoutes,
   type ProductWorkCommandDependencies,

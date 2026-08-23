@@ -1,4 +1,4 @@
-import type { ServiceAccountAccessContext } from './access-context.js';
+import type { ServiceAccountAccessContext } from '../../platform/access-context.js';
 
 export type ApiVariables = {
   requestId: string;

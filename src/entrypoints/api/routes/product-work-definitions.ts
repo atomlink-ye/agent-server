@@ -25,7 +25,7 @@ import {
   WorkDefinitionValidateSuccessSchema,
 } from '../../../contracts/product-work-definitions.js';
 import { HttpError } from '../../../contracts/http.js';
-import type { ApiEnvironment } from '../../../platform/http-types.js';
+import type { ApiEnvironment } from '../http-types.js';
 import type { AppConfig } from '../../../shared/config.js';
 import {
   getAuthenticatedAccessContext,

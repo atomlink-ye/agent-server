@@ -142,16 +142,6 @@
       "phase": "Phase 4 — facade/compat execution"
     },
     {
-      "rule": "backend.compose-platform-app",
-      "path": "src/entrypoints/api/app.ts",
-      "line": 353,
-      "symbol": "composePlatformApp",
-      "occurrence": 1,
-      "key": "backend.compose-platform-app|src/entrypoints/api/app.ts|composePlatformApp|000001",
-      "why": "The platform app composer remains the legacy bootstrap facade.",
-      "phase": "Phase 5 — composition graph"
-    },
-    {
       "rule": "backend.fresh-sessions",
       "path": "src/application/runtime/execution-plane-runtime-facade.ts",
       "line": 117,
@@ -274,7 +264,7 @@
     {
       "rule": "backend.modules-import",
       "path": "src/entrypoints/api/app.ts",
-      "line": 63,
+      "line": 33,
       "symbol": "../../modules/memory/memory-module.js",
       "occurrence": 1,
       "key": "backend.modules-import|src/entrypoints/api/app.ts|../../modules/memory/memory-module.js|000001",
@@ -284,7 +274,7 @@
     {
       "rule": "backend.modules-import",
       "path": "src/entrypoints/api/app.ts",
-      "line": 64,
+      "line": 34,
       "symbol": "../../modules/resource/resource-module.js",
       "occurrence": 1,
       "key": "backend.modules-import|src/entrypoints/api/app.ts|../../modules/resource/resource-module.js|000001",
@@ -294,7 +284,7 @@
     {
       "rule": "backend.modules-import",
       "path": "src/entrypoints/api/app.ts",
-      "line": 62,
+      "line": 32,
       "symbol": "../../modules/work/work-module.js",
       "occurrence": 1,
       "key": "backend.modules-import|src/entrypoints/api/app.ts|../../modules/work/work-module.js|000001",
@@ -320,46 +310,6 @@
       "key": "backend.modules-tree|src/modules|directory:src/modules|000001",
       "why": "The legacy modules tree still owns compatibility composition seams.",
       "phase": "Phase 6 — delete modules/resource"
-    },
-    {
-      "rule": "backend.platform-contribution",
-      "path": "src/entrypoints/api/app.ts",
-      "line": 67,
-      "symbol": "PlatformContribution",
-      "occurrence": 1,
-      "key": "backend.platform-contribution|src/entrypoints/api/app.ts|PlatformContribution|000001",
-      "why": "PlatformContribution is a legacy composition contract.",
-      "phase": "Phase 5 — composition graph"
-    },
-    {
-      "rule": "backend.platform-contribution",
-      "path": "src/entrypoints/api/app.ts",
-      "line": 355,
-      "symbol": "PlatformContribution",
-      "occurrence": 2,
-      "key": "backend.platform-contribution|src/entrypoints/api/app.ts|PlatformContribution|000002",
-      "why": "PlatformContribution is a legacy composition contract.",
-      "phase": "Phase 5 — composition graph"
-    },
-    {
-      "rule": "backend.platform-contribution",
-      "path": "src/platform/composition-shell.ts",
-      "line": 38,
-      "symbol": "PlatformContribution",
-      "occurrence": 1,
-      "key": "backend.platform-contribution|src/platform/composition-shell.ts|PlatformContribution|000001",
-      "why": "PlatformContribution is a legacy composition contract.",
-      "phase": "Phase 5 — composition graph"
-    },
-    {
-      "rule": "backend.platform-contribution",
-      "path": "src/platform/composition-shell.ts",
-      "line": 44,
-      "symbol": "PlatformContribution",
-      "occurrence": 2,
-      "key": "backend.platform-contribution|src/platform/composition-shell.ts|PlatformContribution|000002",
-      "why": "PlatformContribution is a legacy composition contract.",
-      "phase": "Phase 5 — composition graph"
     },
     {
       "rule": "backend.platform-import",
@@ -734,27 +684,7 @@
     {
       "rule": "backend.platform-import",
       "path": "src/entrypoints/api/app.ts",
-      "line": 72,
-      "symbol": "../../platform/access-context.js",
-      "occurrence": 1,
-      "key": "backend.platform-import|src/entrypoints/api/app.ts|../../platform/access-context.js|000001",
-      "why": "Production code still imports the legacy platform tree.",
-      "phase": "Phase 5 — composition graph"
-    },
-    {
-      "rule": "backend.platform-import",
-      "path": "src/entrypoints/api/app.ts",
-      "line": 65,
-      "symbol": "../../platform/composition-shell.js",
-      "occurrence": 1,
-      "key": "backend.platform-import|src/entrypoints/api/app.ts|../../platform/composition-shell.js|000001",
-      "why": "Production code still imports the legacy platform tree.",
-      "phase": "Phase 5 — composition graph"
-    },
-    {
-      "rule": "backend.platform-import",
-      "path": "src/entrypoints/api/app.ts",
-      "line": 29,
+      "line": 16,
       "symbol": "../../platform/http-types.js",
       "occurrence": 1,
       "key": "backend.platform-import|src/entrypoints/api/app.ts|../../platform/http-types.js|000001",
@@ -1158,26 +1088,6 @@
       "symbol": "../../platform/runtime-tool-registry.js",
       "occurrence": 1,
       "key": "backend.platform-import|src/modules/work/work-module.ts|../../platform/runtime-tool-registry.js|000001",
-      "why": "Production code still imports the legacy platform tree.",
-      "phase": "Phase 5 — composition graph"
-    },
-    {
-      "rule": "backend.platform-import",
-      "path": "src/platform/composition-shell.ts",
-      "line": 2,
-      "symbol": "./access-context.js",
-      "occurrence": 1,
-      "key": "backend.platform-import|src/platform/composition-shell.ts|./access-context.js|000001",
-      "why": "Production code still imports the legacy platform tree.",
-      "phase": "Phase 5 — composition graph"
-    },
-    {
-      "rule": "backend.platform-import",
-      "path": "src/platform/composition-shell.ts",
-      "line": 9,
-      "symbol": "./http-types.js",
-      "occurrence": 1,
-      "key": "backend.platform-import|src/platform/composition-shell.ts|./http-types.js|000001",
       "why": "Production code still imports the legacy platform tree.",
       "phase": "Phase 5 — composition graph"
     },

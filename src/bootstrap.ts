@@ -41,10 +41,7 @@ import {
 } from './application/teams/runtime-grant-lifecycle.js';
 import { PostgresExecutionFactQuery } from './infrastructure/postgres/postgres-execution-fact-query.js';
 import { InvokeTaskExecutionAdmission } from './application/ports/execution-admission.js';
-import { createMemoryModule } from './modules/memory/memory-module.js';
-import { createResourceModule } from './modules/resource/resource-module.js';
 import { createRuntimeModule } from './modules/runtime/runtime-module.js';
-import { createTeamModule } from './modules/team/team-module.js';
 import { createWorkModule } from './modules/work/work-module.js';
 import { ChatDeliveryReconciler } from './application/chat/chat-delivery-reconciler.js';
 import { MockChatTurnProvider } from './adapters/chat/mock-chat-turn-provider.js';
@@ -64,9 +61,12 @@ import { PostgresAgentHomeRepository } from './infrastructure/postgres/postgres-
 import { PostgresAgentHomeDefinitionSource } from './infrastructure/postgres/postgres-agent-home-definition-source.js';
 import { noExternalDependencies } from './application/health/readiness.js';
 import { createConfiguredRuntimeCapabilities } from './composition/create-runtime-capabilities.js';
+import { createMemoryCapabilities } from './composition/create-memory-capabilities.js';
 import { createKernelCapabilities } from './composition/create-kernel-capabilities.js';
 import { createInfrastructure } from './composition/create-infrastructure.js';
 import { createHttpApi } from './composition/create-http-api.js';
+import { createResourceCapabilities } from './composition/create-resource-capabilities.js';
+import { createTeamCapabilities } from './composition/create-team-capabilities.js';
 import { createWorkers } from './composition/create-workers.js';
 import {
   closeRuntimeAndPool,
@@ -152,7 +152,7 @@ export async function createService(
   const workerId = `agent-server:${process.pid}:${randomUUID()}`;
   const leaseDurationMs = turnLeaseDurationMs(config.paseo.executionTimeoutMs);
   const { pool } = await createInfrastructure(config, logger);
-  const resourceModule = await createResourceModule({
+  const resourceModule = await createResourceCapabilities({
     database: pool,
     config,
   });
@@ -183,7 +183,7 @@ export async function createService(
     definitionReadApi: resourceModule.definitionReadApi,
     agentResolutionApi: resourceModule.agentResolutionApi,
   });
-  const teamModule = createTeamModule({
+  const teamModule = createTeamCapabilities({
     database: pool,
     tasks: taskRepository,
     runs: runRepository,
@@ -201,7 +201,7 @@ export async function createService(
     activationReconciler: collaborationActivationReconciler,
     collaboration,
   } = teamModule;
-  const memoryModule = createMemoryModule({
+  const memoryModule = createMemoryCapabilities({
     database: pool,
     tasks: taskRepository,
     sessions,

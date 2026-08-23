@@ -30,6 +30,7 @@ import {
   createRunExecutionConsumer,
 } from './create-execution-consumers.js';
 import { createLarkChannelWorkers } from './create-lark-channel-workers.js';
+import { createApplicationLifecycle } from './create-application-lifecycle.js';
 import { createMemoryCapabilities } from './create-memory-capabilities.js';
 import { createKernelCapabilities } from './create-kernel-capabilities.js';
 import { createInfrastructure } from './create-infrastructure.js';
@@ -38,7 +39,6 @@ import { createResourceCapabilities } from './create-resource-capabilities.js';
 import { createTeamCapabilities } from './create-team-capabilities.js';
 import { createWorkCapabilities } from './create-work-capabilities.js';
 import { createWorkers } from './create-workers.js';
-import { createLifecycleSupervisor } from './lifecycle-supervisor.js';
 import type { PostgresChannelRepository } from '../infrastructure/postgres/postgres-channel-repository.js';
 import type { FileStore } from '../application/ports/file-store.js';
 import type { PostgresSessionRepository } from '../infrastructure/postgres/postgres-session-repository.js';
@@ -592,9 +592,9 @@ export async function createApplication(
     ...(workChatWorker ? { workChatWorker } : {}),
     ...(larkReceiver ? { larkReceiver } : {}),
   });
-  const lifecycle = createLifecycleSupervisor({
+  const lifecycle = createApplicationLifecycle({
     dispatcher,
-    ...workers,
+    workers,
     runtimeProvider,
     runtimeMcpServer,
     pool,

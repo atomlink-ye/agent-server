@@ -1,12 +1,7 @@
-import {
-  ProductRunTraceSuccessSchema,
-  type ProductRunTrace,
-} from '@atomlink-ye/agent-server/product-contract';
+import { ProductRunTraceSuccessSchema } from '@atomlink-ye/agent-server/product-contract';
+import { normalizeProductRunTrace, type NormalizedTrace } from './normalized';
 
-export type AnchoredRecordingTrace = Extract<
-  ProductRunTrace,
-  { projection_status: 'internally_anchored' }
->;
+export type AnchoredRecordingTrace = NormalizedTrace;
 
 type Recording = {
   readonly recording_documents: readonly unknown[];
@@ -16,5 +11,7 @@ type Recording = {
 export function parseRecordedTrace(
   recording: Recording,
 ): AnchoredRecordingTrace {
-  return ProductRunTraceSuccessSchema.parse(recording.recording_documents[0]);
+  return normalizeProductRunTrace(
+    ProductRunTraceSuccessSchema.parse(recording.recording_documents[0]),
+  );
 }

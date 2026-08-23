@@ -6,18 +6,21 @@ import type {
 
 import {
   type AnchoredRun,
-  type AnchoredTrace,
   type RoleSummary,
   workRunClient,
 } from '../clients/work-run-client';
 import { workClient } from '../clients/work-client';
 import { workDefinitionClient } from '../clients/work-definition-client';
+import {
+  normalizeProductRunTrace,
+  type NormalizedTrace,
+} from '@/features/run-trace/normalized';
 
 export type WorkDetailData = {
   readonly work: WorkResponse;
   readonly runs: readonly WorkRunSummary[];
   readonly run: AnchoredRun | null;
-  readonly trace: AnchoredTrace | null;
+  readonly trace: NormalizedTrace | null;
   readonly selectedDefinitionVersionId: string;
   readonly definitionVersion: ProductWorkDefinitionVersionResponse | null;
 };
@@ -56,14 +59,14 @@ export async function loadWorkDetail(
     };
   }
 
-  const [run, trace, definitionVersion] = await Promise.all([
+  const [run, productTrace, definitionVersion] = await Promise.all([
     workRunClient.get(workId, selectedSummary.id),
     workRunClient.trace(workId, selectedSummary.id),
     definitionPromise,
   ]);
   if (
     run.projection_status !== 'internally_anchored' ||
-    trace.projection_status !== 'internally_anchored'
+    productTrace.projection_status !== 'internally_anchored'
   ) {
     throw new Error('The Product WorkRun projection was not captured.');
   }
@@ -71,7 +74,7 @@ export async function loadWorkDetail(
     work,
     runs,
     run,
-    trace,
+    trace: normalizeProductRunTrace(productTrace),
     selectedDefinitionVersionId,
     definitionVersion,
   };
@@ -84,4 +87,4 @@ export async function loadRunRoleSummaries(
   return workRunClient.sessionTranscripts(workId, runId);
 }
 
-export { type AnchoredRun, type AnchoredTrace, type RoleSummary };
+export { type AnchoredRun, type NormalizedTrace, type RoleSummary };

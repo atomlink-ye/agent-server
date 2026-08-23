@@ -4,7 +4,8 @@ import { expect, it } from 'vitest';
 
 import parallelRecording from '@/lib/__fixtures__/product-recordings/parallel-success.json';
 import reworkRecording from '@/lib/__fixtures__/product-recordings/rework-once.json';
-import { RunTrace, attemptsFrom } from './run-trace';
+import { RunTrace } from './run-trace-view';
+import { attemptsFrom } from './selectors';
 import { parseRecordedTrace } from './recording-test-helpers';
 
 (
@@ -25,7 +26,7 @@ type RecordedAttempt = ReturnType<typeof attemptsFrom>[number];
 function recordedAttempts(
   trace: ReturnType<typeof parseRecordedTrace>,
 ): readonly RecordedAttempt[] {
-  return trace.work_items.flatMap((workItem) =>
+  return [...trace.workItems.values()].flatMap((workItem) =>
     workItem.attempts.map((attempt) => ({ workItem, attempt })),
   );
 }
@@ -33,17 +34,15 @@ function recordedAttempts(
 function expectedGeometryFromRecording(attempts: readonly RecordedAttempt[]) {
   const captured = attempts.filter(
     ({ attempt }) =>
-      attempt.started_at && attempt.ended_at && attempt.duration_ms !== null,
+      attempt.startedAt && attempt.endedAt && attempt.durationMs !== null,
   );
   const start = Math.min(
     ...captured.map(({ attempt: candidate }) =>
-      Date.parse(candidate.started_at!),
+      Date.parse(candidate.startedAt!),
     ),
   );
   const end = Math.max(
-    ...captured.map(({ attempt: candidate }) =>
-      Date.parse(candidate.ended_at!),
-    ),
+    ...captured.map(({ attempt: candidate }) => Date.parse(candidate.endedAt!)),
   );
   const range = end - start;
   return new Map(
@@ -51,9 +50,9 @@ function expectedGeometryFromRecording(attempts: readonly RecordedAttempt[]) {
       attempt.id,
       {
         left: range
-          ? ((Date.parse(attempt.started_at!) - start) / range) * 100
+          ? ((Date.parse(attempt.startedAt!) - start) / range) * 100
           : 0,
-        width: range ? (attempt.duration_ms! / range) * 100 : 100,
+        width: range ? (attempt.durationMs! / range) * 100 : 100,
       },
     ]),
   );
@@ -79,36 +78,36 @@ it('renders recorder-backed proportional normal and rework geometry', async () =
     if (trace === traces[0])
       expect(
         entries
-          .map(({ attempt }) => attempt.duration_ms)
+          .map(({ attempt }) => attempt.durationMs)
           .sort((a, b) => (a ?? 0) - (b ?? 0)),
       ).toEqual([308425, 312707]);
     else
       expect(
         entries
           .filter(({ workItem }) => workItem.attempts.length === 2)
-          .map(({ attempt }) => attempt.duration_ms),
+          .map(({ attempt }) => attempt.durationMs),
       ).toEqual([177206, 19179]);
     const captured = entries.filter(
       ({ attempt }) =>
-        attempt.timing_capture_status === 'captured' &&
-        attempt.started_at !== null &&
-        attempt.ended_at !== null &&
-        attempt.duration_ms !== null,
+        attempt.timingCaptured &&
+        attempt.startedAt !== null &&
+        attempt.endedAt !== null &&
+        attempt.durationMs !== null,
     );
     expect(captured.length).toBeGreaterThan(0);
     const earliestStartedAt = captured.reduce(
       (earliest, entry) =>
-        Date.parse(entry.attempt.started_at!) < Date.parse(earliest)
-          ? entry.attempt.started_at!
+        Date.parse(entry.attempt.startedAt!) < Date.parse(earliest)
+          ? entry.attempt.startedAt!
           : earliest,
-      captured[0]!.attempt.started_at!,
+      captured[0]!.attempt.startedAt!,
     );
     const latestEndedAt = captured.reduce(
       (latest, entry) =>
-        Date.parse(entry.attempt.ended_at!) > Date.parse(latest)
-          ? entry.attempt.ended_at!
+        Date.parse(entry.attempt.endedAt!) > Date.parse(latest)
+          ? entry.attempt.endedAt!
           : latest,
-      captured[0]!.attempt.ended_at!,
+      captured[0]!.attempt.endedAt!,
     );
 
     const { host, root } = mountTrace(trace);
@@ -142,7 +141,7 @@ it('renders recorder-backed proportional normal and rework geometry', async () =
             candidate.title === workItem.subject &&
             candidate
               .getAttribute('aria-label')
-              ?.includes(`Attempt ${attempt.attempt_no}`),
+              ?.includes(`Attempt ${attempt.attemptNo}`),
         );
         expect(button).toBeDefined();
         const rendered = domGeometry.find(
@@ -159,8 +158,8 @@ it('renders recorder-backed proportional normal and rework geometry', async () =
       const laneNodes = [
         ...host.querySelectorAll<HTMLElement>('.run-trace__lane'),
       ];
-      expect(laneNodes).toHaveLength(trace.actors.length);
-      for (const actor of trace.actors) {
+      expect(laneNodes).toHaveLength(trace.actors.size);
+      for (const actor of trace.actors.values()) {
         const lane = laneNodes.find(
           (candidate) =>
             candidate.querySelector('.run-trace__lane-name span')
@@ -179,7 +178,7 @@ it('renders recorder-backed proportional normal and rework geometry', async () =
               candidate.title === entry.workItem.subject &&
               candidate
                 .getAttribute('aria-label')
-                ?.includes(`Attempt ${entry.attempt.attempt_no}`),
+                ?.includes(`Attempt ${entry.attempt.attemptNo}`),
           );
           expect(button).toBeDefined();
           if (button) expect(lane.contains(button)).toBe(true);
@@ -193,7 +192,9 @@ it('renders recorder-backed proportional normal and rework geometry', async () =
               lane.querySelector('.run-trace__lane-name span')?.textContent,
           ),
         ).toEqual(
-          trace.actors.map((actor) => actor.name ?? 'Name not captured'),
+          [...trace.actors.values()].map(
+            (actor) => actor.name ?? 'Name not captured',
+          ),
         );
       }
       expect(
@@ -214,7 +215,7 @@ it('renders recorder-backed proportional normal and rework geometry', async () =
           button.title === firstEntry.workItem.subject &&
           button
             .getAttribute('aria-label')
-            ?.includes(`Attempt ${firstEntry.attempt.attempt_no}`),
+            ?.includes(`Attempt ${firstEntry.attempt.attemptNo}`),
       );
       expect(firstEntryButton).toBeDefined();
       const selectedButton = attemptButtons.find(
@@ -225,8 +226,8 @@ it('renders recorder-backed proportional normal and rework geometry', async () =
         '#trace-inspector-heading',
       )?.parentElement;
       expect(inspector).not.toBeNull();
-      expect(inspector?.textContent).toContain(firstEntry.attempt.started_at!);
-      expect(inspector?.textContent).toContain(firstEntry.attempt.ended_at!);
+      expect(inspector?.textContent).toContain(firstEntry.attempt.startedAt!);
+      expect(inspector?.textContent).toContain(firstEntry.attempt.endedAt!);
       const lastEntry = entries.at(-1);
       expect(lastEntry).toBeDefined();
       if (!lastEntry) continue;
@@ -235,7 +236,7 @@ it('renders recorder-backed proportional normal and rework geometry', async () =
           button.title === lastEntry.workItem.subject &&
           button
             .getAttribute('aria-label')
-            ?.includes(`Attempt ${lastEntry.attempt.attempt_no}`),
+            ?.includes(`Attempt ${lastEntry.attempt.attemptNo}`),
       );
       expect(lastEntryButton).toBeDefined();
       expect(lastEntryButton).not.toBe(firstEntryButton);
@@ -246,11 +247,11 @@ it('renders recorder-backed proportional normal and rework geometry', async () =
       });
       expect(lastEntryButton.getAttribute('aria-pressed')).toBe('true');
       expect(host.querySelector('#trace-inspector-heading')).not.toBeNull();
-      expect(inspector?.textContent).toContain(lastEntry.attempt.started_at!);
-      expect(inspector?.textContent).toContain(lastEntry.attempt.ended_at!);
+      expect(inspector?.textContent).toContain(lastEntry.attempt.startedAt!);
+      expect(inspector?.textContent).toContain(lastEntry.attempt.endedAt!);
 
       if (trace === traces[1]) {
-        const reworkItem = trace.work_items.find(
+        const reworkItem = [...trace.workItems.values()].find(
           (workItem) => workItem.attempts.length === 2,
         );
         expect(reworkItem).toBeDefined();
@@ -263,7 +264,7 @@ it('renders recorder-backed proportional normal and rework geometry', async () =
           (edge) => edge.kind === 'feedback',
         );
         expect(feedbackEdges).toHaveLength(1);
-        expect(feedbackEdges[0]?.attempt_id).toBe(reworkItem.attempts[1]?.id);
+        expect(feedbackEdges[0]?.attemptId).toBe(reworkItem.attempts[1]?.id);
         expect(
           attemptButtons.filter((button) =>
             button.getAttribute('aria-label')?.startsWith(reworkItem.subject),

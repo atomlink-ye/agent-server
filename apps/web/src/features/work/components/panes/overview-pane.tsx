@@ -3,15 +3,14 @@ import { useEffect, useState } from 'react';
 import {
   loadRunRoleSummaries,
   type AnchoredRun,
-  type AnchoredTrace,
+  type NormalizedTrace,
   type RoleSummary,
   type WorkDetailData,
 } from '../../queries/load-work-detail';
-import {
-  MapView,
-  RunTrace,
-  type TraceView,
-} from '@/features/run-trace/run-trace';
+import { MapView } from '@/features/run-trace/map';
+import { RunTrace } from '@/features/run-trace/run-trace-view';
+import { selectMapModel } from '@/features/run-trace/selectors';
+import type { TraceView } from '@/features/run-trace/use-run-trace-view-model';
 import {
   productStatePresentation,
   resultCaptureLabel,
@@ -96,7 +95,7 @@ function RunRoleCards({
   runId,
   originConversationId,
 }: {
-  readonly trace: AnchoredTrace;
+  readonly trace: NormalizedTrace;
   readonly workId: string;
   readonly runId: string;
   readonly originConversationId?: string | null;
@@ -180,12 +179,13 @@ function RunReview({
   onRequestTimelineView,
 }: {
   readonly run: AnchoredRun;
-  readonly trace: AnchoredTrace;
+  readonly trace: NormalizedTrace;
   readonly selectedAttemptId: string | null;
   readonly onSelectAttempt: (attemptId: string) => void;
   readonly onRequestTimelineView: () => void;
 }) {
-  const attemptCount = trace.work_items.reduce(
+  const workItems = [...trace.workItems.values()];
+  const attemptCount = workItems.reduce(
     (sum, item) => sum + item.attempts.length,
     0,
   );
@@ -193,29 +193,25 @@ function RunReview({
     (edge) => edge.kind === 'feedback',
   ).length;
   const messageCount = trace.edges.filter(
-    (edge) => edge.kind === 'observed_message' && edge.source_created_at,
+    (edge) => edge.kind === 'observed_message' && edge.sourceCreatedAt,
   ).length;
-  const reworkItems = trace.work_items.filter(
-    (item) => item.attempts.length > 1,
-  );
-  const mcpOnlyItems = trace.work_items.filter(
+  const reworkItems = workItems.filter((item) => item.attempts.length > 1);
+  const mcpOnlyItems = workItems.filter(
     (item) =>
-      trace.mcp_activities.some(
-        (a) => a.source_refs.work_item_id === item.id,
-      ) &&
+      trace.activities.some((a) => a.workItemId === item.id) &&
       !trace.edges.some(
-        (e) => e.kind === 'observed_message' && e.work_item_id === item.id,
+        (e) => e.kind === 'observed_message' && e.workItemId === item.id,
       ),
   );
-  const keyOutputs = trace.work_items
+  const keyOutputs = workItems
     .flatMap((item) =>
       item.attempts
-        .filter((a) => a.result_summary || a.feedback_summary)
+        .filter((a) => a.resultSummary || a.feedbackSummary)
         .map((a) => ({
           subject: item.subject,
-          attemptNo: a.attempt_no,
-          result: a.result_summary,
-          feedback: a.feedback_summary,
+          attemptNo: a.attemptNo,
+          result: a.resultSummary,
+          feedback: a.feedbackSummary,
         })),
     )
     .slice(0, 5);
@@ -240,7 +236,7 @@ function RunReview({
         </article>
         <dl className="work-review__facts">
           <ReviewFact label="Agents" value={trace.actors.length} />
-          <ReviewFact label="Work Items" value={trace.work_items.length} />
+          <ReviewFact label="Work Items" value={workItems.length} />
           <ReviewFact
             label="Attempts"
             value={attemptCount}
@@ -253,7 +249,7 @@ function RunReview({
             label="Rework"
             value={feedbackCount}
             onClick={() => {
-              const reworkItem = trace.work_items.find(
+              const reworkItem = workItems.find(
                 (item) => item.attempts.length > 1,
               );
               if (reworkItem && reworkItem.attempts[0])
@@ -273,22 +269,21 @@ function RunReview({
               );
             }}
           />
-          <ReviewFact
-            label="MCP activities"
-            value={trace.mcp_activities.length}
-          />
+          <ReviewFact label="MCP activities" value={trace.activities.length} />
         </dl>
       </div>
       <div className="work-review__map" data-testid="review-mini-map">
         <h3>Run Map</h3>
         <MapView
-          selectedAttemptKey={selectedAttemptId}
+          model={selectMapModel(trace)}
+          selectedAttemptId={selectedAttemptId}
           trace={trace}
           onSelect={(attemptId) => {
             onSelectAttempt(attemptId);
             onRequestTimelineView();
             scrollTestIdIntoViewAfterRender('trace-timeline');
           }}
+          onSelectMessage={() => undefined}
         />
       </div>
       <div className="work-review__problems" data-testid="review-problems">
@@ -311,12 +306,12 @@ function RunReview({
           ) : null}
           <li>
             <strong>Timeline scope:</strong>{' '}
-            {trace.timeline_coverage.scope.replaceAll('_', ' ')}
-            {trace.timeline_coverage.excluded_execution.length ? (
+            {trace.coverage.scope.replaceAll('_', ' ')}
+            {trace.coverage.excludedExecution.length ? (
               <>
                 {' '}
                 — excluded:{' '}
-                {trace.timeline_coverage.excluded_execution
+                {trace.coverage.excludedExecution
                   .map((e) => e.replaceAll('_', ' '))
                   .join(', ')}
               </>

@@ -4,7 +4,7 @@ import { expect, it } from 'vitest';
 
 import parallelRecording from '@/lib/__fixtures__/product-recordings/parallel-success.json';
 import reworkRecording from '@/lib/__fixtures__/product-recordings/rework-once.json';
-import { RunTrace } from './run-trace';
+import { RunTrace } from './run-trace-view';
 import { parseRecordedTrace } from './recording-test-helpers';
 
 (
@@ -55,7 +55,7 @@ it('renders only recorded MCP activities with sequence and association facts', a
         eventButtons.map((button) =>
           Number(button.querySelector('strong')?.textContent?.replace('#', '')),
         ),
-      ).toEqual(trace.mcp_activities.map((activity) => activity.sequence));
+      ).toEqual(trace.activities.map((activity) => activity.sequence));
       expect(
         eventButtons.every(
           (button) =>
@@ -67,33 +67,33 @@ it('renders only recorded MCP activities with sequence and association facts', a
         ),
       ).toBe(true);
 
-      for (const [index, activity] of trace.mcp_activities.entries()) {
+      for (const [index, activity] of trace.activities.entries()) {
         const button = eventButtons[index];
         expect(button).toBeDefined();
         if (!button) continue;
         expect(button.textContent).toContain(String(activity.sequence));
-        const actor = trace.actors.find(
-          (candidate) => candidate.id === activity.source_refs.actor_id,
-        );
+        const actor = activity.actorId
+          ? trace.actors.get(activity.actorId)
+          : undefined;
         if (actor)
           expect(button.textContent).toContain(
             actor.name ?? 'Name not captured',
           );
-        const item = trace.work_items.find(
-          (candidate) => candidate.id === activity.source_refs.work_item_id,
-        );
+        const item = activity.workItemId
+          ? trace.workItems.get(activity.workItemId)
+          : undefined;
         if (item) expect(button.textContent).toContain(item.subject);
         else expect(button.textContent).toContain('Work Item not captured');
         expect(button.textContent).toContain(
           `MCP activity: ${expectedActivityStatus(activity.status)}`,
         );
         expect(button.textContent).toContain(
-          `Result: ${expectedCaptureLabel(activity.result_capture_status)}`,
+          `Result: ${expectedCaptureLabel(activity.resultCaptureStatus)}`,
         );
       }
 
       const sequenceCounts = new Map<number, number>();
-      for (const activity of trace.mcp_activities)
+      for (const activity of trace.activities)
         sequenceCounts.set(
           activity.sequence,
           (sequenceCounts.get(activity.sequence) ?? 0) + 1,

@@ -1,7 +1,4 @@
-'use client';
-
 import { useEffect, useState } from 'react';
-import type { ProductRunTrace } from '@atomlink-ye/agent-server/product-contract';
 
 import { AssistantMarkdown } from '@/features/conversations/components/assistant-markdown';
 import { ActivityRow } from './activity-row';
@@ -17,13 +14,11 @@ import {
   type SessionSummary,
   type SessionTranscriptsResponse,
 } from './run-trace-gateway';
+import type { NormalizedTrace } from './normalized';
 import './execution-transcript.css';
 import './transcript-stream.css';
 
-type Trace = Extract<
-  ProductRunTrace,
-  { projection_status: 'internally_anchored' }
->;
+type Trace = NormalizedTrace;
 
 // One member per status literal. Collapsing 'idle' | 'loading' into a single
 // member breaks discriminated-union narrowing: the negative branch of
@@ -61,7 +56,7 @@ export function SessionTranscripts({
     if (state.status === 'idle') {
       setState({ status: 'loading' });
     }
-    void loadSessionTranscripts(trace.work.id, trace.work_run.id)
+    void loadSessionTranscripts(trace.work.id, trace.workRun.id)
       .then((data) => {
         if (!active) return;
         setState({ status: 'ready', data });
@@ -81,7 +76,7 @@ export function SessionTranscripts({
     return () => {
       active = false;
     };
-  }, [trace.work.id, trace.work_run.id]);
+  }, [trace.work.id, trace.workRun.id]);
 
   // Auto-select first session when it becomes available
   useEffect(() => {
@@ -94,7 +89,7 @@ export function SessionTranscripts({
   useEffect(() => {
     if (!live || state.status === 'idle' || state.status === 'loading') return;
     const timer = setInterval(() => {
-      void loadSessionTranscripts(trace.work.id, trace.work_run.id)
+      void loadSessionTranscripts(trace.work.id, trace.workRun.id)
         .then((data) => {
           // Update data without resetting selectedIndex or state
           setState({ status: 'ready', data });
@@ -104,7 +99,7 @@ export function SessionTranscripts({
         });
     }, 2500);
     return () => clearInterval(timer);
-  }, [live, trace.work.id, trace.work_run.id, state.status]);
+  }, [live, trace.work.id, trace.workRun.id, state.status]);
 
   if (state.status === 'idle' || state.status === 'loading')
     return (

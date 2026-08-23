@@ -27,6 +27,27 @@ import { CompleteRun } from './complete-run.js';
 import { ExecuteRun } from './execute-run.js';
 import { RUNTIME_RECOVERY_INSTRUCTION } from './run-prompt-context.js';
 import { FakeAgentRuntime } from '../../../tests/fixtures/fake-agent-runtime.js';
+
+function testRuntimeSessions() {
+  return {
+    findByScope: vi.fn(async (_owner: unknown, scope: { readonly kind: string; readonly id: string }) => ({
+      id: `runtime:${scope.kind}:${scope.id}`,
+      owner: {
+        tenantId: 'tenant-1',
+        workspaceId: 'workspace-1',
+        principalType: 'service_account',
+        principalId: 'principal-1',
+      },
+      scope,
+      desiredSpecRevision: 1,
+      currentGenerationId: null,
+      status: 'ready',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      closedAt: null,
+    })),
+  } as never;
+}
 import { collaborationToolRefsForRole } from '../../domain/collaboration/canonical-collaboration-tools.js';
 import type { CreateMemoryProposal } from '../memory/create-memory-proposal.js';
 import {
@@ -162,7 +183,7 @@ describe('ExecuteRun', () => {
         append: vi.fn(async () => undefined),
         bind: vi.fn(async () => undefined),
       } as never,
-      runtimeSessions: runtimeSessions as never,
+      runtimeSessions: testRuntimeSessions(),
       sessions,
       environments,
     });
@@ -230,6 +251,7 @@ describe('ExecuteRun', () => {
       executeTeamTask: {} as never,
       runtimeTurns: runtime,
       runtimeProvider: runtime,
+      runtimeSessions: testRuntimeSessions(),
       logger: { log: vi.fn() },
       now: () => new Date('2026-07-23T00:00:00.000Z'),
       events: events as never,
@@ -1671,6 +1693,7 @@ describe('ExecuteRun', () => {
           runtimeFails ? new Error('late failure') : undefined,
         ),
         runtimeProvider: createRuntime(),
+        runtimeSessions: testRuntimeSessions(),
         logger: { log: vi.fn() },
         now: () => new Date('2026-07-23T00:00:01.000Z'),
         resolver: new ResolveAgentVersion(
@@ -1709,6 +1732,7 @@ function createExecuteRun(input: {
     executeTeamTask: {} as never,
     runtimeTurns: input.runtime,
     runtimeProvider: input.runtime,
+    runtimeSessions: testRuntimeSessions(),
     logger: input.logger ?? { log: vi.fn() },
     now: () => new Date('2026-07-23T00:00:00.000Z'),
   });

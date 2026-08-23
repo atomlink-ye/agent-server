@@ -47,7 +47,7 @@ export class AgentRunExecutor {
     private readonly logger: Logger,
     private readonly events?: RunEventRepository,
     private readonly runtimeExtensionBinder?: RuntimeExtensionBinder,
-    private readonly runtimeSessions?: RuntimeSessionRepository,
+    private readonly runtimeSessions?: any,
     private readonly sessions?: Pick<SessionRepository, 'getSession'>,
     private readonly environments?: EnvironmentReadApi,
     private readonly runtimeCellRoot?: string,
@@ -315,7 +315,7 @@ export class AgentRunExecutor {
     );
     const domainToolRefs = (
       sessionRuntime?.toolRefs ?? resolved.toolRefs
-    ).filter((ref) => !collaborationRefs.has(ref));
+    ).filter((ref: string) => !collaborationRefs.has(ref));
     const runtimeToolRefs =
       collaborativeTeam != null && member ? domainToolRefs : resolved.toolRefs;
 

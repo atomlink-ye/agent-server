@@ -9,7 +9,7 @@ import { CompleteRun } from '../../src/application/runs/complete-run.js';
 import { ExecuteRun } from '../../src/application/runs/execute-run.js';
 import { ExecuteTeamTask } from '../../src/application/tasks/execute-team-task.js';
 import { ChatDeliveryReconciler } from '../../src/application/chat/chat-delivery-reconciler.js';
-import type { RuntimeSession } from '../../src/application/ports/runtime-session-repository.js';
+import type { RuntimeSession } from '../../src/domain/runtime/runtime-session.js';
 import { createWorkChatWakeWorker } from '../../src/application/work-chat/work-chat-wake-worker.js';
 import { ExecutionRuntimeChatTurnProvider } from '../../src/adapters/chat/execution-runtime-chat-turn-provider.js';
 import { transitionRun } from '../../src/domain/runs/run.js';
@@ -271,30 +271,24 @@ describe('North Star host-native deterministic harness', () => {
       }): Promise<RuntimeSession> {
         const now = new Date(0).toISOString();
         return {
-          id: input.agentChatRuntimeId,
+          id: input.agentChatRuntimeId as RuntimeSession['id'],
+          owner: {
+            tenantId: 'tenant',
+            workspaceId: input.agentOwner.scope.workspaceId,
+            principalType: 'service_account',
+            principalId: 'principal',
+          },
           scope: {
             kind: 'agent_chat',
-            agentChatRuntimeId: input.agentChatRuntimeId,
-            runtimeEpoch: input.runtimeEpoch,
+            id: input.agentChatRuntimeId,
+            epoch: input.runtimeEpoch,
           },
-          scopeKind: 'agent_chat',
-          scopeId: input.agentChatRuntimeId,
-          productSessionId: null,
-          taskId: null,
-          launchSnapshotId: `harness-${input.agentChatRuntimeId}`,
-          workspaceId: input.agentOwner.scope.workspaceId,
-          agentVersionId: input.agentVersionId,
-          environmentVersionId: null,
-          resolvedSkills: input.resolvedSkills,
-          toolRefs: input.toolRefs,
-          desiredRevision: 1,
-          desiredSpecDigest: null,
-          status: 'ready',
-          currentGeneration: null,
-          workspaceBinding: null,
-          sessionBinding: null,
+          desiredSpecRevision: 1 as RuntimeSession['desiredSpecRevision'],
+          currentGenerationId: null,
+          status: 'provisioning',
           createdAt: now,
           updatedAt: now,
+          closedAt: null,
         };
       },
       async executeTurn(input: any) {
@@ -327,7 +321,20 @@ describe('North Star host-native deterministic harness', () => {
     const reconciler = new ChatDeliveryReconciler(
       product.conversations,
       dispatches,
-      new ExecutionRuntimeChatTurnProvider(runtime),
+      new ExecutionRuntimeChatTurnProvider(
+        { execute: runtime.ensureAgentChatRuntimeSession },
+        {
+          execute: (input) =>
+            runtime.executeTurn({
+              runId: input.turnId ?? input.runtimeSessionId,
+              runtimeSessionId: input.runtimeSessionId,
+              prompt: input.prompt,
+              ...(input.recoveryPrompt
+                ? { recoveryPrompt: input.recoveryPrompt }
+                : {}),
+            }),
+        },
+      ),
       {
         async resolve(input: any) {
           const invocationContext = scenarioInvocationContext(

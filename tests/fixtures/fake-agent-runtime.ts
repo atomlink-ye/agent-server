@@ -4,10 +4,8 @@ import type {
   RuntimeSessionId,
   RuntimeSpecRevision,
 } from '../../src/domain/runtime/runtime-session.js';
-import type {
-  ExecutionObservationSink,
-  ExecutionPlaneHealth,
-} from '../../src/application/ports/execution-plane.js';
+import type { ExecutionObservationSink } from '../../src/application/ports/runtime-execution-session.js';
+import type { ExecutionPlaneHealth } from '../../src/application/ports/execution-plane.js';
 import type { ExecutionExtensionBinding } from '../../src/application/ports/runtime-extension-binding.js';
 import type {
   ExecutionRuntimeService,

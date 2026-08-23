@@ -1,4 +1,5 @@
 import type { AccessContext } from '../../domain/access-context.js';
+import type { ExecutionPlaneCapability } from '../ports/execution-plane.js';
 import type { ExecutionAdmission } from '../ports/execution-admission.js';
 import type { RuntimeCapabilities } from '../runtime/runtime-capabilities.js';
 import type { WorkRunInputStore } from '../ports/work-run-input-store.js';

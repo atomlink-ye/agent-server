@@ -92,6 +92,7 @@ export interface CreateMemoryModuleOptions {
   readonly tasks: TaskRepository;
   readonly sessions?: SessionRepository;
   readonly config: AppConfig;
+  readonly fileStore?: FileStore;
   readonly teamTools?: {
     readonly contextResolver: TeamToolContextResolver;
   };
@@ -134,7 +135,7 @@ export function createMemoryModule(
     new PostgresMemoryApiRepository(options.database),
     contextMemory,
   );
-  const fileStore = new ContextFsFileStore(logicalFiles);
+  const fileStore = options.fileStore ?? new ContextFsFileStore(logicalFiles);
   const managedMemory = new ManagedMemory(options.database, fileStore);
 
   const createMemoryProposal = new CreateMemoryProposal(

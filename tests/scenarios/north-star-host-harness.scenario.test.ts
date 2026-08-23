@@ -22,7 +22,7 @@ import { PostgresRunEventRepository } from '../../src/infrastructure/postgres/po
 import { PostgresWorkChatConversationAgentResolver } from '../../src/infrastructure/postgres/postgres-work-chat-conversation-agent-resolver.js';
 import { PostgresWorkChatWakeStateRepository } from '../../src/infrastructure/postgres/postgres-work-chat-wake-state-repository.js';
 import { PostgresWorkChatWakeWorkSource } from '../../src/infrastructure/postgres/postgres-work-chat-wake-work-source.js';
-import { RuntimeToolRegistry } from '../../src/platform/runtime-tool-registry.js';
+import { createRuntimeToolCatalog } from '../../src/application/extensions/runtime-tool-catalog.js';
 import { createLogger } from '../../src/shared/observability/logger.js';
 
 import {
@@ -90,12 +90,15 @@ async function startWorkThroughScriptedRuntime(
   } as const;
   const mcp = h.mcp.track(
     new RuntimeMcpServer(
-      new RuntimeToolRegistry([
-        (context: any) =>
-          product.workModule.contributeRuntime({
-            ...context,
-            chatContext,
-          }),
+      createRuntimeToolCatalog([
+        {
+          ref: 'work',
+          contribute: (context: any) =>
+            product.workModule.contributeRuntime({
+              ...context,
+              chatContext,
+            }),
+        },
       ]),
     ),
   );
@@ -238,8 +241,12 @@ describe('North Star host-native deterministic harness', () => {
 
     const mcp = h.mcp.track(
       new RuntimeMcpServer(
-        new RuntimeToolRegistry([
-          (context) => product.workModule.contributeRuntime(context),
+        createRuntimeToolCatalog([
+          {
+            ref: 'work',
+            contribute: (context) =>
+              product.workModule.contributeRuntime(context),
+          },
         ]),
       ),
     );

@@ -321,9 +321,7 @@ export async function createService(
     database: pool,
     config,
     logger,
-    toolContributors: runtimeToolCatalog
-      .list()
-      .map(({ contribute }) => contribute),
+    toolCatalog: runtimeToolCatalog,
     ...(options.debugRuntime ? { debugRuntime: options.debugRuntime } : {}),
   });
   const runtimeRequiresReadiness =

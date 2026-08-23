@@ -15,11 +15,20 @@ import { ErrorResponseSchema } from '../../src/contracts/http.js';
 import type { AppConfig } from '../../src/shared/config.js';
 import { createApp } from '../../src/entrypoints/api/app.js';
 import { createWorkModule } from '../../src/modules/work/work-module.js';
-import { AGENT_SERVER_PRODUCT_WORK_CREATE_TOOL_REF } from '../../src/application/agents/built-in-skills.js';
+import {
+  AGENT_SERVER_PRODUCT_WORK_CREATE_TOOL_REF,
+  AGENT_SERVER_SYNTHETIC_STOCK_SNAPSHOT_TOOL_REF,
+} from '../../src/application/agents/built-in-skills.js';
 import { RuntimeMcpServer } from '../../src/infrastructure/extensions/runtime-mcp-server.js';
-import { RuntimeToolRegistry } from '../../src/platform/runtime-tool-registry.js';
-import { createMemoryReadRuntimeContributor } from '../../src/entrypoints/mcp/runtime-tool-contributors.js';
-import { createRuntimeToolRegistry } from '../../src/entrypoints/mcp/runtime-tool-composition.js';
+import { createRuntimeToolCatalog } from '../../src/application/extensions/runtime-tool-catalog.js';
+import {
+  createCollaborationRuntimeContributor,
+  createMemoryReadRuntimeContributor,
+  createSyntheticRuntimeToolsContributor,
+} from '../../src/entrypoints/mcp/runtime-tool-contributors.js';
+import { createRuntimeToolCatalog as composeRuntimeToolCatalog } from '../../src/entrypoints/mcp/runtime-tool-composition.js';
+import { SyntheticMarketAdapter } from '../../src/adapters/demo-market/synthetic-market-adapter.js';
+import { AGENT_SERVER_COLLABORATION_MCP_NAMES } from '../../src/domain/collaboration/canonical-collaboration-tools.js';
 import type { MemoryApiRepository } from '../../src/application/ports/memory-api-repository.js';
 import {
   AGENT_SERVER_MEMORY_READ_MCP_NAME,
@@ -244,7 +253,9 @@ describe('Product API v1 OI-38 cross-scope existence oracle', () => {
 
   it('creates through real MCP and reads the same Work through HTTP', async () => {
     const mcp = new RuntimeMcpServer(
-      new RuntimeToolRegistry([workModule.contributeRuntime]),
+      createRuntimeToolCatalog([
+        { ref: 'work', contribute: workModule.contributeRuntime },
+      ]),
     );
     const grant = await mcp.grants.issue({
       tenantId,
@@ -297,12 +308,22 @@ describe('Product API v1 OI-38 cross-scope existence oracle', () => {
     }
   });
 
-  it('calls Work and Memory through the composed runtime tool registry', async () => {
+  it('calls the complete production Runtime tool catalog through MCP', async () => {
     const mcp = new RuntimeMcpServer(
-      createRuntimeToolRegistry({
+      composeRuntimeToolCatalog({
         work: workModule.contributeRuntime,
         memory: createMemoryReadRuntimeContributor(memoryRepository),
-        legacy: () => undefined,
+        collaboration: createCollaborationRuntimeContributor({
+          contextResolver: {
+            resolve() {
+              throw new Error('collaboration MCP call was not expected here');
+            },
+          } as any,
+          kernel: {} as any,
+        }),
+        synthetic: createSyntheticRuntimeToolsContributor({
+          market: new SyntheticMarketAdapter(),
+        }),
       }),
     );
     const grant = await mcp.grants.issue({
@@ -314,7 +335,13 @@ describe('Product API v1 OI-38 cross-scope existence oracle', () => {
       allowedTools: [
         AGENT_SERVER_PRODUCT_WORK_CREATE_TOOL_REF,
         AGENT_SERVER_MEMORY_READ_TOOL_REF,
+        AGENT_SERVER_SYNTHETIC_STOCK_SNAPSHOT_TOOL_REF,
       ],
+      taskId: 'oi38-catalog-task',
+      runId: 'oi38-catalog-run',
+      teamMemberRunId: 'oi38-catalog-member',
+      teamRunId: 'oi38-catalog-team',
+      contextEpoch: 'oi38-catalog-epoch',
     });
     const url = await mcp.start();
     const client = new Client({ name: 'registry-e6', version: '1' });
@@ -330,6 +357,10 @@ describe('Product API v1 OI-38 cross-scope existence oracle', () => {
       const names = tools.tools.map((tool) => tool.name).sort();
       const workPresent = names.includes('product_work_create');
       const memoryPresent = names.includes(AGENT_SERVER_MEMORY_READ_MCP_NAME);
+      const syntheticPresent = names.includes('synthetic_stock_snapshot');
+      const collaborationPresent = Object.values(
+        AGENT_SERVER_COLLABORATION_MCP_NAMES,
+      ).every((name) => names.includes(name));
       let workOk = false;
       let memoryOk = false;
       if (workPresent) {
@@ -395,6 +426,22 @@ describe('Product API v1 OI-38 cross-scope existence oracle', () => {
         throw new Error(
           `RUNTIME_TOOLS_MISSING[runtime_memory_registration_missing]:non_target_work_ok=${workOk}`,
         );
+      if (!syntheticPresent)
+        throw new Error(
+          'RUNTIME_TOOLS_MISSING[runtime_synthetic_registration_missing]',
+        );
+      if (!collaborationPresent)
+        throw new Error(
+          'RUNTIME_TOOLS_MISSING[runtime_collaboration_registration_missing]',
+        );
+      const synthetic = await client.callTool({
+        name: 'synthetic_stock_snapshot',
+        arguments: {
+          fixture_ref: 'fixture://self-learning-market-research/acme-v1',
+          symbol: 'ACME',
+        },
+      });
+      expect(synthetic.isError).not.toBe(true);
     } finally {
       await client.close().catch(() => undefined);
       await mcp.stop();

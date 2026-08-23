@@ -6,7 +6,7 @@ import {
 } from '../../src/application/agents/built-in-skills.js';
 import { registerProductWorkMcpTools } from '../../src/entrypoints/mcp/product-work-mcp-tools.js';
 import { RuntimeMcpServer } from '../../src/infrastructure/extensions/runtime-mcp-server.js';
-import { RuntimeToolRegistry } from '../../src/platform/runtime-tool-registry.js';
+import { createRuntimeToolCatalog } from '../../src/application/extensions/runtime-tool-catalog.js';
 import {
   createAgentServerHarness,
   type AgentServerHarness,
@@ -58,30 +58,33 @@ describe('North Star runtime grant boundary', () => {
     };
     const mcp = h.mcp.track(
       new RuntimeMcpServer(
-        new RuntimeToolRegistry([
-          ({ server, grant, grants }) =>
-            registerProductWorkMcpTools({
-              server,
-              grant,
-              grants,
-              definitions: definitions as any,
-              workIdentity: {
-                async createWork() {
-                  throw new Error('must not create');
+        createRuntimeToolCatalog([
+          {
+            ref: 'work',
+            contribute: ({ server, grant, grants }) =>
+              registerProductWorkMcpTools({
+                server,
+                grant,
+                grants,
+                definitions: definitions as any,
+                workIdentity: {
+                  async createWork() {
+                    throw new Error('must not create');
+                  },
+                  async findWorkById() {
+                    return null;
+                  },
+                  async findLatestWorkRun() {
+                    return null;
+                  },
                 },
-                async findWorkById() {
-                  return null;
+                startWorkRun: {
+                  async execute() {
+                    throw new Error('must not start');
+                  },
                 },
-                async findLatestWorkRun() {
-                  return null;
-                },
-              },
-              startWorkRun: {
-                async execute() {
-                  throw new Error('must not start');
-                },
-              },
-            }),
+              }),
+          },
         ]),
       ),
     );

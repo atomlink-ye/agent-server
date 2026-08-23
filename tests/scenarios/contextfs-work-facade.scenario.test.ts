@@ -6,7 +6,7 @@ import {
   AGENT_SERVER_PRODUCT_WORK_RUN_START_TOOL_REF,
 } from '../../src/application/agents/built-in-skills.js';
 import { RuntimeMcpServer } from '../../src/infrastructure/extensions/runtime-mcp-server.js';
-import { RuntimeToolRegistry } from '../../src/platform/runtime-tool-registry.js';
+import { createRuntimeToolCatalog } from '../../src/application/extensions/runtime-tool-catalog.js';
 import {
   createAgentServerHarness,
   type AgentServerHarness,
@@ -29,15 +29,18 @@ describe('ContextFS + WorkExecutionService host scenario', () => {
     const product = h.work.scenario(world);
     const mcp = h.mcp.track(
       new RuntimeMcpServer(
-        new RuntimeToolRegistry([
-          (context: any) =>
-            product.workModule.contributeRuntime({
-              ...context,
-              chatContext: {
-                conversationId: world.conversation.id,
-                triggerMessageId: world.triggerMessageId,
-              },
-            }),
+        createRuntimeToolCatalog([
+          {
+            ref: 'work',
+            contribute: (context: any) =>
+              product.workModule.contributeRuntime({
+                ...context,
+                chatContext: {
+                  conversationId: world.conversation.id,
+                  triggerMessageId: world.triggerMessageId,
+                },
+              }),
+          },
         ]),
       ),
     );

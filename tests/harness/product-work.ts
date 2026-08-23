@@ -132,7 +132,7 @@ export function createHarnessProductWork(input: {
         return { taskId: receipt.taskId, reused: receipt.reused };
       },
     },
-    runtimeCapabilities: runtime,
+    runtimeCapabilities: runtime.capabilities(),
     executionFacts: new PostgresExecutionFactQuery(db as any),
     conversations,
   } as any);

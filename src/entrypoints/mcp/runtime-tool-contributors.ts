@@ -25,7 +25,7 @@ import {
   RuntimeToolGrantService,
   type RuntimeToolGrant,
 } from '../../application/extensions/runtime-tool-grant-service.js';
-import type { RuntimeToolContributor } from '../../platform/runtime-tool-registry.js';
+import type { RuntimeToolContributor } from '../../application/extensions/runtime-tool-catalog.js';
 
 const UUID = z.string().uuid();
 const memoryReadInput = {

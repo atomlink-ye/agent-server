@@ -31,6 +31,7 @@ export interface RuntimeToolCatalog {
   readonly digest: string;
   list(): readonly RuntimeToolDefinition[];
   get(ref: string): RuntimeToolDefinition | null;
+  contribute(context: RuntimeToolContributionContext): void;
 }
 
 /**
@@ -52,6 +53,9 @@ export function createRuntimeToolCatalog(
     digest: computeRuntimeToolCatalogDigest(catalog),
     list: () => catalog,
     get: (ref: string) => byRef.get(ref) ?? null,
+    contribute: (context: RuntimeToolContributionContext) => {
+      for (const tool of catalog) tool.contribute(context);
+    },
   });
 }
 

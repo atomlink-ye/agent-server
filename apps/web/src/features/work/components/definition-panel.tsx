@@ -13,6 +13,7 @@ import {
   workDefinitionClient,
 } from '@/features/work/clients/work-definition-client';
 import { workRunClient } from '@/features/work/clients/work-run-client';
+import './definition-panel.css';
 
 type AuthoringState =
   | 'idle'

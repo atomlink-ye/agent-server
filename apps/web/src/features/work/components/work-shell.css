@@ -344,3 +344,43 @@
     padding: 21px;
   }
 }
+.work-product-brand {
+  text-decoration: none;
+}
+.work-product-nav nav a,
+.work-product-nav nav span {
+  box-sizing: border-box;
+}
+.work-product-nav__current {
+  color: #292726;
+  text-decoration: none;
+}
+.work-product-nav__disabled {
+  align-items: baseline;
+  color: #8a8580;
+  display: flex;
+  font-size: 13px;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 7px 15px;
+}
+.work-product-nav__disabled small {
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.work-product-nav__foot {
+  display: grid;
+  gap: 4px;
+}
+.work-product-nav__foot a {
+  color: #514e50;
+  font-size: 12px;
+  font-weight: 650;
+  text-decoration-color: #beb9b1;
+  text-underline-offset: 3px;
+}
+.work-product-nav__foot span {
+  font-size: 10px;
+}

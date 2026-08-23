@@ -862,16 +862,6 @@
       "phase": "Phase 6 — delete modules/resource"
     },
     {
-      "rule": "frontend.work-shell-overrides",
-      "path": "apps/web/src/features/work/components/work-shell-overrides.css",
-      "line": 1,
-      "symbol": "work-shell-overrides.css",
-      "occurrence": 1,
-      "key": "frontend.work-shell-overrides|apps/web/src/features/work/components/work-shell-overrides.css|work-shell-overrides.css|000001",
-      "why": "The work shell still has a compatibility-only CSS override file.",
-      "phase": "Phase 10 — CSS"
-    },
-    {
       "rule": "persistence.desired-spec-digest",
       "path": "src/infrastructure/postgres/postgres-runtime-session-lookup.ts",
       "line": 53,

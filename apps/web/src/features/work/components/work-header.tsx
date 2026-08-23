@@ -8,6 +8,7 @@ import {
   latestRunSummary,
   productStatePresentation,
 } from './work-presentation';
+import './work-list.css';
 
 export function WorkListHeader({
   showNewWork,

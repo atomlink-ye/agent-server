@@ -147,6 +147,10 @@ export interface CreateServiceOptions {
   readonly deferTeamWakeReconcile?: boolean;
 }
 
+function turnLeaseDurationMs(executionTimeoutMs: number): number {
+  return Math.max(executionTimeoutMs * 2 + 300_000, 30_000);
+}
+
 export async function createService(
   config: AppConfig,
   logger: Logger,

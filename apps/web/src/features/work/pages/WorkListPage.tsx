@@ -5,7 +5,7 @@ import { WorkListContent, WorkListHeader } from '../components/work-header';
 import { WorkProductFrame } from '../components/work-product-frame';
 import { useWorkList } from '../queries/use-work-list';
 import '../components/work-shell.css';
-import '../components/work-shell-overrides.css';
+import '../components/work-list.css';
 
 export function WorkListPage({
   originConversationId = null,

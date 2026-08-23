@@ -82,9 +82,9 @@ const ruleInfo: Readonly<Record<string, RuleInfo>> = {
     why: 'Runtime session generations still carry the legacy extension grant column.',
     phase: 'Phase 3 — RuntimeTurn/grant',
   },
-  'frontend.work-shell-overrides': {
-    why: 'The work shell still has a compatibility-only CSS override file.',
-    phase: 'Phase 10 — CSS',
+  'frontend.product-run-trace-boundary': {
+    why: 'Production frontend code must cross the ProductRunTrace contract only through the normalized run-trace boundary.',
+    phase: 'Phase 10 — normalized run trace',
   },
   'frontend.use-client': {
     why: 'The browser source still carries framework-specific client directives.',
@@ -355,24 +355,27 @@ function scanPersistence(out: Violation[]): void {
 
 function scanFrontend(out: Violation[]): void {
   const frontendRoot = resolve(root, 'apps/web/src');
-  const files = walk(frontendRoot).filter((path) =>
-    /\.(?:ts|tsx|css)$/.test(path),
-  );
+  const files = productionSourceFiles(frontendRoot);
+  const normalizedTracePath = 'apps/web/src/features/run-trace/normalized.ts';
+  const productRunTracePattern = /\bProductRunTrace\b/g;
   for (const file of files) {
     const path = rel(file);
     const text = readFileSync(file, 'utf8');
     for (const hit of lineMatches(text, /^\s*['"]use client['"];?\s*$/))
       out.push(violation('frontend.use-client', path, hit.line, 'use client'));
 
-    if (path.endsWith('/work-shell-overrides.css'))
-      out.push(
-        violation(
-          'frontend.work-shell-overrides',
-          path,
-          1,
-          'work-shell-overrides.css',
-        ),
-      );
+    if (path === normalizedTracePath) continue;
+    for (const [index, line] of text.split('\n').entries()) {
+      for (const match of line.matchAll(productRunTracePattern))
+        out.push(
+          violation(
+            'frontend.product-run-trace-boundary',
+            path,
+            index + 1,
+            match[0],
+          ),
+        );
+    }
   }
 }
 

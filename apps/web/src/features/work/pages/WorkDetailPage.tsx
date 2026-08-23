@@ -10,7 +10,8 @@ import { WorkTabs } from '../components/work-tabs';
 import { normalizeWorkTab } from '../components/work-presentation';
 import { useWorkDetail } from '../queries/use-work-detail';
 import '../components/work-shell.css';
-import '../components/work-shell-overrides.css';
+import '../components/work-list.css';
+import '../components/work-detail.css';
 
 export function WorkDetailPage({
   workId,

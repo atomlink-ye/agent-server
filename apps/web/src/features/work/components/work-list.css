@@ -1,0 +1,64 @@
+/* Work list and shared product-state presentation. */
+.work-list-header__coverage {
+  color: #706c74;
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 12px 0 0;
+  max-width: 620px;
+}
+.work-list-header__coverage {
+  border-left: 2px solid #d9d5ce;
+  padding-left: 12px;
+}
+.work-list-card {
+  grid-template-columns: minmax(150px, 0.34fr) minmax(0, 1fr);
+}
+.work-list-card__state p {
+  color: #706c74;
+  font-size: 11px;
+  line-height: 1.45;
+  margin: 9px 0 0;
+}
+.work-state-pill {
+  align-items: center;
+  background: #f4f2ee;
+  border: 1px solid #cfcac2;
+  border-radius: 999px;
+  color: #514e50;
+  display: inline-flex;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  min-height: 24px;
+  padding: 3px 9px;
+}
+.work-state-pill--needs_you {
+  background: #fbf4e7;
+  border-color: #caa96b;
+  color: #765c2c;
+}
+.work-state-pill--running {
+  background: #eef1f8;
+  border-color: #9eabc1;
+  color: #404a78;
+}
+.work-state-pill--complete {
+  background: #eef4ef;
+  border-color: #9daf9f;
+  color: #42634b;
+}
+.work-state-pill--problem {
+  background: #f7efee;
+  border-color: #b9a19e;
+  color: #7b4e49;
+}
+.work-state-pill--not_captured {
+  background: #f4f2ee;
+  border-style: dashed;
+  color: #706c74;
+}
+@media (max-width: 719px) {
+  .work-list-card {
+    grid-template-columns: 1fr;
+  }
+}

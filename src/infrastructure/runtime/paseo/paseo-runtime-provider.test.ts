@@ -117,6 +117,7 @@ describe('PaseoRuntimeProvider', () => {
     expect(provider().capabilities()).toEqual({
       canReconfigure: false,
       canCloseSession: false,
+      canInspectBootstrapDigestComponents: false,
     });
   });
 
@@ -150,7 +151,11 @@ describe('PaseoRuntimeProvider', () => {
       status: 'available',
       observed: {
         providerSessionId: 'agent-1',
-        bootstrapDigestComponents: null,
+        bootstrapDigestComponents: {
+          status: 'indeterminate',
+          reason:
+            'Paseo cannot report RuntimeBootstrapDigestInput components during session inspection.',
+        },
       },
     });
 

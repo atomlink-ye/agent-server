@@ -62,8 +62,21 @@ export interface ProviderSessionHandle {
 export interface ProviderObservedState {
   /** The provider session identity accepted by the timeline inspection call. */
   readonly providerSessionId: string;
-  /** Paseo's timeline does not expose any RuntimeBootstrapDigestInput component yet. */
-  readonly bootstrapDigestComponents: RuntimeBootstrapDigestInput | null;
+  /**
+   * The provider's report about all 11 components of the complete
+   * RuntimeBootstrapDigestInput.
+   * Indeterminate means the provider session is present, but the provider
+   * cannot report these components; it is not the same fact as unavailable.
+   */
+  readonly bootstrapDigestComponents:
+    | {
+        readonly status: 'observed';
+        readonly value: RuntimeBootstrapDigestInput;
+      }
+    | {
+        readonly status: 'indeterminate';
+        readonly reason: string;
+      };
 }
 
 export type RuntimeProviderInspection =

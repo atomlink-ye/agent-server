@@ -14,6 +14,7 @@ import type { RuntimeProviderCapabilities } from '../../domain/runtime/runtime-p
 const UNAVAILABLE_CAPABILITIES: RuntimeProviderCapabilities = {
   canReconfigure: false,
   canCloseSession: false,
+  canInspectBootstrapDigestComponents: false,
 };
 
 /** Explicit provider graph node for core mode when runtime execution is disabled. */

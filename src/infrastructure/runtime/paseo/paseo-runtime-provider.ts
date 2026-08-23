@@ -34,6 +34,7 @@ import { mapPaseoConfig } from './paseo-config-mapper.js';
 const PASEO_RUNTIME_PROVIDER_CAPABILITIES: RuntimeProviderCapabilities = {
   canReconfigure: false,
   canCloseSession: false,
+  canInspectBootstrapDigestComponents: false,
 };
 
 const MISSING_SESSION_ERROR_CODES = new Set([
@@ -227,7 +228,11 @@ export class PaseoRuntimeProvider implements RuntimeExecutionProvider {
 
     const observed: ProviderObservedState = {
       providerSessionId: binding.generation.providerSessionId!,
-      bootstrapDigestComponents: null,
+      bootstrapDigestComponents: {
+        status: 'indeterminate',
+        reason:
+          'Paseo cannot report RuntimeBootstrapDigestInput components during session inspection.',
+      },
     };
     return { status: 'available', observed };
   }

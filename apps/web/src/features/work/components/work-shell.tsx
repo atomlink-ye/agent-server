@@ -29,14 +29,14 @@ import { SessionTranscripts } from '@/features/run-trace/session-transcripts';
 import {
   loadRunRoleSummaries,
   loadWorkDetail,
-  loadWorks,
-  ProductReadError,
-  startWorkRun,
   type AnchoredRun,
   type AnchoredTrace,
   type RoleSummary,
   type WorkDetailData,
-} from '@/features/work/work-gateway';
+} from '@/features/work/queries/load-work-detail';
+import { ProductReadError } from '@/features/work/clients/errors';
+import { workClient } from '@/features/work/clients/work-client';
+import { workRunClient } from '@/features/work/clients/work-run-client';
 import { workTabPath } from '@/app/routes';
 import './work-shell.css';
 import './work-shell-overrides.css';
@@ -50,7 +50,8 @@ export function WorkListShell() {
 
   useEffect(() => {
     let active = true;
-    void loadWorks()
+    void workClient
+      .list()
       .then((response) => {
         if (!active) return;
         setWorks(response.works);
@@ -948,7 +949,7 @@ function RunTrigger({
     setState('starting');
     setErrorDetail(null);
     try {
-      const runId = await startWorkRun(workId);
+      const runId = (await workRunClient.start(workId)).work_run.id;
       window.location.assign(
         workTabHref(workId, 'overview', runId, originConversationId),
       );

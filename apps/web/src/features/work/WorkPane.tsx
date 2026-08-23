@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { loadWorks, type WorkListItem } from './work-gateway';
+import type { WorkListItem } from '@atomlink-ye/agent-server/product-contract';
+import { workClient } from './clients/work-client';
 
 export interface WorkPaneProps {
   readonly onOpenWork: (workId: string) => void;
@@ -28,7 +29,8 @@ export function WorkPane({
 
   const load = (): void => {
     setState((current) => ({ status: 'loading', works: current.works }));
-    void loadWorks()
+    void workClient
+      .list()
       .then((response) => setState({ status: 'ready', works: response.works }))
       .catch((error: unknown) => {
         setState((current) => ({
@@ -42,7 +44,8 @@ export function WorkPane({
   useEffect(() => {
     let active = true;
     setState({ status: 'loading', works: [] });
-    void loadWorks()
+    void workClient
+      .list()
       .then((response) => {
         if (active) setState({ status: 'ready', works: response.works });
       })

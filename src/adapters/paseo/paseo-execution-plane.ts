@@ -21,6 +21,11 @@ import type { Logger } from '../../shared/observability/logger.js';
 import { PaseoConnectionManager } from './paseo-connection-manager.js';
 import type { PaseoClientPort } from './paseo-client-port.js';
 import { PaseoExecutionSession } from './paseo-execution-session.js';
+import {
+  PaseoClientInspectionUnavailableError,
+  PaseoProviderBindingStaleError,
+  PaseoProviderErrorIndistinguishableAtBoundaryError,
+} from './errors.js';
 import { PaseoGateway } from './paseo-gateway.js';
 import { PaseoSdkClient } from './paseo-sdk-client.js';
 import { PaseoTurnRunner } from './paseo-turn-runner.js';
@@ -247,11 +252,28 @@ export class PaseoExecutionPlane implements ExecutionPlanePort {
     const { provider, model } = this.#resolveLaunch(spec);
     try {
       await this.#gateway.assertSessionAvailable(binding.externalSessionId);
-    } catch {
-      return {
-        kind: 'replacement_required',
-        reason: 'provider_binding_stale',
-      };
+    } catch (error) {
+      if (error instanceof PaseoProviderBindingStaleError)
+        return {
+          kind: 'replacement_required',
+          reason: 'provider_binding_stale',
+        };
+      if (error instanceof PaseoProviderErrorIndistinguishableAtBoundaryError) {
+        this.#logger.log('warn', 'runtime.session.attach.inspection_failed', {
+          runtime_session_id: spec.runtimeSessionId,
+          reason: error.reason,
+          error_name: error.evidence.errorName,
+          error_message: error.evidence.errorMessage,
+        });
+      }
+      if (error instanceof PaseoClientInspectionUnavailableError)
+        this.#logger.log('warn', 'runtime.session.attach.inspection_failed', {
+          runtime_session_id: spec.runtimeSessionId,
+          reason: error.code,
+          error_name: error.name,
+          error_message: error.message,
+        });
+      throw error;
     }
     return {
       kind: 'reused',

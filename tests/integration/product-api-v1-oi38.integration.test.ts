@@ -439,11 +439,16 @@ function minimalAppDependencies(config: AppConfig): Record<string, unknown> {
     invokeTask: {},
     getTask: {},
     getTaskTree: {},
-    createMemoryProposal: {},
-    listMemoryProposals: {},
-    reviewMemoryProposal: {},
-    listMemoryEntries: {},
-    agentRegistry: {},
+    teamExecutions: {},
+    teamDriver: {},
+    teamMessages: {},
+    tasks: {},
+    sessions: {},
+    submitSessionTurn: {},
+    events: {},
+    cancelTask: {},
+    memoryModule: { installHttp() {} },
+    resourceModule: { installHttp() {}, managedAgentDefinitions: {} },
   };
 }
 

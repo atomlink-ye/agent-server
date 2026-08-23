@@ -95,7 +95,7 @@ export async function registerSkill(input: {
     });
   } catch (error) {
     if (isStableRegistrationError(error)) throw error;
-    throw new Error('Skill registration failed.');
+    throw new Error('Skill registration failed.', { cause: error });
   }
 }
 

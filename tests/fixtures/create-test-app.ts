@@ -3,6 +3,9 @@ import { randomUUID } from 'node:crypto';
 import { PGlite } from '@electric-sql/pglite';
 
 import { RuntimeReadinessProbe } from '../../src/application/health/readiness.js';
+import { createMemoryModule } from '../../src/modules/memory/memory-module.js';
+import { createResourceModule } from '../../src/modules/resource/resource-module.js';
+import { createWorkModule } from '../../src/modules/work/work-module.js';
 import { CreateMemoryProposal } from '../../src/application/memory/create-memory-proposal.js';
 import { ListMemoryEntries } from '../../src/application/memory/list-memory-entries.js';
 import { ListMemoryProposals } from '../../src/application/memory/list-memory-proposals.js';
@@ -19,6 +22,7 @@ import { GetTask } from '../../src/application/tasks/get-task.js';
 import { GetTaskTree } from '../../src/application/tasks/get-task-tree.js';
 import { ExecuteTeamTask } from '../../src/application/tasks/execute-team-task.js';
 import { InvokeTask } from '../../src/application/tasks/invoke-task.js';
+import { InvokeTaskExecutionAdmission } from '../../src/application/ports/execution-admission.js';
 import { CancelTask } from '../../src/application/tasks/cancel-task.js';
 import { createApp } from '../../src/entrypoints/api/app.js';
 import { PostgresAdmissionRepository } from '../../src/infrastructure/postgres/postgres-admission-repository.js';
@@ -27,8 +31,8 @@ import { applyDurableKernelMigrations } from '../../src/infrastructure/postgres/
 import { PostgresRunDispatcher } from '../../src/infrastructure/postgres/postgres-run-dispatcher.js';
 import { PostgresRunRepository } from '../../src/infrastructure/postgres/postgres-run-repository.js';
 import { PostgresTaskRepository } from '../../src/infrastructure/postgres/postgres-task-repository.js';
+import { PostgresExecutionFactQuery } from '../../src/infrastructure/postgres/postgres-execution-fact-query.js';
 import { PostgresWorkspaceMemoryRepository } from '../../src/infrastructure/postgres/postgres-workspace-memory-repository.js';
-import { PostgresAgentRegistry } from '../../src/infrastructure/postgres/postgres-agent-registry.js';
 import {
   canonicalAgentResolver,
   seedCanonicalPublishedAgent,
@@ -213,7 +217,6 @@ export async function createTestApp(
   // connect shape shared by PGlite and pg.Pool. Keep the fixture seam broad so
   // callers can inject a real pool without changing production repositories.
   const repositoryDatabase = database as any;
-  const agentRegistry = new PostgresAgentRegistry(repositoryDatabase);
   const sessions = new PostgresSessionRepository(repositoryDatabase);
   if (options.sessionRepositoryControl)
     options.sessionRepositoryControl.repository = sessions;
@@ -262,6 +265,26 @@ export async function createTestApp(
     minimumLevel: 'error',
     write: () => undefined,
   });
+  const memoryModule = createMemoryModule({
+    database: repositoryDatabase,
+    tasks: taskRepository,
+    sessions,
+    config: effectiveConfig as any,
+  });
+  const resourceModule = await createResourceModule({
+    database: repositoryDatabase,
+    // macOS exposes /tmp as a symlink; the production skill registry rejects
+    // symlinked path components, so point the fixture constructor at its real
+    // equivalent while preserving the public test config.
+    config: {
+      ...(effectiveConfig as any),
+      skillRegistryRoot: effectiveConfig.skillRegistryRoot.replace(
+        /^\/tmp/,
+        '/private/tmp',
+      ),
+      serviceAccounts: [],
+    },
+  });
   const admitRootTask = new AdmitRootTask(
     taskRepository,
     runRepository,
@@ -276,6 +299,13 @@ export async function createTestApp(
   );
   const getTask = new GetTask(taskRepository);
   const getTaskTree = new GetTaskTree(taskRepository);
+  const workModule = createWorkModule({
+    database: repositoryDatabase,
+    definitions: resourceModule.definitionReadApi,
+    definitionResolution: resourceModule.workDefinitionResolution,
+    execution: new InvokeTaskExecutionAdmission(invokeTask),
+    executionFacts: new PostgresExecutionFactQuery(repositoryDatabase),
+  });
   const createMemoryProposal = new CreateMemoryProposal(
     workspaceMemoryRepository,
     taskRepository,
@@ -383,16 +413,17 @@ export async function createTestApp(
     invokeTask,
     getTask,
     getTaskTree,
-    createMemoryProposal,
-    listMemoryProposals,
-    reviewMemoryProposal,
-    listMemoryEntries,
-    managedMemory,
-    agentRegistry,
-    agentResolution: resolveAgentVersion,
+    teamExecutions: {} as never,
+    teamDriver: {} as never,
+    teamMessages: {} as never,
+    tasks: taskRepository,
     sessions,
     events,
     cancelTask,
+    submitSessionTurn: {} as never,
+    workModule,
+    memoryModule,
+    resourceModule,
   });
 }
 

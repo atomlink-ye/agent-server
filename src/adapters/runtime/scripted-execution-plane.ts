@@ -9,12 +9,14 @@ import {
   type ExecutionPlaneCapabilities,
   type ExecutionPlaneHealth,
   type ExecutionPlanePort,
-  type ExecutionResult,
-  type ExecutionSession,
-  type ExecutionSessionCapabilities,
   type ExecutionSessionBinding,
   type ExecutionSessionSpec,
 } from '../../application/ports/execution-plane.js';
+import type {
+  ExecutionResult,
+  ExecutionSession,
+  ExecutionSessionCapabilities,
+} from '../../application/ports/runtime-execution-session.js';
 import type { ExecutionMcpServerConfig } from '../../application/ports/runtime-extension-binding.js';
 
 const CAPABILITIES: ExecutionPlaneCapabilities = {

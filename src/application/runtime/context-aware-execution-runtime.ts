@@ -3,7 +3,7 @@ import type {
   ExecutionRuntimeService,
   ExecutionTurnRequest,
 } from '../ports/execution-runtime.js';
-import type { ExecutionObservationSink } from '../ports/execution-plane.js';
+import type { ExecutionObservationSink } from '../ports/runtime-execution-session.js';
 import {
   renderScopedMemory,
   type ScopedMemoryResolver,

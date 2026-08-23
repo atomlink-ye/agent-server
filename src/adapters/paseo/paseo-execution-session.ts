@@ -1,13 +1,15 @@
 import {
   ExecutionBindingUnavailableError,
-  type ExecutionObservationSink,
-  type ExecutionResult,
-  type ExecutionRunInput,
-  type ExecutionSession,
-  type ExecutionSessionCapabilities,
   type ExecutionSessionBinding,
   type ExecutionWorkspaceBinding,
 } from '../../application/ports/execution-plane.js';
+import type {
+  ExecutionObservationSink,
+  ExecutionResult,
+  ExecutionRunInput,
+  ExecutionSession,
+  ExecutionSessionCapabilities,
+} from '../../application/ports/runtime-execution-session.js';
 import { PaseoGateway } from './paseo-gateway.js';
 import { PaseoTurnRunner } from './paseo-turn-runner.js';
 

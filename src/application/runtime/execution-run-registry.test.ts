@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { ExecutionSession } from '../ports/execution-plane.js';
+import type { ExecutionSession } from '../ports/runtime-execution-session.js';
 import { ExecutionRunRegistry } from './execution-run-registry.js';
 
 function deferred<T>() {

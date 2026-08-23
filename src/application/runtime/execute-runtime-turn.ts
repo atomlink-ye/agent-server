@@ -4,7 +4,7 @@ import type {
   ExecutionObservationSink,
   ExecutionOutput,
   ExecutionResult,
-} from '../ports/execution-plane.js';
+} from '../ports/runtime-execution-session.js';
 import type { EnsureRuntimeSession } from '../ports/ensure-runtime-session.js';
 import type { RuntimeTurnStore } from '../ports/runtime-turn-store.js';
 import type {

@@ -6,7 +6,7 @@ import type {
   ExecutionToolCategory,
   ExecutionToolDetail,
   ExecutionToolStatus,
-} from '../../application/ports/execution-plane.js';
+} from '../../application/ports/runtime-execution-session.js';
 import type { RunUsage } from '../../domain/runs/run.js';
 import { collaborationMcpName } from '../../domain/collaboration/canonical-collaboration-tools.js';
 import type {

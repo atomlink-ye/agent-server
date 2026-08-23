@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { UnsupportedCapabilityError } from '../ports/execution-plane.js';
+import { UnsupportedCapabilityError } from '../ports/runtime-execution-session.js';
 import {
   requirePlaneCapability,
   requireSessionCapability,

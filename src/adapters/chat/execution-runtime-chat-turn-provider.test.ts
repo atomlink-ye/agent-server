@@ -10,14 +10,16 @@ import type {
   ExecutionPlaneCapabilities,
   ExecutionPlaneHealth,
   ExecutionPlanePort,
-  ExecutionRunInput,
-  ExecutionResult,
-  ExecutionSession,
   ExecutionSessionBinding,
-  ExecutionSessionCapabilities,
   ExecutionSessionSpec,
   ExecutionWorkspaceBinding,
 } from '../../application/ports/execution-plane.js';
+import type {
+  ExecutionResult,
+  ExecutionRunInput,
+  ExecutionSession,
+  ExecutionSessionCapabilities,
+} from '../../application/ports/runtime-execution-session.js';
 import { makeRuntimeSession } from '../../../tests/fixtures/runtime-session.js';
 import type { RuntimeMemoryCandidateCollector } from '../../application/ports/runtime-memory-candidate-collector.js';
 import type {

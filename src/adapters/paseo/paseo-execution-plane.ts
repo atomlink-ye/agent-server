@@ -3,7 +3,6 @@ import { mkdir } from 'node:fs/promises';
 import {
   ExecutionBindingUnavailableError,
   ExecutionPlaneUnavailableError,
-  ProtocolViolationError,
   type AttachExecutionSessionOutcome,
   type CreatedExecutionSession,
   type ExecutionAppliedSessionSpec,
@@ -13,6 +12,7 @@ import {
   type ExecutionSessionBinding,
   type ExecutionSessionSpec,
 } from '../../application/ports/execution-plane.js';
+import { ProtocolViolationError } from '../../application/ports/runtime-execution-session.js';
 import {
   isManagedEnvironmentProvider,
   type ManagedEnvironmentProvider,

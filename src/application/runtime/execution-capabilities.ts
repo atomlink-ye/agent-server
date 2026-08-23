@@ -1,10 +1,12 @@
 import {
-  UnsupportedCapabilityError,
   type ExecutionPlaneCapabilities,
   type ExecutionPlaneCapability,
+} from '../ports/execution-plane.js';
+import {
+  UnsupportedCapabilityError,
   type ExecutionSessionCapabilities,
   type ExecutionSessionCapability,
-} from '../ports/execution-plane.js';
+} from '../ports/runtime-execution-session.js';
 
 export function requirePlaneCapability(
   capabilities: ExecutionPlaneCapabilities,

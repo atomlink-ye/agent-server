@@ -143,11 +143,12 @@ describe('closeServiceResources', () => {
           events.push('lark.worker.stop');
         }),
       },
-      runtime: {
+      executionRuntime: {
         close: vi.fn(async () => {
           events.push('runtime.close');
         }),
       },
+      runtimeProvider: { close: vi.fn(async () => undefined) },
       pool: {
         end: vi.fn(async () => {
           events.push('pool.end');
@@ -201,11 +202,12 @@ describe('closeServiceResources', () => {
           events.push('worker.stop');
         }),
       },
-      runtime: {
+      executionRuntime: {
         close: vi.fn(async (): Promise<void> => {
           events.push('runtime.close');
         }),
       },
+      runtimeProvider: { close: vi.fn(async (): Promise<void> => undefined) },
       pool: {
         end: vi.fn(async (): Promise<void> => {
           events.push('pool.end');
@@ -249,11 +251,14 @@ describe('closeServiceResources', () => {
           throw new Error('worker secret');
         }),
       },
-      runtime: {
+      executionRuntime: {
         close: vi.fn(async (): Promise<void> => {
           events.push('runtime');
           throw new Error('runtime secret');
         }),
+      },
+      runtimeProvider: {
+        close: vi.fn(async (): Promise<void> => undefined),
       },
       pool: {
         end: vi.fn(async (): Promise<void> => {

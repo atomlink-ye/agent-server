@@ -9,6 +9,7 @@ import type { Logger } from '../../shared/observability/logger.js';
 import { AGENT_SERVER_COLLABORATION_TOOL_REFS } from '../agents/built-in-skills.js';
 import { resolveRuntimeModelPolicy } from '../agents/runtime-model-policy.js';
 import type { RuntimeExtensionBinder } from '../extensions/runtime-extension-binder.js';
+import type { RuntimeSessionStore } from '../ports/runtime-session-store.js';
 import type { EnvironmentReadApi } from '../ports/environment-read-api.js';
 import type { ExecutionObservation } from '../ports/runtime-execution-session.js';
 import type { InvokableOwnerScope } from '../ports/invokable-repository.js';
@@ -47,7 +48,7 @@ export class AgentRunExecutor {
     private readonly logger: Logger,
     private readonly events?: RunEventRepository,
     private readonly runtimeExtensionBinder?: RuntimeExtensionBinder,
-    private readonly runtimeSessions?: any,
+    private readonly runtimeSessions?: RuntimeSessionStore,
     private readonly sessions?: Pick<SessionRepository, 'getSession'>,
     private readonly environments?: EnvironmentReadApi,
     private readonly runtimeCellRoot?: string,
@@ -315,7 +316,7 @@ export class AgentRunExecutor {
     );
     const domainToolRefs = (
       sessionRuntime?.toolRefs ?? resolved.toolRefs
-    ).filter((ref: string) => !collaborationRefs.has(ref));
+    ).filter((ref) => !collaborationRefs.has(ref));
     const runtimeToolRefs =
       collaborativeTeam != null && member ? domainToolRefs : resolved.toolRefs;
 

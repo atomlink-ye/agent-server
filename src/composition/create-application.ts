@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 
-import type { ExecutionRuntimeService } from '../application/ports/execution-runtime.js';
 import { ClaimNextRun } from '../application/runs/claim-next-run.js';
 import { CompleteRun } from '../application/runs/complete-run.js';
 import { ExecuteRun } from '../application/runs/execute-run.js';
@@ -30,12 +29,6 @@ import { createMemoryReviewActionTokenDeriver } from '../application/channels/me
 import { ApplyMemoryReviewCommand } from '../application/channels/apply-memory-review-command.js';
 import { ApplyMemoryReviewControl } from '../application/channels/apply-memory-review-control.js';
 import { AcceptMemoryFromBoundDocument } from '../application/channels/accept-memory-from-bound-document.js';
-import { createRuntimeToolCatalog } from '../application/extensions/runtime-tool-catalog.js';
-import {
-  createCollaborationRuntimeContributor,
-  createSyntheticRuntimeToolsContributor,
-} from '../entrypoints/mcp/runtime-tool-contributors.js';
-import { SyntheticMarketAdapter } from '../adapters/demo-market/synthetic-market-adapter.js';
 import { TeamDriver } from '../application/teams/team-driver.js';
 import {
   revokeForRecoveredTeamRuns,
@@ -43,7 +36,6 @@ import {
 } from '../application/teams/runtime-grant-lifecycle.js';
 import { PostgresExecutionFactQuery } from '../infrastructure/postgres/postgres-execution-fact-query.js';
 import { InvokeTaskExecutionAdmission } from '../application/ports/execution-admission.js';
-import { createRuntimeModule } from './create-runtime-module.js';
 import { noExternalDependencies } from '../application/health/readiness.js';
 import { createConfiguredRuntimeCapabilities } from './create-runtime-capabilities.js';
 import { createChatCapabilities } from './create-chat-capabilities.js';
@@ -55,10 +47,7 @@ import { createResourceCapabilities } from './create-resource-capabilities.js';
 import { createTeamCapabilities } from './create-team-capabilities.js';
 import { createWorkCapabilities } from './create-work-capabilities.js';
 import { createWorkers } from './create-workers.js';
-import {
-  closeRuntimeAndPool,
-  createLifecycleSupervisor,
-} from './lifecycle-supervisor.js';
+import { createLifecycleSupervisor } from './lifecycle-supervisor.js';
 import type { PostgresChannelRepository } from '../infrastructure/postgres/postgres-channel-repository.js';
 import type { FileStore } from '../application/ports/file-store.js';
 import type { PostgresSessionRepository } from '../infrastructure/postgres/postgres-session-repository.js';
@@ -117,8 +106,6 @@ export interface SingleRunDebugControl {
 export interface CreateServiceOptions {
   /** Debug-only seam for retained, manually stepped fixtures. */
   readonly singleRunDebug?: boolean;
-  /** Debug-only runtime substitute; production composition selects config.runtime.adapter. */
-  readonly debugRuntime?: ExecutionRuntimeService;
   /** Keep terminal Team wakes durable until the debug control resumes them. */
   readonly deferTeamWakeReconcile?: boolean;
   /** Explicit infrastructure/runtime seams retained for deterministic fixtures. */
@@ -142,10 +129,7 @@ export async function createApplication(
   logger: Logger,
   options: CreateServiceOptions = {},
 ) {
-  if (
-    (options.debugRuntime || options.deferTeamWakeReconcile) &&
-    !options.singleRunDebug
-  )
+  if (options.deferTeamWakeReconcile && !options.singleRunDebug)
     throw new Error('Debug service options require singleRunDebug.');
   const workerId = `agent-server:${process.pid}:${randomUUID()}`;
   const leaseDurationMs = turnLeaseDurationMs(config.paseo.executionTimeoutMs);
@@ -249,69 +233,6 @@ export async function createApplication(
     leaseMs: leaseDurationMs,
     logger,
   });
-  const runtimeToolCatalog = createRuntimeToolCatalog([
-    { ref: 'memory', contribute: memoryModule.contributeRuntime },
-    {
-      ref: 'collaboration',
-      contribute: createCollaborationRuntimeContributor({
-        contextResolver: teamToolContextResolver,
-        kernel: collaboration,
-      }),
-    },
-    {
-      ref: 'synthetic',
-      contribute: createSyntheticRuntimeToolsContributor({
-        market: new SyntheticMarketAdapter(),
-        logger,
-      }),
-    },
-    ...(workModule
-      ? [{ ref: 'work', contribute: workModule.contributeRuntime }]
-      : []),
-  ]);
-  const runtimeModule = createRuntimeModule({
-    database: pool,
-    config,
-    logger,
-    toolCatalog: runtimeToolCatalog,
-    ...(options.debugRuntime ? { debugRuntime: options.debugRuntime } : {}),
-  });
-  const runtimeRequiresReadiness =
-    directChatPlane === 'execution_runtime' ||
-    productWorkPlane === 'execution_runtime';
-  if (
-    !options.singleRunDebug &&
-    runtimeRequiresReadiness &&
-    config.runtime?.adapter === 'none'
-  ) {
-    await closeRuntimeAndPool(
-      runtimeModule.executionRuntime,
-      runtimeModule.runtimeProvider,
-      pool,
-    );
-    throw new Error(
-      'Declared Direct Chat/Product Work execution runtime requires a runtime adapter.',
-    );
-  }
-  if (!options.singleRunDebug && runtimeRequiresReadiness) {
-    const ready = await runtimeModule.runtimeProvider.ensureReady();
-    if (!ready) {
-      await closeRuntimeAndPool(
-        runtimeModule.executionRuntime,
-        runtimeModule.runtimeProvider,
-        pool,
-      );
-      throw new Error(
-        'Declared Direct Chat/Product Work execution runtime is not ready.',
-      );
-    }
-  }
-  const {
-    executionRuntime,
-    executionRuns,
-    extensions: runtimeExtensionBinder,
-    runtimeMcpServer,
-  } = runtimeModule;
   const chatCapabilities =
     directChatPlane === 'absent'
       ? createChatCapabilities({ directChatPlane })
@@ -319,7 +240,6 @@ export async function createApplication(
           directChatPlane,
           database: pool,
           executionRuntime,
-          chatRuntime: runtimeModule.chatRuntime,
           conversations: conversations!,
           chatDispatches: chatDispatches!,
           managedAgentDefinitions: resourceModule.managedAgentDefinitions,
@@ -414,7 +334,7 @@ export async function createApplication(
     definitions: resourceModule.definitionReadApi,
     executeTeamTask,
     runtime: executionRuntime,
-    runtimeProvider: runtimeModule.runtimeProvider,
+    runtimeProvider,
     logger,
     resolver: resourceModule.agentResolutionApi,
     events,
@@ -423,9 +343,6 @@ export async function createApplication(
     runtimeExtensionBinder,
     sessions,
     environments: resourceModule.environmentReadApi,
-    ...(runtimeModule.runtimeCellRoot
-      ? { runtimeCellRoot: runtimeModule.runtimeCellRoot }
-      : {}),
     collaborativeExecutions: collaborativeTeamExecutions,
     runs: runRepository,
     ...(terminalActivationReconciler
@@ -542,9 +459,7 @@ export async function createApplication(
       repository: channelRepository,
     });
   }
-  const readiness = runtimeRequiresReadiness
-    ? runtimeModule.readiness
-    : noExternalDependencies;
+  const readiness = noExternalDependencies;
   const app = createHttpApi({
     config,
     logger,
@@ -583,7 +498,7 @@ export async function createApplication(
     dispatcher,
     ...workers,
     executionRuntime,
-    runtimeProvider: runtimeModule.runtimeProvider,
+    runtimeProvider,
     runtimeMcpServer,
     pool,
   });

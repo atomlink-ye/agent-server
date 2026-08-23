@@ -190,7 +190,6 @@ export async function createTestApp(
     logger,
     {
       singleRunDebug: true,
-      debugRuntime: runtime,
       database: database as any,
       fileStore,
       ...(options.memoryReviewNotifier

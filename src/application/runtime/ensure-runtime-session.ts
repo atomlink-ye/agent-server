@@ -190,14 +190,15 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
     const inspection = await this.provider.inspect(
       this.binding(input.current, input.applied),
     );
-    if (inspection.status === 'unavailable')
-      throw new Error('runtime_provider_unavailable');
-    if (inspection.status === 'missing' || inspection.status === 'stale')
+    if (inspection.status !== 'available') {
+      if (inspection.status === 'unavailable')
+        throw new Error('runtime_provider_unavailable');
       return {
         kind: 'replace',
         generationId: input.current.id,
         reason: 'provider_missing',
       };
+    }
     const components = inspection.observed.bootstrapDigestComponents;
     if (components.status === 'indeterminate')
       throw new Error('runtime_provider_bootstrap_digest_indeterminate');

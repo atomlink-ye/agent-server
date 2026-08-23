@@ -18,8 +18,6 @@ import { PostgresAgentHomeRepository } from '../infrastructure/postgres/postgres
 import { ChatDeliveryWorker } from '../entrypoints/chat/worker.js';
 import type { AppConfig } from '../shared/config.js';
 import type { Logger } from '../shared/observability/logger.js';
-import type { CreateAgentChatRuntimeSession } from '../application/runtime/create-agent-chat-runtime-session.js';
-import type { ExecuteRuntimeTurn } from '../application/runtime/execute-runtime-turn.js';
 
 type EnabledDirectChatPlane = Exclude<
   AppConfig['directChatPlane'],
@@ -34,10 +32,6 @@ interface CreateChatCapabilitiesEnabledOptions {
   readonly directChatPlane: EnabledDirectChatPlane;
   readonly database: Pool;
   readonly executionRuntime: ExecutionRuntimeService;
-  readonly chatRuntime: {
-    readonly sessionCreator: Pick<CreateAgentChatRuntimeSession, 'execute'>;
-    readonly turnExecutor: Pick<ExecuteRuntimeTurn, 'execute'>;
-  };
   readonly conversations: ConversationRepository;
   readonly chatDispatches: ChatDispatchRepository;
   readonly managedAgentDefinitions: Pick<
@@ -74,10 +68,7 @@ export function createChatCapabilities(
 
   const chatTurnProvider =
     options.directChatPlane === 'execution_runtime'
-      ? new ExecutionRuntimeChatTurnProvider(
-          options.chatRuntime.sessionCreator,
-          options.chatRuntime.turnExecutor,
-        )
+      ? new ExecutionRuntimeChatTurnProvider(options.executionRuntime)
       : new MockChatTurnProvider();
   const chatBrainResolver = new ChatBrainResolver(
     options.managedAgentDefinitions,

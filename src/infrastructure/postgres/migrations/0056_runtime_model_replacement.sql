@@ -152,7 +152,7 @@ CREATE TABLE runtime_session_generations (
   ),
 
   created_at timestamptz NOT NULL,
-  ready_at timestamptz NULL,
+  active_at timestamptz NULL,
   superseded_at timestamptz NULL,
   closed_at timestamptz NULL,
 

@@ -41,7 +41,7 @@ export interface RuntimeGenerationTransaction {
       readonly appliedBootstrapDigest: string;
       readonly endpointEpoch: string;
       readonly createdAt: string;
-      readonly readyAt: string;
+      readonly activeAt: string;
     };
   }): Promise<void>;
 }

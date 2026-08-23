@@ -1,22 +1,25 @@
 import { randomUUID } from 'node:crypto';
 
 import type { IssueRuntimeToolGrant } from '../ports/issue-runtime-tool-grant.js';
+import { AGENT_SERVER_EXECUTION_MCP_SERVER_NAME } from '../ports/execution-plane.js';
 import type {
   EnsureRuntimeSession,
   ReadyRuntime,
 } from '../ports/ensure-runtime-session.js';
 import type {
-  ExecutionAppliedSessionSpec,
-  ExecutionPlanePort,
-  ExecutionSessionSpec,
-} from '../ports/execution-plane.js';
+  ProviderRuntimeSpec,
+  ProviderSessionBinding,
+  RuntimeExecutionProvider,
+} from '../ports/runtime-execution-provider.js';
 import type {
   RuntimeGenerationStore,
   RuntimeGenerationTransaction,
 } from '../ports/runtime-generation-store.js';
 import type { RuntimeSessionStore } from '../ports/runtime-session-store.js';
+import type { RuntimeMcpEndpoint } from '../ports/runtime-mcp-endpoint.js';
 import type { RuntimeSpecStore } from '../ports/runtime-spec-store.js';
 import type { RuntimeSessionGeneration } from '../../domain/runtime/runtime-session-generation.js';
+import { computeRuntimeBootstrapDigest } from '../../domain/runtime/runtime-session-spec.js';
 import type {
   RuntimeGenerationId,
   RuntimeSessionId,
@@ -27,12 +30,13 @@ import type { Logger } from '../../shared/observability/logger.js';
 /** Production reconciliation use case for one durable RuntimeSession. */
 export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
   public constructor(
-    private readonly provider: ExecutionPlanePort,
+    private readonly provider: RuntimeExecutionProvider,
     private readonly sessions: RuntimeSessionStore,
     private readonly specs: RuntimeSpecStore,
     private readonly generations: RuntimeGenerationStore,
     private readonly generationTransaction: RuntimeGenerationTransaction,
     private readonly grants: IssueRuntimeToolGrant,
+    private readonly mcpEndpoint: RuntimeMcpEndpoint,
     private readonly logger?: Logger,
     private readonly now: () => Date = () => new Date(),
   ) {}
@@ -58,61 +62,61 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
       applied,
       desired,
       generation: current,
-      providerCapabilities: {
-        canReconfigure: this.provider
-          .capabilities()
-          .supported.has('reusable_session'),
-      },
+      providerCapabilities: this.provider.capabilities(),
     });
-
     if (plan.kind === 'fail') throw new Error('runtime_provider_unavailable');
-    if (plan.kind === 'reuse' || plan.kind === 'reconfigure') {
+
+    const effectivePlan = current
+      ? await this.planAfterInspection({ current, applied, plan })
+      : plan;
+
+    if (effectivePlan.kind === 'reuse') {
       if (!current) throw new Error('runtime_provider_session_missing');
-      const attached = await this.attach(current, desired);
-      if (plan.kind === 'reconfigure')
-        await this.generations.updateAppliedSpec({
-          id: current.id,
-          appliedSpecRevision: desired.revision,
-          appliedBootstrapDigest: desired.bootstrapDigest,
-        });
+      return {
+        generation: current,
+        session: await this.provider.open(this.binding(current, applied)),
+        resolution: 'reused',
+      };
+    }
+
+    if (effectivePlan.kind === 'reconfigure') {
+      if (!current) throw new Error('runtime_provider_session_missing');
+      const handle = await this.provider.reconfigure(
+        this.binding(current, applied),
+        this.providerSpec(desired),
+      );
+      await this.generations.updateAppliedSpec({
+        id: current.id,
+        appliedSpecRevision: desired.revision,
+        appliedBootstrapDigest: desired.bootstrapDigest,
+      });
       return {
         generation: this.activeGeneration(current, desired),
-        session: attached,
+        session: handle.session,
+        resolution: 'reconfigured',
       };
     }
 
     return this.provision({
-      sessionId,
+      session,
       desired,
       previous: current,
+      previousApplied: applied,
     });
   }
 
-  private async attach(
-    generation: RuntimeSessionGeneration,
-    desired: Awaited<ReturnType<RuntimeSpecStore['getDesired']>>,
-  ) {
-    const binding = this.binding(generation);
-    const outcome = await this.provider.attachSession(
-      binding.session,
-      this.providerSpec(desired, binding.workspace),
-      this.appliedSpec(generation),
-    );
-    if (outcome.kind === 'replacement_required')
-      throw new Error('runtime_replacement_required');
-    return outcome.session;
-  }
-
   private async provision(input: {
-    readonly sessionId: RuntimeSessionId;
+    readonly session: Awaited<ReturnType<RuntimeSessionStore['findById']>>;
     readonly desired: Awaited<ReturnType<RuntimeSpecStore['getDesired']>>;
     readonly previous: RuntimeSessionGeneration | null;
+    readonly previousApplied: Awaited<ReturnType<RuntimeSpecStore['getDesired']>> | null;
   }): Promise<ReadyRuntime> {
+    if (!input.session) throw new Error('runtime_session_not_found');
     const now = this.now().toISOString();
     const generationId = randomUUID() as RuntimeGenerationId;
     const generation = Object.freeze({
       id: generationId,
-      runtimeSessionId: input.sessionId,
+      runtimeSessionId: input.session.id,
       generation: (input.previous?.generation ?? 0) + 1,
       provider: input.desired.provider,
       providerWorkspaceId: null,
@@ -122,44 +126,51 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
       endpointEpoch: input.desired.extensionSetDigest,
       status: 'provisioning' as const,
       createdAt: now,
-      readyAt: null,
+      activeAt: null,
       supersededAt: null,
       closedAt: null,
     });
     await this.generations.insert(generation);
 
-    let grantId:
-      | Awaited<ReturnType<IssueRuntimeToolGrant['issue']>>['grantId']
-      | undefined;
-    let created:
-      Awaited<ReturnType<ExecutionPlanePort['createSession']>> | undefined;
+    let grantId: Awaited<ReturnType<IssueRuntimeToolGrant['issue']>>['grantId'] | undefined;
+    let created: Awaited<ReturnType<RuntimeExecutionProvider['create']>> | undefined;
     try {
-      grantId = (
-        await this.grants.issue({
-          runtimeSessionId: input.sessionId,
-          generationId,
-          catalogDigest: input.desired.toolCatalogDigest,
-        })
-      ).grantId;
-      created = await this.provider.createSession(
-        this.providerSpec(input.desired, null, grantId),
+      const grant = await this.grants.issue({
+        runtimeSessionId: input.session.id,
+        generationId,
+        tenantId: input.session.owner.tenantId,
+        principal: {
+          principalType: input.session.owner.principalType,
+          principalId: input.session.owner.principalId,
+        },
+        scope: input.session.scope,
+        catalogDigest: input.desired.toolCatalogDigest,
+        allowedTools: input.desired.toolRefs,
+      });
+      grantId = grant.grantId;
+      const endpoint = await this.mcpEndpoint.current();
+      created = await this.provider.create(
+        this.providerSpec(input.desired, {
+          url: endpoint.url,
+          token: grant.token,
+        }),
       );
-      if (!created.workspaceBinding.externalWorkspaceId)
+      if (!created.providerWorkspaceId || !created.providerSessionId)
         throw new Error('runtime_provider_session_missing');
 
       await this.generationTransaction.replaceCurrentGeneration({
-        sessionId: input.sessionId,
+        sessionId: input.session.id,
         previousGenerationId: input.previous?.id ?? null,
         generation: {
           id: generationId,
-          provider: input.desired.provider,
-          providerWorkspaceId: created.workspaceBinding.externalWorkspaceId,
-          providerSessionId: created.sessionBinding.externalSessionId,
+          provider: created.provider,
+          providerWorkspaceId: created.providerWorkspaceId,
+          providerSessionId: created.providerSessionId,
           appliedSpecRevision: input.desired.revision,
           appliedBootstrapDigest: input.desired.bootstrapDigest,
           endpointEpoch: input.desired.extensionSetDigest,
           createdAt: now,
-          readyAt: this.now().toISOString(),
+          activeAt: this.now().toISOString(),
         },
       });
     } catch (error) {
@@ -174,75 +185,130 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
       throw error;
     }
 
-    if (input.previous) {
-      this.logger?.log('warn', 'runtime.provider_session.orphaned', {
-        runtime_session_id: input.sessionId,
-        previous_generation_id: input.previous.id,
-        previous_provider_session_id: input.previous.providerSessionId,
-        reason: 'replacement_without_per_agent_close_support',
-      });
-    }
-    await this.sessions.markStatus(
-      input.sessionId,
-      'ready',
-      this.now().toISOString(),
-    );
+    if (input.previous)
+      await this.closeOrRecordOrphan(
+        input.previous,
+        input.previousApplied,
+        generation,
+      );
+    await this.sessions.markStatus(input.session.id, 'ready', this.now().toISOString());
     const active = Object.freeze({
       ...generation,
-      providerWorkspaceId: created!.workspaceBinding.externalWorkspaceId,
-      providerSessionId: created!.sessionBinding.externalSessionId,
+      provider: created!.provider,
+      providerWorkspaceId: created!.providerWorkspaceId,
+      providerSessionId: created!.providerSessionId,
       status: 'active' as const,
-      readyAt: this.now().toISOString(),
+      activeAt: this.now().toISOString(),
     });
-    return { generation: active, session: created!.session };
+    return {
+      generation: active,
+      session: created!.session,
+      resolution: 'replaced',
+    };
+  }
+
+  private async planAfterInspection(input: {
+    readonly current: RuntimeSessionGeneration;
+    readonly applied: Awaited<ReturnType<RuntimeSpecStore['getDesired']>>;
+    readonly plan: ReturnType<typeof buildReconciliationPlan>;
+  }): Promise<ReturnType<typeof buildReconciliationPlan>> {
+    const inspection = await this.provider.inspect(
+      this.binding(input.current, input.applied),
+    );
+    if (inspection.status === 'unavailable')
+      throw new Error('runtime_provider_unavailable');
+    if (inspection.status === 'missing' || inspection.status === 'stale')
+      return {
+        kind: 'replace',
+        generationId: input.current.id,
+        reason: 'provider_missing',
+      };
+    if (
+      inspection.observed.providerSessionId !== input.current.providerSessionId ||
+      (inspection.observed.bootstrapDigestComponents !== null &&
+        computeRuntimeBootstrapDigest(
+          inspection.observed.bootstrapDigestComponents,
+        ) !== input.current.appliedBootstrapDigest)
+    )
+      return {
+        kind: 'replace',
+        generationId: input.current.id,
+        reason: 'provider_missing',
+      };
+    return input.plan;
+  }
+
+  private async closeOrRecordOrphan(
+    previous: RuntimeSessionGeneration,
+    previousApplied: Awaited<ReturnType<RuntimeSpecStore['getDesired']>> | null,
+    replacement: RuntimeSessionGeneration,
+  ): Promise<void> {
+    if (!previousApplied) throw new Error('runtime_spec_not_found');
+    const binding = this.binding(previous, previousApplied);
+    if (this.provider.capabilities().canCloseSession) {
+      try {
+        await this.provider.close(binding);
+        return;
+      } catch {
+        // The switch is already durable; report the provider orphan below.
+      }
+    }
+    this.logger?.log('warn', 'runtime.provider.orphan_session', {
+      previous_generation_id: previous.id,
+      replacement_generation_id: replacement.id,
+      provider: previous.provider,
+      provider_session_id: previous.providerSessionId,
+      reason: 'replacement_without_per_agent_close_support',
+    });
   }
 
   private providerSpec(
     spec: Awaited<ReturnType<RuntimeSpecStore['getDesired']>>,
-    workspace: { plane: string; externalWorkspaceId: string } | null,
-    grantId?: string,
-  ): ExecutionSessionSpec {
+    grant?: { readonly url: string; readonly token: string },
+  ): ProviderRuntimeSpec {
     return {
       runtimeSessionId: spec.runtimeSessionId,
-      workspace: {
-        cwd: spec.cwd,
-        ...(workspace ? { binding: workspace } : {}),
-      },
       provider: spec.provider,
-      ...(spec.model ? { model: spec.model } : {}),
+      model: spec.model,
+      cwd: spec.cwd,
       systemPrompt: spec.systemPromptDigest,
+      workspaceId: spec.workspaceId,
+      revision: spec.revision,
       desiredRevision: spec.revision,
       bootstrapSpecDigest: spec.bootstrapDigest,
       endpointEpoch: spec.extensionSetDigest,
-      ...(grantId ? { extensions: { grantId } } : {}),
+      ...(grant
+        ? {
+            extensions: {
+              mcpServers: [
+                {
+                  name: AGENT_SERVER_EXECUTION_MCP_SERVER_NAME,
+                  url: grant.url,
+                  headers: { Authorization: `Bearer ${grant.token}` },
+                },
+              ],
+            },
+          }
+        : {}),
     };
   }
 
-  private appliedSpec(
+  private binding(
     generation: RuntimeSessionGeneration,
-  ): ExecutionAppliedSessionSpec {
-    return {
-      appliedRevision: generation.appliedSpecRevision,
-      appliedSpecDigest: generation.appliedBootstrapDigest,
-      endpointEpoch: generation.endpointEpoch,
-    };
-  }
-
-  private binding(generation: RuntimeSessionGeneration): {
-    readonly workspace: { plane: string; externalWorkspaceId: string };
-    readonly session: { plane: string; externalSessionId: string };
-  } {
+    applied: Awaited<ReturnType<RuntimeSpecStore['getDesired']>>,
+  ): ProviderSessionBinding {
     if (!generation.providerWorkspaceId || !generation.providerSessionId)
       throw new Error('runtime_provider_session_missing');
     return {
-      workspace: {
-        plane: generation.provider,
-        externalWorkspaceId: generation.providerWorkspaceId,
+      generation: {
+        id: generation.id,
+        runtimeSessionId: generation.runtimeSessionId,
+        provider: generation.provider,
+        providerWorkspaceId: generation.providerWorkspaceId,
+        providerSessionId: generation.providerSessionId,
+        appliedSpecRevision: generation.appliedSpecRevision,
       },
-      session: {
-        plane: generation.provider,
-        externalSessionId: generation.providerSessionId,
-      },
+      applied: this.providerSpec(applied) as ProviderSessionBinding['applied'],
     };
   }
 

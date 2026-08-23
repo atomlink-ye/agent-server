@@ -11,6 +11,12 @@ import type {
   PaseoTimelinePage,
 } from './paseo-client-port.js';
 import type { PaseoModelDescriptor } from './model-selector.js';
+import {
+  isPaseoExplicitMissingSessionError,
+  PaseoClientInspectionUnavailableError,
+  PaseoProviderBindingStaleError,
+  PaseoProviderErrorIndistinguishableAtBoundaryError,
+} from './errors.js';
 
 /**
  * Thin SDK/wire facade. It has no Product/Work/Team/RuntimeSession policy and
@@ -118,8 +124,14 @@ export class PaseoGateway {
 
   public async assertSessionAvailable(agentId: string): Promise<void> {
     const timeline = this.fetchTimeline(agentId);
-    if (!timeline) throw new Error('Paseo session inspection is unavailable.');
-    await timeline;
+    if (!timeline) throw new PaseoClientInspectionUnavailableError();
+    try {
+      await timeline;
+    } catch (error) {
+      if (isPaseoExplicitMissingSessionError(error))
+        throw new PaseoProviderBindingStaleError();
+      throw new PaseoProviderErrorIndistinguishableAtBoundaryError(error);
+    }
   }
 
   public cancel(agentId: string): Promise<void> {

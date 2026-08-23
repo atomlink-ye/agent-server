@@ -10,6 +10,7 @@ import type {
   ExecutionPlaneCapabilities,
   ExecutionPlanePort,
 } from '../../application/ports/execution-plane.js';
+import type { RuntimeExecutionProvider } from '../../application/ports/runtime-execution-provider.js';
 import type { RuntimeSessionRepository } from '../../application/ports/runtime-session-repository.js';
 import type { RuntimeWorkspaceRepository } from '../../application/ports/runtime-workspace-repository.js';
 import {
@@ -34,9 +35,11 @@ import {
   RuntimeToolRegistry,
   type RuntimeToolContributor,
 } from '../../platform/runtime-tool-registry.js';
-import type { ManagedEnvironmentProvider } from '../../domain/environments/managed-environment-package.js';
 import type { AppConfig } from '../../shared/config.js';
 import type { Logger } from '../../shared/observability/logger.js';
+import { mapPaseoConfig } from '../../infrastructure/runtime/paseo/paseo-config-mapper.js';
+import { createPaseoRuntimeProvider } from '../../infrastructure/runtime/paseo/paseo-runtime-provider.js';
+import { UnavailableRuntimeProvider } from '../../infrastructure/runtime/unavailable-runtime-provider.js';
 
 export interface RuntimeExtensionControl extends RuntimeExtensionBinder {
   revokeForTeamRun(teamRunId: string): Promise<void>;
@@ -50,6 +53,8 @@ export interface RuntimeMcpHostLifecycle {
 export interface RuntimeModule {
   readonly executionRuntime: ExecutionRuntimeService;
   readonly executionPlane: ExecutionPlanePort;
+  /** Phase-2 provider seam, including the explicit disabled-runtime node. */
+  readonly runtimeProvider: RuntimeExecutionProvider;
   readonly executionRuns: ExecutionRunRegistry;
   readonly sessions: RuntimeSessionRepository;
   readonly workspaces: RuntimeWorkspaceRepository;
@@ -62,17 +67,6 @@ export interface RuntimeModule {
   registerToolContributor(contributor: RuntimeToolContributor): void;
 }
 
-function normalizePaseoRequestedModel(
-  provider: ManagedEnvironmentProvider,
-  model: string,
-): string {
-  const prefix = 'opencode-go/';
-  const stripsProviderPrefix = provider === 'claude' || provider === 'codex';
-  return stripsProviderPrefix && model.startsWith(prefix)
-    ? model.slice(prefix.length)
-    : model;
-}
-
 export interface RuntimeModuleDatabase {
   query<Row = Record<string, unknown>>(
     sql: string,
@@ -81,6 +75,16 @@ export interface RuntimeModuleDatabase {
     readonly rows?: readonly Row[];
     readonly rowCount?: number | null;
   }>;
+}
+
+function createRuntimeProvider(options: {
+  readonly adapter: 'none' | 'paseo';
+  readonly config: Pick<AppConfig, 'paseo'>;
+  readonly logger: Logger;
+}): RuntimeExecutionProvider {
+  return options.adapter === 'none'
+    ? new UnavailableRuntimeProvider()
+    : createPaseoRuntimeProvider(options.config, options.logger);
 }
 
 export function createRuntimeModule(options: {
@@ -95,6 +99,7 @@ export function createRuntimeModule(options: {
   readonly scopedMemory?: Pick<ScopedMemoryResolver, 'resolve'>;
 }): RuntimeModule {
   const runtimeAdapter = options.config.runtime?.adapter ?? 'paseo';
+  const paseoConfig = mapPaseoConfig(options.config);
   const sessions = new PostgresRuntimeSessionRepository(options.database);
   const sessionLookup = new PostgresRuntimeSessionLookup(options.database);
   const workspaces = new PostgresRuntimeWorkspaceRepository(options.database);
@@ -103,25 +108,14 @@ export function createRuntimeModule(options: {
     runtimeAdapter === 'none'
       ? new UnavailableExecutionPlane()
       : new PaseoExecutionPlane(
-          {
-            wsUrl: options.config.paseo.wsUrl,
-            provider: options.config.paseo.provider,
-            cwd: options.config.paseo.agentCwd,
-            workspaceTitle: options.config.paseo.workspaceTitle,
-            ...(options.config.paseo.model
-              ? {
-                  requestedModel: normalizePaseoRequestedModel(
-                    options.config.paseo.provider,
-                    options.config.paseo.model,
-                  ),
-                }
-              : {}),
-            connectTimeoutMs: options.config.paseo.connectTimeoutMs,
-            executionTimeoutMs: options.config.paseo.executionTimeoutMs,
-            executionTimeoutSource: options.config.paseo.executionTimeoutSource,
-          },
+          paseoConfig,
           options.logger,
         );
+  const runtimeProvider = createRuntimeProvider({
+    adapter: runtimeAdapter,
+    config: options.config,
+    logger: options.logger,
+  });
   const executionPlaneRuntime = new ExecutionPlaneRuntimeFacade(
     executionPlane,
     sessions,
@@ -176,6 +170,7 @@ export function createRuntimeModule(options: {
   return {
     executionRuntime,
     executionPlane,
+    runtimeProvider,
     executionRuns,
     sessions,
     workspaces,

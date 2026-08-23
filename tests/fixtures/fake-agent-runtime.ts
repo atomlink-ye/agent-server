@@ -7,11 +7,6 @@ import type {
 import type { ExecutionObservationSink } from '../../src/application/ports/runtime-execution-session.js';
 import type { ExecutionPlaneHealth } from '../../src/application/ports/execution-plane.js';
 import type { ExecutionExtensionBinding } from '../../src/application/ports/runtime-extension-binding.js';
-import type {
-  ExecutionRuntimeService,
-  ExecutionTurnOutcome,
-  ExecutionTurnRequest,
-} from '../../src/application/ports/execution-runtime.js';
 
 type FakeRuntimeHealth = {
   readonly ready: boolean;
@@ -62,6 +57,30 @@ type FakeRuntimeExecuteInput = {
   };
 };
 
+type FakeTurnInput = {
+  readonly runId: string;
+  readonly prompt: string;
+  readonly systemPrompt?: string;
+  readonly runtimeSessionId?: string;
+  readonly workspaceBinding?: { readonly externalWorkspaceId: string };
+  readonly cwd?: string;
+  readonly provider?: string;
+  readonly model?: string;
+  readonly sessionTitle?: string;
+  readonly labels?: Readonly<Record<string, string>>;
+  readonly proposalLimit?: number;
+};
+
+type FakeTurnOutput = {
+  readonly provider: string;
+  readonly model: string;
+  readonly text: string;
+  readonly workspaceBinding: { readonly plane: string; readonly externalWorkspaceId: string };
+  readonly sessionBinding: { readonly plane: string; readonly externalSessionId: string };
+  readonly usage?: FakeRuntimeExecution['usage'];
+  readonly memoryCandidates?: FakeRuntimeExecution['memoryCandidates'];
+};
+
 export interface FakeRuntimeOptions {
   readonly ready?: boolean;
   readonly responseText?: string;
@@ -88,7 +107,7 @@ export interface FakeRuntimeExecutionRecord {
   readonly finishedAt: number;
 }
 
-export class FakeAgentRuntime implements ExecutionRuntimeService {
+export class FakeAgentRuntime {
   public initializeCalls = 0;
   public executeCalls = 0;
   public closeCalls = 0;
@@ -134,7 +153,14 @@ export class FakeAgentRuntime implements ExecutionRuntimeService {
   }
 
   public async ensureAgentChatRuntimeSession(
-    input: Parameters<ExecutionRuntimeService['ensureAgentChatRuntimeSession']>[0],
+    input: {
+      readonly agentChatRuntimeId: string;
+      readonly runtimeEpoch: number;
+      readonly agentOwner: { readonly scope: { readonly tenantId: string; readonly workspaceId: string }; readonly principal: { readonly type: string; readonly id: string } };
+      readonly agentVersionId: string;
+      readonly resolvedSkills: readonly { readonly ref: string; readonly digest: string }[];
+      readonly toolRefs: readonly string[];
+    },
   ): Promise<RuntimeSession> {
     const now = new Date(0).toISOString();
     return {
@@ -224,9 +250,9 @@ export class FakeAgentRuntime implements ExecutionRuntimeService {
   }
 
   public async executeTurn(
-    input: ExecutionTurnRequest,
+    input: FakeTurnInput,
     _observer?: ExecutionObservationSink,
-  ): Promise<ExecutionTurnOutcome> {
+  ): Promise<FakeTurnOutput> {
     const creating = input.systemPrompt !== undefined;
     const execution = await this.execute(
       creating
@@ -265,9 +291,7 @@ export class FakeAgentRuntime implements ExecutionRuntimeService {
             operation: 'continue',
             runId: input.runId,
             prompt: input.prompt,
-            externalSessionId:
-              input.compatibilitySessionBinding?.externalSessionId ??
-              'fake-agent-1',
+            externalSessionId: 'fake-agent-1',
             ...(input.runtimeSessionId
               ? { runtimeSessionId: input.runtimeSessionId }
               : {}),

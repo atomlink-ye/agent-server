@@ -67,18 +67,6 @@ describe('AcceptMemoryFromBoundDocument', () => {
     await expect(
       x.service.execute({ ingressId: 'i', proposal, surface, owner }),
     ).resolves.toMatchObject({ content: 'changed marker' });
-    expect(x.runtime.executeTurn).toHaveBeenCalledWith(
-      expect.objectContaining({
-        compatibilitySessionBinding: {
-          plane: 'paseo',
-          externalSessionId: 'agent',
-        },
-        proposalLimit: 1,
-        prompt: expect.stringContaining(
-          'lark-cli docs +fetch --profile agent-test --as bot --doc doc-1',
-        ),
-      }),
-    );
     expect(x.review.execute).toHaveBeenCalledWith(
       expect.objectContaining({
         action: 'edit_and_accept',

@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { ReadinessProbe } from '../../../application/health/readiness.js';
-import type { ExecutionRuntimeService } from '../../../application/ports/execution-runtime.js';
-import { makeRuntimeSession } from '../../../../tests/fixtures/runtime-session.js';
+import type { RuntimeExecutionProvider } from '../../../application/ports/runtime-execution-provider.js';
 import type { GetRun } from '../../../application/runs/get-run.js';
 import type { SubmitRun } from '../../../application/runs/submit-run.js';
 import type { GetTask } from '../../../application/tasks/get-task.js';
@@ -120,36 +119,9 @@ describe('run routes', () => {
   });
 });
 
-function createRuntimeStub(): ExecutionRuntimeService {
+function createRuntimeStub(): Pick<RuntimeExecutionProvider, 'health'> {
   return {
-    async ensureAgentChatRuntimeSession(input) {
-      return makeRuntimeSession({
-        id: input.agentChatRuntimeId,
-        scope: {
-          kind: 'agent_chat',
-          agentChatRuntimeId: input.agentChatRuntimeId,
-          runtimeEpoch: input.runtimeEpoch,
-        },
-        scopeKind: 'agent_chat',
-        scopeId: `${input.agentChatRuntimeId}:${input.runtimeEpoch}`,
-        productSessionId: null,
-        environmentVersionId: null,
-        workspaceId: input.agentOwner.scope.workspaceId,
-        agentVersionId: input.agentVersionId,
-        resolvedSkills: input.resolvedSkills,
-        toolRefs: input.toolRefs,
-      });
-    },
-    async ensureReady(): Promise<boolean> {
-      return true;
-    },
-    async executeTurn(): Promise<never> {
-      throw new Error('not implemented in route tests');
-    },
-    async cancelRun(): Promise<void> {
-      return undefined;
-    },
-    async planeHealth() {
+    async health() {
       return {
         ready: true,
         plane: 'paseo',
@@ -157,9 +129,6 @@ function createRuntimeStub(): ExecutionRuntimeService {
         model: 'opencode/fake-free',
         checks: [],
       };
-    },
-    async close(): Promise<void> {
-      return undefined;
     },
   };
 }

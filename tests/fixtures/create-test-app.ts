@@ -9,7 +9,7 @@ import {
   createApplication,
   type ApplicationControls,
 } from '../../src/composition/create-application.js';
-import type { ExecutionRuntimeService } from '../../src/application/ports/execution-runtime.js';
+import type { FakeAgentRuntime } from './fake-agent-runtime.js';
 import type { FileStore } from '../../src/application/ports/file-store.js';
 import { applyDurableKernelMigrations } from '../../src/infrastructure/postgres/postgres.js';
 import type { PostgresRunDispatcher } from '../../src/infrastructure/postgres/postgres-run-dispatcher.js';
@@ -115,7 +115,7 @@ export type TestDatabase = {
 };
 
 export async function createTestApp(
-  runtime: ExecutionRuntimeService,
+  _runtime: FakeAgentRuntime,
   options: CreateTestAppOptions = {},
 ) {
   const database = (options.database ?? new PGlite()) as TestDatabase;

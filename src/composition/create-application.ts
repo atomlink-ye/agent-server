@@ -1,12 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 
-import { ClaimNextRun } from '../application/runs/claim-next-run.js';
 import { CompleteRun } from '../application/runs/complete-run.js';
+import type { PostgresRunDispatcher } from '../infrastructure/postgres/postgres-run-dispatcher.js';
 import { GetTask } from '../application/tasks/get-task.js';
 import { GetTaskTree } from '../application/tasks/get-task-tree.js';
 import { ExecuteTeamTask } from '../application/tasks/execute-team-task.js';
-import { PostgresRunDispatcher } from '../infrastructure/postgres/postgres-run-dispatcher.js';
 import { CancelTask } from '../application/tasks/cancel-task.js';
 import type { AppConfig } from '../shared/config.js';
 import type { Logger } from '../shared/observability/logger.js';
@@ -24,13 +23,15 @@ import {
   createChatExecutionConsumer,
   createMemoryChannelExecutionConsumers,
   createRunExecutionConsumer,
+  createRunExecutionRegistry,
+  createRunDispatcher,
 } from './create-execution-consumers.js';
 import {
   createLarkChannelWorkers,
   type LarkChannelWorkers,
 } from './create-lark-channel-workers.js';
 import { createApplicationLifecycle } from './create-application-lifecycle.js';
-import { createApplicationHttp } from './create-application-http.js';
+import { createHttpApp } from '../entrypoints/api/app.js';
 import { createMemoryCapabilities } from './create-memory-capabilities.js';
 import { createKernelCapabilities } from './create-kernel-capabilities.js';
 import { createInfrastructure } from './create-infrastructure.js';
@@ -43,7 +44,6 @@ import type { PostgresSessionRepository } from '../infrastructure/postgres/postg
 import { createRuntimeToolCatalog } from '../application/extensions/runtime-tool-catalog.js';
 import { createCollaborationRuntimeContributor, createSyntheticRuntimeToolsContributor } from '../entrypoints/mcp/runtime-tool-contributors.js';
 import { SyntheticMarketAdapter } from '../adapters/demo-market/synthetic-market-adapter.js';
-import { ExecutionRunRegistry } from '../application/runtime/execution-run-registry.js';
 import { createRuntimeOwner } from './create-runtime-owner.js';
 
 export interface SingleRunDebugControl {
@@ -220,7 +220,7 @@ export async function createApplication(
     runtimeMcpServer,
     chatRuntime,
   } = runtimeOwner;
-  const executionRuns = new ExecutionRunRegistry();
+  const executionRuns = createRunExecutionRegistry();
   const chatCapabilities =
     directChatPlane === 'absent'
       ? createChatExecutionConsumer({ directChatPlane })
@@ -330,16 +330,14 @@ export async function createApplication(
       ? { activationReconciler: terminalActivationReconciler }
       : {}),
   });
-  const dispatcher = new PostgresRunDispatcher(
-    new ClaimNextRun(runRepository, {
-      workerId,
-      leaseDurationMs,
-    }),
+  const dispatcher = createRunDispatcher({
+    runs: runRepository,
     executeRun,
+    workerId,
+    leaseDurationMs,
     logger,
-    {
-      concurrency: config.dispatcher?.concurrency ?? 4,
-      onIdleMaintenance: async () => {
+    concurrency: config.dispatcher?.concurrency ?? 4,
+    onIdleMaintenance: async () => {
         try {
           const recovered =
             await collaborativeTeamExecutions.recoverExpiredTeamRuns(
@@ -365,9 +363,8 @@ export async function createApplication(
             error_name: error instanceof Error ? error.name : 'UnknownError',
           });
         }
-      },
     },
-  );
+  });
   let larkWorker: LarkChannelWorkers['larkWorker'] | undefined;
   let larkOutboxWorker: LarkChannelWorkers['larkOutboxWorker'] | undefined;
   let larkReceiver: LarkChannelWorkers['larkReceiver'] | undefined;
@@ -395,7 +392,7 @@ export async function createApplication(
     larkReceiver = larkWorkers.larkReceiver;
   }
   const readiness = noExternalDependencies;
-  const app = createApplicationHttp({
+  const app = createHttpApp({
     config,
     logger,
     readiness,

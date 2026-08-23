@@ -11,7 +11,6 @@ import { createTeamMemberRun } from '../../domain/teams/team-member-run.js';
 import { createTeamRun, type TeamRun } from '../../domain/teams/team-run.js';
 import { TeamExecutionError } from '../ports/team-execution-repository.js';
 import { RuntimeTimedOutError } from '../runtime/execution-runtime-errors.js';
-import type { ExecutionRuntimeService } from '../ports/execution-runtime.js';
 import type { InvokableRepository } from '../ports/invokable-repository.js';
 import {
   RunCompletionConflictError,
@@ -35,7 +34,6 @@ import {
   RunCompletionPersistenceError,
 } from './runtime-execution-receipt.js';
 
-type TestExecutionRuntime = ExecutionRuntimeService;
 
 describe('ExecuteRun', () => {
   it('fails a terminal run when the runtime rejects execution', async () => {
@@ -342,10 +340,7 @@ describe('ExecuteRun', () => {
 
     expect(runtime.executeTurn).toHaveBeenCalledWith(
       expect.objectContaining({
-        compatibilitySessionBinding: {
-          plane: 'paseo',
-          externalSessionId: 'agent-prior',
-        },
+        runtimeSessionId: 'agent-prior',
         prompt:
           'Pinned verified MEMORY.md:\npinned memory\n\nCurrent Task input:\nprivate prompt',
         systemPrompt: expect.stringContaining('managed instructions'),
@@ -542,7 +537,7 @@ describe('ExecuteRun', () => {
     );
     expect(
       vi.mocked(runtime.executeTurn).mock.calls[0]?.[0],
-    ).not.toHaveProperty('compatibilitySessionBinding');
+    ).not.toHaveProperty('sessionBinding');
   });
   it('ignores a stale Lead callback but preserves current-Lead no-progress and revision fences', async () => {
     const now = () => new Date('2026-07-23T00:00:00.000Z');

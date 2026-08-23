@@ -46,9 +46,6 @@ import { ChatDeliveryReconciler } from './application/chat/chat-delivery-reconci
 import { MockChatTurnProvider } from './adapters/chat/mock-chat-turn-provider.js';
 import { ExecutionRuntimeChatTurnProvider } from './adapters/chat/execution-runtime-chat-turn-provider.js';
 import { ChatDeliveryWorker } from './entrypoints/chat/worker.js';
-import {
-  type WorkChatWakeWorker,
-} from './entrypoints/work-chat/worker.js';
 import { ChatBrainResolver } from './application/chat/chat-brain-resolver.js';
 import { ListAgentHomeEntries } from './application/agents/agent-home.js';
 import { PostgresAgentHomeRepository } from './infrastructure/postgres/postgres-agent-home-repository.js';

@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { PGlite } from '@electric-sql/pglite';
 
 import { RuntimeReadinessProbe } from '../../src/application/health/readiness.js';
+import { createConfiguredRuntimeCapabilities } from '../../src/composition/create-runtime-capabilities.js';
 import { createMemoryModule } from '../../src/modules/memory/memory-module.js';
 import { createResourceModule } from '../../src/modules/resource/resource-module.js';
 import { createWorkModule } from '../../src/modules/work/work-module.js';
@@ -309,6 +310,7 @@ export async function createTestApp(
     definitionResolution: resourceModule.workDefinitionResolution,
     execution: new InvokeTaskExecutionAdmission(invokeTask),
     executionFacts: new PostgresExecutionFactQuery(repositoryDatabase),
+    runtimeCapabilities: createConfiguredRuntimeCapabilities(testConfig),
   });
   const createMemoryProposal = new CreateMemoryProposal(
     workspaceMemoryRepository,

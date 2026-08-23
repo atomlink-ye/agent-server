@@ -1,5 +1,6 @@
 import {
   ExecutionPlaneUnavailableError,
+  type ExecutionPlaneHealth,
   type ExecutionSession,
 } from '../../application/ports/execution-plane.js';
 import type {
@@ -23,6 +24,24 @@ export class UnavailableRuntimeProvider implements RuntimeExecutionProvider {
 
   public capabilities(): RuntimeProviderCapabilities {
     return UNAVAILABLE_CAPABILITIES;
+  }
+
+  public async ensureReady(): Promise<boolean> {
+    return false;
+  }
+
+  public async health(): Promise<ExecutionPlaneHealth> {
+    return {
+      ready: false,
+      plane: this.name,
+      checks: [
+        {
+          name: 'execution_plane',
+          ready: false,
+          detail: 'Runtime adapter is disabled.',
+        },
+      ],
+    };
   }
 
   public async create(
@@ -57,4 +76,6 @@ export class UnavailableRuntimeProvider implements RuntimeExecutionProvider {
   public async closeSession(_binding: ProviderSessionBinding): Promise<void> {
     return Promise.resolve();
   }
+
+  public async close(): Promise<void> {}
 }

@@ -24,6 +24,7 @@ import type { CreateMemoryProposal } from '../memory/create-memory-proposal.js';
 import type { RuntimeExtensionBinder } from '../extensions/runtime-extension-binder.js';
 import { RuntimeTimedOutError } from '../runtime/execution-runtime-errors.js';
 import type { ExecutionRuntimeService } from '../ports/execution-runtime.js';
+import type { RuntimeExecutionProvider } from '../ports/runtime-execution-provider.js';
 import { ExecuteTeamTask } from '../tasks/execute-team-task.js';
 import type { CollaborationActivationReconciler } from '../collaboration/collaboration-activation-reconciler.js';
 import { AgentRunExecutor } from './agent-run-executor.js';
@@ -52,6 +53,10 @@ export class ExecuteRun {
     _definitions: DefinitionReadApi,
     private readonly executeTeamTask: ExecuteTeamTask,
     private readonly runtime: ExecutionRuntimeService,
+    private readonly runtimeProvider: Pick<
+      RuntimeExecutionProvider,
+      'ensureReady'
+    >,
     private readonly logger: Logger,
     private readonly now: () => Date = () => new Date(),
     resolver: AgentResolutionApi = { resolvePublished: async () => null },
@@ -118,7 +123,7 @@ export class ExecuteRun {
 
   public async ensureRuntimeReady(): Promise<boolean> {
     try {
-      return await this.runtime.ensureReady();
+      return await this.runtimeProvider.ensureReady();
     } catch (error) {
       this.logger.log('warn', 'run.runtime.unavailable', {
         error_name: error instanceof Error ? error.name : 'UnknownError',

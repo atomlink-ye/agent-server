@@ -332,15 +332,23 @@ export async function createService(
     runtimeRequiresReadiness &&
     config.runtime?.adapter === 'none'
   ) {
-    await closeRuntimeAndPool(runtimeModule.executionRuntime, pool);
+    await closeRuntimeAndPool(
+      runtimeModule.executionRuntime,
+      runtimeModule.runtimeProvider,
+      pool,
+    );
     throw new Error(
       'Declared Direct Chat/Product Work execution runtime requires a runtime adapter.',
     );
   }
   if (!options.singleRunDebug && runtimeRequiresReadiness) {
-    const ready = await runtimeModule.executionRuntime.ensureReady();
+    const ready = await runtimeModule.runtimeProvider.ensureReady();
     if (!ready) {
-      await closeRuntimeAndPool(runtimeModule.executionRuntime, pool);
+      await closeRuntimeAndPool(
+        runtimeModule.executionRuntime,
+        runtimeModule.runtimeProvider,
+        pool,
+      );
       throw new Error(
         'Declared Direct Chat/Product Work execution runtime is not ready.',
       );
@@ -481,6 +489,7 @@ export async function createService(
     resourceModule.definitionReadApi,
     executeTeamTask,
     executionRuntime,
+    runtimeModule.runtimeProvider,
     logger,
     undefined,
     resourceModule.agentResolutionApi,
@@ -641,7 +650,8 @@ export async function createService(
     ...(chatWorker ? { chatWorker } : {}),
     ...(workChatWorker ? { workChatWorker } : {}),
     ...(larkReceiver ? { larkReceiver } : {}),
-    runtime: executionRuntime,
+    executionRuntime,
+    runtimeProvider: runtimeModule.runtimeProvider,
     runtimeMcpServer,
     pool,
   });

@@ -42,16 +42,9 @@ import {
 import { PostgresExecutionFactQuery } from './infrastructure/postgres/postgres-execution-fact-query.js';
 import { InvokeTaskExecutionAdmission } from './application/ports/execution-admission.js';
 import { createRuntimeModule } from './modules/runtime/runtime-module.js';
-import { ChatDeliveryReconciler } from './application/chat/chat-delivery-reconciler.js';
-import { MockChatTurnProvider } from './adapters/chat/mock-chat-turn-provider.js';
-import { ExecutionRuntimeChatTurnProvider } from './adapters/chat/execution-runtime-chat-turn-provider.js';
-import { ChatDeliveryWorker } from './entrypoints/chat/worker.js';
-import { ChatBrainResolver } from './application/chat/chat-brain-resolver.js';
-import { ListAgentHomeEntries } from './application/agents/agent-home.js';
-import { PostgresAgentHomeRepository } from './infrastructure/postgres/postgres-agent-home-repository.js';
-import { PostgresAgentHomeDefinitionSource } from './infrastructure/postgres/postgres-agent-home-definition-source.js';
 import { noExternalDependencies } from './application/health/readiness.js';
 import { createConfiguredRuntimeCapabilities } from './composition/create-runtime-capabilities.js';
+import { createChatCapabilities } from './composition/create-chat-capabilities.js';
 import { createMemoryCapabilities } from './composition/create-memory-capabilities.js';
 import { createKernelCapabilities } from './composition/create-kernel-capabilities.js';
 import { createInfrastructure } from './composition/create-infrastructure.js';
@@ -304,53 +297,24 @@ export async function createService(
     extensions: runtimeExtensionBinder,
     mcpHost: runtimeMcpServer,
   } = runtimeModule;
-  let chatWorker: ChatDeliveryWorker | undefined;
-  if (directChatEnabled && conversations && chatDispatches) {
-    const chatTurnProvider =
-      directChatPlane === 'execution_runtime'
-        ? new ExecutionRuntimeChatTurnProvider(executionRuntime)
-        : new MockChatTurnProvider();
-    const chatBrainResolver = new ChatBrainResolver(
-      resourceModule.managedAgentDefinitions,
-      resourceModule.agentResolutionApi,
-      new ListAgentHomeEntries(
-        new PostgresAgentHomeRepository(pool),
-        new PostgresAgentHomeDefinitionSource(pool),
-      ),
-    );
-    const chatDeliveryReconciler = new ChatDeliveryReconciler(
-      conversations,
-      chatDispatches,
-      chatTurnProvider,
-      chatBrainResolver,
-      conversationWorkLinks,
-      logger,
-      undefined,
-      conversationWorkEntitlements,
-      runtimeExtensionBinder,
-    );
-    chatWorker = new ChatDeliveryWorker(
-      chatDispatches,
-      chatDeliveryReconciler,
-      {
-        workerId: `${workerId}:chat`,
-        leaseMs: leaseDurationMs,
-        onError: ({ phase, errorName, error }) => {
-          logger.log('error', 'chat.delivery_worker.failed', {
-            phase,
-            error_name: errorName,
-            error_message: error instanceof Error ? error.message : undefined,
-            error_stack: error instanceof Error ? error.stack : undefined,
-            postgres_code:
-              typeof (error as { code?: unknown })?.code === 'string'
-                ? (error as { code: string }).code
-                : undefined,
-            worker_id: `${workerId}:chat`,
-          });
-        },
-      },
-    );
-  }
+  const chatCapabilities =
+    directChatPlane === 'absent'
+      ? createChatCapabilities({ directChatPlane })
+      : createChatCapabilities({
+          directChatPlane,
+          database: pool,
+          executionRuntime,
+          conversations: conversations!,
+          chatDispatches: chatDispatches!,
+          managedAgentDefinitions: resourceModule.managedAgentDefinitions,
+          agentResolutionApi: resourceModule.agentResolutionApi,
+          conversationWorkLinks,
+          logger,
+          conversationWorkEntitlements,
+          runtimeExtensionBinder,
+          workerId,
+          leaseMs: leaseDurationMs,
+        });
   const synthesizeMemoryDocument = new SynthesizeMemoryDocument(
     executionRuntime,
   );
@@ -588,7 +552,9 @@ export async function createService(
   const workers = createWorkers({
     ...(larkWorker ? { larkWorker } : {}),
     ...(larkOutboxWorker ? { larkOutboxWorker } : {}),
-    ...(chatWorker ? { chatWorker } : {}),
+    ...(chatCapabilities.chatWorker
+      ? { chatWorker: chatCapabilities.chatWorker }
+      : {}),
     ...(workChatWorker ? { workChatWorker } : {}),
     ...(larkReceiver ? { larkReceiver } : {}),
   });

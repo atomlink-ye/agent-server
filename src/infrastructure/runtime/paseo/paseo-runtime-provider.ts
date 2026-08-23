@@ -263,7 +263,7 @@ export class PaseoRuntimeProvider implements RuntimeExecutionProvider {
   }
 
   /** Paseo has no per-agent close/archive operation. */
-  public async close(_binding: ProviderSessionBinding): Promise<void> {
+  public async closeSession(_binding: ProviderSessionBinding): Promise<void> {
     throw new UnsupportedCapabilityError(
       'Paseo cannot close an individual provider session.',
     );

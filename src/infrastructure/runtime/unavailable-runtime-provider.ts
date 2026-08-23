@@ -54,7 +54,7 @@ export class UnavailableRuntimeProvider implements RuntimeExecutionProvider {
   }
 
   /** There is no external session in disabled mode, so this is a safe no-op. */
-  public async close(_binding: ProviderSessionBinding): Promise<void> {
+  public async closeSession(_binding: ProviderSessionBinding): Promise<void> {
     return Promise.resolve();
   }
 }

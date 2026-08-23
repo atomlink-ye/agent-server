@@ -248,7 +248,7 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
     const binding = this.binding(previous, previousApplied);
     if (this.provider.capabilities().canCloseSession) {
       try {
-        await this.provider.close(binding);
+        await this.provider.closeSession(binding);
         return;
       } catch {
         // The switch is already durable; report the provider orphan below.

@@ -106,5 +106,5 @@ export interface RuntimeExecutionProvider {
 
   open(binding: ProviderSessionBinding): Promise<ExecutionSession>;
 
-  close(binding: ProviderSessionBinding): Promise<void>;
+  closeSession(binding: ProviderSessionBinding): Promise<void>;
 }

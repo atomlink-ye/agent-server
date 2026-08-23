@@ -90,6 +90,10 @@ const ruleInfo: Readonly<Record<string, RuleInfo>> = {
     why: 'The browser source still carries framework-specific client directives.',
     phase: 'Phase 8 — frontend work',
   },
+  'frontend.deleted-compatibility-chat-import': {
+    why: 'Frontend code must not revive imports from the deleted compatibility chat tree.',
+    phase: 'Phase 8 — frontend work',
+  },
   'architecture.domain-imports': {
     why: 'Domain code still depends on an outer application, infrastructure, or entrypoint layer.',
     phase: 'Phase 5 — composition graph',
@@ -358,11 +362,38 @@ function scanFrontend(out: Violation[]): void {
   const files = productionSourceFiles(frontendRoot);
   const normalizedTracePath = 'apps/web/src/features/run-trace/normalized.ts';
   const productRunTracePattern = /\bProductRunTrace\b/g;
+  const deletedCompatibilityChatImports = new Set([
+    'apps/web/src/api/chat',
+    'apps/web/src/components/chat/ChatComposer',
+    'apps/web/src/components/chat/ChatTranscript',
+    'apps/web/src/components/chat/ConversationsList',
+    'apps/web/src/components/chat/assistant-markdown',
+    'apps/web/src/components/chat/contracts',
+    'apps/web/src/components/chat/index',
+    'apps/web/src/desktop/ChatShell',
+    'apps/web/src/desktop/ConversationsPane',
+    'apps/web/src/stores/app',
+    'apps/web/src/stores/conversations',
+    'apps/web/src/stores/messages',
+  ]);
   for (const file of files) {
     const path = rel(file);
     const text = readFileSync(file, 'utf8');
     for (const hit of lineMatches(text, /^\s*['"]use client['"];?\s*$/))
       out.push(violation('frontend.use-client', path, hit.line, 'use client'));
+
+    for (const current of staticImports(text)) {
+      const imported = frontendImportPath(file, current.specifier);
+      if (!imported || !deletedCompatibilityChatImports.has(imported)) continue;
+      out.push(
+        violation(
+          'frontend.deleted-compatibility-chat-import',
+          path,
+          current.line,
+          current.specifier,
+        ),
+      );
+    }
 
     if (path === normalizedTracePath) continue;
     for (const [index, line] of text.split('\n').entries()) {
@@ -377,6 +408,15 @@ function scanFrontend(out: Violation[]): void {
         );
     }
   }
+}
+
+function frontendImportPath(file: string, specifier: string): string | null {
+  const withoutExtension = specifier.replace(/\.(?:js|ts|tsx)$/, '');
+  if (withoutExtension.startsWith('.'))
+    return rel(resolve(dirname(file), withoutExtension));
+  if (withoutExtension.startsWith('@/'))
+    return `apps/web/src/${withoutExtension.slice(2)}`;
+  return null;
 }
 
 function scanImportArchitecture(out: Violation[]): void {

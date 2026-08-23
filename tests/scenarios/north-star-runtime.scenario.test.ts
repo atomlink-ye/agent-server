@@ -18,6 +18,7 @@ import type {
 import type { PaseoModelDescriptor } from '../../src/adapters/paseo/model-selector.js';
 import type { ManagedEnvironmentProvider } from '../../src/domain/environments/managed-environment-package.js';
 import { buildTurnPrompt } from '../../src/application/context/runtime-prompts.js';
+import { RUNTIME_RECOVERY_INSTRUCTION } from '../../src/application/runs/run-prompt-context.js';
 import { createLogger } from '../../src/shared/observability/logger.js';
 import { loadConfig } from '../../src/shared/config.js';
 import { seedCanonicalPublishedAgent } from '../fixtures/canonical-agent.js';
@@ -158,10 +159,13 @@ const authorizationHeaders = {
 const formalMessageInput = {
   text: 'Execute the durable runtime turn.',
 } as const;
-const expectedDeliveredTurnPrompt = buildTurnPrompt({
-  taskInput: formalMessageInput.text,
-  memory: null,
-});
+const expectedDeliveredTurnPrompt = [
+  buildTurnPrompt({
+    taskInput: formalMessageInput.text,
+    memory: null,
+  }),
+  RUNTIME_RECOVERY_INSTRUCTION,
+].join('\n\n');
 
 interface ScenarioState {
   workspaceId: string;

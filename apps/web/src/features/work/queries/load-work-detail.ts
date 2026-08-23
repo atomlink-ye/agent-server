@@ -29,6 +29,7 @@ export async function loadWorkDetail(
   workId: string,
   selectedRunId: string | undefined,
   preferCurrentDefinition: boolean,
+  includeTrace = true,
 ): Promise<WorkDetailData> {
   const [work, runsResponse] = await Promise.all([
     workClient.get(workId),
@@ -59,15 +60,24 @@ export async function loadWorkDetail(
     };
   }
 
-  const [run, productTrace, definitionVersion] = await Promise.all([
-    workRunClient.get(workId, selectedSummary.id),
-    workRunClient.trace(workId, selectedSummary.id),
-    definitionPromise,
-  ]);
-  if (
-    run.projection_status !== 'internally_anchored' ||
-    productTrace.projection_status !== 'internally_anchored'
-  ) {
+  const run = await workRunClient.get(workId, selectedSummary.id);
+  const definitionVersion = await definitionPromise;
+  if (run.projection_status !== 'internally_anchored') {
+    throw new Error('The Product WorkRun projection was not captured.');
+  }
+  if (!includeTrace) {
+    return {
+      work,
+      runs,
+      run,
+      trace: null,
+      selectedDefinitionVersionId,
+      definitionVersion,
+    };
+  }
+
+  const productTrace = await workRunClient.trace(workId, selectedSummary.id);
+  if (productTrace.projection_status !== 'internally_anchored') {
     throw new Error('The Product WorkRun projection was not captured.');
   }
   return {

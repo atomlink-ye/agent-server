@@ -17,6 +17,7 @@ import type {
 import type { RuntimeSessionStore } from '../ports/runtime-session-store.js';
 import type { RuntimeSpecStore } from '../ports/runtime-spec-store.js';
 import type { RuntimeSessionGeneration } from '../../domain/runtime/runtime-session-generation.js';
+import { computeRuntimeBootstrapDigest } from '../../domain/runtime/runtime-session-spec.js';
 import type {
   RuntimeGenerationId,
   RuntimeSessionId,
@@ -62,17 +63,9 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
     });
     if (plan.kind === 'fail') throw new Error('runtime_provider_unavailable');
 
-    const inspection = current
-      ? await this.provider.inspect(this.binding(current, applied))
-      : null;
-    const effectivePlan =
-      current && inspection && inspection.status !== 'available'
-        ? {
-            kind: 'replace' as const,
-            generationId: current.id,
-            reason: 'provider_missing' as const,
-          }
-        : plan;
+    const effectivePlan = current
+      ? await this.planAfterInspection({ current, applied, plan })
+      : plan;
 
     if (effectivePlan.kind === 'reuse') {
       if (!current) throw new Error('runtime_provider_session_missing');
@@ -205,6 +198,37 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
       session: created!.session,
       resolution: 'replaced',
     };
+  }
+
+  private async planAfterInspection(input: {
+    readonly current: RuntimeSessionGeneration;
+    readonly applied: Awaited<ReturnType<RuntimeSpecStore['getDesired']>>;
+    readonly plan: ReturnType<typeof buildReconciliationPlan>;
+  }): Promise<ReturnType<typeof buildReconciliationPlan>> {
+    const inspection = await this.provider.inspect(
+      this.binding(input.current, input.applied),
+    );
+    if (inspection.status === 'unavailable')
+      throw new Error('runtime_provider_unavailable');
+    if (inspection.status === 'missing' || inspection.status === 'stale')
+      return {
+        kind: 'replace',
+        generationId: input.current.id,
+        reason: 'provider_missing',
+      };
+    if (
+      inspection.observed.providerSessionId !== input.current.providerSessionId ||
+      (inspection.observed.bootstrapDigestComponents !== null &&
+        computeRuntimeBootstrapDigest(
+          inspection.observed.bootstrapDigestComponents,
+        ) !== input.current.appliedBootstrapDigest)
+    )
+      return {
+        kind: 'replace',
+        generationId: input.current.id,
+        reason: 'provider_missing',
+      };
+    return input.plan;
   }
 
   private async closeOrRecordOrphan(

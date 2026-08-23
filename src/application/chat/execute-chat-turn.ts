@@ -1,4 +1,4 @@
-import type { ExecutionExtensionBinding } from '../ports/execution-plane.js';
+import type { ExecutionExtensionBinding } from '../ports/runtime-extension-binding.js';
 import type {
   ChatTurnMessage,
   ChatTurnProvider,

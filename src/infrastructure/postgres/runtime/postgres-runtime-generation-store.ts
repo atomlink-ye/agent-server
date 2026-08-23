@@ -168,7 +168,7 @@ export class PostgresRuntimeGenerationStore
   public async close(input: {
     readonly id: RuntimeGenerationId;
     readonly closedAt: string;
-    readonly expectedStatus: 'active' | 'superseded';
+    readonly expectedStatus: 'superseded';
   }): Promise<void> {
     const result = await this.database.query(
       `UPDATE runtime_session_generations

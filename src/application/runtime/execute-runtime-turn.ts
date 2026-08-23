@@ -41,21 +41,31 @@ export class ExecuteRuntimeTurn {
   public async execute(
     input: ExecuteRuntimeTurnInput,
   ): Promise<ExecutionOutput> {
-    const created = await this.turns.createPending({
-      ...(input.turnId ? { id: input.turnId } : {}),
-      runtimeSessionId: input.runtimeSessionId,
-      source: input.source,
-      promptDigest: createHash('sha256').update(input.prompt).digest('hex'),
-      createdAt: this.now().toISOString(),
-    });
-
     let ready: Awaited<ReturnType<EnsureRuntimeSession['execute']>>;
     try {
       ready = await this.ensureRuntimeSession.execute(input.runtimeSessionId);
     } catch (error) {
-      await this.fail(created.id, mapFailureCode(error));
       throw new RuntimeTurnExecutionError(mapFailureCode(error));
     }
+
+    const actualPrompt =
+      ready.resolution === 'reused' ? input.prompt : input.recoveryPrompt;
+    if (actualPrompt === undefined) {
+      await ready.session.close().catch(() => undefined);
+      throw new RuntimeTurnExecutionError(
+        ready.resolution === 'replaced'
+          ? 'runtime_replacement_failed'
+          : 'runtime_reconfigure_failed',
+      );
+    }
+
+    const created = await this.turns.createPending({
+      ...(input.turnId ? { id: input.turnId } : {}),
+      runtimeSessionId: input.runtimeSessionId,
+      source: input.source,
+      promptDigest: createHash('sha256').update(actualPrompt).digest('hex'),
+      createdAt: this.now().toISOString(),
+    });
 
     let prepared;
     try {
@@ -96,7 +106,7 @@ export class ExecuteRuntimeTurn {
 
     try {
       const result = await ready.session.run(
-        { runId: created.id, prompt: input.prompt },
+        { runId: created.id, prompt: actualPrompt },
         input.observer,
       );
       return await this.complete(created.id, result);

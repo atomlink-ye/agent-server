@@ -134,7 +134,7 @@ CREATE TABLE runtime_session_generations (
 
   provider text NOT NULL,
   provider_workspace_id text NULL,
-  provider_session_id text NOT NULL,
+  provider_session_id text NULL,
 
   applied_spec_revision integer NOT NULL,
   applied_bootstrap_digest text NOT NULL,
@@ -144,7 +144,7 @@ CREATE TABLE runtime_session_generations (
   status text NOT NULL CHECK (
     status IN (
       'provisioning',
-      'ready',
+      'active',
       'superseded',
       'failed',
       'closed'
@@ -155,6 +155,13 @@ CREATE TABLE runtime_session_generations (
   ready_at timestamptz NULL,
   superseded_at timestamptz NULL,
   closed_at timestamptz NULL,
+
+  CHECK (
+    status <> 'active' OR (
+      provider_session_id IS NOT NULL
+      AND provider_workspace_id IS NOT NULL
+    )
+  ),
 
   UNIQUE (runtime_session_id, generation)
 );

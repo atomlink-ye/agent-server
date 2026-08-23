@@ -10,22 +10,15 @@ import { PostgresRunDispatcher } from '../infrastructure/postgres/postgres-run-d
 import { CancelTask } from '../application/tasks/cancel-task.js';
 import type { AppConfig, LarkCanaryEnabledConfig } from '../shared/config.js';
 import type { Logger } from '../shared/observability/logger.js';
-import { ResolveLarkBinding } from '../application/channels/resolve-lark-binding.js';
-import { ProcessChannelIngress } from '../application/channels/process-channel-ingress.js';
 import { LarkIngressWorker } from '../entrypoints/lark/worker.js';
 import { LarkOutboxWorker } from '../entrypoints/lark/outbox-worker.js';
 import { createLarkWebsocketReceiver } from '../adapters/lark/lark-websocket-receiver.js';
-import { createLarkDeliveryAdapter } from '../adapters/lark/lark-delivery-adapter.js';
-import { larkMemoryReviewCardRenderer } from '../adapters/lark/lark-memory-card.js';
 import { DeliverChannelOutbox } from '../application/channels/deliver-channel-outbox.js';
-import { ProcessLarkIngress } from '../application/channels/process-lark-ingress.js';
 import {
   PublishMemoryReviewSurface,
 } from '../application/channels/publish-memory-review-surface.js';
 import { createLarkMemoryDocumentAdapter } from '../adapters/lark/lark-memory-document.js';
 import { createMemoryReviewActionTokenDeriver } from '../application/channels/memory-review-action-token.js';
-import { ApplyMemoryReviewCommand } from '../application/channels/apply-memory-review-command.js';
-import { ApplyMemoryReviewControl } from '../application/channels/apply-memory-review-control.js';
 import { TeamDriver } from '../application/teams/team-driver.js';
 import { PostgresExecutionFactQuery } from '../infrastructure/postgres/postgres-execution-fact-query.js';
 import { InvokeTaskExecutionAdmission } from '../application/ports/execution-admission.js';
@@ -36,6 +29,7 @@ import {
   createMemoryChannelExecutionConsumers,
   createRunExecutionConsumer,
 } from './create-execution-consumers.js';
+import { createLarkChannelWorkers } from './create-lark-channel-workers.js';
 import { createMemoryCapabilities } from './create-memory-capabilities.js';
 import { createKernelCapabilities } from './create-kernel-capabilities.js';
 import { createInfrastructure } from './create-infrastructure.js';
@@ -542,69 +536,26 @@ export async function createApplication(
   let larkReceiver: ReturnType<typeof createLarkWebsocketReceiver> | undefined;
   if (config.larkCanary?.enabled) {
     const larkConfig = config.larkCanary;
-    const processMessages = new ProcessChannelIngress(
-      new ResolveLarkBinding(channelRepository, larkConfig),
-      submitSessionTurn,
-      channelRepository,
-      larkConfig,
-    );
-    const processIngress = new ProcessLarkIngress(
-      processMessages,
-      new ApplyMemoryReviewCommand(
-        channelRepository,
-        memoryModule.reviewApi.review,
-        memoryModule.reviewApi.managedMemory,
-        larkConfig,
-      ),
-      new ApplyMemoryReviewControl(
-        channelRepository,
-        reviewSurfaceRepository,
-        memoryModule.reviewApi.review,
-        memoryModule.reviewApi.managedMemory,
-        larkConfig,
-        larkMemoryReviewCardRenderer,
-        memoryDocument,
-        synthesizeMemoryDocument,
-        acceptMemoryFromDocument,
-      ),
-    );
-    larkWorker = createLarkIngressWorker(
-      channelRepository,
-      processIngress,
-      larkConfig,
-      logger,
-      {
-        workerId: `${workerId}:lark`,
-        leaseMs: leaseDurationMs,
-      },
-    );
-    larkOutboxWorker = createLarkOutboxWorker(
-      channelRepository,
-      new DeliverChannelOutbox(
-        createLarkDeliveryAdapter(larkConfig),
-        channelRepository,
-        {
-          cards: larkMemoryReviewCardRenderer,
-          tokenDeriver: reviewTokenDeriver!,
-          validateCardPublication: (input) =>
-            reviewSurfaceRepository.validateCardPublication(input),
-          finalizeCardDelivery: (input) =>
-            reviewSurfaceRepository.finalizeCardDelivery(input),
-          ...(larkConfig.docWebBaseUrl
-            ? { docWebBaseUrl: larkConfig.docWebBaseUrl }
-            : {}),
-        },
-      ),
-      logger,
-      {
-        workerId: `${workerId}:lark-outbox`,
-        leaseMs: leaseDurationMs,
-      },
-    );
-    larkReceiver = createLarkWebsocketReceiver({
+    if (!memoryReviewSurface || !reviewTokenDeriver)
+      throw new Error('lark_review_surface_unavailable');
+    const larkWorkers = createLarkChannelWorkers({
       config: larkConfig,
       repository: channelRepository,
+      submitSessionTurn,
+      reviewSurface: reviewSurfaceRepository,
+      review: memoryModule.reviewApi.review,
+      managedMemory: memoryModule.reviewApi.managedMemory,
+      memoryDocument,
+      synthesizeMemoryDocument,
+      acceptMemoryFromDocument,
+      reviewTokenDeriver,
+      workerId,
+      leaseMs: leaseDurationMs,
+      logger,
     });
+    larkWorker = larkWorkers.larkWorker;
+    larkOutboxWorker = larkWorkers.larkOutboxWorker;
+    larkReceiver = larkWorkers.larkReceiver;
   }
   const readiness = noExternalDependencies;
   const app = createHttpApi({

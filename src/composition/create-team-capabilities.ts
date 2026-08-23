@@ -1,10 +1,15 @@
 import type { Pool } from 'pg';
 
-import { createTeamModule } from '../modules/team/team-module.js';
+import { CollaborationActivationReconciler } from '../application/collaboration/collaboration-activation-reconciler.js';
+import { CollaborationKernel } from '../application/collaboration/collaboration-kernel.js';
 import type { AdmissionRepository } from '../application/ports/admission-repository.js';
 import type { RunEventRepository } from '../application/ports/run-events.js';
 import type { RunRepository } from '../application/ports/run-repository.js';
 import type { TaskRepository } from '../application/ports/task-repository.js';
+import { TeamToolContextResolver } from '../application/teams/team-tool-context.js';
+import { PostgresCollaborationRepository } from '../infrastructure/postgres/postgres-collaboration-repository.js';
+import { PostgresTeamExecutionRepository } from '../infrastructure/postgres/postgres-collaborative-team-repository.js';
+import { PostgresTeamMessageRepository } from '../infrastructure/postgres/postgres-team-message-repository.js';
 import type { Logger } from '../shared/observability/logger.js';
 
 export interface CreateTeamCapabilitiesOptions {
@@ -15,6 +20,60 @@ export interface CreateTeamCapabilitiesOptions {
   readonly events: RunEventRepository;
   readonly logger: Logger;
   readonly deferActivationKick?: boolean;
+}
+
+export type CreateTeamModuleOptions = CreateTeamCapabilitiesOptions;
+
+export function createTeamModule(options: CreateTeamModuleOptions) {
+  const collaborationRepository = new PostgresCollaborationRepository(
+    options.database,
+  );
+  const executions = Object.assign(
+    new PostgresTeamExecutionRepository(options.database),
+    {
+      listCollaborationCheckpoints: (
+        teamRunId: string,
+        owner: Parameters<
+          PostgresCollaborationRepository['listCheckpoints']
+        >[1],
+      ) => collaborationRepository.listCheckpoints(teamRunId, owner),
+      listCollaborationSubmissions: (
+        teamRunId: string,
+        owner: Parameters<
+          PostgresCollaborationRepository['listSubmissions']
+        >[1],
+      ) => collaborationRepository.listSubmissions(teamRunId, owner),
+    },
+  );
+  const messages = new PostgresTeamMessageRepository(options.database);
+  const contextResolver = new TeamToolContextResolver(
+    executions,
+    options.tasks,
+    options.runs,
+  );
+  const activationReconciler = new CollaborationActivationReconciler(
+    messages,
+    executions,
+    options.tasks,
+    options.admissions,
+    options.logger,
+  );
+  const collaboration = new CollaborationKernel(
+    executions,
+    collaborationRepository,
+    messages,
+    options.events,
+    options.deferActivationKick ? undefined : activationReconciler,
+  );
+
+  return {
+    executions,
+    messages,
+    collaborationRepository,
+    contextResolver,
+    activationReconciler,
+    collaboration,
+  } as const;
 }
 
 export type TeamCapabilities = ReturnType<typeof createTeamModule>;

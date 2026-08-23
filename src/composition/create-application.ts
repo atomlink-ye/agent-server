@@ -106,9 +106,9 @@ export async function createApplication(
     conversationWorkEntitlements,
     chatDispatches,
     submitSessionTurn,
+    events,
     channelRepository,
     reviewSurfaceRepository,
-    events,
     admitRootTask,
     submitRun,
     getRun,
@@ -239,7 +239,7 @@ export async function createApplication(
         });
   const memoryChannelConsumers = createMemoryChannelExecutionConsumers({
     runtime: executionRuntime,
-    events,
+    acceptRuntime: executionRuntime,
     review: memoryModule.reviewApi.review,
     managedMemory: memoryModule.reviewApi.managedMemory,
     profile: process.env.LARK_CLI_PROFILE ?? 'agent-test',

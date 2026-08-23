@@ -88,7 +88,7 @@ function binding(
       provider: 'opencode',
       model: 'free/model',
       cwd: '/tmp/paseo-provider-test',
-      systemPrompt: 'system',
+      systemPromptDigest: 'digest',
     },
     ...overrides,
   };

@@ -104,14 +104,12 @@ export class RuntimeGenerationManager {
     const generation = await this.generations.findById(generationId);
     if (!generation) throw new Error('Runtime generation does not exist.');
     if (generation.status === 'closed') return;
-    if (generation.status !== 'active' && generation.status !== 'superseded')
-      throw new Error(
-        'Runtime generation cannot close from its current state.',
-      );
+    if (generation.status !== 'superseded')
+      throw new Error('Only superseded runtime generations can close.');
     await this.generations.close({
       id: generation.id,
       closedAt: this.now().toISOString(),
-      expectedStatus: generation.status,
+      expectedStatus: 'superseded',
     });
   }
 }

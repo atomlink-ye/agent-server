@@ -24,10 +24,11 @@ export interface RuntimeGenerationStore {
     readonly id: RuntimeGenerationId;
     readonly failedAt: string;
   }): Promise<void>;
+  /** Fenced cleanup of a generation that has already been superseded. */
   close(input: {
     readonly id: RuntimeGenerationId;
     readonly closedAt: string;
-    readonly expectedStatus: 'active' | 'superseded';
+    readonly expectedStatus: 'superseded';
   }): Promise<void>;
 }
 

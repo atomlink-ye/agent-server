@@ -13,6 +13,7 @@ import type { RuntimeScope, RuntimeSessionOwner } from '../../domain/runtime/run
 import type { ResolveRuntimeSessionSpec } from '../ports/resolve-runtime-session-spec.js';
 import type { EnvironmentReadApi } from '../ports/environment-read-api.js';
 import type { ExecutionObservation } from '../ports/runtime-execution-session.js';
+import type { ExecutionOutput } from '../ports/runtime-execution-session.js';
 import type { InvokableOwnerScope } from '../ports/invokable-repository.js';
 import type { MemoryVersionReadApi } from '../ports/memory-version-read-api.js';
 import type { RunEventRepository } from '../ports/run-events.js';
@@ -24,10 +25,7 @@ import type {
   WorkRunCompositionManifest,
   WorkRunResourceManifestRead,
 } from '../ports/work-run-resource-manifest-read.js';
-import type {
-  ExecutionRuntimeService,
-  ExecutionTurnOutcome,
-} from '../ports/execution-runtime.js';
+import type { ExecuteRuntimeTurn } from '../runtime/execute-runtime-turn.js';
 import { executionObservationPayload } from './execution-observation-payload.js';
 import type { RunTeamContext } from './run-team-coordinator.js';
 import { RunPromptContext } from './run-prompt-context.js';
@@ -41,7 +39,7 @@ import { createDesiredRuntimeSystemPrompt } from '../../domain/runtime/desired-r
  */
 export class AgentRunExecutor {
   public constructor(
-    private readonly runtime: ExecutionRuntimeService,
+    private readonly runtime: Pick<ExecuteRuntimeTurn, 'execute'>,
     private readonly tasks: TaskRepository,
     private readonly promptContext: RunPromptContext,
     private readonly memoryWriter: RuntimeMemoryProposalWriter,
@@ -297,63 +295,21 @@ export class AgentRunExecutor {
         }
       : undefined;
 
-    let execution: ExecutionTurnOutcome | undefined;
+    let execution: ExecutionOutput | undefined;
     let executionFailed = false;
     let executionError: unknown;
     try {
-      execution = await this.runtime.executeTurn(
-        {
-          runId: claim.run.id,
-          prompt: prompts.deliveredTurnPrompt,
-          recoveryPrompt: prompts.recoveryTurnPrompt,
-          ...(sessionRuntime ? { runtimeSessionId: sessionRuntime.id } : {}),
-          ...(cellCwd ? { cwd: cellCwd } : {}),
-          ...(!hasRuntimeSession &&
-          collaborativeTeam &&
-          member &&
-          sessionRuntime
-            ? {
-                workspaceOwner: {
-                  kind: 'team_run' as const,
-                  id: collaborativeTeam.id,
-                  tenantId: task.tenantId,
-                  productWorkspaceId: task.workspaceId,
-                  principalType: task.principalType,
-                  principalId: task.principalId,
-                },
-                ...(member.role !== 'lead'
-                  ? { requireExistingWorkspaceBinding: true }
-                  : {}),
-              }
-            : {}),
-          ...(runtimeModelPolicy
-            ? {
-                provider: runtimeModelPolicy.provider,
-                model: runtimeModelPolicy.model,
-              }
-            : {}),
-          systemPrompt: prompts.systemPrompt,
-          ...(collaborativeTeam && !hasRuntimeSession
-            ? {
-                workspaceTitle: `Team ${collaborativeTeam.id.slice(0, 8)}`,
-              }
-            : {}),
-          ...(member && !hasRuntimeSession
-            ? {
-                sessionTitle: `${member.name} (${member.role})`,
-                labels: {
-                  team_run_id: member.teamRunId,
-                  member_name: member.name,
-                  role: member.role,
-                },
-              }
-            : {}),
-          ...(resolved.proposalLimit > 0
-            ? { proposalLimit: resolved.proposalLimit }
-            : {}),
-        },
-        runtimeObservationSink,
-      );
+      if (!sessionRuntime) throw new Error('runtime_session_required');
+      execution = await this.runtime.execute({
+        runtimeSessionId: sessionRuntime.id,
+        source: { kind: 'run', runId: claim.run.id },
+        prompt: prompts.deliveredTurnPrompt,
+        desiredSystemPrompt: createDesiredRuntimeSystemPrompt(
+          prompts.systemPrompt,
+        ),
+        recoveryPrompt: prompts.recoveryTurnPrompt,
+        ...(runtimeObservationSink ? { observer: runtimeObservationSink } : {}),
+      });
     } catch (error) {
       executionFailed = true;
       executionError = error;
@@ -361,13 +317,6 @@ export class AgentRunExecutor {
 
     if (executionFailed) throw executionError;
     if (!execution) throw new Error('Runtime execution returned no result.');
-
-    await this.events?.bind({
-      runId: claim.run.id,
-      ...(task.sessionId ? { sessionId: task.sessionId } : {}),
-      sessionBinding: execution.sessionBinding,
-      createdAt: claim.run.updatedAt,
-    });
 
     await this.memoryWriter.write({
       claim,

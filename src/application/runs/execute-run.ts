@@ -22,10 +22,10 @@ import type { TeamExecutionRepository } from '../ports/team-execution-repository
 import type { WorkRunResourceManifestRead } from '../ports/work-run-resource-manifest-read.js';
 import type { CreateMemoryProposal } from '../memory/create-memory-proposal.js';
 import { RuntimeTimedOutError } from '../runtime/execution-runtime-errors.js';
-import type { ExecutionRuntimeService } from '../ports/execution-runtime.js';
 import type { RuntimeExecutionProvider } from '../ports/runtime-execution-provider.js';
 import type { RuntimeSessionStore } from '../ports/runtime-session-store.js';
 import type { ResolveRuntimeSessionSpec } from '../ports/resolve-runtime-session-spec.js';
+import type { ExecuteRuntimeTurn } from '../runtime/execute-runtime-turn.js';
 import { ExecuteTeamTask } from '../tasks/execute-team-task.js';
 import type { CollaborationActivationReconciler } from '../collaboration/collaboration-activation-reconciler.js';
 import { AgentRunExecutor } from './agent-run-executor.js';
@@ -49,8 +49,8 @@ export interface ExecuteRunOptions {
   readonly tasks: TaskRepository;
   readonly definitions: DefinitionReadApi;
   readonly executeTeamTask: ExecuteTeamTask;
-  readonly runtime: ExecutionRuntimeService;
   readonly runtimeProvider: Pick<RuntimeExecutionProvider, 'ensureReady'>;
+  readonly runtimeTurns: Pick<ExecuteRuntimeTurn, 'execute'>;
   readonly logger: Logger;
   readonly now?: () => Date;
   readonly resolver?: AgentResolutionApi;
@@ -76,7 +76,6 @@ export class ExecuteRun {
   private readonly completeRun: CompleteRun;
   private readonly tasks: TaskRepository;
   private readonly executeTeamTask: ExecuteTeamTask;
-  private readonly runtime: ExecutionRuntimeService;
   private readonly runtimeProvider: Pick<
     RuntimeExecutionProvider,
     'ensureReady'
@@ -92,8 +91,8 @@ export class ExecuteRun {
       completeRun,
       tasks,
       executeTeamTask,
-      runtime,
       runtimeProvider,
+      runtimeTurns,
       logger,
       now = () => new Date(),
       resolver = { resolvePublished: async () => null },
@@ -114,7 +113,6 @@ export class ExecuteRun {
     this.completeRun = completeRun;
     this.tasks = tasks;
     this.executeTeamTask = executeTeamTask;
-    this.runtime = runtime;
     this.runtimeProvider = runtimeProvider;
     this.logger = logger;
     this.now = now;
@@ -144,7 +142,7 @@ export class ExecuteRun {
         })
       | undefined;
     this.agentRunExecutor = new AgentRunExecutor(
-      runtime,
+      runtimeTurns,
       tasks,
       promptContext,
       memoryWriter,

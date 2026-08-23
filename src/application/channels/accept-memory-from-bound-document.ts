@@ -1,4 +1,3 @@
-import type { ExecutionRuntimeService } from '../ports/execution-runtime.js';
 import type { MemoryReviewApi } from '../ports/memory-review-api.js';
 import type { LarkMemoryReviewSurface } from '../../domain/channels/lark-memory-review-surface.js';
 import type { MemoryProposal } from '../../domain/workspace-memory/memory-proposal.js';
@@ -13,7 +12,6 @@ const DOC_TOKEN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/;
 
 export class AcceptMemoryFromBoundDocument {
   public constructor(
-    private readonly runtime: Pick<ExecutionRuntimeService, 'executeTurn'>,
     private readonly review: Pick<MemoryReviewApi['review'], 'execute'>,
     private readonly managedMemory: Pick<
       MemoryReviewApi['managedMemory'],

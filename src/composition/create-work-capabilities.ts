@@ -1,4 +1,3 @@
-import type { Pool } from 'pg';
 import type { Hono } from 'hono';
 
 import type { TeamDriver } from '../application/teams/team-driver.js';
@@ -61,6 +60,8 @@ import type { ConversationWorkLinkRepository } from '../domain/chat/chat-work-or
 import type { ApiEnvironment } from '../entrypoints/api/http-types.js';
 import type { AppConfig } from '../shared/config.js';
 import type { Logger } from '../shared/observability/logger.js';
+import type { Pool } from 'pg';
+import { PostgresExecutionFactQuery } from '../infrastructure/postgres/postgres-execution-fact-query.js';
 
 export interface WorkModuleHttpOptions {
   readonly teamDriver?: Pick<TeamDriver, 'decideCompletion'>;
@@ -300,6 +301,11 @@ export type WorkCapabilities = {
   readonly workChatWorker?: WorkChatWakeWorker;
   readonly conversationWorkLinks?: ConversationWorkLinkRepository;
 };
+
+export function createWorkExecutionFacts(database: Pool): PostgresExecutionFactQuery {
+  return new PostgresExecutionFactQuery(database);
+}
+
 
 interface CreateWorkCapabilitiesBaseOptions {
   readonly database: Pool;

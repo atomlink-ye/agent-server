@@ -1,22 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 
-import { CompleteRun } from '../application/runs/complete-run.js';
 import type { PostgresRunDispatcher } from '../infrastructure/postgres/postgres-run-dispatcher.js';
 import { GetTask } from '../application/tasks/get-task.js';
 import { GetTaskTree } from '../application/tasks/get-task-tree.js';
 import { ExecuteTeamTask } from '../application/tasks/execute-team-task.js';
-import { CancelTask } from '../application/tasks/cancel-task.js';
 import type { AppConfig } from '../shared/config.js';
+import type { PublishMemoryReviewSurface } from '../application/channels/publish-memory-review-surface.js';
 import type { Logger } from '../shared/observability/logger.js';
-import {
-  PublishMemoryReviewSurface,
-} from '../application/channels/publish-memory-review-surface.js';
 import { createLarkMemoryDocumentAdapter } from '../adapters/lark/lark-memory-document.js';
 import { createMemoryReviewActionTokenDeriver } from '../application/channels/memory-review-action-token.js';
-import { TeamDriver } from '../application/teams/team-driver.js';
-import { PostgresExecutionFactQuery } from '../infrastructure/postgres/postgres-execution-fact-query.js';
-import { InvokeTaskExecutionAdmission } from '../application/ports/execution-admission.js';
 import { noExternalDependencies } from '../application/health/readiness.js';
 import { createConfiguredRuntimeCapabilities } from './create-runtime-capabilities.js';
 import {
@@ -25,6 +18,7 @@ import {
   createRunExecutionConsumer,
   createRunExecutionRegistry,
   createRunDispatcher,
+  createCompleteRunConsumer,
 } from './create-execution-consumers.js';
 import {
   createLarkChannelWorkers,
@@ -32,18 +26,30 @@ import {
 } from './create-lark-channel-workers.js';
 import { createApplicationLifecycle } from './create-application-lifecycle.js';
 import { createHttpApp } from '../entrypoints/api/app.js';
-import { createMemoryCapabilities } from './create-memory-capabilities.js';
-import { createKernelCapabilities } from './create-kernel-capabilities.js';
+import {
+  createMemoryCapabilities,
+  createMemoryReviewSurface,
+} from './create-memory-capabilities.js';
+import {
+  createKernelCapabilities,
+  createTaskExecutionConsumers,
+  createProductWorkExecutionAdmission,
+} from './create-kernel-capabilities.js';
 import { createInfrastructure } from './create-infrastructure.js';
 import { createResourceCapabilities } from './create-resource-capabilities.js';
-import { createTeamCapabilities } from './create-team-capabilities.js';
-import { createWorkCapabilities } from './create-work-capabilities.js';
+import {
+  createTeamCapabilities,
+  createTeamExecutionConsumers,
+} from './create-team-capabilities.js';
+import {
+  createWorkCapabilities,
+  createWorkExecutionFacts,
+} from './create-work-capabilities.js';
 import { createWorkers } from './create-workers.js';
 import type { FileStore } from '../application/ports/file-store.js';
 import type { PostgresSessionRepository } from '../infrastructure/postgres/postgres-session-repository.js';
 import { createRuntimeToolCatalog } from '../application/extensions/runtime-tool-catalog.js';
 import { createCollaborationRuntimeContributor, createSyntheticRuntimeToolsContributor } from '../entrypoints/mcp/runtime-tool-contributors.js';
-import { SyntheticMarketAdapter } from '../adapters/demo-market/synthetic-market-adapter.js';
 import { createRuntimeOwner } from './create-runtime-owner.js';
 
 export interface SingleRunDebugControl {
@@ -151,17 +157,15 @@ export async function createApplication(
   const memoryDocument = config.larkCanary?.enabled
     ? createLarkMemoryDocumentAdapter(config.larkCanary)
     : undefined;
-  const memoryReviewSurface = config.larkCanary?.enabled
-    ? new PublishMemoryReviewSurface(
-        memoryModule.reviewApi.workspaceMemory,
-        channelRepository,
-        channelRepository,
-        config.larkCanary.connectionKey,
-        reviewSurfaceRepository,
-        reviewTokenDeriver,
-        memoryDocument,
-        config.larkCanary.allowedOpenId,
-      )
+  const memoryReviewSurface = config.larkCanary?.enabled && reviewTokenDeriver
+    ? createMemoryReviewSurface({
+        module: memoryModule,
+        channels: channelRepository,
+        reviewSurface: reviewSurfaceRepository,
+        config: config.larkCanary,
+        tokenDeriver: reviewTokenDeriver,
+        document: memoryDocument,
+      })
     : undefined;
   const runtimeCapabilities = createConfiguredRuntimeCapabilities(config);
   const {
@@ -174,8 +178,8 @@ export async function createApplication(
     definitionResolution: resourceModule.workDefinitionResolution,
     ...(productWorkEnabled
       ? {
-          execution: new InvokeTaskExecutionAdmission(invokeTask),
-          executionFacts: new PostgresExecutionFactQuery(pool),
+          execution: createProductWorkExecutionAdmission(invokeTask),
+          executionFacts: createWorkExecutionFacts(pool),
           productWorkEnabled: true as const,
         }
       : { productWorkEnabled: false as const }),
@@ -198,7 +202,6 @@ export async function createApplication(
     {
       ref: 'synthetic',
       contribute: createSyntheticRuntimeToolsContributor({
-        market: new SyntheticMarketAdapter(),
         logger,
       }),
     },
@@ -247,28 +250,22 @@ export async function createApplication(
     synthesizeMemoryDocument,
     acceptMemoryFromDocument,
   } = memoryChannelConsumers;
-  const cancelTask = new CancelTask(
+  const { cancelTask, getTask, getTaskTree } = createTaskExecutionConsumers({
     taskRepository,
     runRepository,
     executionRuns,
     events,
-  );
-  const getTask = new GetTask(taskRepository);
-  const getTaskTree = new GetTaskTree(taskRepository);
+  });
   const terminalActivationReconciler = options.deferTeamWakeReconcile
     ? undefined
     : collaborationActivationReconciler;
-  const teamDriver = new TeamDriver(
-    collaborativeTeamExecutions,
-    taskRepository,
-    runRepository,
-    admissionRepository,
-    teamMessages,
-    terminalActivationReconciler,
-    undefined,
-    { completionApprovalRequired: config.teamCompletionApprovalRequired },
-  );
-  const completeRun = new CompleteRun(
+  const { teamDriver, executeTeamTask } = createTeamExecutionConsumers({
+    module: teamModule,
+    definitions: resourceModule.definitionReadApi,
+    activationReconciler: terminalActivationReconciler,
+    completionApprovalRequired: config.teamCompletionApprovalRequired,
+  });
+  const completeRun = createCompleteRunConsumer(
     runRepository,
     taskRepository,
     events,
@@ -303,10 +300,6 @@ export async function createApplication(
         }
       },
     },
-  );
-  const executeTeamTask = new ExecuteTeamTask(
-    resourceModule.definitionReadApi,
-    teamDriver,
   );
   const executeRun = createRunExecutionConsumer({
     completeRun,

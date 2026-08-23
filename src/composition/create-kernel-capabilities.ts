@@ -18,6 +18,10 @@ import { PostgresRunRepository } from '../infrastructure/postgres/postgres-run-r
 import { PostgresSessionRepository } from '../infrastructure/postgres/postgres-session-repository.js';
 import { PostgresTaskRepository } from '../infrastructure/postgres/postgres-task-repository.js';
 import type { AppConfig } from '../shared/config.js';
+import { InvokeTaskExecutionAdmission } from '../application/ports/execution-admission.js';
+import { CancelTask } from '../application/tasks/cancel-task.js';
+import { GetTask } from '../application/tasks/get-task.js';
+import { GetTaskTree } from '../application/tasks/get-task-tree.js';
 
 export interface KernelCapabilities {
   readonly runRepository: PostgresRunRepository;
@@ -100,4 +104,32 @@ export function createKernelCapabilities(
     getRun,
     invokeTask,
   });
+}
+
+export function createProductWorkExecutionAdmission(
+  invokeTask: InvokeTask,
+): InvokeTaskExecutionAdmission {
+  return new InvokeTaskExecutionAdmission(invokeTask);
+}
+
+export function createTaskExecutionConsumers(input: {
+  readonly taskRepository: PostgresTaskRepository;
+  readonly runRepository: PostgresRunRepository;
+  readonly events: PostgresRunEventRepository;
+  readonly executionRuns: ConstructorParameters<typeof CancelTask>[2];
+}): {
+  readonly cancelTask: CancelTask;
+  readonly getTask: GetTask;
+  readonly getTaskTree: GetTaskTree;
+} {
+  return {
+    cancelTask: new CancelTask(
+      input.taskRepository,
+      input.runRepository,
+      input.executionRuns,
+      input.events,
+    ),
+    getTask: new GetTask(input.taskRepository),
+    getTaskTree: new GetTaskTree(input.taskRepository),
+  };
 }

@@ -1,4 +1,5 @@
 import type { Hono } from 'hono';
+import type { PostgresChannelRepository } from '../infrastructure/postgres/postgres-channel-repository.js';
 
 import { CreateMemoryProposal } from '../application/memory/create-memory-proposal.js';
 import { ListMemoryEntries } from '../application/memory/list-memory-entries.js';
@@ -52,6 +53,11 @@ import {
   PostgresMemoryContextRepository,
 } from '../infrastructure/postgres/postgres-memory-context-repository.js';
 import type { TeamToolContextResolver } from '../application/teams/team-tool-context.js';
+import { PublishMemoryReviewSurface } from '../application/channels/publish-memory-review-surface.js';
+import type { LarkCanaryEnabledConfig } from '../shared/config.js';
+import type { LarkReviewSurfaceRepository } from '../application/ports/lark-review-surface-repository.js';
+import type { MemoryReviewActionTokenDeriver } from '../application/channels/memory-review-action-token.js';
+import type { MemoryDocumentPort } from '../application/ports/lark-memory-document.js';
 
 export interface MemoryModule {
   readonly http: MemoryWorkspaceHttpApi & {
@@ -96,6 +102,26 @@ export interface CreateMemoryModuleOptions {
   readonly teamTools?: {
     readonly contextResolver: TeamToolContextResolver;
   };
+}
+
+export function createMemoryReviewSurface(input: {
+  readonly module: MemoryModule;
+  readonly channels: PostgresChannelRepository;
+  readonly reviewSurface: LarkReviewSurfaceRepository;
+  readonly config: LarkCanaryEnabledConfig;
+  readonly tokenDeriver: MemoryReviewActionTokenDeriver;
+  readonly document: MemoryDocumentPort | undefined;
+}) {
+  return new PublishMemoryReviewSurface(
+    input.module.reviewApi.workspaceMemory,
+    input.channels,
+    input.channels,
+    input.config.connectionKey,
+    input.reviewSurface,
+    input.tokenDeriver,
+    input.document,
+    input.config.allowedOpenId,
+  );
 }
 
 export interface CreateMemoryCapabilitiesOptions

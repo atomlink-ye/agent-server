@@ -5,6 +5,7 @@ import type { MemoryReviewApi } from '../application/ports/memory-review-api.js'
 import type { CreateChatCapabilitiesOptions, ChatCapabilities } from './create-chat-capabilities.js';
 import { createChatCapabilities } from './create-chat-capabilities.js';
 import { ExecuteRun, type ExecuteRunOptions } from '../application/runs/execute-run.js';
+import { CompleteRun } from '../application/runs/complete-run.js';
 import { ExecutionRunRegistry } from '../application/runtime/execution-run-registry.js';
 import { ClaimNextRun } from '../application/runs/claim-next-run.js';
 import { PostgresRunDispatcher } from '../infrastructure/postgres/postgres-run-dispatcher.js';
@@ -25,6 +26,12 @@ export function createRunExecutionConsumer(
 
 export function createRunExecutionRegistry(): ExecutionRunRegistry {
   return new ExecutionRunRegistry();
+}
+
+export function createCompleteRunConsumer(
+  ...args: ConstructorParameters<typeof CompleteRun>
+): CompleteRun {
+  return new CompleteRun(...args);
 }
 
 export function createRunDispatcher(input: {

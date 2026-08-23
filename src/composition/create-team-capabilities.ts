@@ -11,6 +11,9 @@ import { PostgresCollaborationRepository } from '../infrastructure/postgres/post
 import { PostgresTeamExecutionRepository } from '../infrastructure/postgres/postgres-collaborative-team-repository.js';
 import { PostgresTeamMessageRepository } from '../infrastructure/postgres/postgres-team-message-repository.js';
 import type { Logger } from '../shared/observability/logger.js';
+import { TeamDriver } from '../application/teams/team-driver.js';
+import { ExecuteTeamTask } from '../application/tasks/execute-team-task.js';
+import type { DefinitionReadApi } from '../application/ports/definition-read-api.js';
 
 export interface CreateTeamCapabilitiesOptions {
   readonly database: Pool;
@@ -67,6 +70,9 @@ export function createTeamModule(options: CreateTeamModuleOptions) {
   );
 
   return {
+    tasks: options.tasks,
+    runs: options.runs,
+    admissions: options.admissions,
     executions,
     messages,
     collaborationRepository,
@@ -83,4 +89,26 @@ export function createTeamCapabilities(
   options: CreateTeamCapabilitiesOptions,
 ): TeamCapabilities {
   return createTeamModule(options);
+}
+
+export function createTeamExecutionConsumers(input: {
+  readonly module: TeamCapabilities;
+  readonly definitions: DefinitionReadApi;
+  readonly activationReconciler: CollaborationActivationReconciler | undefined;
+  readonly completionApprovalRequired: boolean;
+}) {
+  const teamDriver = new TeamDriver(
+    input.module.executions,
+    input.module.tasks,
+    input.module.runs,
+    input.module.admissions,
+    input.module.messages,
+    input.activationReconciler,
+    undefined,
+    { completionApprovalRequired: input.completionApprovalRequired },
+  );
+  return {
+    teamDriver,
+    executeTeamTask: new ExecuteTeamTask(input.definitions, teamDriver),
+  };
 }

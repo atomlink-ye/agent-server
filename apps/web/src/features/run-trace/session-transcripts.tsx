@@ -1,5 +1,3 @@
-'use client';
-
 import { useEffect, useState } from 'react';
 import type { ProductRunTrace } from '@atomlink-ye/agent-server/product-contract';
 

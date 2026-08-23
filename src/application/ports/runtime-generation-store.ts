@@ -26,7 +26,18 @@ export interface RuntimeGenerationStore {
 export interface RuntimeGenerationTransaction {
   replaceCurrentGeneration(input: {
     readonly sessionId: RuntimeSessionId;
-    readonly generationId: RuntimeGenerationId;
     readonly previousGenerationId: RuntimeGenerationId | null;
+    /** Provider binding facts are inserted only after the session lock/CAS. */
+    readonly generation: {
+      readonly id: RuntimeGenerationId;
+      readonly provider: string;
+      readonly providerWorkspaceId: string | null;
+      readonly providerSessionId: string;
+      readonly appliedSpecRevision: RuntimeSpecRevision;
+      readonly appliedBootstrapDigest: string;
+      readonly endpointEpoch: string;
+      readonly createdAt: string;
+      readonly readyAt: string;
+    };
   }): Promise<void>;
 }

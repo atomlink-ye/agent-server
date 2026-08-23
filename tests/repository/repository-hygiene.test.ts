@@ -18,6 +18,7 @@ const forbiddenRoots = [
   '.local/',
   'artifacts/',
   'evidence/',
+  'rounds/',
   'reports/',
   'docs/evidence/',
   'docs/exec-plans/',

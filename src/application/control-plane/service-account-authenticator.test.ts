@@ -5,7 +5,7 @@ import {
   getAuthenticatedAccessContext,
   requireServiceAccountAccess,
 } from '../../entrypoints/api/authentication.js';
-import type { ApiEnvironment } from '../../platform/http-types.js';
+import type { ApiEnvironment } from '../../entrypoints/api/http-types.js';
 import { ServiceAccountAuthenticator } from './service-account-authenticator.js';
 
 describe('ServiceAccountAuthenticator', () => {

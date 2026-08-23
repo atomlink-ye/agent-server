@@ -1,5 +1,3 @@
-'use client';
-
 import { useEffect, useMemo, useState } from 'react';
 import { stringify } from 'yaml';
 import type { ProductWorkDefinitionVersionResponse } from '@atomlink-ye/agent-server/product-contract';
@@ -10,14 +8,11 @@ import {
 } from '@/features/work/components/work-presentation';
 import { ApiTransportError } from '@/api/transport';
 import {
-  applyWorkDefinition,
-  pinWorkDefinition,
-  planWorkDefinition,
-  startWorkRun,
-  validateWorkDefinition,
   type DefinitionDiagnostics,
   type DefinitionPlan as Plan,
-} from '@/features/work/work-gateway';
+  workDefinitionClient,
+} from '@/features/work/clients/work-definition-client';
+import { workRunClient } from '@/features/work/clients/work-run-client';
 
 type AuthoringState =
   | 'idle'
@@ -96,7 +91,7 @@ export function DefinitionPanel({
     setStatusMessage(null);
     let validation;
     try {
-      validation = await validateWorkDefinition(source);
+      validation = await workDefinitionClient.validate(source);
     } catch (error) {
       const nextDiagnostics = diagnosticsFrom(
         error instanceof ApiTransportError ? error.payload : undefined,
@@ -112,7 +107,7 @@ export function DefinitionPanel({
     }
     let planned;
     try {
-      planned = await planWorkDefinition(source);
+      planned = await workDefinitionClient.plan(source);
     } catch (error) {
       const nextDiagnostics = diagnosticsFrom(
         error instanceof ApiTransportError ? error.payload : undefined,
@@ -136,7 +131,7 @@ export function DefinitionPanel({
     setState('applying');
     let applied;
     try {
-      applied = await applyWorkDefinition(source);
+      applied = await workDefinitionClient.apply(source);
     } catch (error) {
       setDiagnostics(
         diagnosticsFrom(
@@ -159,7 +154,7 @@ export function DefinitionPanel({
       return;
     }
     try {
-      await pinWorkDefinition(workId, applied.versionId);
+      await workDefinitionClient.pinVersion(workId, applied.versionId);
     } catch {
       setState('error');
       setStatusMessage(
@@ -181,7 +176,7 @@ export function DefinitionPanel({
     setState('running');
     setStatusMessage(null);
     try {
-      const runId = await startWorkRun(workId);
+      const runId = (await workRunClient.start(workId)).work_run.id;
       window.location.assign(
         workTabHref(workId, 'overview', runId, originConversationId),
       );

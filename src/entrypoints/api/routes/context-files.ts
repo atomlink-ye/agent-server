@@ -20,7 +20,7 @@ import {
 } from '../authentication.js';
 import { readBoundedJson } from '../read-bounded-json.js';
 import { HttpError } from '../../../contracts/http.js';
-import type { ApiEnvironment } from '../../../platform/http-types.js';
+import type { ApiEnvironment } from '../http-types.js';
 import type { AppConfig } from '../../../shared/config.js';
 
 const BASE = '/api/v1/context';

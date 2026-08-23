@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { loadConversations } from '../conversations/conversations-gateway';
 import { loadCoworkers } from '../agents/agents-gateway';
-import { loadWorks } from '../work/work-gateway';
+import { workClient } from '../work/clients/work-client';
 import {
   admitConversationToWork,
   loadContextFile,
@@ -18,7 +18,9 @@ import './files.css';
 
 type Conversation = Awaited<ReturnType<typeof loadConversations>>[number];
 type Coworker = Awaited<ReturnType<typeof loadCoworkers>>[number];
-type WorkListItem = Awaited<ReturnType<typeof loadWorks>>['works'][number];
+type WorkListItem = Awaited<
+  ReturnType<typeof workClient.list>
+>['works'][number];
 
 type ScopeChoice = Readonly<{
   key: string;
@@ -48,7 +50,7 @@ export function FilesPage() {
     void Promise.all([
       loadCoworkers(),
       loadConversations(),
-      loadWorks().then((response) => response.works),
+      workClient.list().then((response) => response.works),
     ]).then(
       ([nextCoworkers, nextConversations, nextWorks]) => {
         if (!active) return;

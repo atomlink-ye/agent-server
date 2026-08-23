@@ -2,7 +2,7 @@ import type { MiddlewareHandler } from 'hono';
 
 import { ServiceAccountAuthenticator } from '../../application/control-plane/service-account-authenticator.js';
 import type { ErrorResponse } from '../../contracts/http.js';
-import type { ApiEnvironment } from '../../platform/http-types.js';
+import type { ApiEnvironment } from './http-types.js';
 
 export { getAuthenticatedAccessContext } from '../../platform/access-context.js';
 

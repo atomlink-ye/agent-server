@@ -5,7 +5,7 @@ import type { TeamExecutionRepository } from '../../../application/ports/team-ex
 import type { TeamMessageRepository } from '../../../application/ports/team-message-repository.js';
 import { CollaborationRunResponseSchema } from '../../../contracts/collaboration.js';
 import type { AppConfig } from '../../../shared/config.js';
-import type { ApiEnvironment } from '../../../platform/http-types.js';
+import type { ApiEnvironment } from '../http-types.js';
 import { ServiceAccountAuthenticator } from '../../../application/control-plane/service-account-authenticator.js';
 import { getAuthenticatedAccessContext } from '../../../platform/access-context.js';
 import { requireServiceAccountAccess } from '../authentication.js';

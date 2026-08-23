@@ -1,0 +1,1165 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "rule": "architecture.entrypoints-imports",
+      "path": "src/entrypoints/cli/agentctl.ts",
+      "line": 12,
+      "symbol": "entrypoints->infrastructure:../../infrastructure/filesystem/local-agent-project-loader.js",
+      "occurrence": 1,
+      "key": "architecture.entrypoints-imports|src/entrypoints/cli/agentctl.ts|entrypoints->infrastructure:../../infrastructure/filesystem/local-agent-project-loader.js|000001",
+      "why": "Entrypoints still construct infrastructure directly instead of receiving composition.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "architecture.entrypoints-imports",
+      "path": "src/entrypoints/cli/agentctl.ts",
+      "line": 24,
+      "symbol": "entrypoints->infrastructure:../../infrastructure/filesystem/local-agent-project-loader.js",
+      "occurrence": 2,
+      "key": "architecture.entrypoints-imports|src/entrypoints/cli/agentctl.ts|entrypoints->infrastructure:../../infrastructure/filesystem/local-agent-project-loader.js|000002",
+      "why": "Entrypoints still construct infrastructure directly instead of receiving composition.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "architecture.entrypoints-imports",
+      "path": "src/entrypoints/cli/agentctl.ts",
+      "line": 13,
+      "symbol": "entrypoints->infrastructure:../../infrastructure/filesystem/local-agent-project-lock.js",
+      "occurrence": 1,
+      "key": "architecture.entrypoints-imports|src/entrypoints/cli/agentctl.ts|entrypoints->infrastructure:../../infrastructure/filesystem/local-agent-project-lock.js|000001",
+      "why": "Entrypoints still construct infrastructure directly instead of receiving composition.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "architecture.entrypoints-imports",
+      "path": "src/entrypoints/cli/agentctl.ts",
+      "line": 14,
+      "symbol": "entrypoints->infrastructure:../../infrastructure/filesystem/local-project-skill-registrar.js",
+      "occurrence": 1,
+      "key": "architecture.entrypoints-imports|src/entrypoints/cli/agentctl.ts|entrypoints->infrastructure:../../infrastructure/filesystem/local-project-skill-registrar.js|000001",
+      "why": "Entrypoints still construct infrastructure directly instead of receiving composition.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "architecture.infrastructure-imports",
+      "path": "src/infrastructure/extensions/runtime-mcp-server.ts",
+      "line": 3,
+      "symbol": "infrastructure->entrypoints:../../entrypoints/mcp/direct-memory-mcp.js",
+      "occurrence": 1,
+      "key": "architecture.infrastructure-imports|src/infrastructure/extensions/runtime-mcp-server.ts|infrastructure->entrypoints:../../entrypoints/mcp/direct-memory-mcp.js|000001",
+      "why": "Infrastructure still reaches into entrypoint or composition code.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.compatibility-session-binding",
+      "path": "src/application/channels/accept-memory-from-bound-document.ts",
+      "line": 77,
+      "symbol": "compatibilitySessionBinding",
+      "occurrence": 1,
+      "key": "backend.compatibility-session-binding|src/application/channels/accept-memory-from-bound-document.ts|compatibilitySessionBinding|000001",
+      "why": "Compatibility session binding remains in the execution facade.",
+      "phase": "Phase 4 — facade/compat execution"
+    },
+    {
+      "rule": "backend.compatibility-session-binding",
+      "path": "src/application/runs/agent-run-executor.ts",
+      "line": 671,
+      "symbol": "compatibilitySessionBinding",
+      "occurrence": 1,
+      "key": "backend.compatibility-session-binding|src/application/runs/agent-run-executor.ts|compatibilitySessionBinding|000001",
+      "why": "Compatibility session binding remains in the execution facade.",
+      "phase": "Phase 4 — facade/compat execution"
+    },
+    {
+      "rule": "backend.compatibility-session-binding",
+      "path": "src/application/runtime/execution-plane-runtime-facade.ts",
+      "line": 59,
+      "symbol": "compatibilitySessionBinding",
+      "occurrence": 1,
+      "key": "backend.compatibility-session-binding|src/application/runtime/execution-plane-runtime-facade.ts|compatibilitySessionBinding|000001",
+      "why": "Compatibility session binding remains in the execution facade.",
+      "phase": "Phase 4 — facade/compat execution"
+    },
+    {
+      "rule": "backend.compatibility-session-binding",
+      "path": "src/application/runtime/execution-plane-runtime-facade.ts",
+      "line": 103,
+      "symbol": "compatibilitySessionBinding",
+      "occurrence": 2,
+      "key": "backend.compatibility-session-binding|src/application/runtime/execution-plane-runtime-facade.ts|compatibilitySessionBinding|000002",
+      "why": "Compatibility session binding remains in the execution facade.",
+      "phase": "Phase 4 — facade/compat execution"
+    },
+    {
+      "rule": "backend.compatibility-session-binding",
+      "path": "src/application/runtime/execution-plane-runtime-facade.ts",
+      "line": 233,
+      "symbol": "compatibilitySessionBinding",
+      "occurrence": 3,
+      "key": "backend.compatibility-session-binding|src/application/runtime/execution-plane-runtime-facade.ts|compatibilitySessionBinding|000003",
+      "why": "Compatibility session binding remains in the execution facade.",
+      "phase": "Phase 4 — facade/compat execution"
+    },
+    {
+      "rule": "backend.compatibility-session-binding",
+      "path": "src/application/runtime/execution-plane-runtime-facade.ts",
+      "line": 236,
+      "symbol": "compatibilitySessionBinding",
+      "occurrence": 4,
+      "key": "backend.compatibility-session-binding|src/application/runtime/execution-plane-runtime-facade.ts|compatibilitySessionBinding|000004",
+      "why": "Compatibility session binding remains in the execution facade.",
+      "phase": "Phase 4 — facade/compat execution"
+    },
+    {
+      "rule": "backend.compatibility-session-binding",
+      "path": "src/application/runtime/execution-plane-runtime-facade.ts",
+      "line": 269,
+      "symbol": "compatibilitySessionBinding",
+      "occurrence": 5,
+      "key": "backend.compatibility-session-binding|src/application/runtime/execution-plane-runtime-facade.ts|compatibilitySessionBinding|000005",
+      "why": "Compatibility session binding remains in the execution facade.",
+      "phase": "Phase 4 — facade/compat execution"
+    },
+    {
+      "rule": "backend.compatibility-session-binding",
+      "path": "src/application/runtime/execution-plane-runtime-facade.ts",
+      "line": 390,
+      "symbol": "compatibilitySessionBinding",
+      "occurrence": 6,
+      "key": "backend.compatibility-session-binding|src/application/runtime/execution-plane-runtime-facade.ts|compatibilitySessionBinding|000006",
+      "why": "Compatibility session binding remains in the execution facade.",
+      "phase": "Phase 4 — facade/compat execution"
+    },
+    {
+      "rule": "backend.compatibility-session-binding",
+      "path": "src/application/runtime/execution-plane-runtime-facade.ts",
+      "line": 396,
+      "symbol": "compatibilitySessionBinding",
+      "occurrence": 7,
+      "key": "backend.compatibility-session-binding|src/application/runtime/execution-plane-runtime-facade.ts|compatibilitySessionBinding|000007",
+      "why": "Compatibility session binding remains in the execution facade.",
+      "phase": "Phase 4 — facade/compat execution"
+    },
+    {
+      "rule": "backend.fresh-sessions",
+      "path": "src/application/runtime/execution-plane-runtime-facade.ts",
+      "line": 117,
+      "symbol": "#freshSessions",
+      "occurrence": 1,
+      "key": "backend.fresh-sessions|src/application/runtime/execution-plane-runtime-facade.ts|#freshSessions|000001",
+      "why": "The facade still caches compatibility fresh sessions.",
+      "phase": "Phase 4 — facade/compat execution"
+    },
+    {
+      "rule": "backend.fresh-sessions",
+      "path": "src/application/runtime/execution-plane-runtime-facade.ts",
+      "line": 268,
+      "symbol": "#freshSessions",
+      "occurrence": 2,
+      "key": "backend.fresh-sessions|src/application/runtime/execution-plane-runtime-facade.ts|#freshSessions|000002",
+      "why": "The facade still caches compatibility fresh sessions.",
+      "phase": "Phase 4 — facade/compat execution"
+    },
+    {
+      "rule": "backend.fresh-sessions",
+      "path": "src/application/runtime/execution-plane-runtime-facade.ts",
+      "line": 304,
+      "symbol": "#freshSessions",
+      "occurrence": 3,
+      "key": "backend.fresh-sessions|src/application/runtime/execution-plane-runtime-facade.ts|#freshSessions|000003",
+      "why": "The facade still caches compatibility fresh sessions.",
+      "phase": "Phase 4 — facade/compat execution"
+    },
+    {
+      "rule": "backend.fresh-sessions",
+      "path": "src/application/runtime/execution-plane-runtime-facade.ts",
+      "line": 398,
+      "symbol": "#freshSessions",
+      "occurrence": 4,
+      "key": "backend.fresh-sessions|src/application/runtime/execution-plane-runtime-facade.ts|#freshSessions|000004",
+      "why": "The facade still caches compatibility fresh sessions.",
+      "phase": "Phase 4 — facade/compat execution"
+    },
+    {
+      "rule": "backend.fresh-sessions",
+      "path": "src/application/runtime/execution-plane-runtime-facade.ts",
+      "line": 408,
+      "symbol": "#freshSessions",
+      "occurrence": 5,
+      "key": "backend.fresh-sessions|src/application/runtime/execution-plane-runtime-facade.ts|#freshSessions|000005",
+      "why": "The facade still caches compatibility fresh sessions.",
+      "phase": "Phase 4 — facade/compat execution"
+    },
+    {
+      "rule": "backend.fresh-sessions",
+      "path": "src/application/runtime/execution-plane-runtime-facade.ts",
+      "line": 410,
+      "symbol": "#freshSessions",
+      "occurrence": 6,
+      "key": "backend.fresh-sessions|src/application/runtime/execution-plane-runtime-facade.ts|#freshSessions|000006",
+      "why": "The facade still caches compatibility fresh sessions.",
+      "phase": "Phase 4 — facade/compat execution"
+    },
+    {
+      "rule": "backend.modules-import",
+      "path": "src/bootstrap.ts",
+      "line": 64,
+      "symbol": "./modules/memory/memory-module.js",
+      "occurrence": 1,
+      "key": "backend.modules-import|src/bootstrap.ts|./modules/memory/memory-module.js|000001",
+      "why": "Production code still imports the legacy modules tree.",
+      "phase": "Phase 6 — delete modules/resource"
+    },
+    {
+      "rule": "backend.modules-import",
+      "path": "src/bootstrap.ts",
+      "line": 65,
+      "symbol": "./modules/resource/resource-module.js",
+      "occurrence": 1,
+      "key": "backend.modules-import|src/bootstrap.ts|./modules/resource/resource-module.js|000001",
+      "why": "Production code still imports the legacy modules tree.",
+      "phase": "Phase 6 — delete modules/resource"
+    },
+    {
+      "rule": "backend.modules-import",
+      "path": "src/bootstrap.ts",
+      "line": 66,
+      "symbol": "./modules/runtime/runtime-module.js",
+      "occurrence": 1,
+      "key": "backend.modules-import|src/bootstrap.ts|./modules/runtime/runtime-module.js|000001",
+      "why": "Production code still imports the legacy modules tree.",
+      "phase": "Phase 6 — delete modules/resource"
+    },
+    {
+      "rule": "backend.modules-import",
+      "path": "src/bootstrap.ts",
+      "line": 67,
+      "symbol": "./modules/team/team-module.js",
+      "occurrence": 1,
+      "key": "backend.modules-import|src/bootstrap.ts|./modules/team/team-module.js|000001",
+      "why": "Production code still imports the legacy modules tree.",
+      "phase": "Phase 6 — delete modules/resource"
+    },
+    {
+      "rule": "backend.modules-import",
+      "path": "src/bootstrap.ts",
+      "line": 80,
+      "symbol": "./modules/work/conversation-work-link-repository.js",
+      "occurrence": 1,
+      "key": "backend.modules-import|src/bootstrap.ts|./modules/work/conversation-work-link-repository.js|000001",
+      "why": "Production code still imports the legacy modules tree.",
+      "phase": "Phase 6 — delete modules/resource"
+    },
+    {
+      "rule": "backend.modules-import",
+      "path": "src/bootstrap.ts",
+      "line": 68,
+      "symbol": "./modules/work/work-module.js",
+      "occurrence": 1,
+      "key": "backend.modules-import|src/bootstrap.ts|./modules/work/work-module.js|000001",
+      "why": "Production code still imports the legacy modules tree.",
+      "phase": "Phase 6 — delete modules/resource"
+    },
+    {
+      "rule": "backend.modules-import",
+      "path": "src/entrypoints/api/app.ts",
+      "line": 33,
+      "symbol": "../../modules/memory/memory-module.js",
+      "occurrence": 1,
+      "key": "backend.modules-import|src/entrypoints/api/app.ts|../../modules/memory/memory-module.js|000001",
+      "why": "Production code still imports the legacy modules tree.",
+      "phase": "Phase 6 — delete modules/resource"
+    },
+    {
+      "rule": "backend.modules-import",
+      "path": "src/entrypoints/api/app.ts",
+      "line": 34,
+      "symbol": "../../modules/resource/resource-module.js",
+      "occurrence": 1,
+      "key": "backend.modules-import|src/entrypoints/api/app.ts|../../modules/resource/resource-module.js|000001",
+      "why": "Production code still imports the legacy modules tree.",
+      "phase": "Phase 6 — delete modules/resource"
+    },
+    {
+      "rule": "backend.modules-import",
+      "path": "src/entrypoints/api/app.ts",
+      "line": 32,
+      "symbol": "../../modules/work/work-module.js",
+      "occurrence": 1,
+      "key": "backend.modules-import|src/entrypoints/api/app.ts|../../modules/work/work-module.js|000001",
+      "why": "Production code still imports the legacy modules tree.",
+      "phase": "Phase 6 — delete modules/resource"
+    },
+    {
+      "rule": "backend.modules-import",
+      "path": "src/modules/work/work-module.ts",
+      "line": 44,
+      "symbol": "./conversation-work-link-repository.js",
+      "occurrence": 1,
+      "key": "backend.modules-import|src/modules/work/work-module.ts|./conversation-work-link-repository.js|000001",
+      "why": "Production code still imports the legacy modules tree.",
+      "phase": "Phase 6 — delete modules/resource"
+    },
+    {
+      "rule": "backend.modules-tree",
+      "path": "src/modules",
+      "line": 1,
+      "symbol": "directory:src/modules",
+      "occurrence": 1,
+      "key": "backend.modules-tree|src/modules|directory:src/modules|000001",
+      "why": "The legacy modules tree still owns compatibility composition seams.",
+      "phase": "Phase 6 — delete modules/resource"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/application/agents/import-agent.ts",
+      "line": 2,
+      "symbol": "../../platform/access-context.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/application/agents/import-agent.ts|../../platform/access-context.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/application/agents/publish-agent-version.ts",
+      "line": 2,
+      "symbol": "../../platform/access-context.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/application/agents/publish-agent-version.ts|../../platform/access-context.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/application/agents/read-agent.ts",
+      "line": 1,
+      "symbol": "../../platform/access-context.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/application/agents/read-agent.ts|../../platform/access-context.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/application/channels/accept-memory-from-bound-document.ts",
+      "line": 6,
+      "symbol": "../../platform/access-context.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/application/channels/accept-memory-from-bound-document.ts|../../platform/access-context.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/application/channels/resolve-lark-binding.ts",
+      "line": 1,
+      "symbol": "../../platform/access-context.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/application/channels/resolve-lark-binding.ts|../../platform/access-context.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/application/chat/ensure-coworker-conversation.ts",
+      "line": 4,
+      "symbol": "../../platform/access-context.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/application/chat/ensure-coworker-conversation.ts|../../platform/access-context.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/application/chat/reconcile-coworker-conversations.ts",
+      "line": 1,
+      "symbol": "../../platform/access-context.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/application/chat/reconcile-coworker-conversations.ts|../../platform/access-context.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/application/control-plane/service-account-authenticator.ts",
+      "line": 1,
+      "symbol": "../../platform/access-context.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/application/control-plane/service-account-authenticator.ts|../../platform/access-context.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/application/control-plane/user-principal-issuer.ts",
+      "line": 1,
+      "symbol": "../../platform/access-context.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/application/control-plane/user-principal-issuer.ts|../../platform/access-context.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/application/environments/environment-use-cases.ts",
+      "line": 2,
+      "symbol": "../../platform/access-context.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/application/environments/environment-use-cases.ts|../../platform/access-context.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/application/learning/learning-proposals.ts",
+      "line": 2,
+      "symbol": "../../platform/access-context.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/application/learning/learning-proposals.ts|../../platform/access-context.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/application/memory-api/memory-api.ts",
+      "line": 2,
+      "symbol": "../../platform/access-context.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/application/memory-api/memory-api.ts|../../platform/access-context.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/application/memory/create-memory-proposal.ts",
+      "line": 1,
+      "symbol": "../../platform/access-context.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/application/memory/create-memory-proposal.ts|../../platform/access-context.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/application/memory/evaluate-memory-write.ts",
+      "line": 1,
+      "symbol": "../../platform/access-context.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/application/memory/evaluate-memory-write.ts|../../platform/access-context.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/application/memory/list-memory-entries.ts",
+      "line": 1,
+      "symbol": "../../platform/access-context.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/application/memory/list-memory-entries.ts|../../platform/access-context.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/application/memory/list-memory-proposals.ts",
+      "line": 1,
+      "symbol": "../../platform/access-context.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/application/memory/list-memory-proposals.ts|../../platform/access-context.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/application/memory/managed-memory.ts",
+      "line": 3,
+      "symbol": "../../platform/access-context.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/application/memory/managed-memory.ts|../../platform/access-context.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/application/memory/review-memory-proposal.ts",
+      "line": 1,
+      "symbol": "../../platform/access-context.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/application/memory/review-memory-proposal.ts|../../platform/access-context.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/application/ports/admission-repository.ts",
+      "line": 1,
+      "symbol": "../../platform/access-context.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/application/ports/admission-repository.ts|../../platform/access-context.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/application/ports/session-repository.ts",
+      "line": 1,
+      "symbol": "../../platform/access-context.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/application/ports/session-repository.ts|../../platform/access-context.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/application/ports/work-definition-resolution.ts",
+      "line": 1,
+      "symbol": "../../platform/access-context.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/application/ports/work-definition-resolution.ts|../../platform/access-context.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/application/runs/get-run.ts",
+      "line": 1,
+      "symbol": "../../platform/access-context.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/application/runs/get-run.ts|../../platform/access-context.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/application/runs/submit-run.ts",
+      "line": 5,
+      "symbol": "../../platform/access-context.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/application/runs/submit-run.ts|../../platform/access-context.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/application/tasks/admit-root-task.ts",
+      "line": 1,
+      "symbol": "../../platform/access-context.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/application/tasks/admit-root-task.ts|../../platform/access-context.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/application/tasks/cancel-task.ts",
+      "line": 1,
+      "symbol": "../../platform/access-context.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/application/tasks/cancel-task.ts|../../platform/access-context.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/application/tasks/get-task-tree.ts",
+      "line": 1,
+      "symbol": "../../platform/access-context.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/application/tasks/get-task-tree.ts|../../platform/access-context.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/application/tasks/get-task.ts",
+      "line": 1,
+      "symbol": "../../platform/access-context.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/application/tasks/get-task.ts|../../platform/access-context.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/application/tasks/invoke-task.ts",
+      "line": 2,
+      "symbol": "../../platform/access-context.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/application/tasks/invoke-task.ts|../../platform/access-context.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/application/work/describe-workflow.ts",
+      "line": 1,
+      "symbol": "../../platform/access-context.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/application/work/describe-workflow.ts|../../platform/access-context.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/application/work/list-agent-workflows.ts",
+      "line": 1,
+      "symbol": "../../platform/access-context.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/application/work/list-agent-workflows.ts|../../platform/access-context.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/application/work/product-work-definition-api.ts",
+      "line": 16,
+      "symbol": "../../platform/access-context.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/application/work/product-work-definition-api.ts|../../platform/access-context.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/application/work/product-work-definition-composition.ts",
+      "line": 25,
+      "symbol": "../../platform/access-context.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/application/work/product-work-definition-composition.ts|../../platform/access-context.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/application/work/product-work-definition-query.ts",
+      "line": 1,
+      "symbol": "../../platform/access-context.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/application/work/product-work-definition-query.ts|../../platform/access-context.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/application/work/start-work-run.ts",
+      "line": 1,
+      "symbol": "../../platform/access-context.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/application/work/start-work-run.ts|../../platform/access-context.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/application/work/work-execution-service.ts",
+      "line": 1,
+      "symbol": "../../platform/access-context.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/application/work/work-execution-service.ts|../../platform/access-context.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/application/work/work-identity-api.ts",
+      "line": 2,
+      "symbol": "../../platform/access-context.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/application/work/work-identity-api.ts|../../platform/access-context.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/domain/agents/agent-home.ts",
+      "line": 2,
+      "symbol": "../../platform/access-context.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/domain/agents/agent-home.ts|../../platform/access-context.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/entrypoints/api/http-types.ts",
+      "line": 1,
+      "symbol": "../../platform/access-context.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/entrypoints/api/http-types.ts|../../platform/access-context.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/entrypoints/api/routes/collaboration-runs.ts",
+      "line": 10,
+      "symbol": "../../../platform/access-context.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/entrypoints/api/routes/collaboration-runs.ts|../../../platform/access-context.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/entrypoints/mcp/direct-memory-mcp.ts",
+      "line": 9,
+      "symbol": "../../platform/runtime-tool-registry.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/entrypoints/mcp/direct-memory-mcp.ts|../../platform/runtime-tool-registry.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/entrypoints/mcp/runtime-tool-composition.ts",
+      "line": 1,
+      "symbol": "../../platform/runtime-tool-registry.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/entrypoints/mcp/runtime-tool-composition.ts|../../platform/runtime-tool-registry.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/entrypoints/mcp/runtime-tool-contributors.ts",
+      "line": 13,
+      "symbol": "../../platform/access-context.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/entrypoints/mcp/runtime-tool-contributors.ts|../../platform/access-context.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/entrypoints/mcp/runtime-tool-contributors.ts",
+      "line": 28,
+      "symbol": "../../platform/runtime-tool-registry.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/entrypoints/mcp/runtime-tool-contributors.ts|../../platform/runtime-tool-registry.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/infrastructure/extensions/runtime-mcp-server.ts",
+      "line": 5,
+      "symbol": "../../platform/runtime-tool-registry.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/infrastructure/extensions/runtime-mcp-server.ts|../../platform/runtime-tool-registry.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/infrastructure/postgres/postgres-channel-repository.ts",
+      "line": 7,
+      "symbol": "../../platform/access-context.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/infrastructure/postgres/postgres-channel-repository.ts|../../platform/access-context.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/infrastructure/postgres/postgres-conversation-work-entitlement-repository.ts",
+      "line": 1,
+      "symbol": "../../platform/access-context.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/infrastructure/postgres/postgres-conversation-work-entitlement-repository.ts|../../platform/access-context.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/infrastructure/postgres/postgres-service-account-workspace-bootstrap.ts",
+      "line": 1,
+      "symbol": "../../platform/access-context.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/infrastructure/postgres/postgres-service-account-workspace-bootstrap.ts|../../platform/access-context.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/infrastructure/postgres/postgres-session-repository.ts",
+      "line": 2,
+      "symbol": "../../platform/access-context.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/infrastructure/postgres/postgres-session-repository.ts|../../platform/access-context.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/modules/memory/memory-module.ts",
+      "line": 42,
+      "symbol": "../../platform/runtime-tool-registry.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/modules/memory/memory-module.ts|../../platform/runtime-tool-registry.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/modules/runtime/runtime-module.ts",
+      "line": 33,
+      "symbol": "../../platform/runtime-tool-registry.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/modules/runtime/runtime-module.ts|../../platform/runtime-tool-registry.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-import",
+      "path": "src/modules/work/work-module.ts",
+      "line": 35,
+      "symbol": "../../platform/runtime-tool-registry.js",
+      "occurrence": 1,
+      "key": "backend.platform-import|src/modules/work/work-module.ts|../../platform/runtime-tool-registry.js|000001",
+      "why": "Production code still imports the legacy platform tree.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.platform-tree",
+      "path": "src/platform",
+      "line": 1,
+      "symbol": "directory:src/platform",
+      "occurrence": 1,
+      "key": "backend.platform-tree|src/platform|directory:src/platform|000001",
+      "why": "The legacy platform tree still owns composition seams.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "backend.register-tool-contributor",
+      "path": "src/bootstrap.ts",
+      "line": 440,
+      "symbol": "registerToolContributor",
+      "occurrence": 1,
+      "key": "backend.register-tool-contributor|src/bootstrap.ts|registerToolContributor|000001",
+      "why": "Tool contributor registration remains on the legacy module seam.",
+      "phase": "Phase 6 — delete modules/resource"
+    },
+    {
+      "rule": "backend.register-tool-contributor",
+      "path": "src/modules/runtime/runtime-module.ts",
+      "line": 62,
+      "symbol": "registerToolContributor",
+      "occurrence": 1,
+      "key": "backend.register-tool-contributor|src/modules/runtime/runtime-module.ts|registerToolContributor|000001",
+      "why": "Tool contributor registration remains on the legacy module seam.",
+      "phase": "Phase 6 — delete modules/resource"
+    },
+    {
+      "rule": "backend.register-tool-contributor",
+      "path": "src/modules/runtime/runtime-module.ts",
+      "line": 189,
+      "symbol": "registerToolContributor",
+      "occurrence": 2,
+      "key": "backend.register-tool-contributor|src/modules/runtime/runtime-module.ts|registerToolContributor|000002",
+      "why": "Tool contributor registration remains on the legacy module seam.",
+      "phase": "Phase 6 — delete modules/resource"
+    },
+    {
+      "rule": "frontend.work-shell-overrides",
+      "path": "apps/web/src/features/work/components/work-shell-overrides.css",
+      "line": 1,
+      "symbol": "work-shell-overrides.css",
+      "occurrence": 1,
+      "key": "frontend.work-shell-overrides|apps/web/src/features/work/components/work-shell-overrides.css|work-shell-overrides.css|000001",
+      "why": "The work shell still has a compatibility-only CSS override file.",
+      "phase": "Phase 10 — CSS"
+    },
+    {
+      "rule": "persistence.desired-spec-digest",
+      "path": "src/infrastructure/postgres/postgres-runtime-session-lookup.ts",
+      "line": 53,
+      "symbol": "desired_spec_digest",
+      "occurrence": 1,
+      "key": "persistence.desired-spec-digest|src/infrastructure/postgres/postgres-runtime-session-lookup.ts|desired_spec_digest|000001",
+      "why": "Runtime-session reconciliation still uses the legacy desired digest column.",
+      "phase": "Phase 2 — reconciliation"
+    },
+    {
+      "rule": "persistence.desired-spec-digest",
+      "path": "src/infrastructure/postgres/postgres-runtime-session-repository.ts",
+      "line": 77,
+      "symbol": "desired_spec_digest",
+      "occurrence": 1,
+      "key": "persistence.desired-spec-digest|src/infrastructure/postgres/postgres-runtime-session-repository.ts|desired_spec_digest|000001",
+      "why": "Runtime-session reconciliation still uses the legacy desired digest column.",
+      "phase": "Phase 2 — reconciliation"
+    },
+    {
+      "rule": "persistence.desired-spec-digest",
+      "path": "src/infrastructure/postgres/postgres-runtime-session-repository.ts",
+      "line": 349,
+      "symbol": "desired_spec_digest",
+      "occurrence": 2,
+      "key": "persistence.desired-spec-digest|src/infrastructure/postgres/postgres-runtime-session-repository.ts|desired_spec_digest|000002",
+      "why": "Runtime-session reconciliation still uses the legacy desired digest column.",
+      "phase": "Phase 2 — reconciliation"
+    },
+    {
+      "rule": "persistence.desired-spec-digest",
+      "path": "src/infrastructure/postgres/postgres-runtime-session-repository.ts",
+      "line": 349,
+      "symbol": "desired_spec_digest",
+      "occurrence": 3,
+      "key": "persistence.desired-spec-digest|src/infrastructure/postgres/postgres-runtime-session-repository.ts|desired_spec_digest|000003",
+      "why": "Runtime-session reconciliation still uses the legacy desired digest column.",
+      "phase": "Phase 2 — reconciliation"
+    },
+    {
+      "rule": "persistence.desired-spec-digest",
+      "path": "src/infrastructure/postgres/postgres-runtime-session-repository.ts",
+      "line": 353,
+      "symbol": "desired_spec_digest",
+      "occurrence": 4,
+      "key": "persistence.desired-spec-digest|src/infrastructure/postgres/postgres-runtime-session-repository.ts|desired_spec_digest|000004",
+      "why": "Runtime-session reconciliation still uses the legacy desired digest column.",
+      "phase": "Phase 2 — reconciliation"
+    },
+    {
+      "rule": "persistence.desired-spec-digest",
+      "path": "src/infrastructure/postgres/postgres-runtime-session-repository.ts",
+      "line": 356,
+      "symbol": "desired_spec_digest",
+      "occurrence": 5,
+      "key": "persistence.desired-spec-digest|src/infrastructure/postgres/postgres-runtime-session-repository.ts|desired_spec_digest|000005",
+      "why": "Runtime-session reconciliation still uses the legacy desired digest column.",
+      "phase": "Phase 2 — reconciliation"
+    },
+    {
+      "rule": "persistence.desired-spec-digest",
+      "path": "src/infrastructure/postgres/postgres-runtime-session-repository.ts",
+      "line": 356,
+      "symbol": "desired_spec_digest",
+      "occurrence": 6,
+      "key": "persistence.desired-spec-digest|src/infrastructure/postgres/postgres-runtime-session-repository.ts|desired_spec_digest|000006",
+      "why": "Runtime-session reconciliation still uses the legacy desired digest column.",
+      "phase": "Phase 2 — reconciliation"
+    },
+    {
+      "rule": "persistence.extension-grant-id",
+      "path": "src/infrastructure/postgres/postgres-runtime-session-lookup.ts",
+      "line": 64,
+      "symbol": "extension_grant_id",
+      "occurrence": 1,
+      "key": "persistence.extension-grant-id|src/infrastructure/postgres/postgres-runtime-session-lookup.ts|extension_grant_id|000001",
+      "why": "Runtime session generations still carry the legacy extension grant column.",
+      "phase": "Phase 3 — RuntimeTurn/grant"
+    },
+    {
+      "rule": "persistence.extension-grant-id",
+      "path": "src/infrastructure/postgres/postgres-runtime-session-repository.ts",
+      "line": 89,
+      "symbol": "extension_grant_id",
+      "occurrence": 1,
+      "key": "persistence.extension-grant-id|src/infrastructure/postgres/postgres-runtime-session-repository.ts|extension_grant_id|000001",
+      "why": "Runtime session generations still carry the legacy extension grant column.",
+      "phase": "Phase 3 — RuntimeTurn/grant"
+    },
+    {
+      "rule": "persistence.extension-grant-id",
+      "path": "src/infrastructure/postgres/postgres-runtime-session-repository.ts",
+      "line": 381,
+      "symbol": "extension_grant_id",
+      "occurrence": 2,
+      "key": "persistence.extension-grant-id|src/infrastructure/postgres/postgres-runtime-session-repository.ts|extension_grant_id|000002",
+      "why": "Runtime session generations still carry the legacy extension grant column.",
+      "phase": "Phase 3 — RuntimeTurn/grant"
+    },
+    {
+      "rule": "persistence.extension-grant-id",
+      "path": "src/infrastructure/postgres/postgres-runtime-session-repository.ts",
+      "line": 459,
+      "symbol": "extension_grant_id",
+      "occurrence": 3,
+      "key": "persistence.extension-grant-id|src/infrastructure/postgres/postgres-runtime-session-repository.ts|extension_grant_id|000003",
+      "why": "Runtime session generations still carry the legacy extension grant column.",
+      "phase": "Phase 3 — RuntimeTurn/grant"
+    },
+    {
+      "rule": "persistence.paseo-workspace-id",
+      "path": "src/infrastructure/postgres/postgres-runtime-session-repository.ts",
+      "line": 391,
+      "symbol": "paseo_workspace_id",
+      "occurrence": 1,
+      "key": "persistence.paseo-workspace-id|src/infrastructure/postgres/postgres-runtime-session-repository.ts|paseo_workspace_id|000001",
+      "why": "Runtime persistence still carries the provider workspace identity.",
+      "phase": "Phase 1 — runtime/persistence"
+    },
+    {
+      "rule": "persistence.paseo-workspace-id",
+      "path": "src/infrastructure/postgres/postgres-runtime-session-repository.ts",
+      "line": 487,
+      "symbol": "paseo_workspace_id",
+      "occurrence": 2,
+      "key": "persistence.paseo-workspace-id|src/infrastructure/postgres/postgres-runtime-session-repository.ts|paseo_workspace_id|000002",
+      "why": "Runtime persistence still carries the provider workspace identity.",
+      "phase": "Phase 1 — runtime/persistence"
+    },
+    {
+      "rule": "persistence.paseo-workspace-id",
+      "path": "src/infrastructure/postgres/postgres-runtime-workspace-repository.ts",
+      "line": 33,
+      "symbol": "paseo_workspace_id",
+      "occurrence": 1,
+      "key": "persistence.paseo-workspace-id|src/infrastructure/postgres/postgres-runtime-workspace-repository.ts|paseo_workspace_id|000001",
+      "why": "Runtime persistence still carries the provider workspace identity.",
+      "phase": "Phase 1 — runtime/persistence"
+    },
+    {
+      "rule": "persistence.paseo-workspace-id",
+      "path": "src/infrastructure/postgres/postgres-runtime-workspace-repository.ts",
+      "line": 42,
+      "symbol": "paseo_workspace_id",
+      "occurrence": 2,
+      "key": "persistence.paseo-workspace-id|src/infrastructure/postgres/postgres-runtime-workspace-repository.ts|paseo_workspace_id|000002",
+      "why": "Runtime persistence still carries the provider workspace identity.",
+      "phase": "Phase 1 — runtime/persistence"
+    },
+    {
+      "rule": "persistence.paseo-workspace-id",
+      "path": "src/infrastructure/postgres/postgres-runtime-workspace-repository.ts",
+      "line": 43,
+      "symbol": "paseo_workspace_id",
+      "occurrence": 3,
+      "key": "persistence.paseo-workspace-id|src/infrastructure/postgres/postgres-runtime-workspace-repository.ts|paseo_workspace_id|000003",
+      "why": "Runtime persistence still carries the provider workspace identity.",
+      "phase": "Phase 1 — runtime/persistence"
+    },
+    {
+      "rule": "persistence.paseo-workspace-id",
+      "path": "src/infrastructure/postgres/postgres-runtime-workspace-repository.ts",
+      "line": 67,
+      "symbol": "paseo_workspace_id",
+      "occurrence": 4,
+      "key": "persistence.paseo-workspace-id|src/infrastructure/postgres/postgres-runtime-workspace-repository.ts|paseo_workspace_id|000004",
+      "why": "Runtime persistence still carries the provider workspace identity.",
+      "phase": "Phase 1 — runtime/persistence"
+    },
+    {
+      "rule": "persistence.paseo-workspace-id",
+      "path": "src/infrastructure/postgres/postgres-runtime-workspace-repository.ts",
+      "line": 81,
+      "symbol": "paseo_workspace_id",
+      "occurrence": 5,
+      "key": "persistence.paseo-workspace-id|src/infrastructure/postgres/postgres-runtime-workspace-repository.ts|paseo_workspace_id|000005",
+      "why": "Runtime persistence still carries the provider workspace identity.",
+      "phase": "Phase 1 — runtime/persistence"
+    },
+    {
+      "rule": "persistence.paseo-workspace-id",
+      "path": "src/infrastructure/postgres/postgres-runtime-workspace-repository.ts",
+      "line": 82,
+      "symbol": "paseo_workspace_id",
+      "occurrence": 6,
+      "key": "persistence.paseo-workspace-id|src/infrastructure/postgres/postgres-runtime-workspace-repository.ts|paseo_workspace_id|000006",
+      "why": "Runtime persistence still carries the provider workspace identity.",
+      "phase": "Phase 1 — runtime/persistence"
+    },
+    {
+      "rule": "persistence.provider-agent-id",
+      "path": "src/infrastructure/postgres/postgres-runtime-session-repository.ts",
+      "line": 392,
+      "symbol": "provider_agent_id",
+      "occurrence": 1,
+      "key": "persistence.provider-agent-id|src/infrastructure/postgres/postgres-runtime-session-repository.ts|provider_agent_id|000001",
+      "why": "Runtime persistence still carries the provider agent binding.",
+      "phase": "Phase 1 — runtime/persistence"
+    },
+    {
+      "rule": "persistence.provider-agent-id",
+      "path": "src/infrastructure/postgres/postgres-runtime-session-repository.ts",
+      "line": 488,
+      "symbol": "provider_agent_id",
+      "occurrence": 2,
+      "key": "persistence.provider-agent-id|src/infrastructure/postgres/postgres-runtime-session-repository.ts|provider_agent_id|000002",
+      "why": "Runtime persistence still carries the provider agent binding.",
+      "phase": "Phase 1 — runtime/persistence"
+    },
+    {
+      "rule": "persistence.provider-agent-id",
+      "path": "src/infrastructure/postgres/postgres-session-agent-binding-lookup.ts",
+      "line": 39,
+      "symbol": "provider_agent_id",
+      "occurrence": 1,
+      "key": "persistence.provider-agent-id|src/infrastructure/postgres/postgres-session-agent-binding-lookup.ts|provider_agent_id|000001",
+      "why": "Runtime persistence still carries the provider agent binding.",
+      "phase": "Phase 1 — runtime/persistence"
+    },
+    {
+      "rule": "persistence.provider-agent-id",
+      "path": "src/infrastructure/postgres/postgres-session-agent-binding-lookup.ts",
+      "line": 43,
+      "symbol": "provider_agent_id",
+      "occurrence": 2,
+      "key": "persistence.provider-agent-id|src/infrastructure/postgres/postgres-session-agent-binding-lookup.ts|provider_agent_id|000002",
+      "why": "Runtime persistence still carries the provider agent binding.",
+      "phase": "Phase 1 — runtime/persistence"
+    },
+    {
+      "rule": "persistence.session-launch-snapshots",
+      "path": "src/infrastructure/postgres/postgres-runtime-session-lookup.ts",
+      "line": 69,
+      "symbol": "session_launch_snapshots",
+      "occurrence": 1,
+      "key": "persistence.session-launch-snapshots|src/infrastructure/postgres/postgres-runtime-session-lookup.ts|session_launch_snapshots|000001",
+      "why": "Runtime persistence still reads the compatibility launch snapshot table.",
+      "phase": "Phase 1 — runtime/persistence"
+    },
+    {
+      "rule": "persistence.session-launch-snapshots",
+      "path": "src/infrastructure/postgres/postgres-runtime-session-repository.ts",
+      "line": 94,
+      "symbol": "session_launch_snapshots",
+      "occurrence": 1,
+      "key": "persistence.session-launch-snapshots|src/infrastructure/postgres/postgres-runtime-session-repository.ts|session_launch_snapshots|000001",
+      "why": "Runtime persistence still reads the compatibility launch snapshot table.",
+      "phase": "Phase 1 — runtime/persistence"
+    },
+    {
+      "rule": "persistence.session-launch-snapshots",
+      "path": "src/infrastructure/postgres/postgres-runtime-session-repository.ts",
+      "line": 585,
+      "symbol": "session_launch_snapshots",
+      "occurrence": 2,
+      "key": "persistence.session-launch-snapshots|src/infrastructure/postgres/postgres-runtime-session-repository.ts|session_launch_snapshots|000002",
+      "why": "Runtime persistence still reads the compatibility launch snapshot table.",
+      "phase": "Phase 1 — runtime/persistence"
+    },
+    {
+      "rule": "persistence.session-launch-snapshots",
+      "path": "src/infrastructure/postgres/postgres-runtime-workspace-repository.ts",
+      "line": 35,
+      "symbol": "session_launch_snapshots",
+      "occurrence": 1,
+      "key": "persistence.session-launch-snapshots|src/infrastructure/postgres/postgres-runtime-workspace-repository.ts|session_launch_snapshots|000001",
+      "why": "Runtime persistence still reads the compatibility launch snapshot table.",
+      "phase": "Phase 1 — runtime/persistence"
+    },
+    {
+      "rule": "persistence.session-launch-snapshots",
+      "path": "src/infrastructure/postgres/postgres-runtime-workspace-repository.ts",
+      "line": 70,
+      "symbol": "session_launch_snapshots",
+      "occurrence": 2,
+      "key": "persistence.session-launch-snapshots|src/infrastructure/postgres/postgres-runtime-workspace-repository.ts|session_launch_snapshots|000002",
+      "why": "Runtime persistence still reads the compatibility launch snapshot table.",
+      "phase": "Phase 1 — runtime/persistence"
+    },
+    {
+      "rule": "persistence.session-launch-snapshots",
+      "path": "src/infrastructure/postgres/postgres-worker-runtime-invocation-resolver.ts",
+      "line": 62,
+      "symbol": "session_launch_snapshots",
+      "occurrence": 1,
+      "key": "persistence.session-launch-snapshots|src/infrastructure/postgres/postgres-worker-runtime-invocation-resolver.ts|session_launch_snapshots|000001",
+      "why": "Runtime persistence still reads the compatibility launch snapshot table.",
+      "phase": "Phase 1 — runtime/persistence"
+    }
+  ]
+}

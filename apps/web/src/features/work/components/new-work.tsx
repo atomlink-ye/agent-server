@@ -1,16 +1,12 @@
-'use client';
-
 import { useState } from 'react';
 import { diagnosticsFrom } from '@/features/work/components/definition-panel';
 import { workTabHref } from '@/features/work/components/work-presentation';
 import {
-  applyWorkDefinition,
-  createWork as createWorkRequest,
-  planWorkDefinition,
-  validateWorkDefinition,
+  workDefinitionClient,
   type DefinitionDiagnostics,
   type DefinitionPlan,
-} from '@/features/work/work-gateway';
+} from '@/features/work/clients/work-definition-client';
+import { workClient } from '@/features/work/clients/work-client';
 import { ApiTransportError } from '@/api/transport';
 
 type AuthoringState =
@@ -36,7 +32,7 @@ export function NewWork({
 
     let validation;
     try {
-      validation = await validateWorkDefinition(source);
+      validation = await workDefinitionClient.validate(source);
     } catch (error) {
       const nextDiagnostics = diagnosticsFrom(
         error instanceof ApiTransportError ? error.payload : undefined,
@@ -58,7 +54,7 @@ export function NewWork({
 
     let planned;
     try {
-      planned = await planWorkDefinition(source);
+      planned = await workDefinitionClient.plan(source);
     } catch (error) {
       const nextDiagnostics = diagnosticsFrom(
         error instanceof ApiTransportError ? error.payload : undefined,
@@ -84,7 +80,7 @@ export function NewWork({
     setState('applying');
 
     try {
-      const applied = await applyWorkDefinition(source);
+      const applied = await workDefinitionClient.apply(source);
       setState('applied');
       await createWork(applied.definitionId, applied.versionId);
     } catch (error) {
@@ -104,10 +100,14 @@ export function NewWork({
 
   async function createWork(definitionId: string, versionId: string) {
     try {
-      const created = await createWorkRequest(definitionId, versionId, title);
+      const created = await workClient.create({
+        definitionId,
+        definitionVersionId: versionId,
+        title,
+      });
       window.location.assign(
         workTabHref(
-          created.workId,
+          created.work.id,
           'definition',
           undefined,
           originConversationId,

@@ -1,5 +1,6 @@
 import type {
   ExecutionExtensionBinding,
+  ExecutionPlaneHealth,
   ExecutionSession,
 } from './execution-plane.js';
 import type {
@@ -95,6 +96,12 @@ export interface RuntimeExecutionProvider {
 
   capabilities(): RuntimeProviderCapabilities;
 
+  /** Initializes the provider-global connection and reports readiness. */
+  ensureReady(): Promise<boolean>;
+
+  /** Reports provider-global health without mutating session state. */
+  health(): Promise<ExecutionPlaneHealth>;
+
   create(desired: ProviderRuntimeSpec): Promise<ProviderSessionHandle>;
 
   inspect(binding: ProviderSessionBinding): Promise<RuntimeProviderInspection>;
@@ -106,5 +113,9 @@ export interface RuntimeExecutionProvider {
 
   open(binding: ProviderSessionBinding): Promise<ExecutionSession>;
 
+  /** Closes one provider session when the provider supports that operation. */
   closeSession(binding: ProviderSessionBinding): Promise<void>;
+
+  /** Closes the provider-global connection owned by this process. */
+  close(): Promise<void>;
 }

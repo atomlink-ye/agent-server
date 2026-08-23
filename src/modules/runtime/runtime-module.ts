@@ -156,7 +156,7 @@ export function createRuntimeModule(options: {
           return health.checks;
         },
       }
-    : new RuntimeReadinessProbe(executionPlane);
+    : new RuntimeReadinessProbe(runtimeProvider);
 
   return {
     executionRuntime,

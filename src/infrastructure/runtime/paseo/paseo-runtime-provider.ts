@@ -5,6 +5,7 @@ import {
   ExecutionPlaneUnavailableError,
   ProtocolViolationError,
   UnsupportedCapabilityError,
+  type ExecutionPlaneHealth,
   type ExecutionSession,
 } from '../../../application/ports/execution-plane.js';
 import type {
@@ -128,6 +129,48 @@ export class PaseoRuntimeProvider implements RuntimeExecutionProvider {
 
   public capabilities(): RuntimeProviderCapabilities {
     return PASEO_RUNTIME_PROVIDER_CAPABILITIES;
+  }
+
+  public async ensureReady(): Promise<boolean> {
+    try {
+      await this.#initialize();
+      return (await this.health()).ready;
+    } catch {
+      return false;
+    }
+  }
+
+  public async health(): Promise<ExecutionPlaneHealth> {
+    const health = this.#connections.health();
+    return {
+      ready: health.connected && health.workspaceReady && health.modelReady,
+      plane: this.name,
+      provider: this.#options.provider,
+      ...(this.#connections.model ? { model: this.#connections.model.id } : {}),
+      checks: [
+        {
+          name: 'paseo_websocket',
+          ready: health.connected,
+          ...(!health.connected && health.lastError
+            ? { detail: health.lastError }
+            : {}),
+        },
+        {
+          name: 'paseo_workspace',
+          ready: health.workspaceReady,
+          ...(!health.workspaceReady && health.lastError
+            ? { detail: health.lastError }
+            : {}),
+        },
+        {
+          name: 'opencode_model',
+          ready: health.modelReady,
+          ...(!health.modelReady && health.lastError
+            ? { detail: health.lastError }
+            : {}),
+        },
+      ],
+    };
   }
 
   public async create(
@@ -267,6 +310,10 @@ export class PaseoRuntimeProvider implements RuntimeExecutionProvider {
     throw new UnsupportedCapabilityError(
       'Paseo cannot close an individual provider session.',
     );
+  }
+
+  public close(): Promise<void> {
+    return this.#connections.close();
   }
 
   async #initialize(): Promise<void> {

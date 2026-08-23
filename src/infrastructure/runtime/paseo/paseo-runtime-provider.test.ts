@@ -65,7 +65,7 @@ class FakeClient implements PaseoClientPort {
     if (this.timelineError) throw this.timelineError;
     return timeline;
   }
-  async closeSession() {
+  async close() {
     this.status = 'closed';
   }
 }
@@ -243,7 +243,28 @@ describe('PaseoRuntimeProvider', () => {
     });
   });
 
-  it('rejects provider close when Paseo cannot close a session', async () => {
+  it('uses provider-global readiness and health before global close', async () => {
+    const client = new FakeClient();
+    const runtimeProvider = provider(client);
+
+    await expect(runtimeProvider.ensureReady()).resolves.toBe(true);
+    await expect(runtimeProvider.health()).resolves.toMatchObject({
+      ready: true,
+      plane: 'paseo',
+      provider: 'opencode',
+      model: 'free/model',
+      checks: [
+        { name: 'paseo_websocket', ready: true },
+        { name: 'paseo_workspace', ready: true },
+        { name: 'opencode_model', ready: true },
+      ],
+    });
+
+    await runtimeProvider.close();
+    expect(client.status).toBe('closed');
+  });
+
+  it('rejects provider session close when Paseo cannot close a session', async () => {
     await expect(provider().closeSession(binding())).rejects.toBeInstanceOf(
       UnsupportedCapabilityError,
     );

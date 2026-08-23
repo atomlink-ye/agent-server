@@ -6,7 +6,7 @@ import type {
   RuntimeSessionStatus,
 } from '../../domain/runtime/runtime-session.js';
 import type { RuntimeGenerationId } from '../../domain/runtime/runtime-session.js';
-import type { RuntimeSessionSpecInput } from '../../domain/runtime/runtime-session-spec.js';
+import type { RuntimeSessionSpec } from '../../domain/runtime/runtime-session-spec.js';
 
 export interface RuntimeSessionStore {
   findById(id: RuntimeSessionId): Promise<RuntimeSession | null>;
@@ -17,11 +17,8 @@ export interface RuntimeSessionStore {
   createWithInitialSpec(input: {
     readonly owner: RuntimeSessionOwner;
     readonly scope: RuntimeScope;
-    readonly spec: Omit<
-      RuntimeSessionSpecInput,
-      'runtimeSessionId' | 'revision' | 'createdAt'
-    >;
-    readonly now: string;
+    /** A complete P1-resolved desired spec; the store must not manufacture one. */
+    readonly spec: RuntimeSessionSpec;
   }): Promise<RuntimeSession>;
   bindCurrentGeneration(
     id: RuntimeSessionId,

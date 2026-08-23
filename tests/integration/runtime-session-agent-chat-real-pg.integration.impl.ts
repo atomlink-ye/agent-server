@@ -7,7 +7,11 @@ import { PostgresAgentRegistry } from '../../src/infrastructure/postgres/postgre
 import { PostgresConversationRepository } from '../../src/infrastructure/postgres/postgres-conversation-repository.js';
 import { PostgresRuntimeSessionStore } from '../../src/infrastructure/postgres/runtime/postgres-runtime-session-store.js';
 import { PostgresRuntimeSpecStore } from '../../src/infrastructure/postgres/runtime/postgres-runtime-spec-store.js';
-import type { RuntimeScope } from '../../src/domain/runtime/runtime-session.js';
+import {
+  runtimeSpecRevision,
+  type RuntimeScope,
+} from '../../src/domain/runtime/runtime-session.js';
+import { createRuntimeSessionSpec } from '../../src/domain/runtime/runtime-session-spec.js';
 import {
   applyDurableKernelMigrations,
   createPostgresPool,
@@ -108,13 +112,11 @@ describe('Agent Chat RuntimeSession normalized scope persistence on real Postgre
       owner,
       scope: agentChatScope(chatV1!.id, chatV1!.epoch),
       spec: runtimeSpec(publishedV1.id),
-      now: fixedTime().toISOString(),
     });
     const replay = await runtimeSessions.createWithInitialSpec({
       owner,
       scope: agentChatScope(chatV1!.id, chatV1!.epoch),
       spec: runtimeSpec(publishedV1.id),
-      now: fixedTime().toISOString(),
     });
     expect(replay.id).toBe(first.id);
     expect(first.scope).toEqual({
@@ -164,7 +166,6 @@ describe('Agent Chat RuntimeSession normalized scope persistence on real Postgre
       owner,
       scope: agentChatScope(chatV2!.id, chatV2!.epoch),
       spec: runtimeSpec(publishedV2.id),
-      now: fixedTime().toISOString(),
     });
     expect(rotated.id).not.toBe(first.id);
     expect(rotated.scope).toEqual({
@@ -229,7 +230,10 @@ function agentChatScope(id: string, epoch: number): RuntimeScope {
 }
 
 function runtimeSpec(agentVersionId: string) {
-  return {
+  return createRuntimeSessionSpec({
+    runtimeSessionId:
+      crypto.randomUUID() as import('../../src/domain/runtime/runtime-session.js').RuntimeSessionId,
+    revision: runtimeSpecRevision(1),
     workspaceId,
     agentVersionId,
     environmentVersionId: null,
@@ -243,7 +247,8 @@ function runtimeSpec(agentVersionId: string) {
     toolCatalogDigest: 'tool-catalog-digest',
     extensionSetDigest: 'extension-set-digest',
     contextEpoch: 1,
-  } as const;
+    createdAt: fixedTime().toISOString(),
+  });
 }
 
 async function importDraft(input: {

@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import type { RuntimeSessionStore } from '../../../application/ports/runtime-session-store.js';
 import type {
   RuntimeScope,
@@ -9,8 +7,10 @@ import type {
   RuntimeSessionStatus,
   RuntimeSpecRevision,
 } from '../../../domain/runtime/runtime-session.js';
-import { runtimeSpecRevision } from '../../../domain/runtime/runtime-session.js';
-import { createRuntimeSessionSpec } from '../../../domain/runtime/runtime-session-spec.js';
+import {
+  assertRuntimeSessionSpec,
+  type RuntimeSessionSpec,
+} from '../../../domain/runtime/runtime-session-spec.js';
 
 interface Queryable {
   query<Row extends Record<string, unknown> = Record<string, unknown>>(
@@ -93,15 +93,11 @@ export class PostgresRuntimeSessionStore implements RuntimeSessionStore {
     readonly spec: Parameters<
       RuntimeSessionStore['createWithInitialSpec']
     >[0]['spec'];
-    readonly now: string;
   }): Promise<RuntimeSession> {
-    const id = randomUUID() as RuntimeSessionId;
-    const initialSpec = createRuntimeSessionSpec({
-      ...input.spec,
-      runtimeSessionId: id,
-      revision: runtimeSpecRevision(1),
-      createdAt: input.now,
-    });
+    const initialSpec: RuntimeSessionSpec = input.spec;
+    assertRuntimeSessionSpec(initialSpec);
+    if (initialSpec.revision !== 1)
+      throw new Error('Initial runtime session spec must have revision 1.');
     if (initialSpec.workspaceId !== input.owner.workspaceId)
       throw new Error(
         'Runtime session spec workspace does not match its owner.',
@@ -119,7 +115,7 @@ export class PostgresRuntimeSessionStore implements RuntimeSessionStore {
          ON CONFLICT DO NOTHING
          RETURNING ${SESSION_COLUMNS}`,
         [
-          id,
+          initialSpec.runtimeSessionId,
           input.owner.tenantId,
           input.owner.workspaceId,
           input.owner.principalType,
@@ -128,7 +124,7 @@ export class PostgresRuntimeSessionStore implements RuntimeSessionStore {
           input.scope.id,
           scopeEpoch(input.scope),
           initialSpec.revision,
-          input.now,
+          initialSpec.createdAt,
         ],
       );
       const created = result.rows?.[0];

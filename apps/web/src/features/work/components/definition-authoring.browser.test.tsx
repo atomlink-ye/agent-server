@@ -8,7 +8,7 @@ import {
   ProductWorkDefinitionVersionSchema,
   ProductWorkRunSuccessSchema,
 } from '@atomlink-ye/agent-server/product-contract';
-import { WorkDetailShell } from '@/features/work/components/work-shell';
+import { WorkDetailPage } from '@/features/work/pages/WorkDetailPage';
 import reworkRecording from '@/lib/__fixtures__/product-recordings/rework-once.json';
 import { projectWorkRunList } from '@/lib/product-recording-projections';
 
@@ -156,7 +156,7 @@ it('validates current Definition source and renders the server-resolved one-way 
   const root = createRoot(host);
   try {
     await act(async () => {
-      root.render(<WorkDetailShell workId={work.work.id} tab="definition" />);
+      root.render(<WorkDetailPage workId={work.work.id} tab="definition" />);
       await new Promise((resolve) => setTimeout(resolve, 25));
     });
 

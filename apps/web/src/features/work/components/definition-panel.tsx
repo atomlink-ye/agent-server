@@ -1,5 +1,3 @@
-'use client';
-
 import { useEffect, useMemo, useState } from 'react';
 import { stringify } from 'yaml';
 import type { ProductWorkDefinitionVersionResponse } from '@atomlink-ye/agent-server/product-contract';

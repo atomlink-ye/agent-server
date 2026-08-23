@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
 import type { WorkListItem } from '@atomlink-ye/agent-server/product-contract';
-import { workClient } from './clients/work-client';
+
+import { useWorkList } from './queries/use-work-list';
 
 export interface WorkPaneProps {
   readonly onOpenWork: (workId: string) => void;
@@ -8,59 +8,12 @@ export interface WorkPaneProps {
   readonly selectedWorkId?: string | null;
 }
 
-type WorkPaneState =
-  | { readonly status: 'loading'; readonly works: readonly WorkListItem[] }
-  | { readonly status: 'ready'; readonly works: readonly WorkListItem[] }
-  | {
-      readonly status: 'error';
-      readonly works: readonly WorkListItem[];
-      readonly error: string;
-    };
-
 export function WorkPane({
   onOpenWork,
   onCreateNew,
   selectedWorkId = null,
 }: WorkPaneProps) {
-  const [state, setState] = useState<WorkPaneState>({
-    status: 'loading',
-    works: [],
-  });
-
-  const load = (): void => {
-    setState((current) => ({ status: 'loading', works: current.works }));
-    void workClient
-      .list()
-      .then((response) => setState({ status: 'ready', works: response.works }))
-      .catch((error: unknown) => {
-        setState((current) => ({
-          status: 'error',
-          works: current.works,
-          error: error instanceof Error ? error.message : String(error),
-        }));
-      });
-  };
-
-  useEffect(() => {
-    let active = true;
-    setState({ status: 'loading', works: [] });
-    void workClient
-      .list()
-      .then((response) => {
-        if (active) setState({ status: 'ready', works: response.works });
-      })
-      .catch((error: unknown) => {
-        if (!active) return;
-        setState({
-          status: 'error',
-          works: [],
-          error: error instanceof Error ? error.message : String(error),
-        });
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
+  const { status, works, error, refresh } = useWorkList();
 
   return (
     <aside className="sidebar work-pane" aria-label="Work navigation">
@@ -82,8 +35,8 @@ export function WorkPane({
             className="pane-refresh"
             type="button"
             aria-label="Refresh Work"
-            disabled={state.status === 'loading'}
-            onClick={load}
+            disabled={status === 'loading'}
+            onClick={refresh}
           >
             ↻
           </button>
@@ -91,50 +44,68 @@ export function WorkPane({
       </div>
 
       <div className="work-list" aria-label="Work items">
-        {state.status === 'loading' && state.works.length === 0 ? (
+        {status === 'loading' && works.length === 0 ? (
           <p className="pane-placeholder" role="status">
             Loading Work…
           </p>
         ) : null}
-        {state.status === 'error' && state.works.length === 0 ? (
+        {status === 'error' && works.length === 0 ? (
           <div className="pane-placeholder" role="alert">
-            <p>{state.error}</p>
-            <button type="button" onClick={load}>
+            <p>{error}</p>
+            <button type="button" onClick={refresh}>
               Retry
             </button>
           </div>
         ) : null}
-        {state.status === 'ready' && state.works.length === 0 ? (
+        {status === 'ready' && works.length === 0 ? (
           <p className="pane-placeholder">No Work yet.</p>
         ) : null}
-        {state.works.map((work) => (
-          <button
-            aria-current={selectedWorkId === work.id ? 'page' : undefined}
-            className="work-list-item"
-            data-active={selectedWorkId === work.id ? 'true' : 'false'}
+        {works.map((work) => (
+          <WorkListItemButton
             key={work.id}
-            type="button"
-            onClick={() => onOpenWork(work.id)}
-          >
-            <span className="work-list-mark" aria-hidden="true">
-              {work.title.slice(0, 1).toUpperCase()}
-            </span>
-            <span className="work-list-copy">
-              <strong>{work.title}</strong>
-              <span>
-                <span
-                  className={`work-status-dot work-status-dot--${work.product_state}`}
-                />
-                {workStateLabel(work.product_state)}
-              </span>
-            </span>
-            <time dateTime={work.updated_at}>
-              {formatUpdatedTime(work.updated_at)}
-            </time>
-          </button>
+            work={work}
+            selected={selectedWorkId === work.id}
+            onOpenWork={onOpenWork}
+          />
         ))}
       </div>
     </aside>
+  );
+}
+
+function WorkListItemButton({
+  work,
+  selected,
+  onOpenWork,
+}: {
+  readonly work: WorkListItem;
+  readonly selected: boolean;
+  readonly onOpenWork: (workId: string) => void;
+}) {
+  return (
+    <button
+      aria-current={selected ? 'page' : undefined}
+      className="work-list-item"
+      data-active={selected ? 'true' : 'false'}
+      type="button"
+      onClick={() => onOpenWork(work.id)}
+    >
+      <span className="work-list-mark" aria-hidden="true">
+        {work.title.slice(0, 1).toUpperCase()}
+      </span>
+      <span className="work-list-copy">
+        <strong>{work.title}</strong>
+        <span>
+          <span
+            className={`work-status-dot work-status-dot--${work.product_state}`}
+          />
+          {workStateLabel(work.product_state)}
+        </span>
+      </span>
+      <time dateTime={work.updated_at}>
+        {formatUpdatedTime(work.updated_at)}
+      </time>
+    </button>
   );
 }
 

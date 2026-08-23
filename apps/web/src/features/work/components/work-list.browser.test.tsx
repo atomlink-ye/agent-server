@@ -6,7 +6,7 @@ import type {
   WorkListItem,
   WorkListResponse,
 } from '@atomlink-ye/agent-server/product-contract';
-import { WorkListShell } from '@/features/work/components/work-shell';
+import { WorkListPage } from '@/features/work/pages/WorkListPage';
 import parallelRecording from '@/lib/__fixtures__/product-recordings/parallel-success.json';
 import { projectWorkList } from '@/lib/product-recording-projections';
 
@@ -76,7 +76,7 @@ it('renders Product Work state and latest Run summary with one list read', async
   const root = createRoot(host);
   try {
     await act(async () => {
-      root.render(<WorkListShell />);
+      root.render(<WorkListPage />);
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
 
@@ -121,7 +121,7 @@ it('distinguishes loading, empty, and real network error without fabricating Wor
   const loadingRoot = createRoot(loadingHost);
   try {
     await act(async () => {
-      loadingRoot.render(<WorkListShell />);
+      loadingRoot.render(<WorkListPage />);
     });
     expect(
       loadingHost.querySelector('[data-testid="work-list-loading"]'),
@@ -152,7 +152,7 @@ it('distinguishes loading, empty, and real network error without fabricating Wor
   const errorRoot = createRoot(errorHost);
   try {
     await act(async () => {
-      errorRoot.render(<WorkListShell />);
+      errorRoot.render(<WorkListPage />);
     });
     await settleNetworkTurn();
     expect(

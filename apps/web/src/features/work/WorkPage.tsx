@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { NewWork } from './components/new-work';
-import { WorkDetailShell } from './components/work-shell';
+import { WorkDetailPage } from './pages/WorkDetailPage';
 import { workPath, workRootPath } from '../../app/routes';
 import { TitleBar } from '../../app/shell/TitleBar';
 import WorkPane from './WorkPane';
@@ -67,7 +67,7 @@ export function WorkPage({
             <NewWork originConversationId={returnConversationId} />
           ) : null}
           {!showNewWork && selectedWorkId ? (
-            <WorkDetailShell
+            <WorkDetailPage
               workId={selectedWorkId}
               tab={workTab ?? undefined}
               selectedRunId={selectedRunId ?? undefined}

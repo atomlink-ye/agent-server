@@ -2,7 +2,7 @@ import type { Pool } from 'pg';
 
 import type { AppConfig } from '../shared/config.js';
 import type { Logger } from '../shared/observability/logger.js';
-import { noExternalDependencies } from '../application/health/readiness.js';
+import { RuntimeReadinessProbe } from '../application/health/readiness.js';
 import type { AppDependencies } from '../entrypoints/api/app.js';
 import { createHttpApp } from '../entrypoints/api/app.js';
 import type { TeamDriver } from '../application/teams/team-driver.js';
@@ -48,7 +48,9 @@ export async function createHostComposition(input: HostCompositionInput) {
   const app = createHttpApp({
     config: input.config,
     logger: input.logger,
-    readiness: noExternalDependencies,
+    readiness: new RuntimeReadinessProbe({
+      health: () => input.runtime.runtimeProvider.health(),
+    }),
     runtime: input.runtime.runtimeProvider,
     submitRun: input.kernel.submitRun,
     getRun: input.kernel.getRun,

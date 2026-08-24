@@ -28,6 +28,10 @@ import { ExecuteRun } from './execute-run.js';
 import { RUNTIME_RECOVERY_INSTRUCTION } from './run-prompt-context.js';
 import { FakeAgentRuntime } from '../../../tests/fixtures/fake-agent-runtime.js';
 import { makeRuntimeSession } from '../../../tests/fixtures/runtime-session.js';
+import { createDesiredRuntimeSystemPrompt } from '../../domain/runtime/desired-runtime-system-prompt.js';
+import { createRuntimeSessionSpec } from '../../domain/runtime/runtime-session-spec.js';
+import { runtimeSpecRevision } from '../../domain/runtime/runtime-session.js';
+import type { EnsureDesiredRuntimeSpec } from '../ports/ensure-desired-runtime-spec.js';
 
 function testRuntimeSessions() {
   return {
@@ -53,6 +57,72 @@ function testRuntimeSessions() {
       }),
     ),
   } as never;
+}
+
+function testDesiredSpecOwner(runtimeSessions: {
+  findByScope: (owner: unknown, scope: unknown) => Promise<any>;
+}): EnsureDesiredRuntimeSpec {
+  return {
+    execute: async (input) => {
+      const session = await runtimeSessions.findByScope(
+        input.owner,
+        input.scope,
+      );
+      if (!session) throw new Error('test runtime session missing');
+      return {
+        session,
+        spec: createRuntimeSessionSpec({
+          runtimeSessionId: session.id,
+          revision: runtimeSpecRevision(1),
+          workspaceId: session.owner.workspaceId,
+          agentVersionId: input.agentVersionId,
+          environmentVersionId: input.environmentVersionId,
+          resolvedSkills: input.resolvedSkills,
+          toolRefs: input.toolRefs,
+          provider: input.configuration.provider,
+          model: input.configuration.model,
+          cwd: input.configuration.cwd,
+          systemPromptDigest: input.configuration.desiredSystemPrompt.digest,
+          skillSetDigest: 'skills',
+          toolCatalogDigest: 'catalog',
+          extensionSetDigest: 'extensions',
+          contextEpoch: input.configuration.contextEpoch,
+          createdAt: '2026-07-23T00:00:00.000Z',
+        }),
+      };
+    },
+  };
+}
+
+function testEnvironmentReadApi() {
+  return {
+    findVersion: vi.fn(async (): Promise<EnvironmentVersion> => ({
+      id: 'environment-version-1',
+      definitionId: 'environment-definition-1',
+      tenantId: 'tenant-1',
+      workspaceId: 'workspace-1',
+      principalType: 'user',
+      principalId: 'user-1',
+      status: 'published',
+      displayName: 'test',
+      canonicalJson: '{}',
+      fingerprint: 'sha256:test',
+      package: {
+        apiVersion: 'agent-server/v1alpha1',
+        kind: 'ManagedEnvironment',
+        metadata: { name: 'test' },
+        spec: {
+          adapter: 'paseo',
+          provider: 'opencode',
+          modelPolicyRef: 'free-only',
+          runtimeCellPolicy: 'per_runtime_session',
+        },
+      },
+      createdAt: '2026-07-23T00:00:00.000Z',
+      updatedAt: '2026-07-23T00:00:00.000Z',
+      publishedAt: '2026-07-23T00:00:00.000Z',
+    })),
+  };
 }
 import { collaborationToolRefsForRole } from '../../domain/collaboration/canonical-collaboration-tools.js';
 import type { CreateMemoryProposal } from '../memory/create-memory-proposal.js';
@@ -172,6 +242,9 @@ describe('ExecuteRun', () => {
       runtimeSessions: {
         findByScope: vi.fn(async () => runtimeSession),
       } as never,
+      ensureDesiredRuntimeSpec: testDesiredSpecOwner({
+        findByScope: vi.fn(async () => runtimeSession),
+      }),
       sessions,
       environments,
     });
@@ -426,6 +499,15 @@ describe('ExecuteRun', () => {
           }),
         ),
       } as never,
+      ensureDesiredRuntimeSpec: testDesiredSpecOwner({
+        findByScope: vi.fn(async () =>
+          makeRuntimeSession({
+            id: 'runtime-lead-1',
+            scope: { kind: 'team_member', id: lead.id },
+          }),
+        ),
+      }),
+      environments: testEnvironmentReadApi(),
       collaborativeExecutions: collaborativeExecutions as never,
       runs: {
         findByIdForOwner: vi.fn(async () => ({
@@ -1139,6 +1221,8 @@ describe('ExecuteRun', () => {
       runtimeTurns: createRuntime(),
       runtimeProvider: createRuntime(),
       runtimeSessions: testRuntimeSessions(),
+      ensureDesiredRuntimeSpec: testDesiredSpecOwner(testRuntimeSessions()),
+      environments: testEnvironmentReadApi(),
       logger: { log: vi.fn() },
       now: () => new Date('2026-07-23T00:00:00.000Z'),
       resolver: {
@@ -1587,6 +1671,7 @@ function createExecuteRun(input: {
     runtimeTurns: input.runtime,
     runtimeProvider: input.runtime,
     runtimeSessions: testRuntimeSessions(),
+    ensureDesiredRuntimeSpec: testDesiredSpecOwner(testRuntimeSessions()),
     logger: input.logger ?? { log: vi.fn() },
     now: () => new Date('2026-07-23T00:00:00.000Z'),
   });
@@ -1690,6 +1775,8 @@ function createLeadRuntimeFixture() {
       bind: vi.fn(async () => undefined),
     } as never,
     runtimeSessions: runtimeSessions as never,
+    ensureDesiredRuntimeSpec: testDesiredSpecOwner(runtimeSessions),
+    environments: testEnvironmentReadApi(),
     collaborativeExecutions: collaborativeExecutions as never,
   });
   return {
@@ -1724,6 +1811,7 @@ function createDirectExecuteRun(input: {
     runtimeTurns: input.runtime,
     runtimeProvider: input.runtime,
     runtimeSessions: testRuntimeSessions(),
+    ensureDesiredRuntimeSpec: testDesiredSpecOwner(testRuntimeSessions()),
     logger: { log: vi.fn() },
     now: () => new Date('2026-07-23T00:00:00.000Z'),
     resolver: input.resolver,

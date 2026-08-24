@@ -5,7 +5,7 @@ import { MockChatTurnProvider } from '../adapters/chat/mock-chat-turn-provider.j
 import { ListAgentHomeEntries } from '../application/agents/agent-home.js';
 import { ChatBrainResolver } from '../application/chat/chat-brain-resolver.js';
 import { ChatDeliveryReconciler } from '../application/chat/chat-delivery-reconciler.js';
-import type { CreateAgentChatRuntimeSession } from '../application/runtime/create-agent-chat-runtime-session.js';
+import type { EnsureDesiredRuntimeSpec } from '../application/ports/ensure-desired-runtime-spec.js';
 import type { ExecuteRuntimeTurn } from '../application/runtime/execute-runtime-turn.js';
 import type { AgentResolutionApi } from '../application/ports/agent-resolution-api.js';
 import type { ManagedAgentDefinitionRead } from '../application/ports/agent-registry.js';
@@ -29,7 +29,12 @@ interface CreateChatCapabilitiesEnabledOptions {
   readonly directChatPlane: EnabledDirectChatPlane;
   readonly database: Pool;
   readonly chatRuntime: {
-    readonly sessionCreator: Pick<CreateAgentChatRuntimeSession, 'execute'>;
+    readonly desiredSpec: Pick<EnsureDesiredRuntimeSpec, 'execute'>;
+    readonly configuration: {
+      readonly provider: string;
+      readonly model: string | null;
+      readonly cwd: string;
+    };
     readonly turnExecutor: Pick<ExecuteRuntimeTurn, 'execute'>;
   };
   readonly conversations: ConversationRepository;
@@ -64,8 +69,9 @@ export function createChatCapabilities(
   const chatTurnProvider =
     options.directChatPlane === 'execution_runtime'
       ? new ExecutionRuntimeChatTurnProvider(
-          options.chatRuntime.sessionCreator,
+          options.chatRuntime.desiredSpec,
           options.chatRuntime.turnExecutor,
+          options.chatRuntime.configuration,
         )
       : new MockChatTurnProvider();
   const chatBrainResolver = new ChatBrainResolver(

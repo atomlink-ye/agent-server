@@ -36,7 +36,7 @@ export function createRunExecutionComposition(input: {
     | 'runtimeProvider'
     | 'executeRuntimeTurn'
     | 'runtimeSessions'
-    | 'resolveRuntimeSpec'
+    | 'ensureDesiredRuntimeSpec'
   >;
   readonly memory: Pick<MemoryModule, 'fileStore' | 'createMemoryProposal'>;
   readonly memoryReviewSurface?: Pick<PublishMemoryReviewSurface, 'execute'>;
@@ -94,7 +94,7 @@ export function createRunExecutionComposition(input: {
     createMemoryProposal: input.memory.createMemoryProposal,
     sessions: input.kernel.sessions,
     runtimeSessions: input.runtime.runtimeSessions,
-    resolveRuntimeSpec: input.runtime.resolveRuntimeSpec,
+    ensureDesiredRuntimeSpec: input.runtime.ensureDesiredRuntimeSpec,
     environments: input.resources.environmentReadApi,
     collaborativeExecutions: input.team.executions,
     runs: input.kernel.runRepository,

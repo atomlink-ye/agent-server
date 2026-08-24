@@ -13,7 +13,7 @@ import type {
   RuntimeScope,
   RuntimeSessionOwner,
 } from '../../domain/runtime/runtime-session.js';
-import type { ResolveRuntimeSessionSpec } from '../ports/resolve-runtime-session-spec.js';
+import type { EnsureDesiredRuntimeSpec } from '../ports/ensure-desired-runtime-spec.js';
 import type { EnvironmentReadApi } from '../ports/environment-read-api.js';
 import type { ExecutionObservation } from '../ports/runtime-execution-session.js';
 import type { ExecutionOutput } from '../ports/runtime-execution-session.js';
@@ -49,7 +49,7 @@ export class AgentRunExecutor {
     private readonly logger: Logger,
     private readonly events?: RunEventRepository,
     private readonly runtimeSessions?: RuntimeSessionStore,
-    private readonly resolveRuntimeSpec?: ResolveRuntimeSessionSpec,
+    private readonly ensureDesiredRuntimeSpec?: EnsureDesiredRuntimeSpec,
     private readonly sessions?: Pick<SessionRepository, 'getSession'>,
     private readonly environments?: EnvironmentReadApi,
     private readonly runtimeCellRoot?: string,
@@ -198,13 +198,14 @@ export class AgentRunExecutor {
 
     if (
       this.runtimeSessions &&
-      !sessionRuntime &&
       ((task.sessionId && productSession?.environmentVersionId != null) ||
         (member != null && collaborativeTeam != null) ||
         (!task.sessionId && !member && compositionEnvironmentVersionId != null))
     ) {
       if (!this.environments)
         throw new Error('Runtime Environment dependencies are unavailable.');
+      if (!this.ensureDesiredRuntimeSpec)
+        throw new Error('Runtime desired-spec owner is unavailable.');
       const environmentVersionId =
         productSession?.environmentVersionId ??
         collaborativeTeam?.environmentVersionId ??
@@ -241,10 +242,9 @@ export class AgentRunExecutor {
             'WorkRun Environment no longer matches its manifest.',
           );
       }
-      if (!this.resolveRuntimeSpec)
-        throw new Error('Runtime session spec resolver is unavailable.');
-      const runtimeSpec = this.resolveRuntimeSpec.execute({
+      const ensured = await this.ensureDesiredRuntimeSpec.execute({
         owner,
+        scope,
         agentVersionId: resolved.agentVersionId,
         environmentVersionId: environmentVersionId!,
         resolvedSkills: resolved.skills,
@@ -259,11 +259,7 @@ export class AgentRunExecutor {
           ),
         },
       });
-      sessionRuntime = await this.runtimeSessions.createWithInitialSpec({
-        owner,
-        scope,
-        spec: runtimeSpec,
-      });
+      sessionRuntime = ensured.session;
       if (!sessionRuntime) throw new Error('Work runtime session unavailable.');
     }
 

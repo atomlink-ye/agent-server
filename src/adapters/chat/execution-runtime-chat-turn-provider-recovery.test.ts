@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import type { RuntimeSession } from '../../domain/runtime/runtime-session.js';
+import type { EnsureDesiredRuntimeSpecInput } from '../../application/ports/ensure-desired-runtime-spec.js';
+import { createRuntimeSessionSpec } from '../../domain/runtime/runtime-session-spec.js';
+import { runtimeSpecRevision } from '../../domain/runtime/runtime-session.js';
 import type { ExecutionOutput } from '../../application/ports/runtime-execution-session.js';
 import type {
   ExecuteRuntimeTurn,
@@ -25,11 +28,34 @@ describe('ExecutionRuntimeChatTurnProvider recovery handoff', () => {
     };
     const provider = new ExecutionRuntimeChatTurnProvider(
       {
-        async execute() {
-          return durableSession();
+        async execute(input: EnsureDesiredRuntimeSpecInput) {
+          const session = durableSession();
+          return {
+            session,
+            spec: createRuntimeSessionSpec({
+              runtimeSessionId: session.id,
+              revision: runtimeSpecRevision(1),
+              workspaceId: session.owner.workspaceId,
+              agentVersionId: input.agentVersionId,
+              environmentVersionId: input.environmentVersionId,
+              resolvedSkills: input.resolvedSkills,
+              toolRefs: input.toolRefs,
+              provider: input.configuration.provider,
+              model: input.configuration.model,
+              cwd: input.configuration.cwd,
+              systemPromptDigest:
+                input.configuration.desiredSystemPrompt.digest,
+              skillSetDigest: 'skills',
+              toolCatalogDigest: 'catalog',
+              extensionSetDigest: 'extensions',
+              contextEpoch: input.configuration.contextEpoch,
+              createdAt: '2026-08-22T00:00:00.000Z',
+            }),
+          };
         },
       },
       executor,
+      { provider: 'recording', model: 'deterministic', cwd: '/tmp/recording' },
     );
 
     const result = await provider.runTurn({

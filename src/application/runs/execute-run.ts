@@ -25,7 +25,7 @@ import { RuntimeTimedOutError } from '../runtime/execution-runtime-errors.js';
 import { RuntimeTurnExecutionError } from '../runtime/execute-runtime-turn.js';
 import type { RuntimeExecutionProvider } from '../ports/runtime-execution-provider.js';
 import type { RuntimeSessionStore } from '../ports/runtime-session-store.js';
-import type { ResolveRuntimeSessionSpec } from '../ports/resolve-runtime-session-spec.js';
+import type { EnsureDesiredRuntimeSpec } from '../ports/ensure-desired-runtime-spec.js';
 import { RuntimeSessionSpecResolutionError } from '../runtime/resolve-runtime-session-spec.js';
 import type { ExecuteRuntimeTurn } from '../runtime/execute-runtime-turn.js';
 import { ExecuteTeamTask } from '../tasks/execute-team-task.js';
@@ -60,7 +60,7 @@ export interface ExecuteRunOptions {
   readonly fileStore?: FileStore;
   readonly createMemoryProposal?: CreateMemoryProposal;
   readonly runtimeSessions?: RuntimeSessionStore;
-  readonly resolveRuntimeSpec?: ResolveRuntimeSessionSpec;
+  readonly ensureDesiredRuntimeSpec?: EnsureDesiredRuntimeSpec;
   readonly sessions?: Pick<SessionRepository, 'getSession'>;
   readonly environments?: EnvironmentReadApi;
   readonly runtimeCellRoot?: string;
@@ -102,7 +102,7 @@ export class ExecuteRun {
       fileStore,
       createMemoryProposal,
       runtimeSessions,
-      resolveRuntimeSpec,
+      ensureDesiredRuntimeSpec,
       sessions,
       environments,
       runtimeCellRoot,
@@ -151,7 +151,7 @@ export class ExecuteRun {
       logger,
       events,
       runtimeSessions,
-      resolveRuntimeSpec,
+      ensureDesiredRuntimeSpec,
       sessions,
       environments,
       runtimeCellRoot,

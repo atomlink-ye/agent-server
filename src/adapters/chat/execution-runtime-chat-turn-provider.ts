@@ -6,7 +6,8 @@ import type {
   ChatTurnProvider,
 } from '../../application/ports/chat-turn-provider.js';
 import type { ExecutionOutput } from '../../application/ports/runtime-execution-session.js';
-import type { CreateAgentChatRuntimeSession } from '../../application/runtime/create-agent-chat-runtime-session.js';
+import type { EnsureDesiredRuntimeSpec } from '../../application/ports/ensure-desired-runtime-spec.js';
+import type { RuntimeSessionSpecConfiguration } from '../../application/ports/resolve-runtime-session-spec.js';
 import type {
   ExecuteRuntimeTurn,
   ExecuteRuntimeTurnInput,
@@ -25,11 +26,12 @@ import { createDesiredRuntimeSystemPrompt } from '../../domain/runtime/desired-r
  */
 export class ExecutionRuntimeChatTurnProvider implements ChatTurnProvider {
   public constructor(
-    private readonly sessionCreator: Pick<
-      CreateAgentChatRuntimeSession,
-      'execute'
-    >,
+    private readonly desiredSpec: Pick<EnsureDesiredRuntimeSpec, 'execute'>,
     private readonly turnExecutor: Pick<ExecuteRuntimeTurn, 'execute'>,
+    private readonly configuration: Omit<
+      RuntimeSessionSpecConfiguration,
+      'contextEpoch' | 'desiredSystemPrompt'
+    >,
   ) {}
 
   public async runTurn(
@@ -41,11 +43,25 @@ export class ExecutionRuntimeChatTurnProvider implements ChatTurnProvider {
   }> {
     const turnContext = input.brain.turnContext;
     if (!turnContext) throw new Error('chat_runtime_context_missing');
-    const durableSession = await this.sessionCreator.execute({
-      agentChatRuntimeId: turnContext.agentChatRuntimeId,
-      runtimeEpoch: turnContext.runtimeEpoch,
-      agentOwner: input.brain.agentOwner,
+    const desiredSystemPrompt = createDesiredRuntimeSystemPrompt(
+      buildStableSystemPrompt(input),
+    );
+    const owner = {
+      tenantId: input.brain.agentOwner.scope.tenantId,
+      workspaceId: input.brain.agentOwner.scope.workspaceId,
+      principalType: input.brain.agentOwner.principal.type,
+      principalId: input.brain.agentOwner.principal.id,
+    } as const;
+    const scope = {
+      kind: 'agent_chat' as const,
+      id: turnContext.agentChatRuntimeId,
+      epoch: turnContext.runtimeEpoch,
+    };
+    const ensured = await this.desiredSpec.execute({
+      owner,
+      scope,
       agentVersionId: turnContext.agentVersionId,
+      environmentVersionId: null,
       resolvedSkills: input.brain.resolvedSkills,
       toolRefs: [
         ...new Set([
@@ -54,13 +70,20 @@ export class ExecutionRuntimeChatTurnProvider implements ChatTurnProvider {
           AGENT_SERVER_PRODUCT_WORK_RUN_START_TOOL_REF,
         ]),
       ],
-      desiredSystemPrompt: createDesiredRuntimeSystemPrompt(
-        buildStableSystemPrompt(input),
-      ),
+      configuration: {
+        ...this.configuration,
+        contextEpoch: turnContext.runtimeEpoch,
+        desiredSystemPrompt,
+      },
     });
 
     const requested = input.turn?.modeHint ?? 'bootstrap';
-    const result = await this.execute(input, durableSession, requested);
+    const result = await this.execute(
+      input,
+      ensured.session,
+      desiredSystemPrompt,
+      requested,
+    );
     return {
       body: result.text,
       provider: result.provider,
@@ -71,6 +94,7 @@ export class ExecutionRuntimeChatTurnProvider implements ChatTurnProvider {
   private execute(
     input: Parameters<ChatTurnProvider['runTurn']>[0],
     durableSession: RuntimeSession | null,
+    desiredSystemPrompt: ReturnType<typeof createDesiredRuntimeSystemPrompt>,
     mode: ChatTurnMode,
   ): Promise<ExecutionOutput> {
     if (!durableSession) throw new Error('chat_runtime_session_missing');
@@ -92,9 +116,7 @@ export class ExecutionRuntimeChatTurnProvider implements ChatTurnProvider {
         input.triggerMessageId,
       ),
       prompt,
-      desiredSystemPrompt: createDesiredRuntimeSystemPrompt(
-        buildStableSystemPrompt(input),
-      ),
+      desiredSystemPrompt,
       recoveryPrompt,
     };
     return this.turnExecutor.execute(turn);

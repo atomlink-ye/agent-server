@@ -173,7 +173,7 @@ export async function createApplication(
   const {
     runtimeProvider,
     runtimeSessions,
-    resolveRuntimeSpec,
+    ensureDesiredRuntimeSpec,
     executeRuntimeTurn: runtimeTurns,
     oneShotCompletion,
     runtimeMcpServer,
@@ -241,7 +241,7 @@ export async function createApplication(
       runtimeProvider,
       executeRuntimeTurn: runtimeTurns,
       runtimeSessions,
-      resolveRuntimeSpec,
+      ensureDesiredRuntimeSpec,
     },
     memory: memoryModule,
     ...(channelComposition.memoryReviewSurface

@@ -12,8 +12,8 @@ import { AuthorizeRuntimeTool } from '../application/runtime/authorize-runtime-t
 import { EnsureRuntimeSessionService } from '../application/runtime/ensure-runtime-session.js';
 import { ExecuteRuntimeTurn } from '../application/runtime/execute-runtime-turn.js';
 import { CancelRuntimeTurn } from '../application/runtime/cancel-runtime-turn.js';
-import { AgentChatRuntimeSessionCreator } from '../application/runtime/create-agent-chat-runtime-session.js';
 import { ResolveRuntimeSessionSpecService } from '../application/runtime/resolve-runtime-session-spec.js';
+import { EnsureDesiredRuntimeSpecService } from '../application/runtime/ensure-desired-runtime-spec.js';
 import { RuntimeGenerationManager } from '../application/runtime/runtime-generation-manager.js';
 import { createRuntimeMcpEndpoint } from './create-runtime-mcp-endpoint.js';
 import { RuntimeMcpServer } from '../infrastructure/extensions/runtime-mcp-server.js';
@@ -24,21 +24,26 @@ import type { OneShotRuntimeCompletion } from '../application/ports/one-shot-run
 import { hashBearerToken } from '../infrastructure/security/hash-bearer-token.js';
 import type { RuntimeExecutionProvider } from '../application/ports/runtime-execution-provider.js';
 import type { RuntimeSessionStore } from '../application/ports/runtime-session-store.js';
-import type { ResolveRuntimeSessionSpec } from '../application/ports/resolve-runtime-session-spec.js';
 import type { EnsureRuntimeSession } from '../application/ports/ensure-runtime-session.js';
 import type { RuntimeMcpEndpoint } from '../application/ports/runtime-mcp-endpoint.js';
 import type { ExecuteRuntimeTurn as ExecuteRuntimeTurnUseCase } from '../application/runtime/execute-runtime-turn.js';
 import type { CancelRuntimeTurn as CancelRuntimeTurnUseCase } from '../application/runtime/cancel-runtime-turn.js';
+import type { EnsureDesiredRuntimeSpec } from '../application/ports/ensure-desired-runtime-spec.js';
 
 export interface RuntimeOwner {
   readonly runtimeProvider: RuntimeExecutionProvider;
   readonly runtimeSessions: RuntimeSessionStore;
-  readonly resolveRuntimeSpec: ResolveRuntimeSessionSpec;
+  readonly ensureDesiredRuntimeSpec: EnsureDesiredRuntimeSpec;
   readonly ensureRuntimeSession: EnsureRuntimeSession;
   readonly executeRuntimeTurn: Pick<ExecuteRuntimeTurnUseCase, 'execute'>;
   readonly cancelRuntimeTurn: Pick<CancelRuntimeTurnUseCase, 'execute'>;
   readonly chatRuntime: {
-    readonly sessionCreator: Pick<AgentChatRuntimeSessionCreator, 'execute'>;
+    readonly desiredSpec: EnsureDesiredRuntimeSpec;
+    readonly configuration: {
+      readonly provider: string;
+      readonly model: string | null;
+      readonly cwd: string;
+    };
     readonly turnExecutor: Pick<ExecuteRuntimeTurnUseCase, 'execute'>;
   };
   readonly runtimeMcpServer: RuntimeMcpServer;
@@ -82,6 +87,11 @@ export function createRuntimeOwner(input: {
     input.toolCatalog,
     { digest: () => input.toolCatalog.digest },
   );
+  const ensureDesiredRuntimeSpec = new EnsureDesiredRuntimeSpecService(
+    runtimeSessions,
+    specs,
+    resolveRuntimeSpec,
+  );
   const generationManager = new RuntimeGenerationManager({
     generations,
     generationTransaction: generations,
@@ -104,23 +114,23 @@ export function createRuntimeOwner(input: {
     grants,
   );
   const cancelRuntimeTurn = new CancelRuntimeTurn(turns, ensureRuntimeSession);
-  const sessionCreator = new AgentChatRuntimeSessionCreator(
-    runtimeSessions,
-    resolveRuntimeSpec,
-    {
-      provider: input.config.paseo.provider,
-      model: input.config.paseo.model ?? null,
-      cwd: input.config.paseo.agentCwd,
-    },
-  );
+  const configuration = {
+    provider: input.config.paseo.provider,
+    model: input.config.paseo.model ?? null,
+    cwd: input.config.paseo.agentCwd,
+  };
   return {
     runtimeProvider,
     runtimeSessions,
-    resolveRuntimeSpec,
+    ensureDesiredRuntimeSpec,
     ensureRuntimeSession,
     executeRuntimeTurn,
     cancelRuntimeTurn,
-    chatRuntime: { sessionCreator, turnExecutor: executeRuntimeTurn },
+    chatRuntime: {
+      desiredSpec: ensureDesiredRuntimeSpec,
+      configuration,
+      turnExecutor: executeRuntimeTurn,
+    },
     runtimeMcpServer,
     runtimeMcpEndpoint,
     oneShotCompletion,

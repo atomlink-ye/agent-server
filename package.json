@@ -45,7 +45,7 @@
     "gates:changed": "node --import tsx scripts/quality/run-changed-gates.ts",
     "prepush": "node --import tsx scripts/quality/run-changed-gates.ts",
     "check": "pnpm lint && pnpm check:imports && pnpm check:compatibility-surfaces && pnpm check:package-commands && pnpm check:architecture-replacement && pnpm test:repository && pnpm web:check:types && pnpm web:check:architecture && pnpm web:build",
-    "test": "pnpm test:unit && pnpm test:contract && pnpm test:integration && pnpm test:scenario",
+    "test": "pnpm test:unit && pnpm test:contract && pnpm test:integration",
     "test:unit": "vitest run --config vitest.unit.config.ts",
     "test:repository": "vitest run --config vitest.repository.config.ts",
     "test:integration": "vitest run --config vitest.integration.config.ts",

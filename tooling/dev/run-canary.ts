@@ -1,4 +1,6 @@
 import type { ChildProcess } from 'node:child_process';
+import { rm } from 'node:fs/promises';
+import { resolve } from 'node:path';
 
 import {
   LOCAL_SERVICE_TOKEN,
@@ -34,6 +36,8 @@ const runtimeSmokeCommands: Partial<Record<CanaryKind, string[]>> = {
     'scripts/smoke/user-defined-team-work-lifecycle.mjs',
   ],
 };
+
+const webBootstrapEnvPath = resolve(repositoryRoot, '.local/web-bootstrap.env');
 
 function canaryPort(
   environment: NodeJS.ProcessEnv,
@@ -159,6 +163,7 @@ export async function runHostCanary(
     await assertCanaryPortFree('golden-path web', 3001);
     const readyTimeoutMs = canaryReadyTimeout(loaded);
     const apiBaseUrl = `http://127.0.0.1:${apiPort}`;
+    await rm(webBootstrapEnvPath, { force: true });
     const dev = spawnOwned(
       'node',
       ['--import', 'tsx', 'tooling/dev/start.ts', 'runtime'],
@@ -225,6 +230,7 @@ export async function runHostCanary(
     throw error;
   } finally {
     await stopOwned(children);
+    if (kind === 'golden-path') await rm(webBootstrapEnvPath, { force: true });
   }
 }
 

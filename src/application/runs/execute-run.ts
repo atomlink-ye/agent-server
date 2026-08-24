@@ -59,7 +59,7 @@ export interface ExecuteRunOptions {
   readonly events?: RunEventRepository;
   readonly fileStore?: FileStore;
   readonly createMemoryProposal?: CreateMemoryProposal;
-  readonly runtimeSessions?: RuntimeSessionStore;
+  readonly runtimeSessions?: Pick<RuntimeSessionStore, 'findByScope'>;
   readonly ensureDesiredRuntimeSpec?: EnsureDesiredRuntimeSpec;
   readonly runtimeConfiguration?: {
     readonly provider: string;

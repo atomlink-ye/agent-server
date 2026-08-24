@@ -48,7 +48,7 @@ export class AgentRunExecutor {
     private readonly memoryWriter: RuntimeMemoryProposalWriter,
     private readonly logger: Logger,
     private readonly events?: RunEventRepository,
-    private readonly runtimeSessions?: RuntimeSessionStore,
+    private readonly runtimeSessions?: Pick<RuntimeSessionStore, 'findByScope'>,
     private readonly ensureDesiredRuntimeSpec?: EnsureDesiredRuntimeSpec,
     private readonly runtimeConfiguration?: {
       readonly provider: string;

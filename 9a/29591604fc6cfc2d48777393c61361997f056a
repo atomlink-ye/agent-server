@@ -1,0 +1,29 @@
+src/entrypoints/api/app.ts
+  aa841554b33a269e 15,178
+src/infrastructure/runtime/paseo/paseo-runtime-provider.ts
+  aa841554b33a269e 408-410,412
+src/shared/observability/error-diagnostic.ts
+  aa841554b33a269e 1-38
+src/application/runs/execute-run.ts
+  aa841554b33a269e 7,304
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2-bit.10+672fbf0",
+  "base_commit_sha": "9a29591604fc6cfc2d48777393c61361997f056a",
+  "prompts": {
+    "aa841554b33a269e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2e0ac1a9-cdbd-49b5-9938-68e78819ae91",
+        "model": "claude-opus-5"
+      },
+      "human_author": "link.ye",
+      "messages": [],
+      "total_additions": 1362,
+      "total_deletions": 284,
+      "accepted_lines": 2461,
+      "overriden_lines": 0
+    }
+  }
+}

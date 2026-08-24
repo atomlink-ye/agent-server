@@ -8,16 +8,6 @@ import type {
   WorkListPage,
   WorkRunListPage,
 } from '../../application/ports/work-identity-repository.js';
-import type { ExecutionAdmission } from '../../application/ports/execution-admission.js';
-import type { WorkDefinitionReadPort } from '../../application/ports/work-definition-read.js';
-import {
-  WorkIdentityApi,
-  type WorkIdentityApiOptions,
-} from '../../application/work/work-identity-api.js';
-import {
-  StartWorkRun,
-  type StartWorkRunOptions,
-} from '../../application/work/start-work-run.js';
 import {
   WorkIdentityConflictError,
   WorkNotFoundError,
@@ -58,63 +48,6 @@ export interface WorkIdentityConnectable extends WorkIdentityQueryable {
 }
 
 type Database = WorkIdentityQueryable | WorkIdentityConnectable;
-
-export interface PostgresWorkIdentityModuleOptions {
-  readonly database: Database;
-  readonly definitions: WorkDefinitionReadPort;
-  readonly execution: ExecutionAdmission;
-  readonly now?: () => Date;
-  readonly pendingTtlMs?: number;
-}
-
-export interface PostgresWorkIdentityModule {
-  readonly workIdentity: WorkIdentityApi;
-  readonly workIdentityQuery: {
-    readonly findWorkById: WorkIdentityRepository['findWorkById'];
-    readonly findWorkRunById: WorkIdentityRepository['findWorkRunById'];
-    readonly findLatestVisibleWorkRun: (
-      workId: string,
-      owner: WorkIdentityOwnerScope,
-    ) => Promise<WorkRun | null>;
-  };
-  readonly startWorkRun: StartWorkRun;
-}
-
-/** Composes the production Work identity application module over PostgreSQL. */
-export function createPostgresWorkIdentityModule(
-  options: PostgresWorkIdentityModuleOptions,
-): PostgresWorkIdentityModule {
-  const workIdentityRepository = new PostgresWorkIdentityRepository(
-    options.database,
-  );
-  const identityOptions: WorkIdentityApiOptions = {
-    repository: workIdentityRepository,
-    definitions: options.definitions,
-    ...(options.now ? { now: options.now } : {}),
-    ...(options.pendingTtlMs !== undefined
-      ? { pendingTtlMs: options.pendingTtlMs }
-      : {}),
-  };
-  const workIdentity = new WorkIdentityApi(identityOptions);
-  const startWorkRunOptions: StartWorkRunOptions = {
-    identity: workIdentity,
-    execution: options.execution,
-    ...(options.now ? { now: options.now } : {}),
-  };
-  const startWorkRun = new StartWorkRun(startWorkRunOptions);
-  const workIdentityQuery: PostgresWorkIdentityModule['workIdentityQuery'] = {
-    findWorkById: (id, owner) => workIdentityRepository.findWorkById(id, owner),
-    findWorkRunById: (id, owner) =>
-      workIdentityRepository.findWorkRunById(id, owner),
-    findLatestVisibleWorkRun: (workId, owner) =>
-      workIdentityRepository.findLatestVisibleWorkRun(workId, owner),
-  };
-  return {
-    workIdentity,
-    workIdentityQuery,
-    startWorkRun,
-  };
-}
 
 type WorkRow = {
   id: string;

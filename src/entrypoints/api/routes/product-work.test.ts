@@ -7,7 +7,7 @@ import {
   type ProductProjectionApi,
 } from '../../../application/product-projection/product-projection.js';
 import type { AppConfig } from '../../../shared/config.js';
-import type { ApiEnvironment } from '../../../platform/http-types.js';
+import type { ApiEnvironment } from '../http-types.js';
 import { registerProductWorkRoutes } from './product-work.js';
 
 const workId = '00000000-0000-4000-8000-000000000001';

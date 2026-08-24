@@ -50,11 +50,9 @@ import {
 } from '../../../contracts/product-work-controls.js';
 import { HttpError } from '../../../contracts/http.js';
 import type { AppConfig } from '../../../shared/config.js';
-import type { ApiEnvironment } from '../../../platform/http-types.js';
-import {
-  getAuthenticatedAccessContext,
-  requireServiceAccountAccess,
-} from '../authentication.js';
+import type { ApiEnvironment } from '../http-types.js';
+import { getAuthenticatedAccessContext } from '../access-context.js';
+import { requireServiceAccountAccess } from '../authentication.js';
 import { readBoundedJson } from '../read-bounded-json.js';
 
 export interface ProductWorkCommandDependencies {

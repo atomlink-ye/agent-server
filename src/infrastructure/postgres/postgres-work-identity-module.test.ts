@@ -1,42 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import {
-  createPostgresWorkIdentityModule,
-  PostgresWorkIdentityRepository,
-} from './postgres-work-identity-repository.js';
+import { PostgresWorkIdentityRepository } from './postgres-work-identity-repository.js';
 import { WorkWorkspaceScopeUnavailableError } from '../../domain/work/work.js';
 
-describe('Postgres Work identity module', () => {
-  it('does not let the raw write repository escape through its query facade', () => {
-    const module = createPostgresWorkIdentityModule({
-      database: {
-        async query<Row>() {
-          return { rows: [] as Row[] };
-        },
-      },
-      definitions: {
-        findTeamDefinitionById: async () => null,
-        findPublishedTeamVersionById: async () => null,
-      },
-      execution: {
-        admitRoot: async () => {
-          throw new Error('not called by module construction');
-        },
-      },
-    });
-
-    expect(Object.keys(module.workIdentityQuery).sort()).toEqual([
-      'findLatestVisibleWorkRun',
-      'findWorkById',
-      'findWorkRunById',
-    ]);
-    expect(module.workIdentityQuery).not.toHaveProperty('createWork');
-    expect(module.workIdentityQuery).not.toHaveProperty('bindRootTaskCas');
-    expect(module.workIdentityQuery).not.toHaveProperty(
-      'appendResolvedManifest',
-    );
-  });
-
+describe('Postgres Work identity repository', () => {
   it('selects the latest visible WorkRun without using the paginated list', async () => {
     const query = vi.fn().mockResolvedValue({ rows: [] });
     const repository = new PostgresWorkIdentityRepository({ query });

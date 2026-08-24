@@ -263,5 +263,3 @@ export function createMessagesStore(): MessagesStore {
       })),
   };
 }
-
-export const messagesStore = createMessagesStore();

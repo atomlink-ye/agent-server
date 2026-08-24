@@ -4,7 +4,7 @@ import type {
   LarkBindingSessionPort,
   LarkBindingSessionResolutionInput,
 } from '../../application/channels/resolve-lark-binding.js';
-import type { AccessContext } from '../../platform/access-context.js';
+import type { AccessContext } from '../../domain/access-context.js';
 import type {
   ChannelConversationBinding,
   ChannelConversationBindingInput,

@@ -1,4 +1,4 @@
-import type { AccessContext } from '../../platform/access-context.js';
+import type { AccessContext } from '../../domain/access-context.js';
 import type { SessionTurnOrigin } from '../sessions/session-turn-origin.js';
 
 /** Long-lived product/project container. Distinct from provider execution cwd. */

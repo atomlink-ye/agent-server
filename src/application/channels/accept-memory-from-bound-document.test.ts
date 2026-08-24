@@ -18,29 +18,7 @@ const owner = {
   policySnapshotVersion: 'policy',
 };
 
-function make(
-  candidate: any,
-  binding: any = {
-    plane: 'paseo',
-    externalSessionId: 'agent',
-  },
-) {
-  const runtime = {
-    executeTurn: vi.fn().mockResolvedValue({
-      provider: 'p',
-      model: 'm',
-      text: 'ignored',
-      workspaceBinding: {
-        plane: 'paseo',
-        externalWorkspaceId: 'workspace',
-      },
-      sessionBinding: { plane: 'paseo', externalSessionId: 'agent' },
-      memoryCandidates: candidate,
-    }),
-  };
-  const events = {
-    getSessionBindingForRunInSession: vi.fn().mockResolvedValue(binding),
-  };
+function make() {
   const review = {
     execute: vi.fn().mockResolvedValue({ entry: { id: 'entry' } }),
   };
@@ -48,48 +26,15 @@ function make(
     acceptEntry: vi.fn().mockResolvedValue({ projectionStatus: 'ready' }),
   };
   return {
-    service: new AcceptMemoryFromBoundDocument(
-      runtime,
-      events,
-      review,
-      managedMemory,
-    ),
-    runtime,
-    events,
+    service: new AcceptMemoryFromBoundDocument(review, managedMemory),
     review,
     managedMemory,
   };
 }
 
 describe('AcceptMemoryFromBoundDocument', () => {
-  it('uses the exact Agent and Bot-owned CLI fetch, then reviews and projects once', async () => {
-    const x = make([{ category: 'terminology', content: 'changed marker' }]);
-    await expect(
-      x.service.execute({ ingressId: 'i', proposal, surface, owner }),
-    ).resolves.toMatchObject({ content: 'changed marker' });
-    expect(x.runtime.executeTurn).toHaveBeenCalledWith(
-      expect.objectContaining({
-        compatibilitySessionBinding: {
-          plane: 'paseo',
-          externalSessionId: 'agent',
-        },
-        proposalLimit: 1,
-        prompt: expect.stringContaining(
-          'lark-cli docs +fetch --profile agent-test --as bot --doc doc-1',
-        ),
-      }),
-    );
-    expect(x.review.execute).toHaveBeenCalledWith(
-      expect.objectContaining({
-        action: 'edit_and_accept',
-        accessContext: owner,
-      }),
-    );
-    expect(x.managedMemory.acceptEntry).toHaveBeenCalledTimes(1);
-  });
-
   it('replays accepted content without binding or runtime continuation', async () => {
-    const x = make([{ category: 'terminology', content: 'new' }], null);
+    const x = make();
     await expect(
       x.service.execute({
         ingressId: 'i',
@@ -103,7 +48,5 @@ describe('AcceptMemoryFromBoundDocument', () => {
         owner,
       }),
     ).resolves.toMatchObject({ content: 'old' });
-    expect(x.runtime.executeTurn).not.toHaveBeenCalled();
-    expect(x.events.getSessionBindingForRunInSession).not.toHaveBeenCalled();
   });
 });

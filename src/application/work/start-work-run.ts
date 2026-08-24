@@ -1,9 +1,7 @@
-import type { AccessContext } from '../../platform/access-context.js';
+import type { AccessContext } from '../../domain/access-context.js';
+import type { ExecutionPlaneCapability } from '../ports/execution-plane.js';
 import type { ExecutionAdmission } from '../ports/execution-admission.js';
-import type {
-  ExecutionPlaneCapabilities,
-  ExecutionPlaneCapability,
-} from '../ports/execution-plane.js';
+import type { RuntimeCapabilities } from '../runtime/runtime-capabilities.js';
 import type { WorkRunInputStore } from '../ports/work-run-input-store.js';
 import type { WorkRun } from '../../domain/work/work-run.js';
 import {
@@ -51,9 +49,7 @@ export interface StartWorkRunResult {
 export interface StartWorkRunOptions {
   readonly identity: WorkIdentityApi;
   readonly execution: ExecutionAdmission;
-  readonly runtimeCapabilities?: {
-    capabilities(): ExecutionPlaneCapabilities;
-  };
+  readonly runtimeCapabilities: RuntimeCapabilities;
   readonly productDefinitions?: Pick<
     ProductWorkDefinitionApi,
     'getInputContract'
@@ -62,18 +58,10 @@ export interface StartWorkRunOptions {
   readonly now?: () => Date;
 }
 
-const NO_RUNTIME_CAPABILITIES = Object.freeze({
-  capabilities(): ExecutionPlaneCapabilities {
-    return { supported: new Set() };
-  },
-});
-
 export class StartWorkRun {
   private readonly identity: WorkIdentityApi;
   private readonly execution: ExecutionAdmission;
-  private readonly runtimeCapabilities: NonNullable<
-    StartWorkRunOptions['runtimeCapabilities']
-  >;
+  private readonly runtimeCapabilities: RuntimeCapabilities;
   private readonly productDefinitions?: StartWorkRunOptions['productDefinitions'];
   private readonly workRunInputs: WorkRunInputStore | undefined;
   private readonly now: () => Date;
@@ -81,8 +69,7 @@ export class StartWorkRun {
   public constructor(options: StartWorkRunOptions) {
     this.identity = options.identity;
     this.execution = options.execution;
-    this.runtimeCapabilities =
-      options.runtimeCapabilities ?? NO_RUNTIME_CAPABILITIES;
+    this.runtimeCapabilities = options.runtimeCapabilities;
     this.productDefinitions = options.productDefinitions;
     this.workRunInputs = options.workRunInputs;
     this.now = options.now ?? (() => new Date());
@@ -229,7 +216,7 @@ export class StartWorkRun {
   }
 
   private assertRuntimeCapabilities(definition: ResolvedWorkDefinition): void {
-    const supported = this.runtimeCapabilities.capabilities().supported;
+    const supported = this.runtimeCapabilities.supported;
     for (const required of definition.executionPolicy
       .requiredRuntimeCapabilities) {
       if (!supported.has(asExecutionPlaneCapability(required)))

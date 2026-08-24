@@ -6,7 +6,7 @@ import {
   createPostgresPool,
 } from '../../src/infrastructure/postgres/postgres.js';
 import { PostgresConversationRepository } from '../../src/infrastructure/postgres/postgres-conversation-repository.js';
-import { PostgresConversationWorkLinkRepository } from '../../src/modules/work/conversation-work-link-repository.js';
+import { PostgresConversationWorkLinkRepository } from '../../src/composition/postgres-conversation-work-link-repository.js';
 import { PostgresChatDispatchRepository } from '../../src/infrastructure/postgres/postgres-chat-dispatch-repository.js';
 import { ChatDeliveryReconciler } from '../../src/application/chat/chat-delivery-reconciler.js';
 import { ChatDeliveryWorker } from '../../src/entrypoints/chat/worker.js';
@@ -364,82 +364,139 @@ describe('Chat delivery reconciler on real PostgreSQL', () => {
     expect(allBobBodies).not.toContain('Alice');
   });
 
-  it('4. scope_kind mutation: agent_chat scope is now allowed in runtime_sessions', async () => {
-    // This test verifies the migration 0039 scope plus 0051 typed epoch shape.
-    // We test within a transaction that is always rolled back to avoid pollution.
-
+  it('4. 0056 runtime model: normalized scopes, immutable specs, and generation state', async () => {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
 
-      // Drop FK constraints that would block synthetic row insertion
-      const fkConstraintsResult = await client.query<{ conname: string }>(
-        `SELECT conname FROM pg_constraint
-         WHERE conrelid='runtime_sessions'::regclass AND contype='f'`,
-      );
+      const runtimeSessionId = '73000000-0000-4000-8000-000000000001';
+      const scopeId = '74000000-0000-4000-8000-000000000001';
+      const agentVersionId = '72000000-0000-4000-8000-000000000001';
+      const createdAt = '2026-08-22T08:00:00.000Z';
 
-      const fkNames = (fkConstraintsResult.rows ?? []).map((r) => r.conname);
-      for (const fkName of fkNames) {
-        await client.query(
-          `ALTER TABLE runtime_sessions DROP CONSTRAINT IF EXISTS "${fkName}"`,
-        );
-      }
-
-      // Positive: current schema allows typed agent_chat scope identity.
-      await client.query('SAVEPOINT test_agent_chat_allowed');
-      const insertResult = await client.query(
+      await client.query(
         `INSERT INTO runtime_sessions
-          (id, tenant_id, principal_type, principal_id, scope_kind, agent_chat_runtime_id, runtime_epoch, launch_snapshot_id, created_at, updated_at)
-         VALUES (gen_random_uuid(), 'test-tenant-scope', 'service_account', 'sa-1', 'agent_chat', gen_random_uuid(), 1, gen_random_uuid(), now(), now())`,
+          (id,tenant_id,workspace_id,principal_type,principal_id,
+           scope_kind,scope_id,scope_epoch,desired_spec_revision,
+           current_generation_id,status,created_at,updated_at,closed_at)
+         VALUES($1,$2,$3,$4,$5,'agent_chat',$6,1,1,NULL,'provisioning',$7,$7,NULL)`,
+        [
+          runtimeSessionId,
+          tenantId,
+          'workspace-test',
+          'service_account',
+          'sa-runtime-model-test',
+          scopeId,
+          createdAt,
+        ],
       );
-      expect(insertResult.rowCount).toBe(1);
-      await client.query('ROLLBACK TO SAVEPOINT test_agent_chat_allowed');
 
-      // Negative: before 0039 (old constraints), agent_chat would be rejected.
-      await client.query('SAVEPOINT test_old_constraints');
-
-      // Drop current scope constraints. 0051's typed identity check stays in
-      // place so this branch isolates the historical scope-kind restriction.
       await client.query(
-        `ALTER TABLE runtime_sessions DROP CONSTRAINT IF EXISTS runtime_sessions_scope_shape_check`,
-      );
-      await client.query(
-        `ALTER TABLE runtime_sessions DROP CONSTRAINT IF EXISTS runtime_sessions_scope_kind_check`,
+        `INSERT INTO runtime_session_specs
+          (runtime_session_id,revision,workspace_id,agent_version_id,
+           environment_version_id,resolved_skills,tool_refs,provider,model,
+           cwd,system_prompt_digest,skill_set_digest,tool_catalog_digest,
+           extension_set_digest,context_epoch,bootstrap_digest,created_at)
+         VALUES($1,1,$2,$3,NULL,'[]'::jsonb,'[]'::jsonb,'paseo',NULL,
+                '/workspace','system','skills','tools','extensions',1,
+                'bootstrap',$4)`,
+        [runtimeSessionId, 'workspace-test', agentVersionId, createdAt],
       );
 
-      // Add old (pre-0039) constraints
-      await client.query(`
-        ALTER TABLE runtime_sessions
-        ADD CONSTRAINT runtime_sessions_scope_shape_check CHECK (
-          (scope_kind = 'product_session' AND product_session_id IS NOT NULL AND task_id IS NULL)
-          OR (scope_kind = 'task' AND product_session_id IS NULL AND task_id IS NOT NULL)
-          OR (scope_kind = 'team_member' AND product_session_id IS NULL AND task_id IS NOT NULL)
+      const session = await client.query<{
+        scope_kind: string;
+        scope_id: string;
+        scope_epoch: number;
+        desired_spec_revision: number;
+        status: string;
+      }>(
+        `SELECT scope_kind,scope_id,scope_epoch,desired_spec_revision,status
+           FROM runtime_sessions WHERE id=$1`,
+        [runtimeSessionId],
+      );
+      expect(session.rows).toEqual([
+        {
+          scope_kind: 'agent_chat',
+          scope_id: scopeId,
+          scope_epoch: 1,
+          desired_spec_revision: 1,
+          status: 'provisioning',
+        },
+      ]);
+
+      await client.query('SAVEPOINT immutable_spec_update');
+      await expect(
+        client.query(
+          `UPDATE runtime_session_specs
+              SET agent_version_id=$2
+            WHERE runtime_session_id=$1 AND revision=1`,
+          [runtimeSessionId, '72000000-0000-4000-8000-000000000002'],
         ),
-        ADD CONSTRAINT runtime_sessions_scope_kind_check
-          CHECK (scope_kind IN ('product_session','task','team_member'))
-      `);
+      ).rejects.toThrow(/immutable/i);
+      await client.query('ROLLBACK TO SAVEPOINT immutable_spec_update');
 
-      // Attempt to insert a structurally typed agent_chat under old constraints.
-      let oldConstraintRejectsAgentChat = false;
-      try {
-        await client.query(
-          `INSERT INTO runtime_sessions
-            (id, tenant_id, principal_type, principal_id, scope_kind, agent_chat_runtime_id, runtime_epoch, launch_snapshot_id, created_at, updated_at)
-           VALUES (gen_random_uuid(), 'test-tenant-scope-old', 'service_account', 'sa-2', 'agent_chat', gen_random_uuid(), 1, gen_random_uuid(), now(), now())`,
-        );
-      } catch (error) {
-        if (
-          error instanceof Error &&
-          error.message.includes('violates check constraint')
-        ) {
-          oldConstraintRejectsAgentChat = true;
-        }
-      }
-      expect(oldConstraintRejectsAgentChat).toBe(true);
+      const spec = await client.query<{ agent_version_id: string }>(
+        `SELECT agent_version_id
+           FROM runtime_session_specs
+          WHERE runtime_session_id=$1 AND revision=1`,
+        [runtimeSessionId],
+      );
+      expect(spec.rows).toEqual([{ agent_version_id: agentVersionId }]);
 
-      await client.query('ROLLBACK TO SAVEPOINT test_old_constraints');
+      const provisioningGenerationId = '75000000-0000-4000-8000-000000000001';
+      await client.query(
+        `INSERT INTO runtime_session_generations
+          (id,runtime_session_id,generation,provider,provider_workspace_id,
+           provider_session_id,applied_spec_revision,applied_bootstrap_digest,
+           endpoint_epoch,status,created_at)
+         VALUES($1,$2,1,'paseo',NULL,NULL,1,'bootstrap','endpoint-1',
+                'provisioning',$3)`,
+        [provisioningGenerationId, runtimeSessionId, createdAt],
+      );
 
-      // Final rollback to ensure no data is committed
+      await client.query('SAVEPOINT active_provider_check');
+      await expect(
+        client.query(
+          `INSERT INTO runtime_session_generations
+           (id,runtime_session_id,generation,provider,provider_workspace_id,
+             provider_session_id,applied_spec_revision,applied_bootstrap_digest,
+             endpoint_epoch,status,created_at)
+           VALUES($1,$2,2,'paseo',NULL,NULL,1,'bootstrap','endpoint-2','active',$3)`,
+          ['75000000-0000-4000-8000-000000000002', runtimeSessionId, createdAt],
+        ),
+      ).rejects.toThrow(/check constraint|violates check/i);
+      await client.query('ROLLBACK TO SAVEPOINT active_provider_check');
+
+      await client.query(
+        `INSERT INTO runtime_session_generations
+          (id,runtime_session_id,generation,provider,provider_workspace_id,
+           provider_session_id,applied_spec_revision,applied_bootstrap_digest,
+           endpoint_epoch,status,created_at)
+         VALUES($1,$2,2,'paseo','provider-workspace-1','provider-session-1',
+                1,'bootstrap','endpoint-2','active',$3)`,
+        ['75000000-0000-4000-8000-000000000003', runtimeSessionId, createdAt],
+      );
+      await client.query(
+        `INSERT INTO runtime_session_generations
+          (id,runtime_session_id,generation,provider,provider_workspace_id,
+           provider_session_id,applied_spec_revision,applied_bootstrap_digest,
+           endpoint_epoch,status,created_at)
+         VALUES($1,$2,3,'paseo','provider-workspace-1','provider-session-1',
+                1,'bootstrap','endpoint-3','superseded',$3)`,
+        ['75000000-0000-4000-8000-000000000004', runtimeSessionId, createdAt],
+      );
+
+      const generations = await client.query<{ status: string }>(
+        `SELECT status FROM runtime_session_generations
+          WHERE runtime_session_id=$1 ORDER BY generation`,
+        [runtimeSessionId],
+      );
+      expect(generations.rows).toEqual([
+        { status: 'provisioning' },
+        { status: 'active' },
+        { status: 'superseded' },
+      ]);
+
       await client.query('ROLLBACK');
     } finally {
       client.release();

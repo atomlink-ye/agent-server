@@ -16,7 +16,7 @@ import {
   applyDurableKernelMigrations,
   createPostgresPool,
 } from '../../src/infrastructure/postgres/postgres.js';
-import type { AccessContext } from '../../src/platform/access-context.js';
+import type { AccessContext } from '../../src/domain/access-context.js';
 
 const connectionString = process.env.DATABASE_URL ?? process.env.POSTGRES_URL;
 if (!connectionString)
@@ -229,9 +229,7 @@ describe('Composition-first Work on real PostgreSQL', () => {
       identity,
       execution: { admitRoot },
       runtimeCapabilities: {
-        capabilities: () => ({
-          supported: new Set(['external_workspace', 'platform_mcp'] as const),
-        }),
+        supported: new Set(['external_workspace', 'platform_mcp'] as const),
       },
       now: () => new Date(at),
     });

@@ -1,7 +1,7 @@
 import type { AgentDefinition } from '../../domain/agents/managed-agent-definition.js';
 import type { Conversation } from '../../domain/chat/conversation.js';
 import type { ConversationWorkEntitlement } from '../../domain/chat/conversation-work-entitlement.js';
-import type { ServiceAccountAccessContext } from '../../platform/access-context.js';
+import type { ServiceAccountAccessContext } from '../../domain/access-context.js';
 import type { ConversationRepository } from '../ports/conversation-repository.js';
 import type { ConversationWorkEntitlementRepository } from '../ports/conversation-work-entitlement-repository.js';
 

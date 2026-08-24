@@ -3,7 +3,7 @@ import type { Task } from '../../domain/tasks/task.js';
 import type { Logger } from '../../shared/observability/logger.js';
 import type { CreateMemoryProposal } from '../memory/create-memory-proposal.js';
 import type { ClaimedRun } from '../ports/run-repository.js';
-import type { ExecutionTurnOutcome } from '../runtime/execution-plane-runtime-facade.js';
+import type { ExecutionOutput } from '../ports/runtime-execution-session.js';
 import {
   createRuntimeExecutionReceipt,
   RuntimeMemoryPersistenceError,
@@ -26,39 +26,9 @@ export class RuntimeMemoryProposalWriter {
     readonly task: Task;
     readonly agentVersionId: string;
     readonly proposalLimit: number;
-    readonly execution: ExecutionTurnOutcome;
+    readonly execution: ExecutionOutput;
   }): Promise<void> {
-    const candidateInputs = (
-      input.task.sourceMessageId ? (input.execution.memoryCandidates ?? []) : []
-    )
-      .slice(0, input.proposalLimit)
-      .flatMap((candidate, sourceCandidateIndex) => {
-        if (!isSafeRuntimeCandidate(candidate)) return [];
-        return [
-          {
-            content: candidate.content,
-            category: candidate.category,
-            sourceTaskId: input.task.id,
-            ...(input.task.sessionId
-              ? { sourceSessionId: input.task.sessionId }
-              : {}),
-            ...(input.task.sourceMessageId
-              ? { sourceMessageId: input.task.sourceMessageId }
-              : {}),
-            sourceRunId: input.claim.run.id,
-            sourceAgentVersionId: input.agentVersionId,
-            sourceCandidateIndex,
-            accessContext: {
-              tenantId: input.task.tenantId,
-              serviceAccountId: input.task.principalId,
-              workspaceId: input.task.workspaceId,
-              principalType: input.task.principalType as 'service_account',
-              principalId: input.task.principalId,
-              policySnapshotVersion: input.task.policySnapshotVersion,
-            },
-          },
-        ];
-      });
+    const candidateInputs: readonly never[] = [];
 
     try {
       if (candidateInputs.length && this.createMemoryProposal) {

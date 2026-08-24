@@ -8,12 +8,10 @@ import {
 } from '../../../application/product-projection/chat-work-card-projection.js';
 import { ServiceAccountAuthenticator } from '../../../application/control-plane/service-account-authenticator.js';
 import { ErrorResponseSchema } from '../../../contracts/http.js';
-import type { ApiEnvironment } from '../../../platform/http-types.js';
+import type { ApiEnvironment } from '../http-types.js';
 import type { AppConfig } from '../../../shared/config.js';
-import {
-  getAuthenticatedAccessContext,
-  requireServiceAccountAccess,
-} from '../authentication.js';
+import { getAuthenticatedAccessContext } from '../access-context.js';
+import { requireServiceAccountAccess } from '../authentication.js';
 
 export interface WorkCardRouteDependencies {
   readonly config: AppConfig;

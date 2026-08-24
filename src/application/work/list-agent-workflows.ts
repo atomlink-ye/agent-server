@@ -1,4 +1,4 @@
-import type { AccessContext } from '../../platform/access-context.js';
+import type { AccessContext } from '../../domain/access-context.js';
 import type { WorkDefinitionSourceDefinition } from '../../domain/work/work-definition-source.js';
 import type { WorkDefinitionSourceRepository } from '../ports/work-definition-source-repository.js';
 

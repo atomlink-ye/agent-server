@@ -15,6 +15,13 @@ import { createLogger } from '../../src/shared/observability/logger.js';
 import { transitionRun } from '../../src/domain/runs/run.js';
 import { applyDurableKernelMigrations } from '../../src/infrastructure/postgres/postgres.js';
 import { CancelTask } from '../../src/application/tasks/cancel-task.js';
+import {
+  runtimeSpecRevision,
+  type RuntimeSession,
+  type RuntimeSessionId,
+  type RuntimeSessionOwner,
+  type RuntimeScope,
+} from '../../src/domain/runtime/runtime-session.js';
 
 const connectionString = process.env.DATABASE_URL ?? process.env.POSTGRES_URL;
 const required = process.env.REAL_POSTGRES_REQUIRED === '1';
@@ -140,19 +147,23 @@ describeRealPostgres('Phase C session lanes on PostgreSQL', () => {
         ],
       });
       const complete = new CompleteRun(runs, tasks, undefined, repository);
-      const execute = new ExecuteRun(
-        complete,
+      const execute = new ExecuteRun({
+        completeRun: complete,
         tasks,
-        invokables,
-        new ExecuteTeamTask(invokables, {} as never),
-        runtime,
-        createLogger({
+        definitions: invokables,
+        executeTeamTask: new ExecuteTeamTask(invokables, {} as never),
+        runtimeTurns: runtime,
+        runtimeProvider: runtime,
+        runtimeSessions: {
+          findByScope: async (runtimeOwner, scope) =>
+            readyRuntimeSession(runtimeOwner, scope),
+        },
+        logger: createLogger({
           service: 'session-lane-test',
           minimumLevel: 'error',
           write: () => undefined,
         }),
-        undefined,
-        new ResolveAgentVersion(
+        resolver: new ResolveAgentVersion(
           {
             findVersion: async () =>
               ({
@@ -185,29 +196,17 @@ describeRealPostgres('Phase C session lanes on PostgreSQL', () => {
           },
           { resolve: async () => null },
         ),
-        undefined,
-        undefined,
-        new CreateMemoryProposal(
+        createMemoryProposal: new CreateMemoryProposal(
           new PostgresWorkspaceMemoryRepository(pool),
           tasks,
         ),
-      );
+      });
       await execute.execute(claim);
       const proposals = await new PostgresWorkspaceMemoryRepository(
         pool,
       ).listProposalsByOwnerScope({ ...owner, workspaceId: workspace.id });
-      expect(proposals).toHaveLength(1);
-      expect(proposals[0]).toMatchObject({
-        originalContent: 'REAL_PG_PRODUCT_SESSION_CANDIDATE',
-        originalCategory: 'project_constraint',
-        sourceTaskId: first.taskId,
-        sourceSessionId: session.id,
-        sourceMessageId: first.id,
-        sourceRunId: first.runId,
-        sourceAgentVersionId: versionId,
-        sourceCandidateIndex: 0,
-        status: 'pending',
-      });
+      // MGR-030 D1/D2: worker scoped-memory has no owner, so candidates persist nowhere.
+      expect(proposals).toEqual([]);
       const completedMessages = await repository.listMessages(
         session.id,
         owner,
@@ -410,3 +409,21 @@ describeRealPostgres('Phase C session lanes on PostgreSQL', () => {
     }
   });
 });
+
+function readyRuntimeSession(
+  owner: RuntimeSessionOwner,
+  scope: RuntimeScope,
+): RuntimeSession {
+  const now = '2026-08-24T00:00:00.000Z';
+  return {
+    id: `runtime:${scope.kind}:${scope.id}` as RuntimeSessionId,
+    owner,
+    scope,
+    desiredSpecRevision: runtimeSpecRevision(1),
+    currentGenerationId: null,
+    status: 'ready',
+    createdAt: now,
+    updatedAt: now,
+    closedAt: null,
+  };
+}

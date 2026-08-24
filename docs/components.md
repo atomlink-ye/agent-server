@@ -2,15 +2,15 @@
 
 Components are ownership and contract boundaries, not deployment promises. The baseline is a modular monolith with a separate Paseo process; future services may be extracted only when durability, security, or scaling evidence requires it.
 
-| Component                                                                  | Responsibility                                  | Current status              |
-| -------------------------------------------------------------------------- | ----------------------------------------------- | --------------------------- |
-| [Control Plane](components/control-plane.md)                               | Definitions, policy, admission, review          | Planned                     |
-| [Orchestration Kernel](components/orchestration-kernel.md)                 | Task/Run lifecycle, Team coordination, recovery | Run seam baseline           |
-| [Paseo Runtime Adapter](components/paseo-execution-plane.md)               | Leaf-agent provider translation                 | Implemented baseline        |
-| [Credential and Tool Gateway](components/credential-and-tool-gateway.md)   | Secret-safe tool authorization and receipts     | Planned                     |
-| [Workspace and Artifact Store](components/workspace-and-artifact-store.md) | Sources, scoped files, artifacts, evidence      | Paseo workspace baseline    |
-| [Channel, API, and Console](components/channel-api-console.md)             | Ingress, delivery, inspection                   | Agent Teams v2 project view |
-| [Data and Operations](components/data-and-operations.md)                   | Durable storage, queue, audit, observability    | Logging baseline            |
+| Component                                                                  | Responsibility                                   | Current status              |
+| -------------------------------------------------------------------------- | ------------------------------------------------ | --------------------------- |
+| [Control Plane](components/control-plane.md)                               | Definitions, policy, admission, review           | Planned                     |
+| [Orchestration Kernel](components/orchestration-kernel.md)                 | Task/Run lifecycle, Team coordination, recovery  | Run seam baseline           |
+| [Runtime execution](components/paseo-execution-plane.md)                   | Provider lifecycle and durable session readiness | Replacement in progress     |
+| [Credential and Tool Gateway](components/credential-and-tool-gateway.md)   | Secret-safe tool authorization and receipts      | Planned                     |
+| [Workspace and Artifact Store](components/workspace-and-artifact-store.md) | Sources, scoped files, artifacts, evidence       | Paseo workspace baseline    |
+| [Channel, API, and Console](components/channel-api-console.md)             | Ingress, delivery, inspection                    | Agent Teams v2 project view |
+| [Data and Operations](components/data-and-operations.md)                   | Durable storage, queue, audit, observability     | Logging baseline            |
 
 Dependencies point inward: entrypoints and adapters depend on application ports; application depends on domain; domain imports neither frameworks nor Paseo.
 
@@ -52,8 +52,8 @@ Workspace there. A later Run reuses the same provider binding; another
 ProductSession receives a distinct Cell and provider Workspace. This is an
 implemented baseline, not production isolation or Runtime Session V2.
 
-Per-Run bindings/events remain durable evidence. Transaction concurrency, crash
-recovery, legacy nullable Sessions, Grant renewal/header persistence, Host
+Run Events remain durable evidence; per-Run provider bindings are not persisted.
+Transaction concurrency, crash recovery, legacy nullable Sessions, Grant renewal/header persistence, Host
 placement/GC, a second adapter, and production lifecycle hardening are deferred.
 
 ## Phase C Session lane boundary
@@ -132,6 +132,6 @@ the Project and selected Agent Session on refresh. This is local/single-operator
 only; production or multi-user deployment requires a new authentication Human
 Gate. ProductSession Chat remains a separate unchanged path.
 
-## Execution Plane boundary
+## Runtime execution boundary
 
-Paseo is the primary Execution Plane. RuntimeWorkspace owns ProductSession/TeamRun workspace binding, RuntimeSession owns sticky ProductSession/TeamMember session binding, and Run remains durable execution truth. See [Paseo Execution Plane](./components/paseo-execution-plane.md) and [Runtime Contract](./contracts/runtime-contract.md).
+Runtime execution is converging on `RuntimeExecutionProvider` for provider lifecycle, `EnsureRuntimeSession` for durable session readiness, and `RuntimeToolCatalog` for immutable tool definitions. `RuntimeSession` and `RuntimeSessionGeneration` remain the durable identity and provider-binding records; `Run` remains durable execution truth. The retiring execution-plane implementation is documented only as a transition in [Runtime execution](./components/paseo-execution-plane.md); the current boundary is defined by the [Runtime Contract](./contracts/runtime-contract.md).

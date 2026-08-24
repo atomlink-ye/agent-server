@@ -3,9 +3,9 @@ import { createRoot } from 'react-dom/client';
 import type { ProductSessionTranscriptsResponse } from '@atomlink-ye/agent-server/product-contract';
 import { expect, it, vi } from 'vitest';
 
-import reworkRecording from '@/lib/__fixtures__/product-recordings/rework-once.json';
+import reworkRecording from '@/test-support/fixtures/product-recordings/rework-once.json';
 import { SessionTranscripts } from './session-transcripts';
-import { parseRecordedTrace } from './recording-test-helpers';
+import { parseRecordedTrace } from '@/test-support/run-trace-recording-test-helpers';
 
 (
   globalThis as typeof globalThis & {
@@ -132,9 +132,14 @@ const MOCK_RESPONSE: ProductSessionTranscriptsResponse = {
 
 it('renders per-session transcripts with switching between sessions that share a role, truncation warning, permission honesty, and derived summary labeling', async () => {
   const trace = parseRecordedTrace(reworkRecording);
+  const response = {
+    ...MOCK_RESPONSE,
+    work_id: trace.work.id,
+    work_run_id: trace.workRun.id,
+  } satisfies ProductSessionTranscriptsResponse;
   const fetchMock = vi.fn().mockResolvedValue({
     ok: true,
-    json: async () => MOCK_RESPONSE,
+    json: async () => response,
   });
   vi.stubGlobal('fetch', fetchMock);
 
@@ -241,6 +246,8 @@ it('renders per-session transcripts with switching between sessions that share a
     if (!toolEntry)
       throw new Error('Fixture must contain a tool_status entry.');
     toolEntry.tool_name = null;
+    withoutPlatform.work_id = trace.work.id;
+    withoutPlatform.work_run_id = trace.workRun.id;
     fetchMock.mockResolvedValueOnce({
       ok: true,
       json: async () => withoutPlatform,

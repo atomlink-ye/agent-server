@@ -45,6 +45,13 @@ import { createLogger } from '../../src/shared/observability/logger.js';
 import { FakeAgentRuntime } from '../fixtures/fake-agent-runtime.js';
 import { TestClock } from '../fixtures/test-clock.js';
 import { createTeamRun } from '../../src/domain/teams/team-run.js';
+import {
+  runtimeSpecRevision,
+  type RuntimeSession,
+  type RuntimeSessionId,
+  type RuntimeSessionOwner,
+  type RuntimeScope,
+} from '../../src/domain/runtime/runtime-session.js';
 
 const primaryAccessContext = {
   tenantId: 'tenant_alpha',
@@ -1773,15 +1780,37 @@ function createExecuteRun(input: {
     {} as never,
   );
 
-  return new ExecuteRun(
+  return new ExecuteRun({
     completeRun,
     tasks,
-    input.invokableRepository,
+    definitions: input.invokableRepository,
     executeTeamTask,
-    input.runtime,
-    input.logger,
-    input.now,
-  );
+    runtimeTurns: input.runtime,
+    runtimeProvider: input.runtime,
+    runtimeSessions: {
+      findByScope: async (owner, scope) => readyRuntimeSession(owner, scope),
+    },
+    logger: input.logger,
+    now: input.now,
+  });
+}
+
+function readyRuntimeSession(
+  owner: RuntimeSessionOwner,
+  scope: RuntimeScope,
+): RuntimeSession {
+  const now = '2026-07-22T12:00:00.000Z';
+  return {
+    id: `runtime:${scope.kind}:${scope.id}` as RuntimeSessionId,
+    owner,
+    scope,
+    desiredSpecRevision: runtimeSpecRevision(1),
+    currentGenerationId: null,
+    status: 'ready',
+    createdAt: now,
+    updatedAt: now,
+    closedAt: null,
+  };
 }
 
 async function waitFor(check: () => Promise<boolean>): Promise<void> {

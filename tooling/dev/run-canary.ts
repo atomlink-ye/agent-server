@@ -1,4 +1,6 @@
 import type { ChildProcess } from 'node:child_process';
+import { rm } from 'node:fs/promises';
+import { resolve } from 'node:path';
 
 import {
   LOCAL_SERVICE_TOKEN,
@@ -35,6 +37,8 @@ const runtimeSmokeCommands: Partial<Record<CanaryKind, string[]>> = {
   ],
 };
 
+const webBootstrapEnvPath = resolve(repositoryRoot, '.local/web-bootstrap.env');
+
 function canaryPort(
   environment: NodeJS.ProcessEnv,
   name: string,
@@ -59,6 +63,24 @@ async function assertCanaryPortFree(
       `${label} port 127.0.0.1:${port} is already in use; stop the existing process before running the canary.`,
     );
   }
+}
+
+async function goldenPortsStillBusy(apiPort: number): Promise<number[]> {
+  const busy: number[] = [];
+  if (!(await isPortFree(apiPort))) busy.push(apiPort);
+  if (!(await isPortFree(3001))) busy.push(3001);
+  return busy;
+}
+
+async function waitForGoldenPortsIdle(apiPort: number): Promise<number[]> {
+  let busy = await goldenPortsStillBusy(apiPort);
+  for (let attempt = 0; attempt < 5 && busy.length > 0; attempt += 1) {
+    await new Promise<void>((resolveDelay) => {
+      setTimeout(resolveDelay, 200);
+    });
+    busy = await goldenPortsStillBusy(apiPort);
+  }
+  return busy;
 }
 
 function parseKind(value: string | undefined): CanaryKind {
@@ -91,6 +113,8 @@ export async function runHostCanary(
   const children: ChildProcess[] = [];
   let primaryChild: ChildProcess | undefined;
   let primaryEnvironment: NodeJS.ProcessEnv | undefined;
+  let goldenApiPort: number | undefined;
+  let runError: unknown;
   try {
     let commandEnvironment: NodeJS.ProcessEnv;
     const runtimeSmokeCommand = runtimeSmokeCommands[kind];
@@ -150,31 +174,45 @@ export async function runHostCanary(
       await runCommand('node', runtimeSmokeCommand, {
         environment: commandEnvironment,
         cwd: repositoryRoot,
+        abortOn: {
+          child: api,
+          environment: runtimeEnvironment,
+          label: 'runtime canary API',
+        },
       });
       return;
     }
 
     const apiPort = canaryPort(loaded, 'PORT', 3000);
+    goldenApiPort = apiPort;
     await assertCanaryPortFree('golden-path API', apiPort);
     await assertCanaryPortFree('golden-path web', 3001);
     const readyTimeoutMs = canaryReadyTimeout(loaded);
     const apiBaseUrl = `http://127.0.0.1:${apiPort}`;
+    await rm(webBootstrapEnvPath, { force: true });
+    const devEnvironment: NodeJS.ProcessEnv = {
+      ...loaded,
+      HOST_NATIVE_WATCH: '0',
+    };
     const dev = spawnOwned(
       'node',
       ['--import', 'tsx', 'tooling/dev/start.ts', 'runtime'],
-      { environment: loaded, logName: 'canary-golden-path-dev' },
+      {
+        environment: devEnvironment,
+        logName: 'canary-golden-path-dev',
+      },
     );
     children.push(dev);
     primaryChild = dev;
-    primaryEnvironment = loaded;
+    primaryEnvironment = devEnvironment;
     await waitForHttp(`${apiBaseUrl}/health/ready`, readyTimeoutMs, {
       child: dev,
-      environment: loaded,
+      environment: devEnvironment,
       label: 'golden-path dev',
     });
     await waitForHttp('http://127.0.0.1:3001', readyTimeoutMs, {
       child: dev,
-      environment: loaded,
+      environment: devEnvironment,
       label: 'golden-path dev',
     });
     commandEnvironment = hostWebEnvironment({
@@ -185,7 +223,16 @@ export async function runHostCanary(
       AGENT_SERVER_WORKSPACE_ID:
         loaded.AGENT_SERVER_WORKSPACE_ID?.trim() || LOCAL_WORKSPACE_ID,
       WEB_E2E_BASE_URL:
-        loaded.WEB_E2E_BASE_URL?.trim() || 'http://127.0.0.1:3001',
+        loaded.WEB_E2E_BASE_URL?.trim() || 'http://web.localhost:3001',
+      WEB_E2E_RESOLVE_HOST: loaded.WEB_E2E_RESOLVE_HOST?.trim() || '127.0.0.1',
+      WEB_E2E_PROVIDER:
+        loaded.WEB_E2E_PROVIDER?.trim() ||
+        loaded.PASEO_PROVIDER?.trim() ||
+        'claude',
+      WEB_E2E_MODEL:
+        loaded.WEB_E2E_MODEL?.trim() ||
+        loaded.PASEO_MODEL?.trim() ||
+        'opencode-go/deepseek-v4-flash',
     });
     await runCommand(
       'pnpm',
@@ -197,7 +244,16 @@ export async function runHostCanary(
         'vitest.e2e.config.ts',
         'e2e/web-product-session.e2e.test.ts',
       ],
-      { environment: commandEnvironment, cwd: repositoryRoot },
+      {
+        environment: commandEnvironment,
+        cwd: repositoryRoot,
+        abortOn: {
+          child: dev,
+          environment: devEnvironment,
+          label: 'golden-path dev',
+          healthUrl: `${apiBaseUrl}/health/ready`,
+        },
+      },
     );
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -209,14 +265,39 @@ export async function runHostCanary(
       } catch {
         // Preserve the primary failure if the diagnostic log cannot be read.
       }
-      throw new Error(
+      runError = new Error(
         `${errorMessage}\ncanary primary child: log=${logPath}\nlog tail:\n${tail}`,
         { cause: error },
       );
+    } else {
+      runError = error;
     }
-    throw error;
   } finally {
-    await stopOwned(children);
+    let cleanupError: unknown;
+    try {
+      await stopOwned(children);
+    } catch (error) {
+      cleanupError = error;
+    }
+    if (kind === 'golden-path') {
+      await rm(webBootstrapEnvPath, { force: true });
+      const busy = await waitForGoldenPortsIdle(goldenApiPort ?? 3000);
+      if (busy.length > 0) {
+        cleanupError = new Error(
+          `golden-path left ports in use: ${busy.join(', ')}${
+            cleanupError instanceof Error ? `; ${cleanupError.message}` : ''
+          }`,
+        );
+      }
+    }
+    if (runError && cleanupError) {
+      throw new Error(
+        `${runError instanceof Error ? runError.message : String(runError)}\n${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`,
+        { cause: runError },
+      );
+    }
+    if (runError) throw runError;
+    if (cleanupError) throw cleanupError;
   }
 }
 

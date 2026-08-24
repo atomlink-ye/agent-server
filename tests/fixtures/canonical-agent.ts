@@ -7,7 +7,7 @@ import {
   PostgresAgentRegistry,
   type PostgresQueryable,
 } from '../../src/infrastructure/postgres/postgres-agent-registry.js';
-import type { AccessContext } from '../../src/platform/access-context.js';
+import type { AccessContext } from '../../src/domain/access-context.js';
 
 export interface CanonicalAgentFixtureOptions {
   readonly definitionId?: string;
@@ -15,6 +15,7 @@ export interface CanonicalAgentFixtureOptions {
   readonly name?: string;
   readonly description?: string;
   readonly instructions?: string;
+  readonly toolRefs?: readonly string[];
   readonly now?: Date;
 }
 
@@ -31,6 +32,7 @@ export async function seedCanonicalPublishedAgent(
     name: options.name ?? 'Canonical Test Agent',
     description: options.description ?? 'Canonical managed Agent test fixture.',
     instructions: options.instructions ?? 'Return the input unchanged.',
+    toolRefs: options.toolRefs ?? [],
   });
   const imported = await importAgent(registry, {
     accessContext,
@@ -64,7 +66,13 @@ export function canonicalAgentSource(input: {
   readonly name: string;
   readonly description: string;
   readonly instructions: string;
+  readonly toolRefs?: readonly string[];
 }): string {
+  const tools = input.toolRefs?.length
+    ? `tools:\n${input.toolRefs
+        .map((ref) => `    - ref: ${ref}\n      kind: tool`)
+        .join('\n')}`
+    : 'tools: []';
   return `apiVersion: agent-server/v1alpha1
 kind: ManagedAgent
 metadata:
@@ -76,7 +84,7 @@ spec:
     provider: paseo
     modelPolicyRef: free-only
     mode: isolated
-  tools: []
+  ${tools}
   skills: []
   input:
     schema:

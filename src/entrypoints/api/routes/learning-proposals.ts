@@ -18,12 +18,10 @@ import {
   EditAndAcceptLearningProposalRequestSchema,
   MAX_LEARNING_PROPOSAL_ACTION_BYTES,
 } from '../../../contracts/learning-proposals.js';
-import {
-  getAuthenticatedAccessContext,
-  requireServiceAccountAccess,
-} from '../authentication.js';
+import { getAuthenticatedAccessContext } from '../access-context.js';
+import { requireServiceAccountAccess } from '../authentication.js';
 import { readBoundedJson } from '../read-bounded-json.js';
-import type { ApiEnvironment } from '../../../platform/http-types.js';
+import type { ApiEnvironment } from '../http-types.js';
 import type { AppConfig } from '../../../shared/config.js';
 
 export interface LearningProposalRouteDependencies {

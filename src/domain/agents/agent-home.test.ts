@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { AccessContext } from '../../platform/access-context.js';
+import type { AccessContext } from '../access-context.js';
 import {
   AgentHomeNamespaceReadOnlyError,
   AgentHomeScopeRequiredError,

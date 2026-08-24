@@ -17,11 +17,9 @@ import {
   TeamCompletionDecisionResultResponseSchema,
   MAX_TEAM_REQUEST_BYTES,
 } from '../../../contracts/teams.js';
-import {
-  getAuthenticatedAccessContext,
-  requireServiceAccountAccess,
-} from '../authentication.js';
-import type { ApiEnvironment } from '../../../platform/http-types.js';
+import { getAuthenticatedAccessContext } from '../access-context.js';
+import { requireServiceAccountAccess } from '../authentication.js';
+import type { ApiEnvironment } from '../http-types.js';
 import type { AppConfig } from '../../../shared/config.js';
 import { z } from 'zod';
 import { readBoundedJson } from '../read-bounded-json.js';

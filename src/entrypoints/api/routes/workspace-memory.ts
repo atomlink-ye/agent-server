@@ -23,11 +23,9 @@ import {
   type WorkspaceMemoryEntryResponse,
 } from '../../../contracts/workspace-memory.js';
 import type { AppConfig } from '../../../shared/config.js';
-import {
-  getAuthenticatedAccessContext,
-  requireServiceAccountAccess,
-} from '../authentication.js';
-import type { ApiEnvironment } from '../../../platform/http-types.js';
+import { getAuthenticatedAccessContext } from '../access-context.js';
+import { requireServiceAccountAccess } from '../authentication.js';
+import type { ApiEnvironment } from '../http-types.js';
 import type {
   MemoryReviewApi,
   MemoryWorkspaceHttpApi,

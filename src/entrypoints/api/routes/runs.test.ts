@@ -1,19 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import type { ReadinessProbe } from '../../../application/health/readiness.js';
-import type { CreateMemoryProposal } from '../../../application/memory/create-memory-proposal.js';
-import type { ListMemoryEntries } from '../../../application/memory/list-memory-entries.js';
-import type { ListMemoryProposals } from '../../../application/memory/list-memory-proposals.js';
-import type { ReviewMemoryProposal } from '../../../application/memory/review-memory-proposal.js';
-import type { ExecutionRuntimeService } from '../../../application/runtime/execution-plane-runtime-facade.js';
-import { makeRuntimeSession } from '../../../../tests/fixtures/runtime-session.js';
+import type { RuntimeExecutionProvider } from '../../../application/ports/runtime-execution-provider.js';
 import type { GetRun } from '../../../application/runs/get-run.js';
 import type { SubmitRun } from '../../../application/runs/submit-run.js';
 import type { GetTask } from '../../../application/tasks/get-task.js';
 import type { GetTaskTree } from '../../../application/tasks/get-task-tree.js';
 import type { InvokeTask } from '../../../application/tasks/invoke-task.js';
 import { createRun } from '../../../domain/runs/run.js';
-import { createApp } from '../app.js';
+import { createHttpApp } from '../app.js';
 
 describe('run routes', () => {
   it('admits work without directly coupling the route to inline execution', async () => {
@@ -24,7 +19,7 @@ describe('run routes', () => {
     const executeCalls: string[] = [];
     let submitCalls = 0;
 
-    const app = createApp({
+    const app = createHttpApp({
       config: {
         nodeEnv: 'test',
         host: '127.0.0.1',
@@ -79,35 +74,23 @@ describe('run routes', () => {
       getTaskTree: {
         execute: async () => null,
       } as unknown as GetTaskTree,
-      createMemoryProposal: {
-        execute: async () => {
-          throw new Error('not implemented in run route tests');
+      teamExecutions: {} as never,
+      teamDriver: {} as never,
+      teamMessages: {} as never,
+      tasks: {} as never,
+      sessions: {} as never,
+      submitSessionTurn: {} as never,
+      events: {} as never,
+      cancelTask: {} as never,
+      memoryModule: { installHttp() {} },
+      resourceModule: {
+        installHttp() {},
+        managedAgentDefinitions: {
+          findDefinition: async () => null,
+          findManagedDefinitionByTenant: async () => null,
+          findVersionByTenant: async () => null,
+          listVersionsByTenant: async () => ({ items: [], nextCursor: null }),
         },
-      } as unknown as CreateMemoryProposal,
-      listMemoryProposals: {
-        execute: async () => [],
-      } as unknown as ListMemoryProposals,
-      reviewMemoryProposal: {
-        execute: async () => {
-          throw new Error('not implemented in run route tests');
-        },
-      } as unknown as ReviewMemoryProposal,
-      listMemoryEntries: {
-        execute: async () => [],
-      } as unknown as ListMemoryEntries,
-      agentRegistry: {
-        importAgent: async () => {
-          throw new Error('not implemented in run route tests');
-        },
-        publishAgentVersion: async () => {
-          throw new Error('not implemented in run route tests');
-        },
-        findDefinition: async () => null,
-        findVersion: async () => null,
-        listVersionsForOwner: async () => null,
-        findManagedDefinitionByTenant: async () => null,
-        findVersionByTenant: async () => null,
-        listVersionsByTenant: async () => null,
       },
     });
 
@@ -136,36 +119,9 @@ describe('run routes', () => {
   });
 });
 
-function createRuntimeStub(): ExecutionRuntimeService {
+function createRuntimeStub(): Pick<RuntimeExecutionProvider, 'health'> {
   return {
-    async ensureAgentChatRuntimeSession(input) {
-      return makeRuntimeSession({
-        id: input.agentChatRuntimeId,
-        scope: {
-          kind: 'agent_chat',
-          agentChatRuntimeId: input.agentChatRuntimeId,
-          runtimeEpoch: input.runtimeEpoch,
-        },
-        scopeKind: 'agent_chat',
-        scopeId: `${input.agentChatRuntimeId}:${input.runtimeEpoch}`,
-        productSessionId: null,
-        environmentVersionId: null,
-        workspaceId: input.agentOwner.scope.workspaceId,
-        agentVersionId: input.agentVersionId,
-        resolvedSkills: input.resolvedSkills,
-        toolRefs: input.toolRefs,
-      });
-    },
-    async ensureReady(): Promise<boolean> {
-      return true;
-    },
-    async executeTurn(): Promise<never> {
-      throw new Error('not implemented in route tests');
-    },
-    async cancelRun(): Promise<void> {
-      return undefined;
-    },
-    async planeHealth() {
+    async health() {
       return {
         ready: true,
         plane: 'paseo',
@@ -173,9 +129,6 @@ function createRuntimeStub(): ExecutionRuntimeService {
         model: 'opencode/fake-free',
         checks: [],
       };
-    },
-    async close(): Promise<void> {
-      return undefined;
     },
   };
 }

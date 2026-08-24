@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { RuntimeToolGrant } from '../extensions/runtime-tool-grant-service.js';
+import type { AuthorizedRuntimeToolContext } from '../runtime/authorize-runtime-tool.js';
 import type {
   OwnerScope,
   TeamExecutionRepository,
@@ -21,7 +21,7 @@ export type TeamToolContext = Readonly<{
   task: Task;
   run: Run;
   attempt: TeamWorkItemAttempt | null;
-  grant: RuntimeToolGrant;
+  grant: AuthorizedRuntimeToolContext;
   /** User/domain tools allowed in the current runtime turn. */
   domainTools: readonly string[];
   contextEpoch: string;
@@ -59,7 +59,9 @@ export class TeamToolContextResolver {
     private readonly runs: Pick<RunRepository, 'findByIdForOwner'>,
   ) {}
 
-  public async resolve(grant: RuntimeToolGrant): Promise<TeamToolContext> {
+  public async resolve(
+    grant: AuthorizedRuntimeToolContext,
+  ): Promise<TeamToolContext> {
     if (!grant.teamMemberRunId) throw new TeamContextError('not_allowed');
     const activeTurn = grant.activeTurn;
     if (!activeTurn) throw new TeamContextError('stale_state');

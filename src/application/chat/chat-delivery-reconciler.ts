@@ -6,7 +6,6 @@ import type {
 import type { ChatTurnProvider } from '../ports/chat-turn-provider.js';
 import type { ConversationWorkEntitlementRepository } from '../ports/conversation-work-entitlement-repository.js';
 import type { ConversationWorkLinkRepository } from '../../domain/chat/chat-work-origin-ref.js';
-import type { RuntimeExtensionBinder } from '../extensions/runtime-extension-binder.js';
 import type { Logger } from '../../shared/observability/logger.js';
 import type { ChatBrainResolver } from './chat-brain-resolver.js';
 import type { ConversationActorResolver } from './chat-turn-context.js';
@@ -15,7 +14,6 @@ import {
   ResolveChatTurnContext,
 } from './resolve-chat-turn-context.js';
 import { ResolveChatBrain } from './resolve-chat-brain.js';
-import { BindChatCapabilities } from './bind-chat-capabilities.js';
 import { ExecuteChatTurn } from './execute-chat-turn.js';
 import { MaterializeChatReply } from './materialize-chat-reply.js';
 
@@ -30,7 +28,6 @@ import { MaterializeChatReply } from './materialize-chat-reply.js';
 export class ChatDeliveryReconciler {
   readonly #resolveContext: ResolveChatTurnContext;
   readonly #resolveBrain: ResolveChatBrain;
-  readonly #bindCapabilities: BindChatCapabilities;
   readonly #executeTurn: ExecuteChatTurn;
   readonly #materialize: MaterializeChatReply;
 
@@ -44,7 +41,6 @@ export class ChatDeliveryReconciler {
     private readonly logger?: Logger,
     private readonly now: () => Date = () => new Date(),
     workEntitlements?: ConversationWorkEntitlementRepository,
-    extensions?: RuntimeExtensionBinder,
     actorResolver?: ConversationActorResolver,
   ) {
     this.#resolveContext = new ResolveChatTurnContext(
@@ -54,7 +50,6 @@ export class ChatDeliveryReconciler {
       actorResolver,
     );
     this.#resolveBrain = new ResolveChatBrain(brainResolver);
-    this.#bindCapabilities = new BindChatCapabilities(extensions);
     this.#executeTurn = new ExecuteChatTurn(provider);
     this.#materialize = new MaterializeChatReply(
       conversations,
@@ -96,8 +91,7 @@ export class ChatDeliveryReconciler {
     }
 
     const brain = await this.#resolveBrain.execute(context);
-    const extensions = await this.#bindCapabilities.execute(context, brain);
-    const reply = await this.#executeTurn.execute(context, brain, extensions);
+    const reply = await this.#executeTurn.execute(context, brain);
     const materialized = await this.#materialize.execute(context, reply);
 
     if (workerId) await this.completeCompatibilityClaim(dispatch, workerId);

@@ -2,10 +2,10 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { expect, it } from 'vitest';
 
-import parallelRecording from '@/lib/__fixtures__/product-recordings/parallel-success.json';
-import reworkRecording from '@/lib/__fixtures__/product-recordings/rework-once.json';
-import { RunTrace } from './run-trace';
-import { parseRecordedTrace } from './recording-test-helpers';
+import parallelRecording from '@/test-support/fixtures/product-recordings/parallel-success.json';
+import reworkRecording from '@/test-support/fixtures/product-recordings/rework-once.json';
+import { RunTrace } from './run-trace-view';
+import { parseRecordedTrace } from '@/test-support/run-trace-recording-test-helpers';
 
 (
   globalThis as typeof globalThis & {
@@ -29,12 +29,12 @@ it('keeps MCP-only coverage disclosure present across views and selection', asyn
       );
       expect(coverage).not.toBeNull();
       if (!coverage) continue;
-      expect(trace.timeline_coverage.completeness).toBe('mcp_only');
+      expect(trace.coverage.completeness).toBe('mcp_only');
       expect(coverage.textContent).toContain('MCP-only');
       expect(coverage.textContent?.toLowerCase()).toContain(
         'mcp dispatch and confirmation',
       );
-      for (const excluded of trace.timeline_coverage.excluded_execution) {
+      for (const excluded of trace.coverage.excludedExecution) {
         expect(coverage.textContent?.toLowerCase()).toContain(
           excluded.replaceAll('_', ' '),
         );
@@ -61,7 +61,7 @@ it('keeps MCP-only coverage disclosure present across views and selection', asyn
         host.querySelector('[data-testid="trace-coverage-disclosure"]'),
       ).toBe(coverage);
       expect(coverage.textContent).toContain('MCP-only');
-      for (const excluded of trace.timeline_coverage.excluded_execution) {
+      for (const excluded of trace.coverage.excludedExecution) {
         expect(coverage.textContent?.toLowerCase()).toContain(
           excluded.replaceAll('_', ' '),
         );

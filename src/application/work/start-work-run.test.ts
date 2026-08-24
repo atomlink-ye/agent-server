@@ -7,7 +7,7 @@ import {
 } from './start-work-run.js';
 import type { ResolvedWorkDefinition } from '../../domain/work/work-composition.js';
 import type { WorkRun } from '../../domain/work/work-run.js';
-import type { AccessContext } from '../../platform/access-context.js';
+import type { AccessContext } from '../../domain/access-context.js';
 
 const access: AccessContext = {
   tenantId: 'tenant-a',
@@ -116,7 +116,7 @@ describe('StartWorkRun composition admission', () => {
     const start = new StartWorkRun({
       identity,
       execution: { admitRoot },
-      runtimeCapabilities: { capabilities: () => ({ supported: new Set() }) },
+      runtimeCapabilities: { supported: new Set() },
       now: () => new Date(now),
     });
 
@@ -157,13 +157,11 @@ describe('StartWorkRun composition admission', () => {
       identity,
       execution: { admitRoot },
       runtimeCapabilities: {
-        capabilities: () => ({
-          supported: new Set([
-            'reusable_session',
-            'external_workspace',
-            'platform_mcp',
-          ] as const),
-        }),
+        supported: new Set([
+          'reusable_session',
+          'external_workspace',
+          'platform_mcp',
+        ] as const),
       },
       now: () => new Date(now),
     });
@@ -205,12 +203,7 @@ describe('StartWorkRun composition admission', () => {
       identity,
       execution: { admitRoot },
       runtimeCapabilities: {
-        capabilities: () => ({
-          supported: new Set([
-            'reusable_session',
-            'external_workspace',
-          ] as const),
-        }),
+        supported: new Set(['reusable_session', 'external_workspace'] as const),
       },
       now: () => new Date(now),
     });

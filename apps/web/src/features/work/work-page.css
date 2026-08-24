@@ -47,8 +47,7 @@
   backdrop-filter: blur(10px);
 }
 
-.work-return-bar button,
-.work-main-empty button {
+.work-return-bar button {
   border: 1px solid var(--border-strong, rgba(0, 0, 0, 0.16));
   border-radius: 8px;
   background: var(--panel, #fff);
@@ -57,21 +56,8 @@
   padding: 7px 11px;
 }
 
-.work-pane-actions {
-  display: flex;
-  gap: 6px;
-}
-
-.work-list-item[data-active='true'] {
-  background: var(--selection-bg, rgba(70, 80, 100, 0.1));
-}
-
 .work-main .new-work-form {
   width: min(100%, 980px);
   margin: 28px auto;
   padding: 0 28px 64px;
-}
-
-.work-main-empty {
-  min-height: 55vh;
 }

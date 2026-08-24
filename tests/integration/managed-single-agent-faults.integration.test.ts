@@ -20,8 +20,16 @@ import {
   defaultPublishedAgentVersionId,
   primaryServiceAccountToken,
 } from '../fixtures/create-test-app.js';
+import type { SingleRunDebugControl } from '../../src/composition/create-application.js';
 import { FakeAgentRuntime } from '../fixtures/fake-agent-runtime.js';
 import { createLogger } from '../../src/shared/observability/logger.js';
+import {
+  runtimeSpecRevision,
+  type RuntimeSession,
+  type RuntimeSessionId,
+  type RuntimeSessionOwner,
+  type RuntimeScope,
+} from '../../src/domain/runtime/runtime-session.js';
 
 const connectionString = process.env.DATABASE_URL ?? process.env.POSTGRES_URL;
 if (!connectionString)
@@ -81,14 +89,19 @@ describe('managed single-agent minimum fault evidence', () => {
       });
       const complete = new CompleteRun(runs, tasks);
       const team = new ExecuteTeamTask(invokables, {} as never);
-      const execute = new ExecuteRun(
-        complete,
+      const execute = new ExecuteRun({
+        completeRun: complete,
         tasks,
-        invokables,
-        team,
-        runtime,
+        definitions: invokables,
+        executeTeamTask: team,
+        runtimeTurns: runtime,
+        runtimeProvider: runtime,
+        runtimeSessions: {
+          findByScope: async (runtimeOwner, scope) =>
+            readyRuntimeSession(runtimeOwner, scope),
+        },
         logger,
-      );
+      });
       let available = true;
       const claim = {
         execute: async () => {
@@ -171,10 +184,13 @@ describe('managed single-agent minimum fault evidence', () => {
     }
   });
 
-  // Failure is unresolved: stale assertion vs suspected product bug; see sandbox evidence /tmp/lane-a-realpg.{log,rc}.
-  it.skip('executes an admitted v1 task from its pinned version after v2 exists', async () => {
+  it('executes an admitted v1 task from its pinned version after v2 exists', async () => {
     const runtime = new FakeAgentRuntime();
-    const app = await createTestApp(runtime, { startDispatcher: true });
+    const runControl: { control?: SingleRunDebugControl } = {};
+    const app = await createTestApp(runtime, {
+      startDispatcher: false,
+      runControl,
+    });
     const source = `apiVersion: agent-server/v1alpha1\nkind: ManagedAgent\nmetadata:\n  name: v2\nspec:\n  description: v2\n  instructions: Use V2 only.\n  runtime:\n    provider: paseo\n    modelPolicyRef: free-only\n    mode: isolated\n  tools: []\n  skills: []\n  input:\n    schema: { type: object, additionalProperties: false, properties: {} }\n    prompt: input\n  session: { invocation: fresh_per_invocation, followUps: queued, binding: reusable }\n  memory: { policy: workspace_snapshot, proposalLimit: 1 }\n  permissions: { network: none, filesystem: none }\n  completion: { type: executable, command: done }`;
     const response = await app.request('/api/v1/tasks:invoke', {
       method: 'POST',
@@ -188,14 +204,48 @@ describe('managed single-agent minimum fault evidence', () => {
       }),
     });
     expect(response.status).toBe(202);
-    await app.request('/api/v1/agents:import', {
+    const admitted = (await response.json()) as { task_id: string };
+    const imported = await app.request('/api/v1/agents:import', {
       method: 'POST',
       headers: { ...headers, 'idempotency-key': crypto.randomUUID() },
       body: JSON.stringify({ source }),
     });
-    await new Promise((r) => setTimeout(r, 40));
-    expect(
-      runtime.prompts.some((prompt) => prompt.includes('Do the task.')),
-    ).toBe(true);
+    expect(imported.status).toBe(201);
+    const task = await app.request(`/api/v1/tasks/${admitted.task_id}`, {
+      headers: { authorization: `Bearer ${primaryServiceAccountToken}` },
+    });
+    expect(task.status).toBe(200);
+    const taskBody = (await task.json()) as {
+      invokable: { version_id: string };
+      latest_run: { run_id: string } | null;
+    };
+    expect(taskBody.invokable.version_id).toBe(defaultPublishedAgentVersionId);
+    if (!taskBody.latest_run)
+      throw new Error('admitted task has no latest run');
+    if (!runControl.control)
+      throw new Error('missing single-run debug control');
+    await runControl.control.claimAndExecute(taskBody.latest_run.run_id);
+    expect(runtime.executeCalls).toBe(1);
+    expect(runtime.prompts.some((prompt) => prompt.includes('pinned'))).toBe(
+      true,
+    );
   });
 });
+
+function readyRuntimeSession(
+  owner: RuntimeSessionOwner,
+  scope: RuntimeScope,
+): RuntimeSession {
+  const now = '2026-08-24T00:00:00.000Z';
+  return {
+    id: `runtime:${scope.kind}:${scope.id}` as RuntimeSessionId,
+    owner,
+    scope,
+    desiredSpecRevision: runtimeSpecRevision(1),
+    currentGenerationId: null,
+    status: 'ready',
+    createdAt: now,
+    updatedAt: now,
+    closedAt: null,
+  };
+}

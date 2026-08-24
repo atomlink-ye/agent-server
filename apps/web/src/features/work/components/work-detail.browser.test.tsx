@@ -8,12 +8,12 @@ import {
   ProductWorkDefinitionVersionSchema,
   ProductWorkRunSuccessSchema,
 } from '@atomlink-ye/agent-server/product-contract';
-import { WorkDetailShell } from '@/features/work/components/work-shell';
-import reworkRecording from '@/lib/__fixtures__/product-recordings/rework-once.json';
+import { WorkDetailPage } from '@/features/work/pages/WorkDetailPage';
+import reworkRecording from '@/test-support/fixtures/product-recordings/rework-once.json';
 import {
   projectWorkList,
   projectWorkRunList,
-} from '@/lib/product-recording-projections';
+} from '@/test-support/product-recording-test-helpers';
 
 (
   globalThis as typeof globalThis & {
@@ -129,7 +129,7 @@ function mockProductReads(
 }
 
 async function renderDetail(
-  props: React.ComponentProps<typeof WorkDetailShell> = {
+  props: React.ComponentProps<typeof WorkDetailPage> = {
     workId: work.work.id,
   },
 ) {
@@ -137,7 +137,7 @@ async function renderDetail(
   document.body.append(host);
   const root = createRoot(host);
   await act(async () => {
-    root.render(<WorkDetailShell {...props} />);
+    root.render(<WorkDetailPage {...props} />);
     await new Promise((resolve) => setTimeout(resolve, 25));
   });
   return { host, root };

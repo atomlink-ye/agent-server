@@ -388,7 +388,12 @@ describe('managed agent HTTP contracts', () => {
     }
   });
 
-  it('exposes exactly the seven approved managed Agent routes', async () => {
+  // DECISION-011 family B: independent master evidence in e9d8dd3f has
+  // src/entrypoints/api/routes/agent-profile.ts, and
+  // create-resource-capabilities.ts
+  // imports/registers it in installHttp; this fixes an incomplete test-only
+  // graph rather than expanding the contract.
+  it('exposes exactly the eight approved managed Agent routes', async () => {
     const app = await createTestApp(new FakeAgentRuntime(), {
       startDispatcher: false,
     });
@@ -405,6 +410,7 @@ describe('managed agent HTTP contracts', () => {
         'GET /api/v1/agents',
         'GET /api/v1/agents/:agentId',
         'GET /api/v1/agents/:agentId/versions',
+        'GET /api/v1/agents/:agentId/profile',
         'POST /api/v1/agent-packages:validate',
         'POST /api/v1/agent-versions/:versionId:publish',
         'POST /api/v1/agents:import',

@@ -12,7 +12,7 @@ import { PostgresAgentRegistry } from '../../src/infrastructure/postgres/postgre
 import { PostgresConversationRepository } from '../../src/infrastructure/postgres/postgres-conversation-repository.js';
 import { PostgresConversationWorkEntitlementRepository } from '../../src/infrastructure/postgres/postgres-conversation-work-entitlement-repository.js';
 import { applyDurableKernelMigrations } from '../../src/infrastructure/postgres/postgres.js';
-import type { ApiEnvironment } from '../../src/platform/http-types.js';
+import type { ApiEnvironment } from '../../src/entrypoints/api/http-types.js';
 import type { AppConfig } from '../../src/shared/config.js';
 
 const token = 'coworker-api-token';

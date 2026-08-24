@@ -2,9 +2,9 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';
 
-import reworkRecording from '@/lib/__fixtures__/product-recordings/rework-once.json';
+import reworkRecording from '@/test-support/fixtures/product-recordings/rework-once.json';
 import { ExecutionTranscript } from './execution-transcript';
-import { parseRecordedTrace } from './recording-test-helpers';
+import { parseRecordedTrace } from '@/test-support/run-trace-recording-test-helpers';
 
 (
   globalThis as typeof globalThis & {
@@ -14,20 +14,23 @@ import { parseRecordedTrace } from './recording-test-helpers';
 
 it('renders actual safe provider output through the Product-scoped Attempt detail endpoint', async () => {
   const trace = parseRecordedTrace(reworkRecording);
-  const selected = trace.work_items.find((item) => item.attempts.length > 0)!;
+  const selected = [...trace.workItems.values()].find(
+    (item) => item.attempts.length > 0,
+  )!;
   const attempt = selected.attempts[0]!;
-  const actor = trace.actors.find(
-    (candidate) => candidate.id === selected.actor_id,
-  );
+  const actor = selected.actorId
+    ? trace.actors.get(selected.actorId)
+    : undefined;
   const fetchMock = vi.fn().mockResolvedValue({
     ok: true,
     json: async () => ({
       work_id: trace.work.id,
-      work_run_id: trace.work_run.id,
+      work_run_id: trace.workRun.id,
       work_item_id: selected.id,
       attempt_id: attempt.id,
-      actor_id: selected.actor_id,
+      actor_id: selected.actorId,
       capture_scope: 'safe_run_events',
+      truncated: false,
       events: [
         {
           kind: 'lifecycle',
@@ -82,7 +85,7 @@ it('renders actual safe provider output through the Product-scoped Attempt detai
     expect(host.textContent).toContain('bounded detail');
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining(
-        `/api/works/${trace.work.id}/runs/${trace.work_run.id}/execution-detail?attempt_id=${attempt.id}`,
+        `/api/works/${trace.work.id}/runs/${trace.workRun.id}/execution-detail?attempt_id=${attempt.id}`,
       ),
       expect.objectContaining({ method: 'GET', cache: 'no-store' }),
     );

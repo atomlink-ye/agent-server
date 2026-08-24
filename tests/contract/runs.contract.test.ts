@@ -19,6 +19,9 @@ const authenticatedJsonHeaders = {
   'content-type': 'application/json',
 };
 
+const createContractApp = (runtime: FakeAgentRuntime) =>
+  createTestApp(runtime, { startDispatcher: false });
+
 describe('run HTTP contracts', () => {
   it('authorizes event reads for a product-session run by principal ownership', async () => {
     const app = await createTestApp(new FakeAgentRuntime(), {
@@ -68,7 +71,7 @@ describe('run HTTP contracts', () => {
   ])(
     'returns the same public 401 for %s bearer auth failure',
     async (headers, _reason) => {
-      const app = await createTestApp(new FakeAgentRuntime());
+      const app = await createContractApp(new FakeAgentRuntime());
       const response = await app.request('/api/v1/runs', {
         method: 'POST',
         headers: {
@@ -92,7 +95,7 @@ describe('run HTTP contracts', () => {
   );
 
   it('accepts a valid authenticated prompt asynchronously', async () => {
-    const app = await createTestApp(new FakeAgentRuntime());
+    const app = await createContractApp(new FakeAgentRuntime());
     const response = await app.request('/api/v1/runs', {
       method: 'POST',
       headers: authenticatedJsonHeaders,
@@ -108,7 +111,7 @@ describe('run HTTP contracts', () => {
   });
 
   it('reuses the same accepted work for the same Idempotency-Key', async () => {
-    const app = await createTestApp(new FakeAgentRuntime());
+    const app = await createContractApp(new FakeAgentRuntime());
     const headers = {
       ...authenticatedJsonHeaders,
       'idempotency-key': 'same-key',
@@ -137,7 +140,7 @@ describe('run HTTP contracts', () => {
 
   it('replays already accepted work when runtime readiness later turns false', async () => {
     const runtime = new FakeAgentRuntime();
-    const app = await createTestApp(runtime);
+    const app = await createContractApp(runtime);
     const headers = {
       ...authenticatedJsonHeaders,
       'idempotency-key': 'same-key',
@@ -168,7 +171,7 @@ describe('run HTTP contracts', () => {
   });
 
   it('returns conflict when the same Idempotency-Key is reused with a different body', async () => {
-    const app = await createTestApp(new FakeAgentRuntime());
+    const app = await createContractApp(new FakeAgentRuntime());
     const headers = {
       ...authenticatedJsonHeaders,
       'idempotency-key': 'same-key',
@@ -196,7 +199,7 @@ describe('run HTTP contracts', () => {
     [{}, 'invalid_request'],
     [{ prompt: 'ok', model: 'opencode/paid' }, 'invalid_request'],
   ])('rejects invalid input %#', async (body, code) => {
-    const app = await createTestApp(new FakeAgentRuntime());
+    const app = await createContractApp(new FakeAgentRuntime());
     const response = await app.request('/api/v1/runs', {
       method: 'POST',
       headers: authenticatedJsonHeaders,
@@ -210,7 +213,7 @@ describe('run HTTP contracts', () => {
   });
 
   it('rejects a request body larger than 64 KiB', async () => {
-    const app = await createTestApp(new FakeAgentRuntime());
+    const app = await createContractApp(new FakeAgentRuntime());
     const response = await app.request('/api/v1/runs', {
       method: 'POST',
       headers: authenticatedJsonHeaders,
@@ -224,7 +227,7 @@ describe('run HTTP contracts', () => {
   });
 
   it('returns 503 before accepting work when runtime readiness fails', async () => {
-    const app = await createTestApp(new FakeAgentRuntime({ ready: false }));
+    const app = await createContractApp(new FakeAgentRuntime({ ready: false }));
     const response = await app.request('/api/v1/runs', {
       method: 'POST',
       headers: authenticatedJsonHeaders,
@@ -238,7 +241,7 @@ describe('run HTTP contracts', () => {
   });
 
   it('returns 404 for an unknown run', async () => {
-    const app = await createTestApp(new FakeAgentRuntime());
+    const app = await createContractApp(new FakeAgentRuntime());
     const response = await app.request(
       '/api/v1/runs/00000000-0000-4000-8000-000000000000',
       { headers: { authorization: `Bearer ${primaryServiceAccountToken}` } },
@@ -251,8 +254,12 @@ describe('run HTTP contracts', () => {
   });
 
   it('returns a stable terminal representation without the prompt', async () => {
+    const runControl: {
+      control?: import('../../src/composition/create-application.js').SingleRunDebugControl;
+    } = {};
     const app = await createTestApp(
       new FakeAgentRuntime({ responseText: 'CONTRACT_OK' }),
+      { startDispatcher: false, runControl },
     );
     const created = CreateRunResponseSchema.parse(
       await (
@@ -264,7 +271,9 @@ describe('run HTTP contracts', () => {
       ).json(),
     );
 
-    await new Promise((resolve) => setTimeout(resolve, 5));
+    if (!runControl.control)
+      throw new Error('missing single-run debug control');
+    await runControl.control.claimAndExecute(created.run_id);
     const response = await app.request(created.links.self, {
       headers: { authorization: `Bearer ${primaryServiceAccountToken}` },
     });
@@ -288,6 +297,7 @@ describe('run HTTP contracts', () => {
   it('returns 404 run_not_found when an authenticated non-owner reads an existing run', async () => {
     const app = await createTestApp(
       new FakeAgentRuntime({ responseText: 'OWNER_SCOPE_OK' }),
+      { startDispatcher: false },
     );
     const created = CreateRunResponseSchema.parse(
       await (

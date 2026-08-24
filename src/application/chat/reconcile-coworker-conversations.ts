@@ -1,4 +1,4 @@
-import type { ServiceAccountAccessContext } from '../../platform/access-context.js';
+import type { ServiceAccountAccessContext } from '../../domain/access-context.js';
 import type { ManagedAgentDefinitionRead } from '../ports/agent-registry.js';
 import type { EnsureCoworkerConversation } from './ensure-coworker-conversation.js';
 

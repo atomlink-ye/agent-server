@@ -2,7 +2,7 @@ import type {
   ExecutionObservationSink,
   ExecutionResult,
   ExecutionRunInput,
-} from '../../application/ports/execution-plane.js';
+} from '../../application/ports/runtime-execution-session.js';
 import { ExecutionPlaneUnavailableError } from '../../application/ports/execution-plane.js';
 import type { Logger } from '../../shared/observability/logger.js';
 import {

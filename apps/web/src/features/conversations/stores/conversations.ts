@@ -98,5 +98,3 @@ export function createConversationsStore(
     fail: (error) => setSnapshot({ ...snapshot, status: 'error', error }),
   };
 }
-
-export const conversationsStore = createConversationsStore();

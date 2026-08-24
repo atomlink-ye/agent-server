@@ -2,10 +2,11 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { expect, it } from 'vitest';
 
-import parallelRecording from '@/lib/__fixtures__/product-recordings/parallel-success.json';
-import reworkRecording from '@/lib/__fixtures__/product-recordings/rework-once.json';
-import { RunTrace, attemptsFrom } from './run-trace';
-import { parseRecordedTrace } from './recording-test-helpers';
+import parallelRecording from '@/test-support/fixtures/product-recordings/parallel-success.json';
+import reworkRecording from '@/test-support/fixtures/product-recordings/rework-once.json';
+import { RunTrace } from './run-trace-view';
+import { attemptsFrom } from './selectors';
+import { parseRecordedTrace } from '@/test-support/run-trace-recording-test-helpers';
 
 (
   globalThis as typeof globalThis & {
@@ -43,7 +44,7 @@ it('renders Attempt nodes in Map and keeps selection synchronized with Timeline 
     const targetNode = nodes.find(
       (node) =>
         node.textContent?.includes(target.workItem.subject) &&
-        node.textContent?.includes(`Attempt ${target.attempt.attempt_no}`),
+        node.textContent?.includes(`Attempt ${target.attempt.attemptNo}`),
     );
     expect(targetNode).toBeDefined();
     if (!targetNode) return;
@@ -70,7 +71,7 @@ it('renders Attempt nodes in Map and keeps selection synchronized with Timeline 
         button.title === target.workItem.subject &&
         button
           .getAttribute('aria-label')
-          ?.includes(`Attempt ${target.attempt.attempt_no}`),
+          ?.includes(`Attempt ${target.attempt.attemptNo}`),
     );
     expect(selectedSpan).toBeDefined();
   } finally {
@@ -84,7 +85,7 @@ it('exposes Agent message summaries and MCP activity through Inspector detail le
   const target = attemptsFrom(trace).find(({ workItem }) =>
     trace.edges.some(
       (edge) =>
-        edge.kind === 'observed_message' && edge.work_item_id === workItem.id,
+        edge.kind === 'observed_message' && edge.workItemId === workItem.id,
     ),
   );
   expect(target).toBeDefined();

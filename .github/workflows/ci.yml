@@ -25,6 +25,22 @@ jobs:
   scenario:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: agent
+          POSTGRES_PASSWORD: agent
+          POSTGRES_DB: agent_server_scenario_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U agent -d agent_server_scenario_test"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+    env:
+      TEST_DATABASE_URL: postgresql://agent:agent@127.0.0.1:5432/agent_server_scenario_test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

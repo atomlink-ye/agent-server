@@ -5,7 +5,14 @@ import { parseManagedAgentPackage } from '../../src/domain/agents/managed-agent-
 import { createManagedAgentDraft } from '../../src/domain/agents/managed-agent-version.js';
 import { PostgresAgentRegistry } from '../../src/infrastructure/postgres/postgres-agent-registry.js';
 import { PostgresConversationRepository } from '../../src/infrastructure/postgres/postgres-conversation-repository.js';
-import { PostgresRuntimeSessionRepository } from '../../src/infrastructure/postgres/postgres-runtime-session-repository.js';
+import { PostgresRuntimeSessionStore } from '../../src/infrastructure/postgres/runtime/postgres-runtime-session-store.js';
+import { PostgresRuntimeGrantAuthority } from '../../src/infrastructure/postgres/runtime/postgres-runtime-grant-authority.js';
+import { PostgresRuntimeSpecStore } from '../../src/infrastructure/postgres/runtime/postgres-runtime-spec-store.js';
+import {
+  runtimeSpecRevision,
+  type RuntimeScope,
+} from '../../src/domain/runtime/runtime-session.js';
+import { createRuntimeSessionSpec } from '../../src/domain/runtime/runtime-session-spec.js';
 import {
   applyDurableKernelMigrations,
   createPostgresPool,
@@ -37,7 +44,11 @@ const owner = {
 const pool = createPostgresPool({ connectionString });
 const registry = new PostgresAgentRegistry(pool);
 const conversations = new PostgresConversationRepository(pool);
-const runtimeSessions = new PostgresRuntimeSessionRepository(pool);
+const runtimeSessions = new PostgresRuntimeSessionStore(
+  pool,
+  new PostgresRuntimeGrantAuthority(pool),
+);
+const runtimeSpecs = new PostgresRuntimeSpecStore(pool);
 
 beforeAll(async () => {
   await applyDurableKernelMigrations(pool);
@@ -61,9 +72,6 @@ afterAll(async () => {
   await pool.query('DELETE FROM runtime_sessions WHERE tenant_id=$1', [
     tenantId,
   ]);
-  await pool.query('DELETE FROM session_launch_snapshots WHERE tenant_id=$1', [
-    tenantId,
-  ]);
   await pool.query('DELETE FROM agent_chat_runtimes WHERE tenant_id=$1', [
     tenantId,
   ]);
@@ -79,7 +87,7 @@ afterAll(async () => {
   await pool.end();
 });
 
-describe('Agent Chat RuntimeSession typed epoch persistence on real PostgreSQL', () => {
+describe('Agent Chat RuntimeSession normalized scope persistence on real PostgreSQL', () => {
   it('reuses one epoch session, rotates cleanly, and keeps version pins stable', async () => {
     const v1 = await importDraft({
       source: source('first capability'),
@@ -104,36 +112,36 @@ describe('Agent Chat RuntimeSession typed epoch persistence on real PostgreSQL',
     });
     expect(chatV1?.id).toMatch(/^[0-9a-f-]{36}$/i);
 
-    const first = await runtimeSessions.createOrGetForAgentChat({
-      tenantId,
-      workspaceId,
-      principalType,
-      principalId,
-      agentChatRuntimeId: chatV1!.id,
-      runtimeEpoch: chatV1!.epoch,
-      agentVersionId: publishedV1.id,
-      resolvedSkills: [],
-      toolRefs: [],
+    const first = await runtimeSessions.createWithInitialSpec({
+      owner,
+      scope: agentChatScope(chatV1!.id, chatV1!.epoch),
+      spec: runtimeSpec(publishedV1.id),
     });
-    const replay = await runtimeSessions.createOrGetForAgentChat({
-      tenantId,
-      workspaceId,
-      principalType,
-      principalId,
-      agentChatRuntimeId: chatV1!.id,
-      runtimeEpoch: chatV1!.epoch,
-      agentVersionId: publishedV1.id,
-      resolvedSkills: [],
-      toolRefs: [],
+    const replay = await runtimeSessions.createWithInitialSpec({
+      owner,
+      scope: agentChatScope(chatV1!.id, chatV1!.epoch),
+      spec: runtimeSpec(publishedV1.id),
     });
     expect(replay.id).toBe(first.id);
     expect(first.scope).toEqual({
       kind: 'agent_chat',
-      agentChatRuntimeId: chatV1!.id,
-      runtimeEpoch: 1,
+      id: chatV1!.id,
+      epoch: 1,
     });
-    expect(first.scopeId).toBe(chatV1!.id);
-    expect(first.agentVersionId).toBe(publishedV1.id);
+    expect(first.desiredSpecRevision).toBe(1);
+    expect(first.status).toBe('provisioning');
+    expect(first.currentGenerationId).toBeNull();
+
+    const firstSpec = await runtimeSpecs.get(
+      first.id,
+      first.desiredSpecRevision,
+    );
+    expect(firstSpec).toMatchObject({
+      runtimeSessionId: first.id,
+      revision: 1,
+      workspaceId,
+      agentVersionId: publishedV1.id,
+    });
 
     const v2 = await importDraft({
       source: source('second capability'),
@@ -158,61 +166,94 @@ describe('Agent Chat RuntimeSession typed epoch persistence on real PostgreSQL',
       epoch: 2,
     });
 
-    const rotated = await runtimeSessions.createOrGetForAgentChat({
-      tenantId,
-      workspaceId,
-      principalType,
-      principalId,
-      agentChatRuntimeId: chatV2!.id,
-      runtimeEpoch: chatV2!.epoch,
-      agentVersionId: publishedV2.id,
-      resolvedSkills: [],
-      toolRefs: [],
+    const rotated = await runtimeSessions.createWithInitialSpec({
+      owner,
+      scope: agentChatScope(chatV2!.id, chatV2!.epoch),
+      spec: runtimeSpec(publishedV2.id),
     });
     expect(rotated.id).not.toBe(first.id);
-    expect(rotated.agentVersionId).toBe(publishedV2.id);
     expect(rotated.scope).toEqual({
       kind: 'agent_chat',
-      agentChatRuntimeId: chatV2!.id,
-      runtimeEpoch: 2,
+      id: chatV2!.id,
+      epoch: 2,
     });
+    expect(rotated.desiredSpecRevision).toBe(1);
+    expect(
+      (await runtimeSpecs.get(rotated.id, rotated.desiredSpecRevision))
+        ?.agentVersionId,
+    ).toBe(publishedV2.id);
 
-    const historical = await runtimeSessions.findByAgentChat({
-      tenantId,
-      workspaceId,
-      principalType,
-      principalId,
-      agentChatRuntimeId: chatV1!.id,
-      runtimeEpoch: 1,
-    });
+    const historical = await runtimeSessions.findByScope(
+      owner,
+      agentChatScope(chatV1!.id, 1),
+    );
     expect(historical?.id).toBe(first.id);
-    expect(historical?.agentVersionId).toBe(publishedV1.id);
+    expect(
+      (await runtimeSpecs.get(first.id, first.desiredSpecRevision))
+        ?.agentVersionId,
+    ).toBe(publishedV1.id);
 
     const persisted = await pool.query<{
-      agent_chat_runtime_id: string;
-      runtime_epoch: number;
-      scope_id: string | null;
+      scope_kind: string;
+      scope_id: string;
+      scope_epoch: number;
+      desired_spec_revision: number;
+      status: string;
+      current_generation_id: string | null;
     }>(
-      `SELECT agent_chat_runtime_id,runtime_epoch,scope_id
+      `SELECT scope_kind,scope_id,scope_epoch,desired_spec_revision,status,
+              current_generation_id
          FROM runtime_sessions
         WHERE tenant_id=$1 AND scope_kind='agent_chat'
-        ORDER BY runtime_epoch ASC`,
+        ORDER BY scope_epoch ASC`,
       [tenantId],
     );
     expect(persisted.rows).toEqual([
       {
-        agent_chat_runtime_id: chatV1!.id,
-        runtime_epoch: 1,
-        scope_id: null,
+        scope_kind: 'agent_chat',
+        scope_id: chatV1!.id,
+        scope_epoch: 1,
+        desired_spec_revision: 1,
+        status: 'provisioning',
+        current_generation_id: null,
       },
       {
-        agent_chat_runtime_id: chatV1!.id,
-        runtime_epoch: 2,
-        scope_id: null,
+        scope_kind: 'agent_chat',
+        scope_id: chatV1!.id,
+        scope_epoch: 2,
+        desired_spec_revision: 1,
+        status: 'provisioning',
+        current_generation_id: null,
       },
     ]);
   });
 });
+
+function agentChatScope(id: string, epoch: number): RuntimeScope {
+  return { kind: 'agent_chat', id, epoch };
+}
+
+function runtimeSpec(agentVersionId: string) {
+  return createRuntimeSessionSpec({
+    runtimeSessionId:
+      crypto.randomUUID() as import('../../src/domain/runtime/runtime-session.js').RuntimeSessionId,
+    revision: runtimeSpecRevision(1),
+    workspaceId,
+    agentVersionId,
+    environmentVersionId: null,
+    resolvedSkills: [],
+    toolRefs: [],
+    provider: 'paseo',
+    model: null,
+    cwd: '/workspace',
+    systemPromptDigest: 'system-prompt-digest',
+    skillSetDigest: 'skill-set-digest',
+    toolCatalogDigest: 'tool-catalog-digest',
+    extensionSetDigest: 'extension-set-digest',
+    contextEpoch: 1,
+    createdAt: fixedTime().toISOString(),
+  });
+}
 
 async function importDraft(input: {
   readonly source: string;

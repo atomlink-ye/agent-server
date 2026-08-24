@@ -203,6 +203,24 @@ spec:
     const rootTaskId = started.execution_receipt?.source_refs?.task_id;
     if (typeof workRunId !== 'string' || typeof rootTaskId !== 'string')
       throw new Error('composition smoke WorkRun identities missing');
+    const rootRuns = await pool.query(
+      `SELECT r.id FROM runs r
+         JOIN tasks t ON t.id=r.task_id
+        WHERE r.task_id=$1 AND t.tenant_id=$2 AND t.workspace_id=$3
+          AND t.principal_type=$4 AND t.principal_id=$5`,
+      [
+        rootTaskId,
+        owner.tenant_id,
+        workspaceId,
+        owner.principal_type,
+        owner.principal_id,
+      ],
+    );
+    if (rootRuns.rows.length !== 1)
+      throw new Error(
+        `composition root Run provenance mismatch: ${JSON.stringify(rootRuns.rows)}`,
+      );
+    const rootRunId = rootRuns.rows[0].id;
     progress('composition_single_agent_started', {
       work_id: workId,
       work_run_id: workRunId,
@@ -328,25 +346,35 @@ spec:
     );
 
     const session = await pool.query(
-      `SELECT rs.id,rs.scope_kind,rs.scope_id,rs.task_id,
-              sls.agent_version_id,sls.environment_version_id
+      `SELECT rs.id,rs.scope_kind,rs.scope_id,
+              rss.agent_version_id,rss.environment_version_id
          FROM runtime_sessions rs
-         JOIN session_launch_snapshots sls ON sls.id=rs.launch_snapshot_id
-        WHERE rs.task_id=$1 AND rs.tenant_id=$2
-          AND rs.principal_type=$3 AND rs.principal_id=$4`,
-      [rootTaskId, owner.tenant_id, owner.principal_type, owner.principal_id],
+         JOIN runtime_session_specs rss
+           ON rss.runtime_session_id=rs.id
+          AND rss.revision=rs.desired_spec_revision
+         JOIN runtime_turns rt ON rt.runtime_session_id=rs.id
+         JOIN runs r ON r.id=rt.source_id::uuid
+         JOIN tasks t ON t.id=r.task_id
+        WHERE rt.source_kind='run' AND r.id=$1 AND t.id=$2
+          AND rs.tenant_id=$3 AND rs.principal_type=$4 AND rs.principal_id=$5`,
+      [
+        rootRunId,
+        rootTaskId,
+        owner.tenant_id,
+        owner.principal_type,
+        owner.principal_id,
+      ],
     );
-    const runtimeSession = session.rows[0];
+    const runtimeSession = session.rows.length === 1 ? session.rows[0] : null;
     if (
       !runtimeSession ||
-      runtimeSession.scope_kind !== 'task' ||
-      runtimeSession.scope_id !== null ||
-      runtimeSession.task_id !== rootTaskId ||
+      runtimeSession.scope_kind !== 'run' ||
+      runtimeSession.scope_id !== rootRunId ||
       runtimeSession.agent_version_id !== agent.id ||
       runtimeSession.environment_version_id !== environment.id
     )
       throw new Error(
-        `composition runtime session snapshot mismatch: ${JSON.stringify(runtimeSession)}`,
+        `composition runtime session snapshot mismatch: ${JSON.stringify(session.rows)}`,
       );
 
     progress('composition_single_agent_verified', {
@@ -558,6 +586,24 @@ spec:
     const rootTaskId = started.execution_receipt?.source_refs?.task_id;
     if (typeof workRunId !== 'string' || typeof rootTaskId !== 'string')
       throw new Error('inline smoke WorkRun identities missing');
+    const rootRuns = await pool.query(
+      `SELECT r.id FROM runs r
+         JOIN tasks t ON t.id=r.task_id
+        WHERE r.task_id=$1 AND t.tenant_id=$2 AND t.workspace_id=$3
+          AND t.principal_type=$4 AND t.principal_id=$5`,
+      [
+        rootTaskId,
+        owner.tenant_id,
+        workspaceId,
+        owner.principal_type,
+        owner.principal_id,
+      ],
+    );
+    if (rootRuns.rows.length !== 1)
+      throw new Error(
+        `inline root Run provenance mismatch: ${JSON.stringify(rootRuns.rows)}`,
+      );
+    const rootRunId = rootRuns.rows[0].id;
     progress('composition_inline_started', {
       work_id: workId,
       work_run_id: workRunId,
@@ -702,26 +748,36 @@ spec:
     );
 
     const session = await pool.query(
-      `SELECT rs.id,rs.scope_kind,rs.scope_id,rs.task_id,
-              sls.agent_version_id,sls.environment_version_id
+      `SELECT rs.id,rs.scope_kind,rs.scope_id,
+              rss.agent_version_id,rss.environment_version_id
          FROM runtime_sessions rs
-         JOIN session_launch_snapshots sls ON sls.id=rs.launch_snapshot_id
-        WHERE rs.task_id=$1 AND rs.tenant_id=$2
-          AND rs.principal_type=$3 AND rs.principal_id=$4`,
-      [rootTaskId, owner.tenant_id, owner.principal_type, owner.principal_id],
+         JOIN runtime_session_specs rss
+           ON rss.runtime_session_id=rs.id
+          AND rss.revision=rs.desired_spec_revision
+         JOIN runtime_turns rt ON rt.runtime_session_id=rs.id
+         JOIN runs r ON r.id=rt.source_id::uuid
+         JOIN tasks t ON t.id=r.task_id
+        WHERE rt.source_kind='run' AND r.id=$1 AND t.id=$2
+          AND rs.tenant_id=$3 AND rs.principal_type=$4 AND rs.principal_id=$5`,
+      [
+        rootRunId,
+        rootTaskId,
+        owner.tenant_id,
+        owner.principal_type,
+        owner.principal_id,
+      ],
     );
-    const runtimeSession = session.rows[0];
+    const runtimeSession = session.rows.length === 1 ? session.rows[0] : null;
     if (
       !runtimeSession ||
-      runtimeSession.scope_kind !== 'task' ||
-      runtimeSession.scope_id !== null ||
-      runtimeSession.task_id !== rootTaskId ||
+      runtimeSession.scope_kind !== 'run' ||
+      runtimeSession.scope_id !== rootRunId ||
       runtimeSession.agent_version_id !== agentEntry.resolved_version_id ||
       runtimeSession.environment_version_id !==
         environmentEntry.resolved_version_id
     )
       throw new Error(
-        `inline runtime session snapshot mismatch: ${JSON.stringify(runtimeSession)}`,
+        `inline runtime session snapshot mismatch: ${JSON.stringify(session.rows)}`,
       );
 
     progress('composition_inline_verified', {

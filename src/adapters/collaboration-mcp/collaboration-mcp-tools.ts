@@ -8,7 +8,7 @@ import {
   collaborationErrorCode,
   type CollaborationKernel,
 } from '../../application/collaboration/collaboration-kernel.js';
-import type { RuntimeToolGrant } from '../../application/extensions/runtime-tool-grant-service.js';
+import type { AuthorizedRuntimeToolContext } from '../../application/runtime/authorize-runtime-tool.js';
 import type { TeamToolContextResolver } from '../../application/teams/team-tool-context.js';
 import {
   AGENT_SERVER_COLLABORATION_MCP_NAMES,
@@ -18,12 +18,12 @@ import { COLLABORATION_LIMITS } from '../../domain/collaboration/collaboration-p
 
 export interface CollaborationMcpContext {
   readonly resolve: (
-    grant: RuntimeToolGrant,
+    grant: AuthorizedRuntimeToolContext,
   ) => ReturnType<TeamToolContextResolver['resolve']>;
-  readonly grantId: string;
-  readonly currentGrant: () => RuntimeToolGrant | null;
-  readonly begin: (grantId: string) => void;
-  readonly end: (grantId: string) => void;
+  readonly grant: AuthorizedRuntimeToolContext;
+  readonly authorize: (
+    toolRef: string,
+  ) => Promise<AuthorizedRuntimeToolContext | null>;
   readonly kernel: CollaborationKernel;
 }
 
@@ -60,18 +60,13 @@ export function registerCollaborationMcpTools(
         ...(readOnly ? { annotations: { readOnlyHint: true } } : {}),
       },
       async (args: z.infer<z.ZodObject<Input>>) => {
-        let begun = false;
         try {
-          context.begin(context.grantId);
-          begun = true;
-          const grant = context.currentGrant();
+          const grant = await context.authorize(_ref);
           if (!grant) return failure('unauthorized', true);
           const resolved = await context.resolve(grant);
           return success(await operation(args, resolved));
         } catch (error) {
           return failure(collaborationErrorCode(error));
-        } finally {
-          if (begun) context.end(context.grantId);
         }
       },
     ) as RegisteredTool;

@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { createLarkIngressWorker } from './bootstrap.js';
 import {
   closeServiceResources,
-  createLarkIngressWorker,
   startServiceResources,
-} from './bootstrap.js';
+} from './composition/lifecycle-supervisor.js';
 import type { ChannelIngress } from './domain/channels/channel-event.js';
 import { ProcessLarkIngress } from './application/channels/process-lark-ingress.js';
 import { ApplyMemoryReviewControl } from './application/channels/apply-memory-review-control.js';
@@ -143,7 +143,7 @@ describe('closeServiceResources', () => {
           events.push('lark.worker.stop');
         }),
       },
-      runtime: {
+      runtimeProvider: {
         close: vi.fn(async () => {
           events.push('runtime.close');
         }),
@@ -201,7 +201,7 @@ describe('closeServiceResources', () => {
           events.push('worker.stop');
         }),
       },
-      runtime: {
+      runtimeProvider: {
         close: vi.fn(async (): Promise<void> => {
           events.push('runtime.close');
         }),
@@ -249,7 +249,7 @@ describe('closeServiceResources', () => {
           throw new Error('worker secret');
         }),
       },
-      runtime: {
+      runtimeProvider: {
         close: vi.fn(async (): Promise<void> => {
           events.push('runtime');
           throw new Error('runtime secret');
@@ -312,7 +312,7 @@ describe('closeServiceResources', () => {
       expect(logs).toEqual([
         {
           event: 'lark.ingress_worker.failed',
-          attributes: { phase: 'claim', errorName: 'Error' },
+          attributes: { phase: 'claim', error_name: 'Error' },
         },
       ]),
     );

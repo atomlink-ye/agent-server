@@ -12,8 +12,8 @@ const protectedNames = [
 ];
 const sourceFilePattern = /\.(?:ts|tsx|mts|cts)$/u;
 
-describe('Work module concrete import boundary', () => {
-  it('keeps concrete Work PostgreSQL helpers behind the Work module', () => {
+describe('Work composition concrete import boundary', () => {
+  it('keeps concrete Work PostgreSQL helpers behind composition', () => {
     const files = execFileSync('git', ['ls-files', 'src'], {
       cwd: root,
       encoding: 'utf8',
@@ -25,7 +25,11 @@ describe('Work module concrete import boundary', () => {
       .filter((path) => !path.includes('.test.'));
     const violations: string[] = [];
     for (const path of files) {
-      if (path.startsWith('src/modules/work/')) continue;
+      if (
+        path === 'src/composition/create-work-capabilities.ts' ||
+        path === 'src/composition/postgres-conversation-work-link-repository.ts'
+      )
+        continue;
       if (protectedNames.some((name) => path.includes(name))) continue;
       const source = readFileSync(resolve(root, path), 'utf8');
       if (protectedNames.some((name) => source.includes(name)))

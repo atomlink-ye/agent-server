@@ -1,15 +1,27 @@
 import type { RuntimeMemoryCandidateCategory } from '../../src/application/ports/runtime-memory-candidate-collector.js';
-import type { RuntimeSession } from '../../src/application/ports/runtime-session-repository.js';
 import type {
-  ExecutionExtensionBinding,
-  ExecutionObservationSink,
-  ExecutionPlaneHealth,
-} from '../../src/application/ports/execution-plane.js';
+  RuntimeSession,
+  RuntimeSessionId,
+  RuntimeSpecRevision,
+} from '../../src/domain/runtime/runtime-session.js';
+import type { ExecutionObservationSink } from '../../src/application/ports/runtime-execution-session.js';
+import type { ExecutionPlaneHealth } from '../../src/application/ports/execution-plane.js';
+import type { ExecutionExtensionBinding } from '../../src/application/ports/runtime-extension-binding.js';
+import type { ExecuteRuntimeTurnInput } from '../../src/application/runtime/execute-runtime-turn.js';
+import type { ExecutionOutput } from '../../src/application/ports/runtime-execution-session.js';
 import type {
-  ExecutionRuntimeService,
-  ExecutionTurnOutcome,
-  ExecutionTurnRequest,
-} from '../../src/application/runtime/execution-plane-runtime-facade.js';
+  ProviderRuntimeSpec,
+  ProviderSessionBinding,
+  ProviderSessionHandle,
+  RuntimeExecutionProvider,
+  RuntimeProviderInspection,
+} from '../../src/application/ports/runtime-execution-provider.js';
+import type {
+  ExecutionSession,
+  ExecutionSessionCapabilities,
+} from '../../src/application/ports/runtime-execution-session.js';
+import type { RuntimeTurnId } from '../../src/domain/runtime/runtime-session.js';
+import type { RuntimeProviderCapabilities } from '../../src/domain/runtime/runtime-provider-capabilities.js';
 
 type FakeRuntimeHealth = {
   readonly ready: boolean;
@@ -60,6 +72,38 @@ type FakeRuntimeExecuteInput = {
   };
 };
 
+type FakeTurnInput = {
+  readonly runId: string;
+  readonly prompt: string;
+  readonly systemPrompt?: string;
+  readonly runtimeSessionId?: string;
+  readonly workspaceBinding?: { readonly externalWorkspaceId: string };
+  readonly cwd?: string;
+  readonly provider?: string;
+  readonly model?: string;
+  readonly sessionTitle?: string;
+  readonly workspaceTitle?: string;
+  readonly labels?: Readonly<Record<string, string>>;
+  readonly extensions?: ExecutionExtensionBinding;
+  readonly proposalLimit?: number;
+};
+
+type FakeTurnOutput = {
+  readonly provider: string;
+  readonly model: string;
+  readonly text: string;
+  readonly workspaceBinding: {
+    readonly plane: string;
+    readonly externalWorkspaceId: string;
+  };
+  readonly sessionBinding: {
+    readonly plane: string;
+    readonly externalSessionId: string;
+  };
+  readonly usage?: FakeRuntimeExecution['usage'];
+  readonly memoryCandidates?: FakeRuntimeExecution['memoryCandidates'];
+};
+
 export interface FakeRuntimeOptions {
   readonly ready?: boolean;
   readonly responseText?: string;
@@ -86,7 +130,7 @@ export interface FakeRuntimeExecutionRecord {
   readonly finishedAt: number;
 }
 
-export class FakeAgentRuntime implements ExecutionRuntimeService {
+export class FakeAgentRuntime {
   public initializeCalls = 0;
   public executeCalls = 0;
   public closeCalls = 0;
@@ -114,6 +158,27 @@ export class FakeAgentRuntime implements ExecutionRuntimeService {
     this.ready = options.ready ?? true;
   }
 
+  public async complete(input: {
+    readonly systemPrompt: string;
+    readonly prompt: string;
+  }): Promise<{
+    readonly provider: string;
+    readonly model: string;
+    readonly text: string;
+  }> {
+    const result = await this.execute({
+      operation: 'create',
+      runId: `one-shot-${this.executeCalls + 1}`,
+      prompt: input.prompt,
+      systemPrompt: input.systemPrompt,
+    });
+    return {
+      provider: result.provider,
+      model: result.model,
+      text: result.text,
+    };
+  }
+
   public async initialize(): Promise<void> {
     this.initializeCalls += 1;
     if (!this.ready) {
@@ -134,7 +199,13 @@ export class FakeAgentRuntime implements ExecutionRuntimeService {
   public async ensureAgentChatRuntimeSession(input: {
     readonly agentChatRuntimeId: string;
     readonly runtimeEpoch: number;
-    readonly agentOwner: { readonly scope: { readonly workspaceId: string } };
+    readonly agentOwner: {
+      readonly scope: {
+        readonly tenantId: string;
+        readonly workspaceId: string;
+      };
+      readonly principal: { readonly type: string; readonly id: string };
+    };
     readonly agentVersionId: string;
     readonly resolvedSkills: readonly {
       readonly ref: string;
@@ -144,36 +215,47 @@ export class FakeAgentRuntime implements ExecutionRuntimeService {
   }): Promise<RuntimeSession> {
     const now = new Date(0).toISOString();
     return {
-      id: input.agentChatRuntimeId,
+      id: input.agentChatRuntimeId as RuntimeSessionId,
       scope: {
         kind: 'agent_chat',
-        agentChatRuntimeId: input.agentChatRuntimeId,
-        runtimeEpoch: input.runtimeEpoch,
+        id: input.agentChatRuntimeId,
+        epoch: input.runtimeEpoch,
       },
-      scopeKind: 'agent_chat',
-      scopeId: input.agentChatRuntimeId,
-      productSessionId: null,
-      taskId: null,
-      launchSnapshotId: `fake-launch-${input.agentChatRuntimeId}`,
-      workspaceId: input.agentOwner.scope.workspaceId,
-      agentVersionId: input.agentVersionId,
-      environmentVersionId: null,
-      resolvedSkills: input.resolvedSkills,
-      toolRefs: input.toolRefs,
-      desiredRevision: 1,
-      desiredSpecDigest: null,
+      owner: {
+        tenantId: input.agentOwner.scope.tenantId,
+        workspaceId: input.agentOwner.scope.workspaceId,
+        principalType: input.agentOwner.principal.type,
+        principalId: input.agentOwner.principal.id,
+      },
+      desiredSpecRevision: 1 as RuntimeSpecRevision,
       status: 'ready',
-      currentGeneration: null,
-      workspaceBinding: null,
-      sessionBinding: null,
+      currentGenerationId: null,
       createdAt: now,
       updatedAt: now,
+      closedAt: null,
     };
   }
 
+  public execute(input: FakeRuntimeExecuteInput): Promise<FakeRuntimeExecution>;
+  public execute(input: ExecuteRuntimeTurnInput): Promise<ExecutionOutput>;
   public async execute(
-    input: FakeRuntimeExecuteInput,
-  ): Promise<FakeRuntimeExecution> {
+    input: FakeRuntimeExecuteInput | ExecuteRuntimeTurnInput,
+  ): Promise<FakeRuntimeExecution | ExecutionOutput> {
+    if (!('operation' in input)) {
+      const result = await this.executeTurn({
+        runId:
+          input.source.kind === 'run'
+            ? input.source.runId
+            : input.runtimeSessionId,
+        prompt: input.prompt,
+      });
+      return {
+        provider: result.provider,
+        model: result.model,
+        text: result.text,
+        ...(result.usage ? { usage: result.usage } : {}),
+      };
+    }
     this.executeCalls += 1;
     this.executionRunIds.push(input.runId);
     this.prompts.push(input.prompt);
@@ -236,9 +318,9 @@ export class FakeAgentRuntime implements ExecutionRuntimeService {
   }
 
   public async executeTurn(
-    input: ExecutionTurnRequest,
+    input: FakeTurnInput,
     _observer?: ExecutionObservationSink,
-  ): Promise<ExecutionTurnOutcome> {
+  ): Promise<FakeTurnOutput> {
     const creating = input.systemPrompt !== undefined;
     const execution = await this.execute(
       creating
@@ -277,9 +359,7 @@ export class FakeAgentRuntime implements ExecutionRuntimeService {
             operation: 'continue',
             runId: input.runId,
             prompt: input.prompt,
-            externalSessionId:
-              input.compatibilitySessionBinding?.externalSessionId ??
-              'fake-agent-1',
+            externalSessionId: 'fake-agent-1',
             ...(input.runtimeSessionId
               ? { runtimeSessionId: input.runtimeSessionId }
               : {}),
@@ -375,4 +455,127 @@ export class FakeAgentRuntime implements ExecutionRuntimeService {
   public async close(): Promise<void> {
     this.closeCalls += 1;
   }
+
+  public asRuntimeProvider(): RuntimeExecutionProvider {
+    return new FakeRuntimeProvider(this);
+  }
+}
+
+const fakeCapabilities: RuntimeProviderCapabilities = {
+  canReconfigure: true,
+  canCloseSession: true,
+  canInspectBootstrapDigestComponents: false,
+};
+
+class FakeRuntimeProvider implements RuntimeExecutionProvider {
+  public readonly name = 'fake';
+
+  public constructor(private readonly runtime: FakeAgentRuntime) {}
+
+  public capabilities(): RuntimeProviderCapabilities {
+    return fakeCapabilities;
+  }
+
+  public async ensureReady(): Promise<boolean> {
+    return this.runtime.ensureReady();
+  }
+
+  public health(): Promise<ExecutionPlaneHealth> {
+    return this.runtime.planeHealth();
+  }
+
+  public async create(
+    desired: ProviderRuntimeSpec,
+  ): Promise<ProviderSessionHandle> {
+    if (!(await this.ensureReady()))
+      throw new Error('fake runtime unavailable');
+    return this.handle(desired);
+  }
+
+  public async inspect(
+    _binding: ProviderSessionBinding,
+  ): Promise<RuntimeProviderInspection> {
+    return {
+      status: 'missing',
+      reason: 'Fake provider has no persisted session.',
+    };
+  }
+
+  public reconfigure(
+    _binding: ProviderSessionBinding,
+    desired: ProviderRuntimeSpec,
+  ): Promise<ProviderSessionHandle> {
+    return this.create(desired);
+  }
+
+  public open(
+    _binding: ProviderSessionBinding,
+    command: ProviderRuntimeSpec,
+  ): Promise<ExecutionSession> {
+    return Promise.resolve(new FakeRuntimeSession(this.runtime, command));
+  }
+
+  public async closeSession(_binding: ProviderSessionBinding): Promise<void> {}
+
+  public cancelTurn(
+    _binding: ProviderSessionBinding,
+    turnId: RuntimeTurnId,
+  ): Promise<void> {
+    return this.runtime.cancel({ runId: turnId });
+  }
+
+  public close(): Promise<void> {
+    return this.runtime.close();
+  }
+
+  public completeOneShot(input: {
+    readonly systemPrompt: string;
+    readonly prompt: string;
+  }): Promise<ExecutionOutput> {
+    return this.runtime.complete(input);
+  }
+
+  private handle(desired: ProviderRuntimeSpec): ProviderSessionHandle {
+    return {
+      provider: 'fake',
+      model: desired.model ?? 'opencode/fake-free',
+      providerWorkspaceId: 'fake-runtime-workspace-1',
+      providerSessionId: 'fake-agent-1',
+      session: new FakeRuntimeSession(this.runtime, desired),
+    };
+  }
+}
+
+class FakeRuntimeSession implements ExecutionSession {
+  public readonly capabilities: ExecutionSessionCapabilities = {
+    supported: new Set(),
+  };
+
+  public constructor(
+    private readonly runtime: FakeAgentRuntime,
+    private readonly desired: ProviderRuntimeSpec,
+  ) {}
+
+  public async run(input: { readonly runId: string; readonly prompt: string }) {
+    const output = await this.runtime.execute({
+      operation: 'continue',
+      runId: input.runId,
+      prompt: input.prompt,
+      systemPrompt: this.desired.systemPrompt,
+      runtimeSessionId: this.desired.runtimeSessionId,
+      runtimeWorkspaceId: 'fake-runtime-workspace-1',
+      externalSessionId: 'fake-agent-1',
+    });
+    return {
+      status: 'completed' as const,
+      output: {
+        provider: output.provider,
+        model: output.model,
+        text: output.text,
+        ...(output.usage ? { usage: output.usage } : {}),
+      },
+    };
+  }
+
+  public async close(): Promise<void> {}
 }

@@ -15,16 +15,19 @@ import {
   type ClaimedRun,
   type RunRepository,
 } from '../ports/run-repository.js';
-import type { RuntimeSessionRepository } from '../ports/runtime-session-repository.js';
 import type { SessionRepository } from '../ports/session-repository.js';
 import type { TaskRepository } from '../ports/task-repository.js';
 import type { EnvironmentReadApi } from '../ports/environment-read-api.js';
 import type { TeamExecutionRepository } from '../ports/team-execution-repository.js';
 import type { WorkRunResourceManifestRead } from '../ports/work-run-resource-manifest-read.js';
 import type { CreateMemoryProposal } from '../memory/create-memory-proposal.js';
-import type { RuntimeExtensionBinder } from '../extensions/runtime-extension-binder.js';
 import { RuntimeTimedOutError } from '../runtime/execution-runtime-errors.js';
-import type { ExecutionRuntimeService } from '../runtime/execution-plane-runtime-facade.js';
+import { RuntimeTurnExecutionError } from '../runtime/execute-runtime-turn.js';
+import type { RuntimeExecutionProvider } from '../ports/runtime-execution-provider.js';
+import type { RuntimeSessionStore } from '../ports/runtime-session-store.js';
+import type { EnsureDesiredRuntimeSpec } from '../ports/ensure-desired-runtime-spec.js';
+import { RuntimeSessionSpecResolutionError } from '../runtime/resolve-runtime-session-spec.js';
+import type { ExecuteRuntimeTurn } from '../runtime/execute-runtime-turn.js';
 import { ExecuteTeamTask } from '../tasks/execute-team-task.js';
 import type { CollaborationActivationReconciler } from '../collaboration/collaboration-activation-reconciler.js';
 import { AgentRunExecutor } from './agent-run-executor.js';
@@ -43,36 +46,85 @@ import {
 import { RuntimeMemoryProposalWriter } from './runtime-memory-proposal-writer.js';
 
 /** Durable Run process manager. */
+export interface ExecuteRunOptions {
+  readonly completeRun: CompleteRun;
+  readonly tasks: TaskRepository;
+  readonly definitions: DefinitionReadApi;
+  readonly executeTeamTask: ExecuteTeamTask;
+  readonly runtimeProvider: Pick<RuntimeExecutionProvider, 'ensureReady'>;
+  readonly runtimeTurns: Pick<ExecuteRuntimeTurn, 'execute'>;
+  readonly logger: Logger;
+  readonly now?: () => Date;
+  readonly resolver?: AgentResolutionApi;
+  readonly events?: RunEventRepository;
+  readonly fileStore?: FileStore;
+  readonly createMemoryProposal?: CreateMemoryProposal;
+  readonly runtimeSessions?: Pick<RuntimeSessionStore, 'findByScope'>;
+  readonly ensureDesiredRuntimeSpec?: EnsureDesiredRuntimeSpec;
+  readonly runtimeConfiguration?: {
+    readonly provider: string;
+    readonly model: string | null;
+    readonly cwd: string;
+  };
+  readonly sessions?: Pick<SessionRepository, 'getSession'>;
+  readonly environments?: EnvironmentReadApi;
+  readonly runtimeCellRoot?: string;
+  readonly collaborativeExecutions?: TeamExecutionRepository;
+  readonly runs?: Pick<RunRepository, 'findByIdForOwner'>;
+  readonly activationReconciler?: Pick<
+    CollaborationActivationReconciler,
+    'reconcileForRootTask'
+  >;
+  readonly workRunManifests?: WorkRunResourceManifestRead;
+  readonly memoryVersions?: MemoryVersionReadApi;
+}
+
 export class ExecuteRun {
+  private readonly completeRun: CompleteRun;
+  private readonly tasks: TaskRepository;
+  private readonly executeTeamTask: ExecuteTeamTask;
+  private readonly runtimeProvider: Pick<
+    RuntimeExecutionProvider,
+    'ensureReady'
+  >;
+  private readonly logger: Logger;
+  private readonly now: () => Date;
+  private readonly events: RunEventRepository | undefined;
   private readonly teamCoordinator: RunTeamCoordinator | undefined;
   private readonly agentRunExecutor: AgentRunExecutor;
 
-  public constructor(
-    private readonly completeRun: CompleteRun,
-    private readonly tasks: TaskRepository,
-    _definitions: DefinitionReadApi,
-    private readonly executeTeamTask: ExecuteTeamTask,
-    private readonly runtime: ExecutionRuntimeService,
-    private readonly logger: Logger,
-    private readonly now: () => Date = () => new Date(),
-    resolver: AgentResolutionApi = { resolvePublished: async () => null },
-    private readonly events?: RunEventRepository,
-    fileStore?: FileStore,
-    createMemoryProposal?: CreateMemoryProposal,
-    runtimeExtensionBinder?: RuntimeExtensionBinder,
-    runtimeSessions?: RuntimeSessionRepository,
-    sessions?: Pick<SessionRepository, 'getSession'>,
-    environments?: EnvironmentReadApi,
-    runtimeCellRoot?: string,
-    collaborativeExecutions?: TeamExecutionRepository,
-    runs?: Pick<RunRepository, 'findByIdForOwner'>,
-    activationReconciler?: Pick<
-      CollaborationActivationReconciler,
-      'reconcileForRootTask'
-    >,
-    workRunManifests?: WorkRunResourceManifestRead,
-    memoryVersions?: MemoryVersionReadApi,
-  ) {
+  public constructor(options: ExecuteRunOptions) {
+    const {
+      completeRun,
+      tasks,
+      executeTeamTask,
+      runtimeProvider,
+      runtimeTurns,
+      logger,
+      now = () => new Date(),
+      resolver = { resolvePublished: async () => null },
+      events,
+      fileStore,
+      createMemoryProposal,
+      runtimeSessions,
+      ensureDesiredRuntimeSpec,
+      runtimeConfiguration,
+      sessions,
+      environments,
+      runtimeCellRoot,
+      collaborativeExecutions,
+      runs,
+      activationReconciler,
+      workRunManifests,
+      memoryVersions,
+    } = options;
+    this.completeRun = completeRun;
+    this.tasks = tasks;
+    this.executeTeamTask = executeTeamTask;
+    this.runtimeProvider = runtimeProvider;
+    this.logger = logger;
+    this.now = now;
+    this.events = events;
     this.teamCoordinator = collaborativeExecutions
       ? new RunTeamCoordinator(
           collaborativeExecutions,
@@ -98,14 +150,15 @@ export class ExecuteRun {
         })
       | undefined;
     this.agentRunExecutor = new AgentRunExecutor(
-      runtime,
+      runtimeTurns,
       tasks,
       promptContext,
       memoryWriter,
       logger,
       events,
-      runtimeExtensionBinder,
       runtimeSessions,
+      ensureDesiredRuntimeSpec,
+      runtimeConfiguration,
       sessions,
       environments,
       runtimeCellRoot,
@@ -119,7 +172,7 @@ export class ExecuteRun {
 
   public async ensureRuntimeReady(): Promise<boolean> {
     try {
-      return await this.runtime.ensureReady();
+      return await this.runtimeProvider.ensureReady();
     } catch (error) {
       this.logger.log('warn', 'run.runtime.unavailable', {
         error_name: error instanceof Error ? error.name : 'UnknownError',
@@ -172,11 +225,6 @@ export class ExecuteRun {
         : null;
       await this.events?.append(claim.run.id, 'started', {});
       if (teamContext) await this.teamCoordinator!.markActive(teamContext);
-      await this.events?.bind({
-        runId: claim.run.id,
-        ...(task.sessionId ? { sessionId: task.sessionId } : {}),
-        createdAt: claim.run.updatedAt,
-      });
       if (task.status === 'queued')
         await this.tasks.save(
           transitionTask(task, 'active', () => new Date(claim.run.updatedAt)),
@@ -246,7 +294,20 @@ export class ExecuteRun {
         });
         throw error;
       }
-      const timedOut = error instanceof RuntimeTimedOutError;
+      const timedOut =
+        error instanceof RuntimeTimedOutError ||
+        (error instanceof RuntimeTurnExecutionError &&
+          error.code === 'runtime_turn_timed_out');
+      this.logger.log('error', 'run.execution_failed', {
+        run_id: claim.run.id,
+        error_name: error instanceof Error ? error.name : 'UnknownError',
+        ...(error instanceof RuntimeTurnExecutionError
+          ? { runtime_failure_code: error.code }
+          : {}),
+        ...(error instanceof RuntimeSessionSpecResolutionError
+          ? { runtime_spec_component: error.component }
+          : {}),
+      });
       const failure: RunFailure = timedOut
         ? {
             code: 'runtime_timed_out',

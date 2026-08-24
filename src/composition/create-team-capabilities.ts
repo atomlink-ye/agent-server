@@ -1,0 +1,114 @@
+import type { Pool } from 'pg';
+
+import { CollaborationActivationReconciler } from '../application/collaboration/collaboration-activation-reconciler.js';
+import { CollaborationKernel } from '../application/collaboration/collaboration-kernel.js';
+import type { AdmissionRepository } from '../application/ports/admission-repository.js';
+import type { RunEventRepository } from '../application/ports/run-events.js';
+import type { RunRepository } from '../application/ports/run-repository.js';
+import type { TaskRepository } from '../application/ports/task-repository.js';
+import { TeamToolContextResolver } from '../application/teams/team-tool-context.js';
+import { PostgresCollaborationRepository } from '../infrastructure/postgres/postgres-collaboration-repository.js';
+import { PostgresTeamExecutionRepository } from '../infrastructure/postgres/postgres-collaborative-team-repository.js';
+import { PostgresTeamMessageRepository } from '../infrastructure/postgres/postgres-team-message-repository.js';
+import type { Logger } from '../shared/observability/logger.js';
+import { TeamDriver } from '../application/teams/team-driver.js';
+import { ExecuteTeamTask } from '../application/tasks/execute-team-task.js';
+import type { DefinitionReadApi } from '../application/ports/definition-read-api.js';
+
+export interface CreateTeamCapabilitiesOptions {
+  readonly database: Pool;
+  readonly tasks: TaskRepository;
+  readonly runs: RunRepository;
+  readonly admissions: AdmissionRepository;
+  readonly events: RunEventRepository;
+  readonly logger: Logger;
+  readonly deferActivationKick?: boolean;
+}
+
+export type CreateTeamModuleOptions = CreateTeamCapabilitiesOptions;
+
+export function createTeamModule(options: CreateTeamModuleOptions) {
+  const collaborationRepository = new PostgresCollaborationRepository(
+    options.database,
+  );
+  const executions = Object.assign(
+    new PostgresTeamExecutionRepository(options.database),
+    {
+      listCollaborationCheckpoints: (
+        teamRunId: string,
+        owner: Parameters<
+          PostgresCollaborationRepository['listCheckpoints']
+        >[1],
+      ) => collaborationRepository.listCheckpoints(teamRunId, owner),
+      listCollaborationSubmissions: (
+        teamRunId: string,
+        owner: Parameters<
+          PostgresCollaborationRepository['listSubmissions']
+        >[1],
+      ) => collaborationRepository.listSubmissions(teamRunId, owner),
+    },
+  );
+  const messages = new PostgresTeamMessageRepository(options.database);
+  const contextResolver = new TeamToolContextResolver(
+    executions,
+    options.tasks,
+    options.runs,
+  );
+  const activationReconciler = new CollaborationActivationReconciler(
+    messages,
+    executions,
+    options.tasks,
+    options.admissions,
+    options.logger,
+  );
+  const collaboration = new CollaborationKernel(
+    executions,
+    collaborationRepository,
+    messages,
+    options.events,
+    options.deferActivationKick ? undefined : activationReconciler,
+  );
+
+  return {
+    tasks: options.tasks,
+    runs: options.runs,
+    admissions: options.admissions,
+    executions,
+    messages,
+    collaborationRepository,
+    contextResolver,
+    activationReconciler,
+    collaboration,
+  } as const;
+}
+
+export type TeamCapabilities = ReturnType<typeof createTeamModule>;
+
+/** Creates the Team capabilities shared by the application graph. */
+export function createTeamCapabilities(
+  options: CreateTeamCapabilitiesOptions,
+): TeamCapabilities {
+  return createTeamModule(options);
+}
+
+export function createTeamExecutionConsumers(input: {
+  readonly module: TeamCapabilities;
+  readonly definitions: DefinitionReadApi;
+  readonly activationReconciler: CollaborationActivationReconciler | undefined;
+  readonly completionApprovalRequired: boolean;
+}) {
+  const teamDriver = new TeamDriver(
+    input.module.executions,
+    input.module.tasks,
+    input.module.runs,
+    input.module.admissions,
+    input.module.messages,
+    input.activationReconciler,
+    undefined,
+    { completionApprovalRequired: input.completionApprovalRequired },
+  );
+  return {
+    teamDriver,
+    executeTeamTask: new ExecuteTeamTask(input.definitions, teamDriver),
+  };
+}

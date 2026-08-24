@@ -8,9 +8,13 @@ import {
   ProductWorkDefinitionVersionSchema,
   ProductWorkRunSuccessSchema,
 } from '@atomlink-ye/agent-server/product-contract';
-import { WorkDetailShell } from '@/features/work/components/work-shell';
-import reworkRecording from '@/lib/__fixtures__/product-recordings/rework-once.json';
-import { projectWorkRunList } from '@/lib/product-recording-projections';
+import { WorkDetailPage } from '@/features/work/pages/WorkDetailPage';
+import { DefinitionPanel } from './definition-panel';
+import { NewWork } from './new-work';
+import { workDefinitionClient } from '../clients/work-definition-client';
+import { workClient } from '../clients/work-client';
+import reworkRecording from '@/test-support/fixtures/product-recordings/rework-once.json';
+import { projectWorkRunList } from '@/test-support/product-recording-test-helpers';
 
 (
   globalThis as typeof globalThis & {
@@ -156,7 +160,7 @@ it('validates current Definition source and renders the server-resolved one-way 
   const root = createRoot(host);
   try {
     await act(async () => {
-      root.render(<WorkDetailShell workId={work.work.id} tab="definition" />);
+      root.render(<WorkDetailPage workId={work.work.id} tab="definition" />);
       await new Promise((resolve) => setTimeout(resolve, 25));
     });
 
@@ -204,5 +208,183 @@ it('validates current Definition source and renders the server-resolved one-way 
     await act(async () => root.unmount());
     host.remove();
     vi.unstubAllGlobals();
+  }
+});
+
+it('applies and creates Work in order after Definition validation and planning', async () => {
+  const sequence: string[] = [];
+  const validate = vi
+    .spyOn(workDefinitionClient, 'validate')
+    .mockImplementation(async () => {
+      sequence.push('validate');
+      return { fingerprint: 'sha256:validated', diagnostics: [] };
+    });
+  const plan = vi
+    .spyOn(workDefinitionClient, 'plan')
+    .mockImplementation(async () => {
+      sequence.push('plan');
+      return {
+        fingerprint: 'sha256:planned',
+        resolved: {
+          kind: 'collaboration',
+          participants: [],
+          environment: {
+            source: 'referenced',
+            environment_version_id: environmentVersionId,
+          },
+          memory_version_ids: [],
+          required_runtime_capabilities: [],
+          platform_capabilities: [],
+        },
+      };
+    });
+  const apply = vi
+    .spyOn(workDefinitionClient, 'apply')
+    .mockImplementation(async () => {
+      sequence.push('apply');
+      return {
+        definitionId: work.work.definition_id,
+        versionId: work.work.definition_version_id,
+      };
+    });
+  const create = vi.spyOn(workClient, 'create').mockImplementation(async () => {
+    sequence.push('create');
+    throw new Error('stop test before navigation');
+  });
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(<NewWork />);
+    });
+    const title = host.querySelector<HTMLInputElement>('#work-title');
+    const source = host.querySelector<HTMLTextAreaElement>('#work-definition');
+    const submit = host.querySelector<HTMLButtonElement>(
+      '[data-testid="new-work-submit"]',
+    );
+    expect(title).not.toBeNull();
+    expect(source).not.toBeNull();
+    expect(submit).not.toBeNull();
+    setInputValue(title!, 'Supplier risk review');
+    setTextAreaValue(source!, 'kind: collaboration');
+    await act(async () => {
+      submit!.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(sequence).toEqual(['validate', 'plan', 'apply', 'create']);
+    expect(validate).toHaveBeenCalledWith('kind: collaboration');
+    expect(plan).toHaveBeenCalledWith('kind: collaboration');
+    expect(apply).toHaveBeenCalledWith('kind: collaboration');
+    expect(create).toHaveBeenCalledWith({
+      definitionId: work.work.definition_id,
+      definitionVersionId: work.work.definition_version_id,
+      title: 'Supplier risk review',
+    });
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    validate.mockRestore();
+    plan.mockRestore();
+    apply.mockRestore();
+    create.mockRestore();
+  }
+});
+
+function setInputValue(input: HTMLInputElement, value: string): void {
+  const setter = Object.getOwnPropertyDescriptor(
+    HTMLInputElement.prototype,
+    'value',
+  )?.set;
+  setter?.call(input, value);
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+function setTextAreaValue(textarea: HTMLTextAreaElement, value: string): void {
+  const setter = Object.getOwnPropertyDescriptor(
+    HTMLTextAreaElement.prototype,
+    'value',
+  )?.set;
+  setter?.call(textarea, value);
+  textarea.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+it('applies and pins an authored Definition before returning to Work', async () => {
+  const sequence: string[] = [];
+  const validate = vi
+    .spyOn(workDefinitionClient, 'validate')
+    .mockImplementation(async () => {
+      sequence.push('validate');
+      return { fingerprint: 'sha256:validated', diagnostics: [] };
+    });
+  const plan = vi
+    .spyOn(workDefinitionClient, 'plan')
+    .mockImplementation(async () => {
+      sequence.push('plan');
+      return {
+        fingerprint: 'sha256:planned',
+        resolved: {
+          kind: 'collaboration',
+          participants: [],
+          environment: {
+            source: 'referenced',
+            environment_version_id: environmentVersionId,
+          },
+          memory_version_ids: [],
+          required_runtime_capabilities: [],
+          platform_capabilities: [],
+        },
+      };
+    });
+  const apply = vi
+    .spyOn(workDefinitionClient, 'apply')
+    .mockImplementation(async () => {
+      sequence.push('apply');
+      return {
+        definitionId: work.work.definition_id,
+        versionId: work.work.definition_version_id,
+      };
+    });
+  const pin = vi
+    .spyOn(workDefinitionClient, 'pinVersion')
+    .mockImplementation(async () => {
+      sequence.push('pin');
+      throw new Error('stop test before navigation');
+    });
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(
+        <DefinitionPanel
+          currentWorkVersionId={work.work.definition_version_id}
+          editable
+          originConversationId={null}
+          selectedVersionId={work.work.definition_version_id}
+          version={definitionVersion}
+          workDefinitionId={work.work.definition_id}
+          workId={work.work.id}
+        />,
+      );
+    });
+    const applyButton = [...host.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('Apply new version'),
+    );
+    expect(applyButton).not.toBeUndefined();
+    await act(async () => {
+      applyButton!.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(sequence).toEqual(['validate', 'plan', 'apply', 'pin']);
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    validate.mockRestore();
+    plan.mockRestore();
+    apply.mockRestore();
+    pin.mockRestore();
   }
 });

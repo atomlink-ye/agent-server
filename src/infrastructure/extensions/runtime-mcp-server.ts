@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
-import { createDirectMemoryMcpHandler } from '../../entrypoints/mcp/direct-memory-mcp.js';
-import { RuntimeToolGrantService } from '../../application/extensions/runtime-tool-grant-service.js';
-import type { RuntimeToolRegistry } from '../../platform/runtime-tool-registry.js';
+import { createRuntimeMcpHttpHandler } from '../../adapters/mcp/runtime-mcp-http-handler.js';
+import type { AuthorizeRuntimeTool } from '../../application/runtime/authorize-runtime-tool.js';
+import type { RuntimeToolCatalog } from '../../application/extensions/runtime-tool-catalog.js';
 
 export interface RuntimeMcpEndpoint {
   readonly url: string;
@@ -10,19 +10,19 @@ export interface RuntimeMcpEndpoint {
 }
 
 export class RuntimeMcpServer {
-  readonly grants: RuntimeToolGrantService;
+  readonly authorize: AuthorizeRuntimeTool;
   #server: Server | null = null;
   #endpoint: RuntimeMcpEndpoint | null = null;
   #starting: Promise<RuntimeMcpEndpoint> | null = null;
 
   public constructor(
-    private readonly registry: RuntimeToolRegistry,
-    grants = new RuntimeToolGrantService(),
+    private readonly toolCatalog: RuntimeToolCatalog,
+    authorize: AuthorizeRuntimeTool,
     private readonly listenHost = '127.0.0.1',
     private readonly advertisedHost = '127.0.0.1',
     private readonly listenPort = 0,
   ) {
-    this.grants = grants;
+    this.authorize = authorize;
   }
 
   public endpoint(): RuntimeMcpEndpoint | null {
@@ -37,12 +37,11 @@ export class RuntimeMcpServer {
     if (this.#endpoint) return this.#endpoint;
     if (this.#starting) return this.#starting;
     this.#starting = (async () => {
-      await this.grants.initialize();
       return new Promise<RuntimeMcpEndpoint>((resolve, reject) => {
         const server = createServer(
-          createDirectMemoryMcpHandler({
-            grants: this.grants,
-            registry: this.registry,
+          createRuntimeMcpHttpHandler({
+            authorize: this.authorize,
+            toolCatalog: this.toolCatalog,
           }),
         );
         this.#server = server;

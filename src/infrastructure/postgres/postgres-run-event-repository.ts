@@ -4,10 +4,7 @@ import type {
   RunEvent,
   RunEventRepository,
   RunEventType,
-  RuntimeSessionBinding,
 } from '../../application/ports/run-events.js';
-
-const EXECUTION_PLANE = 'paseo';
 
 export class PostgresRunEventRepository implements RunEventRepository {
   public constructor(
@@ -18,65 +15,6 @@ export class PostgresRunEventRepository implements RunEventRepository {
       ): Promise<{ rows?: readonly R[]; rowCount?: number | null }>;
     },
   ) {}
-  async bind(input: RuntimeSessionBinding) {
-    await this.db.query(
-      `INSERT INTO runtime_session_bindings(run_id,provider_agent_id,created_at) VALUES($1,$2,$3) ON CONFLICT(run_id) DO UPDATE SET provider_agent_id=COALESCE(EXCLUDED.provider_agent_id,runtime_session_bindings.provider_agent_id)`,
-      [
-        input.runId,
-        input.sessionBinding?.externalSessionId ?? null,
-        input.createdAt,
-      ],
-    );
-  }
-  async getBinding(runId: string) {
-    const r = await this.db.query<any>(
-      'SELECT run_id,provider_agent_id,created_at FROM runtime_session_bindings WHERE run_id=$1',
-      [runId],
-    );
-    const x = r.rows?.[0];
-    return x
-      ? {
-          runId: x.run_id,
-          ...(x.provider_agent_id
-            ? {
-                sessionBinding: {
-                  plane: EXECUTION_PLANE,
-                  externalSessionId: x.provider_agent_id,
-                },
-              }
-            : {}),
-          createdAt: new Date(x.created_at).toISOString(),
-        }
-      : null;
-  }
-  async findLatestSessionBindingBySessionId(sessionId: string) {
-    const r = await this.db.query<{ provider_agent_id: string }>(
-      `SELECT b.provider_agent_id
-       FROM runtime_session_bindings b
-       JOIN runs r ON r.id = b.run_id
-       JOIN tasks t ON t.id = r.task_id
-       WHERE t.session_id = $1 AND b.provider_agent_id IS NOT NULL
-       ORDER BY b.created_at DESC, b.run_id DESC
-       LIMIT 1`,
-      [sessionId],
-    );
-    const externalSessionId = r.rows?.[0]?.provider_agent_id;
-    return externalSessionId
-      ? { plane: EXECUTION_PLANE, externalSessionId }
-      : null;
-  }
-  async getSessionBindingForRunInSession(runId: string, sessionId: string) {
-    const r = await this.db.query<{ provider_agent_id: string }>(
-      `SELECT b.provider_agent_id FROM runtime_session_bindings b
-       JOIN runs r ON r.id = b.run_id JOIN tasks t ON t.id = r.task_id
-       WHERE b.run_id = $1 AND t.session_id = $2 AND b.provider_agent_id IS NOT NULL LIMIT 1`,
-      [runId, sessionId],
-    );
-    const externalSessionId = r.rows?.[0]?.provider_agent_id;
-    return externalSessionId
-      ? { plane: EXECUTION_PLANE, externalSessionId }
-      : null;
-  }
   async append(
     runId: string,
     type: RunEventType,

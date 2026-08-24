@@ -4,43 +4,9 @@ import type {
   RunEvent,
   RunEventRepository,
   RunEventType,
-  RuntimeSessionBinding,
 } from '../../application/ports/run-events.js';
 export class InMemoryRunEventRepository implements RunEventRepository {
   readonly #events = new Map<string, RunEvent[]>();
-  readonly #bindings = new Map<string, RuntimeSessionBinding>();
-  async bind(input: RuntimeSessionBinding) {
-    const current = this.#bindings.get(input.runId);
-    const sessionBinding =
-      input.sessionBinding !== undefined
-        ? input.sessionBinding
-        : current?.sessionBinding;
-    this.#bindings.set(input.runId, {
-      ...current,
-      ...input,
-      ...(sessionBinding !== undefined ? { sessionBinding } : {}),
-    });
-  }
-  async findLatestSessionBindingBySessionId(sessionId: string) {
-    return (
-      [...this.#bindings.values()]
-        .filter(
-          (binding) =>
-            binding.sessionId === sessionId && binding.sessionBinding,
-        )
-        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
-        ?.sessionBinding ?? null
-    );
-  }
-  async getBinding(runId: string) {
-    return this.#bindings.get(runId) ?? null;
-  }
-  async getSessionBindingForRunInSession(runId: string, sessionId: string) {
-    const binding = this.#bindings.get(runId);
-    return binding?.sessionId === sessionId && binding.sessionBinding
-      ? binding.sessionBinding
-      : null;
-  }
   async append(
     runId: string,
     type: RunEventType,

@@ -7,8 +7,8 @@ import { PostgresInvokableRepository } from '../../src/infrastructure/postgres/p
 import { PostgresRunRepository } from '../../src/infrastructure/postgres/postgres-run-repository.js';
 import { PostgresTaskRepository } from '../../src/infrastructure/postgres/postgres-task-repository.js';
 import { PostgresWorkDefinitionSourceRepository } from '../../src/infrastructure/postgres/postgres-work-definition-source-repository.js';
-import { createWorkModule } from '../../src/modules/work/work-module.js';
-import type { ScriptedExecutionPlane } from '../../src/adapters/runtime/scripted-execution-plane.js';
+import { createWorkModule } from '../../src/composition/create-work-capabilities.js';
+import type { ScriptedExecutionPlane } from './scripted-execution-plane.js';
 
 import type { HarnessDatabase } from './database.js';
 import type { HarnessOwner } from './seed/index.js';
@@ -132,7 +132,7 @@ export function createHarnessProductWork(input: {
         return { taskId: receipt.taskId, reused: receipt.reused };
       },
     },
-    runtimeCapabilities: runtime,
+    runtimeCapabilities: runtime.capabilities(),
     executionFacts: new PostgresExecutionFactQuery(db as any),
     conversations,
   } as any);

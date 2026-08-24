@@ -1,4 +1,4 @@
-import type { AccessContext } from '../../platform/access-context.js';
+import type { AccessContext } from '../../domain/access-context.js';
 import type { Work } from '../../domain/work/work.js';
 import { WorkNotFoundError } from '../../domain/work/work.js';
 import type { WorkRun } from '../../domain/work/work-run.js';

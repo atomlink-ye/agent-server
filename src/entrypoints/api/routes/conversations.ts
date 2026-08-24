@@ -10,12 +10,10 @@ import { EnsureCoworkerConversation } from '../../../application/chat/ensure-cow
 import { postConversationMessage } from '../../../application/chat/post-conversation-message.js';
 import { enqueueChatDispatchForMessage } from '../../../application/chat/enqueue-chat-dispatch.js';
 import { ServiceAccountAuthenticator } from '../../../application/control-plane/service-account-authenticator.js';
-import {
-  getAuthenticatedAccessContext,
-  requireServiceAccountAccess,
-} from '../authentication.js';
+import { getAuthenticatedAccessContext } from '../access-context.js';
+import { requireServiceAccountAccess } from '../authentication.js';
 import { readBoundedJson } from '../read-bounded-json.js';
-import type { ApiEnvironment } from '../../../platform/http-types.js';
+import type { ApiEnvironment } from '../http-types.js';
 import type { AppConfig } from '../../../shared/config.js';
 import { HttpError } from '../../../contracts/http.js';
 

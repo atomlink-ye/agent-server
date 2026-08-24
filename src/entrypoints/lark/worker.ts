@@ -167,14 +167,14 @@ export async function runLarkEntrypoint(
     service: config.serviceName,
     minimumLevel: config.logLevel,
   });
-  const createService =
+  const createApplication =
     options.createService ??
     (async (serviceConfig: AppConfig, serviceLogger: Logger) =>
-      (await import('../../bootstrap.js')).createService(
+      (await import('../../bootstrap.js')).createApplication(
         serviceConfig,
         serviceLogger,
       ));
-  const service = await createService(config, logger);
+  const service = await createApplication(config, logger);
   const process = options.process ?? globalThis.process;
 
   await new Promise<void>((resolve, reject) => {

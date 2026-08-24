@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "rule": "architecture.entrypoints-imports",
+      "path": "src/entrypoints/cli/agentctl.ts",
+      "line": 12,
+      "symbol": "entrypoints->infrastructure:../../infrastructure/filesystem/local-agent-project-loader.js",
+      "occurrence": 1,
+      "key": "architecture.entrypoints-imports|src/entrypoints/cli/agentctl.ts|entrypoints->infrastructure:../../infrastructure/filesystem/local-agent-project-loader.js|000001",
+      "why": "Entrypoints still construct infrastructure directly instead of receiving composition.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "architecture.entrypoints-imports",
+      "path": "src/entrypoints/cli/agentctl.ts",
+      "line": 24,
+      "symbol": "entrypoints->infrastructure:../../infrastructure/filesystem/local-agent-project-loader.js",
+      "occurrence": 2,
+      "key": "architecture.entrypoints-imports|src/entrypoints/cli/agentctl.ts|entrypoints->infrastructure:../../infrastructure/filesystem/local-agent-project-loader.js|000002",
+      "why": "Entrypoints still construct infrastructure directly instead of receiving composition.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "architecture.entrypoints-imports",
+      "path": "src/entrypoints/cli/agentctl.ts",
+      "line": 13,
+      "symbol": "entrypoints->infrastructure:../../infrastructure/filesystem/local-agent-project-lock.js",
+      "occurrence": 1,
+      "key": "architecture.entrypoints-imports|src/entrypoints/cli/agentctl.ts|entrypoints->infrastructure:../../infrastructure/filesystem/local-agent-project-lock.js|000001",
+      "why": "Entrypoints still construct infrastructure directly instead of receiving composition.",
+      "phase": "Phase 5 — composition graph"
+    },
+    {
+      "rule": "architecture.entrypoints-imports",
+      "path": "src/entrypoints/cli/agentctl.ts",
+      "line": 14,
+      "symbol": "entrypoints->infrastructure:../../infrastructure/filesystem/local-project-skill-registrar.js",
+      "occurrence": 1,
+      "key": "architecture.entrypoints-imports|src/entrypoints/cli/agentctl.ts|entrypoints->infrastructure:../../infrastructure/filesystem/local-project-skill-registrar.js|000001",
+      "why": "Entrypoints still construct infrastructure directly instead of receiving composition.",
+      "phase": "Phase 5 — composition graph"
+    }
+  ]
+}

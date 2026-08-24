@@ -1,7 +1,7 @@
 import type { Hono } from 'hono';
 
 import { ServiceAccountAuthenticator } from '../../../application/control-plane/service-account-authenticator.js';
-import type { ExecutionRuntimeService } from '../../../application/runtime/execution-plane-runtime-facade.js';
+import type { RuntimeExecutionProvider } from '../../../application/ports/runtime-execution-provider.js';
 import { IdempotencyConflictError } from '../../../application/tasks/admit-root-task.js';
 import type { GetRun } from '../../../application/runs/get-run.js';
 import type { SubmitRun } from '../../../application/runs/submit-run.js';
@@ -14,16 +14,14 @@ import {
 } from '../../../contracts/runs.js';
 import type { Run, RunUsage } from '../../../domain/runs/run.js';
 import type { AppConfig } from '../../../shared/config.js';
-import {
-  getAuthenticatedAccessContext,
-  requireServiceAccountAccess,
-} from '../authentication.js';
-import type { ApiEnvironment } from '../../../platform/http-types.js';
+import { getAuthenticatedAccessContext } from '../access-context.js';
+import { requireServiceAccountAccess } from '../authentication.js';
+import type { ApiEnvironment } from '../http-types.js';
 import type { RunEventRepository } from '../../../application/ports/run-events.js';
 
 interface RunRouteDependencies {
   readonly config: AppConfig;
-  readonly runtime: ExecutionRuntimeService;
+  readonly runtime: Pick<RuntimeExecutionProvider, 'health'>;
   readonly submitRun: SubmitRun;
   readonly getRun: GetRun;
   readonly events?: RunEventRepository;
@@ -66,7 +64,7 @@ export function registerRunRoutes(
         : null;
 
       if (!submission) {
-        const health = await dependencies.runtime.planeHealth();
+        const health = await dependencies.runtime.health();
         if (!health.ready) {
           throw new HttpError(
             503,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { ExecutionObservation } from '../../application/ports/execution-plane.js';
+import type { ExecutionObservation } from '../../application/ports/runtime-execution-session.js';
 import type { PaseoClientPort } from './paseo-client-port.js';
 import { PaseoGateway } from './paseo-gateway.js';
 import { PaseoTurnRunner } from './paseo-turn-runner.js';

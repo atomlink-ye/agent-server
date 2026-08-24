@@ -12,7 +12,7 @@ import {
   ReadAgentHomeEntry,
   WriteAgentHomeEntry,
 } from '../../src/application/agents/agent-home.js';
-import type { AccessContext } from '../../src/platform/access-context.js';
+import type { AccessContext } from '../../src/domain/access-context.js';
 import { AgentHomeNamespaceReadOnlyError } from '../../src/domain/agents/agent-home.js';
 
 const tenantId = 'tenant_test';

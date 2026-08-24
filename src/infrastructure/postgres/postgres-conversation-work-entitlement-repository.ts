@@ -1,4 +1,4 @@
-import { SERVICE_ACCOUNT_PRINCIPAL_TYPE } from '../../platform/access-context.js';
+import { SERVICE_ACCOUNT_PRINCIPAL_TYPE } from '../../domain/access-context.js';
 import type { ConversationWorkEntitlement } from '../../domain/chat/conversation-work-entitlement.js';
 import type { ConversationWorkEntitlementRepository } from '../../application/ports/conversation-work-entitlement-repository.js';
 

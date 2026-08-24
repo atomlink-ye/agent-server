@@ -1,0 +1,183 @@
+/* Work detail panes and trace context. */
+.work-detail-header__summary {
+  color: #706c74;
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 12px 0 0;
+  max-width: 620px;
+}
+.work-detail-header--stacked {
+  display: block;
+}
+.work-tabs {
+  border-bottom: 1px solid #d9d5ce;
+  display: flex;
+  gap: 26px;
+  margin-top: 26px;
+}
+.work-tabs a {
+  color: #706c74;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 0 1px 12px;
+  position: relative;
+  text-decoration: none;
+}
+.work-tabs a[aria-current='page'] {
+  color: #292726;
+}
+.work-tabs a[aria-current='page']::after {
+  background: #404a78;
+  bottom: -1px;
+  content: '';
+  height: 2px;
+  left: 0;
+  position: absolute;
+  right: 0;
+}
+.work-overview,
+.work-runs,
+.work-capability-unavailable,
+.work-detail-state {
+  margin-top: 28px;
+}
+.work-overview__summary {
+  align-items: start;
+  background: #fcfbf8;
+  border: 1px solid #d9d5ce;
+  border-radius: 8px;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: max-content minmax(0, 1fr);
+  padding: 18px 20px;
+}
+.work-overview__summary h2,
+.work-section-heading h2,
+.work-capability-unavailable h2,
+.work-detail-state h2 {
+  color: #292726;
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+.work-section-heading {
+  max-width: 760px;
+}
+.work-section-heading > p:last-child,
+.work-capability-unavailable > p:last-child,
+.work-detail-state > p:last-child {
+  color: #706c74;
+  font-size: 12px;
+  line-height: 1.55;
+  margin: 10px 0 0;
+}
+.work-live-note {
+  color: #4a7366;
+  font-size: 10px;
+  margin: 8px 0 0;
+}
+
+.work-run-list {
+  border-top: 1px solid #d9d5ce;
+  display: grid;
+  gap: 0;
+  list-style: none;
+  margin: 24px 0 0;
+  padding: 0;
+}
+.work-run-list li {
+  align-items: center;
+  border-bottom: 1px solid #e4e1db;
+  display: grid;
+  gap: 14px;
+  grid-template-columns:
+    minmax(140px, 0.7fr) minmax(220px, 1.2fr) minmax(100px, 0.5fr)
+    max-content max-content;
+  min-height: 78px;
+  padding: 14px 4px;
+}
+.work-run-list li[data-selected='true'] {
+  background: color-mix(in srgb, #eef1f8 50%, transparent);
+}
+.work-run-list__identity,
+.work-run-list__definition {
+  display: grid;
+  gap: 5px;
+}
+.work-run-list__identity strong,
+.work-run-list__definition strong {
+  font-size: 12px;
+  font-weight: 650;
+}
+.work-run-list__identity time,
+.work-run-list__definition span,
+.work-run-list__quiet {
+  color: #706c74;
+  font-size: 10px;
+}
+.work-run-list a {
+  color: #404a78;
+  font-size: 11px;
+  font-weight: 650;
+  text-underline-offset: 3px;
+}
+.work-capability-unavailable,
+.work-detail-state {
+  background: #fcfbf8;
+  border: 1px dashed #cfcac2;
+  border-radius: 8px;
+  max-width: 760px;
+  padding: 28px 30px;
+}
+.work-detail-loading {
+  color: #706c74;
+}
+.work-run-list code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 9px;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 820px) {
+  .work-run-list li {
+    gap: 8px;
+    grid-template-columns: 1fr;
+    padding: 18px 4px;
+  }
+}
+@media (max-width: 719px) {
+  .work-tabs {
+    gap: 18px;
+    overflow-x: auto;
+  }
+}
+/* Role cards on Overview (O-1 S3) */
+.work-role-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+}
+.work-role-card {
+  background: transparent;
+  border: 1px solid #d9d5ce;
+  border-radius: 6px;
+  cursor: pointer;
+  display: grid;
+  font: inherit;
+  gap: 3px;
+  min-width: 160px;
+  padding: 10px;
+  text-align: left;
+}
+.work-role-card:hover {
+  background: #f9f8f5;
+}
+.work-role-card strong {
+  font-size: 11px;
+  line-height: 1.35;
+}
+.work-role-card span {
+  color: #706c74;
+  font-size: 9px;
+}

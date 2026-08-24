@@ -177,8 +177,8 @@ export async function createLarkTestService(
   const dispatcherControl: { dispatcher?: PostgresRunDispatcher } = {};
   const sessionRepositoryControl: { repository?: any } = {};
   const memoryReviewControl: {
-    review?: import('../../src/application/memory/review-memory-proposal.js').ReviewMemoryProposal;
-    managedMemory?: import('../../src/application/memory/managed-memory.js').ManagedMemory;
+    review?: import('../../src/application/ports/memory-review-api.js').MemoryReviewApi['review'];
+    managedMemory?: import('../../src/application/ports/memory-review-api.js').MemoryReviewApi['managedMemory'];
   } = {};
   const deliveries: Array<
     import('../../src/application/ports/lark-delivery.js').LarkDeliveryInput

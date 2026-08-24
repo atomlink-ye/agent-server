@@ -10,8 +10,7 @@ import {
 import { createTeamMemberRun } from '../../domain/teams/team-member-run.js';
 import { createTeamRun, type TeamRun } from '../../domain/teams/team-run.js';
 import { TeamExecutionError } from '../ports/team-execution-repository.js';
-import { RuntimeTimedOutError } from '../runtime/execution-runtime-errors.js';
-import type { ExecutionRuntimeService } from '../runtime/execution-plane-runtime-facade.js';
+import { RuntimeTurnExecutionError } from '../runtime/execute-runtime-turn.js';
 import type { InvokableRepository } from '../ports/invokable-repository.js';
 import {
   RunCompletionConflictError,
@@ -28,14 +27,109 @@ import { CompleteRun } from './complete-run.js';
 import { ExecuteRun } from './execute-run.js';
 import { RUNTIME_RECOVERY_INSTRUCTION } from './run-prompt-context.js';
 import { FakeAgentRuntime } from '../../../tests/fixtures/fake-agent-runtime.js';
+import { makeRuntimeSession } from '../../../tests/fixtures/runtime-session.js';
+import { createDesiredRuntimeSystemPrompt } from '../../domain/runtime/desired-runtime-system-prompt.js';
+import { createRuntimeSessionSpec } from '../../domain/runtime/runtime-session-spec.js';
+import { runtimeSpecRevision } from '../../domain/runtime/runtime-session.js';
+import type { EnsureDesiredRuntimeSpec } from '../ports/ensure-desired-runtime-spec.js';
+
+function testRuntimeSessions() {
+  return {
+    findByScope: vi.fn(
+      async (
+        _owner: unknown,
+        scope: { readonly kind: string; readonly id: string },
+      ) => ({
+        id: `runtime:${scope.kind}:${scope.id}`,
+        owner: {
+          tenantId: 'tenant-1',
+          workspaceId: 'workspace-1',
+          principalType: 'service_account',
+          principalId: 'principal-1',
+        },
+        scope,
+        desiredSpecRevision: 1,
+        currentGenerationId: null,
+        status: 'ready',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        closedAt: null,
+      }),
+    ),
+  } as never;
+}
+
+function testDesiredSpecOwner(runtimeSessions: {
+  findByScope: (owner: unknown, scope: unknown) => Promise<any>;
+}): EnsureDesiredRuntimeSpec {
+  return {
+    execute: async (input) => {
+      const session = await runtimeSessions.findByScope(
+        input.owner,
+        input.scope,
+      );
+      if (!session) throw new Error('test runtime session missing');
+      return {
+        session,
+        spec: createRuntimeSessionSpec({
+          runtimeSessionId: session.id,
+          revision: runtimeSpecRevision(1),
+          workspaceId: session.owner.workspaceId,
+          agentVersionId: input.agentVersionId,
+          environmentVersionId: input.environmentVersionId,
+          resolvedSkills: input.resolvedSkills,
+          toolRefs: input.toolRefs,
+          provider: input.configuration.provider,
+          model: input.configuration.model,
+          cwd: input.configuration.cwd,
+          systemPromptDigest: input.configuration.desiredSystemPrompt.digest,
+          skillSetDigest: 'skills',
+          toolCatalogDigest: 'catalog',
+          extensionSetDigest: 'extensions',
+          contextEpoch: input.configuration.contextEpoch,
+          createdAt: '2026-07-23T00:00:00.000Z',
+        }),
+      };
+    },
+  };
+}
+
+function testEnvironmentReadApi() {
+  return {
+    findVersion: vi.fn(async (): Promise<EnvironmentVersion> => ({
+      id: 'environment-version-1',
+      definitionId: 'environment-definition-1',
+      tenantId: 'tenant-1',
+      workspaceId: 'workspace-1',
+      principalType: 'user',
+      principalId: 'user-1',
+      status: 'published',
+      displayName: 'test',
+      canonicalJson: '{}',
+      fingerprint: 'sha256:test',
+      package: {
+        apiVersion: 'agent-server/v1alpha1',
+        kind: 'ManagedEnvironment',
+        metadata: { name: 'test' },
+        spec: {
+          adapter: 'paseo',
+          provider: 'opencode',
+          modelPolicyRef: 'free-only',
+          runtimeCellPolicy: 'per_runtime_session',
+        },
+      },
+      createdAt: '2026-07-23T00:00:00.000Z',
+      updatedAt: '2026-07-23T00:00:00.000Z',
+      publishedAt: '2026-07-23T00:00:00.000Z',
+    })),
+  };
+}
 import { collaborationToolRefsForRole } from '../../domain/collaboration/canonical-collaboration-tools.js';
 import type { CreateMemoryProposal } from '../memory/create-memory-proposal.js';
 import {
   createRuntimeExecutionReceipt,
   RunCompletionPersistenceError,
 } from './runtime-execution-receipt.js';
-
-type TestExecutionRuntime = ExecutionRuntimeService;
 
 describe('ExecuteRun', () => {
   it('fails a terminal run when the runtime rejects execution', async () => {
@@ -69,23 +163,10 @@ describe('ExecuteRun', () => {
   it('allows a first product-session runtime session to execute', async () => {
     const claim = createClaim();
     const task = { ...createTask(), sessionId: 'product-session-1' } as Task;
-    const runtimeSession = {
+    const runtimeSession = makeRuntimeSession({
       id: 'runtime-product-1',
-      scopeKind: 'product_session',
-      scopeId: 'product-session-1',
-      productSessionId: 'product-session-1',
-      taskId: null,
-      launchSnapshotId: 'launch-1',
-      workspaceId: task.workspaceId,
-      agentVersionId: task.invokableVersionId,
-      environmentVersionId: 'environment-version-1',
-      resolvedSkills: [],
-      toolRefs: [],
-      workspaceBinding: null,
-      sessionBinding: null,
-      createdAt: task.createdAt,
-      updatedAt: task.updatedAt,
-    } as const;
+      scope: { kind: 'product_session', id: 'product-session-1' },
+    });
     const resolver = {
       resolve: vi.fn(async () => ({
         agentVersionId: task.invokableVersionId,
@@ -140,46 +221,41 @@ describe('ExecuteRun', () => {
         publishedAt: task.createdAt,
       })),
     };
-    const runtimeSessions = {
-      findByProductSession: vi.fn(
-        async (): Promise<typeof runtimeSession | null> => null,
-      ),
-      createOrGetForProductSession: vi.fn(async () => runtimeSession),
-    };
     const completeRunExecute = vi.fn(async ({ run }: { run: Run }) => run);
-    const executeRun = new ExecuteRun(
-      { execute: completeRunExecute } as never,
-      {
+    const executeRun = new ExecuteRun({
+      completeRun: { execute: completeRunExecute } as never,
+      tasks: {
         findById: vi.fn(async () => task),
         save: vi.fn(async () => undefined),
       } as never,
-      {} as never,
-      {} as never,
-      createRuntime(),
-      { log: vi.fn() },
-      () => new Date('2026-07-23T00:00:00.000Z'),
+      definitions: {} as never,
+      executeTeamTask: {} as never,
+      runtimeTurns: createRuntime(),
+      runtimeProvider: createRuntime(),
+      logger: { log: vi.fn() },
+      now: () => new Date('2026-07-23T00:00:00.000Z'),
       resolver,
-      {
+      events: {
         append: vi.fn(async () => undefined),
         bind: vi.fn(async () => undefined),
       } as never,
-      undefined,
-      undefined,
-      undefined,
-      runtimeSessions as never,
+      runtimeSessions: {
+        findByScope: vi.fn(async () => runtimeSession),
+      } as never,
+      ensureDesiredRuntimeSpec: testDesiredSpecOwner({
+        findByScope: vi.fn(async () => runtimeSession),
+      }),
       sessions,
       environments,
-    );
+    });
 
     await expect(executeRun.execute(claim)).resolves.toBeDefined();
-    expect(runtimeSessions.createOrGetForProductSession).toHaveBeenCalled();
     expect(completeRunExecute).toHaveBeenCalledWith(
       expect.objectContaining({
         run: expect.objectContaining({ status: 'succeeded' }),
       }),
     );
 
-    runtimeSessions.findByProductSession.mockResolvedValue(runtimeSession);
     await expect(executeRun.execute(claim)).resolves.toBeDefined();
     expect(completeRunExecute).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -197,8 +273,8 @@ describe('ExecuteRun', () => {
       bind: vi.fn(async () => undefined),
     };
     const runtime = createRuntime();
-    vi.mocked(runtime.executeTurn).mockImplementation(async (_input, sink) => {
-      await sink?.emit({
+    vi.mocked(runtime.execute).mockImplementation(async (input) => {
+      await input.observer?.emit({
         kind: 'tool_updated',
         activityId: 'activity-shell-1',
         category: 'shell',
@@ -211,33 +287,26 @@ describe('ExecuteRun', () => {
         provider: 'test-provider',
         model: 'test-model',
         text: 'safe result',
-        workspaceBinding: {
-          plane: 'test',
-          externalWorkspaceId: 'workspace-test',
-        },
-        sessionBinding: {
-          plane: 'test',
-          externalSessionId: 'agent-test',
-        },
       };
     });
     const completeRun = {
       execute: vi.fn(async ({ run }: { run: Run }) => run),
     } as unknown as CompleteRun;
-    const executeRun = new ExecuteRun(
+    const executeRun = new ExecuteRun({
       completeRun,
-      {
+      tasks: {
         findById: vi.fn(async () => task),
         save: vi.fn(async () => undefined),
       } as never,
-      {} as InvokableRepository,
-      {} as never,
-      runtime,
-      { log: vi.fn() },
-      () => new Date('2026-07-23T00:00:00.000Z'),
-      undefined,
-      events as never,
-    );
+      definitions: {} as InvokableRepository,
+      executeTeamTask: {} as never,
+      runtimeTurns: runtime,
+      runtimeProvider: runtime,
+      runtimeSessions: testRuntimeSessions(),
+      logger: { log: vi.fn() },
+      now: () => new Date('2026-07-23T00:00:00.000Z'),
+      events: events as never,
+    });
 
     await executeRun.execute(claim);
 
@@ -247,7 +316,7 @@ describe('ExecuteRun', () => {
     expect(outputCall?.[2]).not.toHaveProperty('detail_kind');
   });
 
-  it('reuses the prior session provider Agent with its canonical bootstrap and persists the returned Agent id', async () => {
+  it('executes a product-session RuntimeTurn with the canonical desired prompt', async () => {
     const claim = createClaim();
     const task = {
       ...createTask('agent', 'managed-version-1'),
@@ -302,75 +371,44 @@ describe('ExecuteRun', () => {
     const events = {
       bind: vi.fn(async () => undefined),
       append: vi.fn(async () => undefined),
-      findLatestSessionBindingBySessionId: vi.fn(async () => ({
-        plane: 'paseo',
-        externalSessionId: 'agent-prior',
-      })),
     };
-    const runtime = createRuntimeWithCandidates('agent-prior');
-    const extensionBinding = {
-      mcpServers: [
-        {
-          name: 'agent-server',
-          url: 'http://127.0.0.1:39117/mcp',
-          headers: { Authorization: 'Bearer grant-token' },
-        },
-      ],
-      endpointEpoch: 'epoch-1',
-      digest: 'sha256:extensions',
-      grantId: 'grant-1',
-    };
-    const binder = vi.fn(async () => extensionBinding);
+    const runtime = createRuntimeWithCandidates();
     const batch = vi.fn(async () => undefined);
-    const executeRun = new ExecuteRun(
-      { execute: vi.fn(async ({ run }: { run: Run }) => run) } as never,
-      { findById: vi.fn(async () => task), save: vi.fn() } as never,
-      {} as never,
-      {} as never,
-      runtime,
-      { log: vi.fn() },
-      () => new Date(),
+    const executeRun = new ExecuteRun({
+      completeRun: {
+        execute: vi.fn(async ({ run }: { run: Run }) => run),
+      } as never,
+      tasks: { findById: vi.fn(async () => task), save: vi.fn() } as never,
+      definitions: {} as never,
+      executeTeamTask: {} as never,
+      runtimeTurns: runtime,
+      runtimeProvider: runtime,
+      logger: { log: vi.fn() },
+      now: () => new Date(),
       resolver,
-      events as never,
-      { readVerified: vi.fn(async () => 'pinned memory') } as never,
-      { executeBatch: batch } as never,
-      { bind: binder } as never,
-    );
+      events: events as never,
+      fileStore: { readVerified: vi.fn(async () => 'pinned memory') } as never,
+      createMemoryProposal: { executeBatch: batch } as never,
+      runtimeSessions: testRuntimeSessions(),
+    });
 
     const out = await executeRun.execute(claim);
 
-    expect(runtime.executeTurn).toHaveBeenCalledWith(
+    expect(runtime.execute).toHaveBeenCalledWith(
       expect.objectContaining({
-        compatibilitySessionBinding: {
-          plane: 'paseo',
-          externalSessionId: 'agent-prior',
-        },
+        runtimeSessionId: 'runtime:product_session:session-1',
         prompt:
           'Pinned verified MEMORY.md:\npinned memory\n\nCurrent Task input:\nprivate prompt',
-        systemPrompt: expect.stringContaining('managed instructions'),
-        extensions: extensionBinding,
-        proposalLimit: 1,
+        desiredSystemPrompt: expect.objectContaining({
+          text: expect.stringContaining('managed instructions'),
+          digest: expect.any(String),
+        }),
       }),
-      expect.objectContaining({ emit: expect.any(Function) }),
     );
     expect(catalogResolve).toHaveBeenCalledWith('custom/skill');
-    expect(binder).toHaveBeenCalledWith(
-      expect.objectContaining({
-        skills: [expect.objectContaining({ ref: 'custom/skill' })],
-      }),
-    );
-    expect(batch).toHaveBeenCalledTimes(1);
-    expect(events.findLatestSessionBindingBySessionId).toHaveBeenCalledTimes(1);
-    expect(events.bind).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        sessionBinding: {
-          plane: 'test',
-          externalSessionId: 'agent-prior',
-        },
-      }),
-    );
+    expect(batch).not.toHaveBeenCalled();
   });
-  it('recovers an agentic Lead turn with its member-scoped current-Run grant', async () => {
+  it('executes an agentic Lead RuntimeTurn with its member-scoped RuntimeSession', async () => {
     const claim = createClaim();
     const task = createChildTask({
       id: claim.taskId,
@@ -420,30 +458,7 @@ describe('ExecuteRun', () => {
       principalId: task.principalId,
       now: () => new Date('2026-07-23T00:00:00.000Z'),
     });
-    const getTeamMemberGrant = vi.fn(() => ({
-      grantId: 'grant-1',
-      activeTurn: null,
-      allowedTools: [],
-      catalogTools: collaborationToolRefsForRole('lead'),
-    }));
-    const refreshForTeamMember = vi.fn(() => ({
-      grantId: 'grant-1',
-      activeTurn: {
-        taskId: task.id,
-        runId: claim.run.id,
-        contextEpoch: 'epoch-1',
-      },
-      allowedTools: [],
-      catalogTools: collaborationToolRefsForRole('lead'),
-    }));
-    const closeTeamMemberTurn = vi.fn(() => ({
-      grantId: 'grant-1',
-      activeTurn: null,
-      allowedTools: [],
-      catalogTools: collaborationToolRefsForRole('lead'),
-    }));
-    const activeToolCalls = vi.fn(() => 0);
-    const runtime = createRuntimeWithCandidates('agent-prior');
+    const runtime = createRuntimeWithCandidates();
     const completeRun = {
       execute: vi.fn(async ({ run }: { run: Run }) => run),
     } as unknown as CompleteRun;
@@ -457,96 +472,68 @@ describe('ExecuteRun', () => {
       updateMemberRunStatus: vi.fn(async () => lead),
       updateMemberRuntimeSession: vi.fn(async () => lead),
     };
-    const executeRun = new ExecuteRun(
+    const executeRun = new ExecuteRun({
       completeRun,
-      {
+      tasks: {
         findById: vi.fn(async () => task),
         findByRootTaskIdForOwner: vi.fn(async () => [
           { task, latestRun: claim.run },
         ]),
         save: vi.fn(async () => undefined),
       } as never,
-      {} as never,
-      {} as never,
-      runtime,
-      { log: vi.fn() },
-      () => new Date('2026-07-23T00:00:00.000Z'),
-      undefined,
-      {
+      definitions: {} as never,
+      executeTeamTask: {} as never,
+      runtimeTurns: runtime,
+      runtimeProvider: runtime,
+      logger: { log: vi.fn() },
+      now: () => new Date('2026-07-23T00:00:00.000Z'),
+      events: {
         append: vi.fn(async () => undefined),
         bind: vi.fn(async () => undefined),
       } as never,
-      undefined,
-      undefined,
-      {
-        bind: vi.fn(),
-        getTeamMemberGrant,
-        refreshForTeamMember,
-        closeTeamMemberTurn,
-        activeToolCalls,
-        revoke: vi.fn(),
+      runtimeSessions: {
+        findByScope: vi.fn(async () =>
+          makeRuntimeSession({
+            id: 'runtime-lead-1',
+            scope: { kind: 'team_member', id: lead.id },
+          }),
+        ),
       } as never,
-      {
-        findByTeamMember: vi.fn(async () => ({
-          id: 'runtime-lead-1',
-          scopeKind: 'team_member',
-          scopeId: lead.id,
-          productSessionId: null,
-          taskId: task.id,
-          launchSnapshotId: 'launch-1',
-          workspaceId: task.workspaceId,
-          agentVersionId: task.invokableVersionId,
-          environmentVersionId: team.environmentVersionId,
-          resolvedSkills: [],
-          toolRefs: collaborationToolRefsForRole('lead'),
-          workspaceBinding: {
-            plane: 'paseo',
-            externalWorkspaceId: 'workspace-provider-1',
-          },
-          sessionBinding: {
-            plane: 'paseo',
-            externalSessionId: 'agent-prior',
-          },
-          createdAt: task.createdAt,
-          updatedAt: task.updatedAt,
-        })),
-      } as never,
-      undefined,
-      undefined,
-      undefined,
-      collaborativeExecutions as never,
-      {
+      ensureDesiredRuntimeSpec: testDesiredSpecOwner({
+        findByScope: vi.fn(async () =>
+          makeRuntimeSession({
+            id: 'runtime-lead-1',
+            scope: { kind: 'team_member', id: lead.id },
+          }),
+        ),
+      }),
+      environments: testEnvironmentReadApi(),
+      collaborativeExecutions: collaborativeExecutions as never,
+      runs: {
         findByIdForOwner: vi.fn(async () => ({
           ...claim.run,
           id: 'prior-run-id',
           status: 'succeeded',
         })),
       } as never,
-    );
+    });
 
     const out = await executeRun.execute(claim);
 
-    expect(getTeamMemberGrant).toHaveBeenCalledWith({
-      teamMemberRunId: lead.id,
-      scopeId: lead.id,
-    });
-    expect(refreshForTeamMember).toHaveBeenCalledWith(
-      expect.objectContaining({
-        teamMemberRunId: lead.id,
-        scopeId: lead.id,
-        taskId: task.id,
-        runId: claim.run.id,
-      }),
-    );
-    expect(runtime.executeTurn).toHaveBeenCalledWith(
+    expect(runtime.execute).toHaveBeenCalledWith(
       expect.objectContaining({
         runtimeSessionId: 'runtime-lead-1',
+        source: {
+          kind: 'team_member',
+          teamMemberRunId: lead.id,
+          taskId: task.id,
+          runId: claim.run.id,
+        },
       }),
-      expect.anything(),
     );
-    expect(
-      vi.mocked(runtime.executeTurn).mock.calls[0]?.[0],
-    ).not.toHaveProperty('compatibilitySessionBinding');
+    expect(vi.mocked(runtime.execute).mock.calls[0]?.[0]).toHaveProperty(
+      'desiredSystemPrompt',
+    );
   });
   it('ignores a stale Lead callback but preserves current-Lead no-progress and revision fences', async () => {
     const now = () => new Date('2026-07-23T00:00:00.000Z');
@@ -996,19 +983,21 @@ describe('ExecuteRun', () => {
       },
       'managed-version-1',
     );
-    expect(runtime.executeTurn).toHaveBeenCalledTimes(1);
-    expect(runtime.executeTurn).toHaveBeenCalledWith(
-      {
-        runId: claim.run.id,
+    expect(runtime.execute).toHaveBeenCalledTimes(1);
+    expect(runtime.execute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runtimeSessionId: 'runtime:run:run-1',
+        source: { kind: 'run', runId: claim.run.id },
         prompt: 'private prompt',
-        systemPrompt:
-          'Runtime contract: execute the supplied task input using the published agent instructions. Do not infer or access other session history.\n\nPublished AgentVersion instructions:\nmanaged instructions',
+        desiredSystemPrompt: expect.objectContaining({
+          text: 'Runtime contract: execute the supplied task input using the published agent instructions. Do not infer or access other session history.\n\nPublished AgentVersion instructions:\nmanaged instructions',
+          digest: expect.any(String),
+        }),
         recoveryPrompt: `private prompt\n\n${RUNTIME_RECOVERY_INSTRUCTION}`,
-      },
-      undefined,
+      }),
     );
     const executionRequest = JSON.stringify(
-      vi.mocked(runtime.executeTurn).mock.calls[0]?.[0],
+      vi.mocked(runtime.execute).mock.calls[0]?.[0],
     ).replace(RUNTIME_RECOVERY_INSTRUCTION, '');
     expect(executionRequest).not.toMatch(
       /package|modelPolicyRef|schema|template|completion|tools/,
@@ -1072,7 +1061,7 @@ describe('ExecuteRun', () => {
     const completed = await executeRun.execute(claim);
 
     expect(completed.status).toBe('succeeded');
-    expect(runtime.executeTurn).toHaveBeenCalledTimes(1);
+    expect(runtime.execute).toHaveBeenCalledTimes(1);
     expect(batch).not.toHaveBeenCalled();
     expect(completeRun.execute).toHaveBeenCalledTimes(1);
   });
@@ -1115,7 +1104,7 @@ describe('ExecuteRun', () => {
 
     expect(completed.status).toBe('failed');
     expect(completed.error?.code).toBe('runtime_execution_failed');
-    expect(runtime.executeTurn).not.toHaveBeenCalled();
+    expect(runtime.execute).not.toHaveBeenCalled();
     expect(completeRun.execute).toHaveBeenCalledTimes(1);
   });
 
@@ -1224,19 +1213,24 @@ describe('ExecuteRun', () => {
       findMembersByTeamRunId: vi.fn(async () => [member]),
       findAttemptsByTeamRunId: vi.fn(async () => []),
       updateMemberRunStatus: vi.fn(async () => member),
+      updateMemberRuntimeSession: vi.fn(async () => member),
     };
-    const executeRun = new ExecuteRun(
+    const executeRun = new ExecuteRun({
       completeRun,
-      {
+      tasks: {
         findById: vi.fn(async () => task),
         save: vi.fn(async () => undefined),
       } as never,
-      {} as never,
-      {} as never,
-      createRuntime(),
-      { log: vi.fn() },
-      () => new Date('2026-07-23T00:00:00.000Z'),
-      {
+      definitions: {} as never,
+      executeTeamTask: {} as never,
+      runtimeTurns: createRuntime(),
+      runtimeProvider: createRuntime(),
+      runtimeSessions: testRuntimeSessions(),
+      ensureDesiredRuntimeSpec: testDesiredSpecOwner(testRuntimeSessions()),
+      environments: testEnvironmentReadApi(),
+      logger: { log: vi.fn() },
+      now: () => new Date('2026-07-23T00:00:00.000Z'),
+      resolver: {
         resolvePublished: vi.fn(async () => ({
           instructions: 'Complete the assigned Team work.',
           skills: [],
@@ -1244,16 +1238,8 @@ describe('ExecuteRun', () => {
           toolRefs: [],
         })),
       } as never,
-      undefined,
-      undefined,
-      undefined,
-      { bind: vi.fn(async () => undefined) } as never,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      collaborativeExecutions as never,
-    );
+      collaborativeExecutions: collaborativeExecutions as never,
+    });
 
     await expect(executeRun.execute(claim)).rejects.toBe(conflict);
     expect(completeRun.execute).toHaveBeenCalledTimes(1);
@@ -1303,34 +1289,27 @@ describe('ExecuteRun', () => {
     });
   });
 
-  it('retries an existing unbound Team runtime session through create and bind', async () => {
+  it('executes a Team RuntimeTurn through its durable runtime session', async () => {
     const fixture = createLeadRuntimeFixture();
     await fixture.executeRun.execute(fixture.claim);
-    expect(fixture.runtime.executeTurn).toHaveBeenCalled();
+    expect(fixture.runtime.execute).toHaveBeenCalled();
 
-    expect(fixture.runtime.executeTurn).toHaveBeenCalledWith(
-      expect.objectContaining({ systemPrompt: expect.any(String) }),
-      expect.anything(),
-    );
-    expect(fixture.binder.bind).toHaveBeenCalledWith(
-      expect.objectContaining({ teamRunId: 'team-run-1' }),
+    expect(fixture.runtime.execute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runtimeSessionId: 'runtime-lead-1',
+        desiredSystemPrompt: expect.objectContaining({
+          text: expect.any(String),
+          digest: expect.any(String),
+        }),
+      }),
     );
   });
 
-  it('keeps a runtime timeout classification when Team grant narrowing also fails', async () => {
+  it('keeps a runtime timeout classification for a durable RuntimeTurn', async () => {
     const fixture = createLeadRuntimeFixture();
-    const timeout = new (RuntimeTimedOutError as typeof RuntimeTimedOutError)();
-    vi.mocked(fixture.runtime.executeTurn).mockRejectedValue(timeout);
-    fixture.binder.closeTeamMemberTurn.mockImplementation(() => {
-      throw new Error('narrowing failed');
-    });
-    fixture.binder.revoke.mockImplementation(() => {
-      throw new Error('revoke failed');
-    });
-    fixture.logger.log.mockImplementation((_level, event) => {
-      if (event === 'run.runtime_grant_revoke_failed')
-        throw new Error('logger failed');
-    });
+    vi.mocked(fixture.runtime.execute).mockRejectedValue(
+      new RuntimeTurnExecutionError('runtime_turn_timed_out'),
+    );
     const failed = {
       ...fixture.claim.run,
       status: 'timed_out',
@@ -1351,12 +1330,6 @@ describe('ExecuteRun', () => {
           error: expect.objectContaining({ code: 'runtime_timed_out' }),
         }),
       }),
-    );
-    expect(fixture.binder.revoke).toHaveBeenCalledWith('grant-1');
-    expect(fixture.logger.log).toHaveBeenCalledWith(
-      'warn',
-      'run.runtime_grant_revoke_failed',
-      expect.anything(),
     );
   });
 
@@ -1405,7 +1378,7 @@ describe('ExecuteRun', () => {
     );
   });
 
-  it('raises typed recoverable persistence failure for runtime memory candidates', async () => {
+  it('does not persist runtime memory candidates without a scoped-memory owner', async () => {
     const claim = createClaim();
     const task = createTask('agent', 'managed-version-1');
     const runtime = createRuntimeWithCandidates();
@@ -1443,11 +1416,10 @@ describe('ExecuteRun', () => {
       },
       { resolve: vi.fn(async () => null) },
     );
-    const createMemoryProposal = {
-      execute: vi.fn(async () => {
-        throw new Error('control plane down');
-      }),
-    } as never;
+    const executeBatch = vi.fn(async () => {
+      throw new Error('control plane down');
+    });
+    const createMemoryProposal = { executeBatch } as never;
     const executeRun = createDirectExecuteRun({
       completeRun,
       runtime,
@@ -1456,37 +1428,24 @@ describe('ExecuteRun', () => {
       createMemoryProposal,
     });
 
-    await expect(executeRun.execute(claim)).rejects.toMatchObject({
-      name: 'RuntimeMemoryPersistenceError',
-      code: 'runtime_memory_persistence_failed',
+    await expect(executeRun.execute(claim)).resolves.toMatchObject({
+      status: 'succeeded',
     });
-    expect(completeRun.execute).not.toHaveBeenCalled();
+    expect(executeBatch).not.toHaveBeenCalled();
+    expect(completeRun.execute).toHaveBeenCalledTimes(1);
   });
 
-  it('applies immutable proposal limit and rejects secret-like runtime candidates', async () => {
+  it('does not persist runtime memory candidates without a scoped-memory owner', async () => {
     const claim = createClaim();
     const task = createTask('agent', 'managed-version-1');
     const runtime = {
       ...createRuntime(),
-      executeTurn: vi.fn(async () => ({
+      execute: vi.fn(async () => ({
         provider: 'test-provider',
         model: 'test-model',
         text: 'safe result',
-        workspaceBinding: {
-          plane: 'test',
-          externalWorkspaceId: 'workspace-test',
-        },
-        sessionBinding: {
-          plane: 'test',
-          externalSessionId: 'agent-test',
-        },
-        memoryCandidates: [
-          { category: 'project_constraint', content: 'api_key=secret' },
-          { category: 'project_constraint', content: 'safe constraint' },
-          { category: 'project_constraint', content: 'over limit candidate' },
-        ],
       })),
-    } as TestExecutionRuntime;
+    } as unknown as FakeAgentRuntime;
     const completeRun = {
       execute: vi.fn(async ({ run }: { run: Run }) => run),
     } as unknown as CompleteRun;
@@ -1528,28 +1487,22 @@ describe('ExecuteRun', () => {
       },
       { resolve: vi.fn(async () => null) },
     );
-    await new ExecuteRun(
+    await new ExecuteRun({
       completeRun,
-      { findById: vi.fn(async () => task), save: vi.fn() } as never,
-      {} as never,
-      {} as never,
-      runtime,
-      { log: vi.fn() },
-      () => new Date(),
+      tasks: { findById: vi.fn(async () => task), save: vi.fn() } as never,
+      definitions: {} as never,
+      executeTeamTask: {} as never,
+      runtimeTurns: runtime,
+      runtimeProvider: runtime,
+      logger: { log: vi.fn() },
+      now: () => new Date(),
       resolver,
-      undefined,
-      undefined,
       createMemoryProposal,
-    ).execute(claim);
-    expect(batch).toHaveBeenCalledWith(
-      expect.arrayContaining([
-        expect.objectContaining({ content: 'safe constraint' }),
-      ]),
-    );
-    expect(batch.mock.calls[0]?.[0]).toHaveLength(1);
+    }).execute(claim);
+    expect(batch).not.toHaveBeenCalled();
   });
 
-  it('keeps proposal limits execution-local across concurrent managed and compatibility runs', async () => {
+  it('does not persist runtime candidates across concurrent runs without a scoped-memory owner', async () => {
     const lowTask = createTask('agent', 'managed-low', 'task-low');
     const highTask = createTask('agent', 'managed-high', 'task-high');
     const compatibilityTask = createTask(
@@ -1569,7 +1522,8 @@ describe('ExecuteRun', () => {
     ];
     const runtime = {
       ...createRuntime(),
-      executeTurn: vi.fn(async ({ runId }: { runId: string }) => {
+      execute: vi.fn(async ({ source }: { source: { runId: string } }) => {
+        const runId = source.runId;
         await new Promise((resolve) =>
           setTimeout(resolve, runId === 'run-low' ? 10 : 0),
         );
@@ -1577,22 +1531,9 @@ describe('ExecuteRun', () => {
           provider: 'test-provider',
           model: 'test-model',
           text: runId,
-          workspaceBinding: {
-            plane: 'test',
-            externalWorkspaceId: 'workspace-test',
-          },
-          sessionBinding: {
-            plane: 'test',
-            externalSessionId: 'agent-test',
-          },
-          memoryCandidates: [
-            { category: 'project_constraint', content: 'one' },
-            { category: 'project_constraint', content: 'two' },
-            { category: 'project_constraint', content: 'three' },
-          ],
         };
       }),
-    } as TestExecutionRuntime;
+    } as unknown as FakeAgentRuntime;
     const batch = vi.fn(
       async (inputs: readonly { content: string }[]) => inputs as never,
     );
@@ -1634,35 +1575,34 @@ describe('ExecuteRun', () => {
       },
       { resolve: vi.fn(async () => null) },
     );
-    const executeRun = new ExecuteRun(
-      { execute: vi.fn(async ({ run }: { run: Run }) => run) } as never,
-      {
+    const executeRun = new ExecuteRun({
+      completeRun: {
+        execute: vi.fn(async ({ run }: { run: Run }) => run),
+      } as never,
+      tasks: {
         findById: vi.fn(async (id: string) => tasksById.get(id) ?? null),
         save: vi.fn(),
       } as never,
-      {} as never,
-      {} as never,
-      runtime,
-      { log: vi.fn() },
-      () => new Date(),
+      definitions: {} as never,
+      executeTeamTask: {} as never,
+      runtimeTurns: runtime,
+      runtimeProvider: runtime,
+      logger: { log: vi.fn() },
+      now: () => new Date(),
       resolver,
-      undefined,
-      undefined,
-      { executeBatch: batch } as never,
-    );
+      createMemoryProposal: { executeBatch: batch } as never,
+      runtimeSessions: testRuntimeSessions(),
+    });
 
     await Promise.all([
       executeRun.execute(claims[0]!),
       executeRun.execute(claims[1]!),
     ]);
-    expect(runtime.executeTurn).toHaveBeenCalledTimes(2);
-    expect(batch).toHaveBeenCalledTimes(2);
-    expect(batch.mock.calls.map(([inputs]) => inputs.length).sort()).toEqual([
-      1, 3,
-    ]);
+    expect(runtime.execute).toHaveBeenCalledTimes(2);
+    expect(batch).not.toHaveBeenCalled();
 
     await executeRun.execute(claims[2]!);
-    expect(batch).toHaveBeenCalledTimes(2);
+    expect(batch).not.toHaveBeenCalled();
   });
 
   it.each([false, true])(
@@ -1684,26 +1624,30 @@ describe('ExecuteRun', () => {
           ),
         ),
       } as unknown as CompleteRun;
-      const executeRun = new ExecuteRun(
+      const executeRun = new ExecuteRun({
         completeRun,
-        {
+        tasks: {
           findById: vi.fn(async () => task),
           save: vi.fn(async () => undefined),
         } as never,
-        {} as never,
-        {} as never,
-        createRuntime(runtimeFails ? new Error('late failure') : undefined),
-        { log: vi.fn() },
-        () => new Date('2026-07-23T00:00:01.000Z'),
-        new ResolveAgentVersion(
+        definitions: {} as never,
+        executeTeamTask: {} as never,
+        runtimeTurns: createRuntime(
+          runtimeFails ? new Error('late failure') : undefined,
+        ),
+        runtimeProvider: createRuntime(),
+        runtimeSessions: testRuntimeSessions(),
+        logger: { log: vi.fn() },
+        now: () => new Date('2026-07-23T00:00:01.000Z'),
+        resolver: new ResolveAgentVersion(
           {
             findVersion: vi.fn(async () => null),
             findVersionByTenant: vi.fn(async () => null),
           } as never,
           { resolve: vi.fn(async () => null) },
         ),
-        events as never,
-      );
+        events: events as never,
+      });
       await executeRun.execute(claim);
       expect(
         (events.append.mock.calls as unknown as Array<Array<unknown>>).map(
@@ -1716,7 +1660,7 @@ describe('ExecuteRun', () => {
 
 function createExecuteRun(input: {
   readonly completeRun: CompleteRun;
-  readonly runtime: TestExecutionRuntime;
+  readonly runtime: FakeAgentRuntime;
   readonly task: Task;
   readonly logger?: Logger;
 }): ExecuteRun {
@@ -1724,15 +1668,18 @@ function createExecuteRun(input: {
     findById: vi.fn(async () => input.task),
     save: vi.fn(async () => undefined),
   } as unknown as TaskRepository;
-  return new ExecuteRun(
-    input.completeRun,
+  return new ExecuteRun({
+    completeRun: input.completeRun,
     tasks,
-    {} as InvokableRepository,
-    {} as never,
-    input.runtime,
-    input.logger ?? { log: vi.fn() },
-    () => new Date('2026-07-23T00:00:00.000Z'),
-  );
+    definitions: {} as InvokableRepository,
+    executeTeamTask: {} as never,
+    runtimeTurns: input.runtime,
+    runtimeProvider: input.runtime,
+    runtimeSessions: testRuntimeSessions(),
+    ensureDesiredRuntimeSpec: testDesiredSpecOwner(testRuntimeSessions()),
+    logger: input.logger ?? { log: vi.fn() },
+    now: () => new Date('2026-07-23T00:00:00.000Z'),
+  });
 }
 
 function createLeadRuntimeFixture() {
@@ -1785,55 +1732,22 @@ function createLeadRuntimeFixture() {
     principalId: task.principalId,
     now: () => new Date('2026-07-23T00:00:00.000Z'),
   });
-  const grant = {
-    grantId: 'grant-1',
-    activeTurn: null,
-    allowedTools: collaborationToolRefsForRole('lead'),
-    catalogTools: collaborationToolRefsForRole('lead'),
-  };
-  const binder = {
-    bind: vi.fn(async () => ({})),
-    getTeamMemberGrant: vi.fn(() => grant),
-    refreshForTeamMember: vi.fn(() => ({ ...grant, allowedTools: [] })),
-    closeTeamMemberTurn: vi.fn(() => ({ ...grant, activeTurn: null })),
-    activeToolCalls: vi.fn(() => 0),
-    revoke: vi.fn(),
-  };
-  const runtime = createRuntimeWithCandidates('agent-created');
-  vi.mocked(runtime.executeTurn).mockResolvedValue({
+  const runtime = createRuntimeWithCandidates();
+  vi.mocked(runtime.execute).mockResolvedValue({
     provider: 'test-provider',
     model: 'test-model',
     text: 'safe result',
-    workspaceBinding: {
-      plane: 'test',
-      externalWorkspaceId: 'workspace-provider-1',
-    },
-    sessionBinding: {
-      plane: 'test',
-      externalSessionId: 'agent-created',
-    },
   });
   const completeRun = {
     execute: vi.fn(async ({ run }: { run: Run }) => run),
   } as unknown as CompleteRun;
   const runtimeSessions = {
-    findByTeamMember: vi.fn(async () => ({
-      id: 'runtime-lead-1',
-      scopeKind: 'team_member',
-      scopeId: lead.id,
-      productSessionId: null,
-      taskId: task.id,
-      launchSnapshotId: 'launch-1',
-      workspaceId: task.workspaceId,
-      agentVersionId: task.invokableVersionId,
-      environmentVersionId: team.environmentVersionId,
-      resolvedSkills: [],
-      toolRefs: collaborationToolRefsForRole('lead'),
-      workspaceBinding: null,
-      sessionBinding: null,
-      createdAt: task.createdAt,
-      updatedAt: task.updatedAt,
-    })),
+    findByScope: vi.fn(async () =>
+      makeRuntimeSession({
+        id: 'runtime-lead-1',
+        scope: { kind: 'team_member', id: lead.id },
+      }),
+    ),
   };
   const collaborativeExecutions = {
     findTeamRunByRootTaskId: vi.fn(async () => team),
@@ -1846,34 +1760,30 @@ function createLeadRuntimeFixture() {
     updateMemberRuntimeSession: vi.fn(async () => lead),
   };
   const logger = { log: vi.fn() };
-  const executeRun = new ExecuteRun(
+  const executeRun = new ExecuteRun({
     completeRun,
-    {
+    tasks: {
       findById: vi.fn(async () => task),
       findByRootTaskIdForOwner: vi.fn(async () => [
         { task, latestRun: claim.run },
       ]),
       save: vi.fn(async () => undefined),
     } as never,
-    {} as never,
-    {} as never,
-    runtime,
+    definitions: {} as never,
+    executeTeamTask: {} as never,
+    runtimeTurns: runtime,
+    runtimeProvider: runtime,
     logger,
-    () => new Date('2026-07-23T00:00:00.000Z'),
-    undefined,
-    {
+    now: () => new Date('2026-07-23T00:00:00.000Z'),
+    events: {
       append: vi.fn(async () => undefined),
       bind: vi.fn(async () => undefined),
     } as never,
-    undefined,
-    undefined,
-    binder as never,
-    runtimeSessions as never,
-    undefined,
-    undefined,
-    undefined,
-    collaborativeExecutions as never,
-  );
+    runtimeSessions: runtimeSessions as never,
+    ensureDesiredRuntimeSpec: testDesiredSpecOwner(runtimeSessions),
+    environments: testEnvironmentReadApi(),
+    collaborativeExecutions: collaborativeExecutions as never,
+  });
   return {
     claim,
     task,
@@ -1881,7 +1791,6 @@ function createLeadRuntimeFixture() {
     team,
     executeRun,
     runtime,
-    binder,
     runtimeSessions,
     completeRun,
     logger,
@@ -1890,7 +1799,7 @@ function createLeadRuntimeFixture() {
 
 function createDirectExecuteRun(input: {
   readonly completeRun: CompleteRun;
-  readonly runtime: TestExecutionRuntime;
+  readonly runtime: FakeAgentRuntime;
   readonly task: Task;
   readonly resolver: ResolveAgentVersion;
   readonly createMemoryProposal?: CreateMemoryProposal;
@@ -1899,58 +1808,43 @@ function createDirectExecuteRun(input: {
     findById: vi.fn(async () => input.task),
     save: vi.fn(async () => undefined),
   } as unknown as TaskRepository;
-  return new ExecuteRun(
-    input.completeRun,
+  return new ExecuteRun({
+    completeRun: input.completeRun,
     tasks,
-    {} as InvokableRepository,
-    {} as never,
-    input.runtime,
-    { log: vi.fn() },
-    () => new Date('2026-07-23T00:00:00.000Z'),
-    input.resolver,
-    undefined,
-    undefined,
-    input.createMemoryProposal,
-  );
+    definitions: {} as InvokableRepository,
+    executeTeamTask: {} as never,
+    runtimeTurns: input.runtime,
+    runtimeProvider: input.runtime,
+    runtimeSessions: testRuntimeSessions(),
+    ensureDesiredRuntimeSpec: testDesiredSpecOwner(testRuntimeSessions()),
+    logger: { log: vi.fn() },
+    now: () => new Date('2026-07-23T00:00:00.000Z'),
+    resolver: input.resolver,
+    ...(input.createMemoryProposal
+      ? { createMemoryProposal: input.createMemoryProposal }
+      : {}),
+  });
 }
 
-function createRuntimeWithCandidates(
-  externalSessionId = 'agent-test',
-): TestExecutionRuntime {
+function createRuntimeWithCandidates(): FakeAgentRuntime {
   const runtime = createRuntime();
-  vi.mocked(runtime.executeTurn).mockResolvedValue({
+  vi.mocked(runtime.execute).mockResolvedValue({
     provider: 'test-provider',
     model: 'test-model',
     text: 'safe result',
-    workspaceBinding: {
-      plane: 'test',
-      externalWorkspaceId: 'workspace-test',
-    },
-    sessionBinding: { plane: 'test', externalSessionId },
-    memoryCandidates: [
-      { category: 'project_constraint', content: 'keep logs' },
-    ],
   });
   return runtime;
 }
 
-function createRuntime(error?: Error): TestExecutionRuntime {
+function createRuntime(error?: Error): FakeAgentRuntime {
   const runtime = {
     ensureReady: vi.fn(async () => true),
-    executeTurn: vi.fn(async () => {
+    execute: vi.fn(async () => {
       if (error) throw error;
       return {
         provider: 'test-provider',
         model: 'test-model',
         text: 'safe result',
-        workspaceBinding: {
-          plane: 'test',
-          externalWorkspaceId: 'workspace-test',
-        },
-        sessionBinding: {
-          plane: 'test',
-          externalSessionId: 'agent-test',
-        },
       };
     }),
     cancelRun: vi.fn(async () => undefined),
@@ -1962,7 +1856,7 @@ function createRuntime(error?: Error): TestExecutionRuntime {
       checks: [],
     })),
     close: vi.fn(async () => undefined),
-  } as unknown as TestExecutionRuntime;
+  } as unknown as FakeAgentRuntime;
   return runtime;
 }
 

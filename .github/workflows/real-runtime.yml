@@ -147,6 +147,10 @@ jobs:
       - if: steps.credentials.outputs.available == 'true'
         run: pnpm install --frozen-lockfile
 
+      - name: Install the Golden Path browser
+        if: steps.credentials.outputs.available == 'true'
+        run: pnpm exec playwright install --with-deps chromium
+
       - name: Make the checkout writable by the runner and runtime containers
         if: steps.credentials.outputs.available == 'true'
         run: |

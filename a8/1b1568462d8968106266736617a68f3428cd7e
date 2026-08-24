@@ -1,0 +1,29 @@
+apps/web/src/features/work/components/work-shell.css
+  aa841554b33a269e 35-37,41-43
+apps/web/src/features/work/pages/WorkDetailPage.tsx
+  aa841554b33a269e 97
+apps/web/src/features/work/components/work-detail.css
+  aa841554b33a269e 184-224
+apps/web/src/features/work/components/work-header.tsx
+  aa841554b33a269e 4,11,16,26-30
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2-bit.10+672fbf0",
+  "base_commit_sha": "a81b1568462d8968106266736617a68f3428cd7e",
+  "prompts": {
+    "aa841554b33a269e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2e0ac1a9-cdbd-49b5-9938-68e78819ae91",
+        "model": "claude-opus-5"
+      },
+      "human_author": "link.ye",
+      "messages": [],
+      "total_additions": 62,
+      "total_deletions": 9,
+      "accepted_lines": 1194,
+      "overriden_lines": 0
+    }
+  }
+}

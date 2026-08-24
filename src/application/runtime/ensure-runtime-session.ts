@@ -20,7 +20,7 @@ import { assertDesiredRuntimeSystemPrompt } from '../../domain/runtime/desired-r
 import { buildReconciliationPlan } from './reconciliation/build-reconciliation-plan.js';
 import type { ReconciliationPlan } from '../../domain/runtime/reconciliation-plan.js';
 import type { Logger } from '../../shared/observability/logger.js';
-import { RuntimeGenerationManager } from './runtime-generation-manager.js';
+import type { RuntimeGenerationManager } from './runtime-generation-manager.js';
 import { buildProviderSessionBinding } from './provider-session-binding.js';
 
 export function planWhenBootstrapDigestIsIndeterminate(input: {

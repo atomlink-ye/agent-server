@@ -143,7 +143,11 @@ describe('closeServiceResources', () => {
           events.push('lark.worker.stop');
         }),
       },
-      runtimeProvider: { close: vi.fn(async () => undefined) },
+      runtimeProvider: {
+        close: vi.fn(async () => {
+          events.push('runtime.close');
+        }),
+      },
       pool: {
         end: vi.fn(async () => {
           events.push('pool.end');
@@ -197,12 +201,11 @@ describe('closeServiceResources', () => {
           events.push('worker.stop');
         }),
       },
-      executionRuntime: {
+      runtimeProvider: {
         close: vi.fn(async (): Promise<void> => {
           events.push('runtime.close');
         }),
       },
-      runtimeProvider: { close: vi.fn(async (): Promise<void> => undefined) },
       pool: {
         end: vi.fn(async (): Promise<void> => {
           events.push('pool.end');
@@ -246,14 +249,11 @@ describe('closeServiceResources', () => {
           throw new Error('worker secret');
         }),
       },
-      executionRuntime: {
+      runtimeProvider: {
         close: vi.fn(async (): Promise<void> => {
           events.push('runtime');
           throw new Error('runtime secret');
         }),
-      },
-      runtimeProvider: {
-        close: vi.fn(async (): Promise<void> => undefined),
       },
       pool: {
         end: vi.fn(async (): Promise<void> => {
@@ -312,7 +312,7 @@ describe('closeServiceResources', () => {
       expect(logs).toEqual([
         {
           event: 'lark.ingress_worker.failed',
-          attributes: { phase: 'claim', errorName: 'Error' },
+          attributes: { phase: 'claim', error_name: 'Error' },
         },
       ]),
     );

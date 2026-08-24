@@ -2,21 +2,15 @@ import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 
 import type { PostgresRunDispatcher } from '../infrastructure/postgres/postgres-run-dispatcher.js';
-import { GetTask } from '../application/tasks/get-task.js';
-import { GetTaskTree } from '../application/tasks/get-task-tree.js';
-import { ExecuteTeamTask } from '../application/tasks/execute-team-task.js';
 import type { AppConfig } from '../shared/config.js';
 import type { PublishMemoryReviewSurface } from '../application/channels/publish-memory-review-surface.js';
 import type { Logger } from '../shared/observability/logger.js';
-import { noExternalDependencies } from '../application/health/readiness.js';
 import { createConfiguredRuntimeCapabilities } from './create-runtime-capabilities.js';
 import {
   createChatExecutionConsumer,
   createRunExecutionRegistry,
 } from './create-execution-consumers.js';
 import { createChannelComposition } from './create-channel-composition.js';
-import { createApplicationLifecycle } from './create-application-lifecycle.js';
-import { createHttpApp } from '../entrypoints/api/app.js';
 import { createMemoryCapabilities } from './create-memory-capabilities.js';
 import {
   createKernelCapabilities,
@@ -39,6 +33,7 @@ import type { PostgresSessionRepository } from '../infrastructure/postgres/postg
 import { createRuntimeToolCatalog } from '../entrypoints/mcp/runtime-tool-composition.js';
 import { createRuntimeOwner } from './create-runtime-owner.js';
 import { createRunExecutionComposition } from './create-run-execution-composition.js';
+import { createHostComposition } from './create-host-composition.js';
 
 export interface SingleRunDebugControl {
   claimAndExecute(runId: string): Promise<{
@@ -91,6 +86,12 @@ export async function createApplication(
   const productWorkPlane = config.productWorkPlane;
   const directChatEnabled = directChatPlane !== 'absent';
   const productWorkEnabled = productWorkPlane !== 'absent';
+  const kernel = createKernelCapabilities({
+    pool,
+    config,
+    definitionReadApi: resourceModule.definitionReadApi,
+    agentResolutionApi: resourceModule.agentResolutionApi,
+  });
   const {
     runRepository,
     taskRepository,
@@ -107,12 +108,7 @@ export async function createApplication(
     submitRun,
     getRun,
     invokeTask,
-  } = createKernelCapabilities({
-    pool,
-    config,
-    definitionReadApi: resourceModule.definitionReadApi,
-    agentResolutionApi: resourceModule.agentResolutionApi,
-  });
+  } = kernel;
   const teamModule = createTeamCapabilities({
     database: pool,
     tasks: taskRepository,
@@ -260,50 +256,27 @@ export async function createApplication(
     concurrency: config.dispatcher?.concurrency ?? 4,
     logger,
   });
-  const readiness = noExternalDependencies;
-  const app = createHttpApp({
+  const host = await createHostComposition({
     config,
     logger,
-    readiness,
-    runtime: runtimeProvider,
-    submitRun,
-    getRun,
-    invokeTask,
-    getTask,
-    getTaskTree,
-    teamExecutions: collaborativeTeamExecutions,
+    kernel,
+    team: teamModule,
     teamDriver,
-    teamMessages,
-    tasks: taskRepository,
-    sessions,
-    ...(conversations ? { conversations } : {}),
-    ...(chatDispatches ? { chatDispatches } : {}),
-    ...(conversationWorkEntitlements ? { conversationWorkEntitlements } : {}),
-    submitSessionTurn,
-    events,
-    cancelTask,
+    taskConsumers: { cancelTask, getTask, getTaskTree },
+    memory: memoryModule,
+    resources: resourceModule,
     ...(workModule ? { workModule } : {}),
-    memoryModule,
-    resourceModule,
-  });
-  const workers = createWorkers({
-    ...channelComposition.workers,
+    channels: channelComposition,
     ...(chatCapabilities.chatWorker
       ? { chatWorker: chatCapabilities.chatWorker }
       : {}),
     ...(workChatWorker ? { workChatWorker } : {}),
-  });
-  const lifecycle = createApplicationLifecycle({
+    runtime: { runtimeProvider, runtimeMcpServer },
     dispatcher,
-    workers,
-    runtimeProvider,
-    runtimeMcpServer,
     pool,
+    activationReconciler: collaborationActivationReconciler,
+    ...(options.singleRunDebug ? { singleRunDebug: true } : {}),
   });
-  if (!options.singleRunDebug) {
-    await collaborationActivationReconciler.reconcilePendingRoots();
-    await lifecycle.start();
-  }
 
   const singleRunDebug: SingleRunDebugControl | undefined =
     options.singleRunDebug
@@ -335,13 +308,13 @@ export async function createApplication(
       : undefined;
 
   return {
-    app,
+    app: host.app,
     controls: {
       dispatcher,
       sessions,
       memoryModule,
     } satisfies ApplicationControls,
     ...(singleRunDebug ? { singleRunDebug } : {}),
-    close: () => lifecycle.stop(),
+    close: host.close,
   };
 }

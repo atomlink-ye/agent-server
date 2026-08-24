@@ -362,7 +362,9 @@ export class AgentRunExecutor {
     }
     return {
       provider:
-        policy?.provider ?? this.runtimeConfiguration?.provider ?? spec.provider,
+        policy?.provider ??
+        this.runtimeConfiguration?.provider ??
+        spec.provider,
       model: policy?.model ?? null,
       cwd:
         this.runtimeCellRoot ?? this.runtimeConfiguration?.cwd ?? process.cwd(),

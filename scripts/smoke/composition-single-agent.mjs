@@ -201,7 +201,12 @@ spec:
     });
     const workRunId = started.work_run?.id;
     const rootTaskId = started.execution_receipt?.source_refs?.task_id;
-    if (typeof workRunId !== 'string' || typeof rootTaskId !== 'string')
+    const rootRunId = started.execution_receipt?.source_refs?.run_id;
+    if (
+      typeof workRunId !== 'string' ||
+      typeof rootTaskId !== 'string' ||
+      typeof rootRunId !== 'string'
+    )
       throw new Error('composition smoke WorkRun identities missing');
     progress('composition_single_agent_started', {
       work_id: workId,
@@ -335,21 +340,28 @@ spec:
            ON rss.runtime_session_id=rs.id
           AND rss.revision=rs.desired_spec_revision
          JOIN runtime_turns rt ON rt.runtime_session_id=rs.id
-         JOIN runs r ON r.id=rt.source_id
-        WHERE rt.source_kind='run' AND r.task_id=$1 AND rs.tenant_id=$2
-          AND rs.principal_type=$3 AND rs.principal_id=$4`,
-      [rootTaskId, owner.tenant_id, owner.principal_type, owner.principal_id],
+         JOIN runs r ON r.id=rt.source_id::uuid
+         JOIN tasks t ON t.id=r.task_id
+        WHERE rt.source_kind='run' AND r.id=$1 AND t.id=$2
+          AND rs.tenant_id=$3 AND rs.principal_type=$4 AND rs.principal_id=$5`,
+      [
+        rootRunId,
+        rootTaskId,
+        owner.tenant_id,
+        owner.principal_type,
+        owner.principal_id,
+      ],
     );
-    const runtimeSession = session.rows[0];
+    const runtimeSession = session.rows.length === 1 ? session.rows[0] : null;
     if (
       !runtimeSession ||
       runtimeSession.scope_kind !== 'run' ||
-      runtimeSession.scope_id === null ||
+      runtimeSession.scope_id !== rootRunId ||
       runtimeSession.agent_version_id !== agent.id ||
       runtimeSession.environment_version_id !== environment.id
     )
       throw new Error(
-        `composition runtime session snapshot mismatch: ${JSON.stringify(runtimeSession)}`,
+        `composition runtime session snapshot mismatch: ${JSON.stringify(session.rows)}`,
       );
 
     progress('composition_single_agent_verified', {
@@ -559,7 +571,12 @@ spec:
     });
     const workRunId = started.work_run?.id;
     const rootTaskId = started.execution_receipt?.source_refs?.task_id;
-    if (typeof workRunId !== 'string' || typeof rootTaskId !== 'string')
+    const rootRunId = started.execution_receipt?.source_refs?.run_id;
+    if (
+      typeof workRunId !== 'string' ||
+      typeof rootTaskId !== 'string' ||
+      typeof rootRunId !== 'string'
+    )
       throw new Error('inline smoke WorkRun identities missing');
     progress('composition_inline_started', {
       work_id: workId,
@@ -712,22 +729,29 @@ spec:
            ON rss.runtime_session_id=rs.id
           AND rss.revision=rs.desired_spec_revision
          JOIN runtime_turns rt ON rt.runtime_session_id=rs.id
-         JOIN runs r ON r.id=rt.source_id
-        WHERE rt.source_kind='run' AND r.task_id=$1 AND rs.tenant_id=$2
-          AND rs.principal_type=$3 AND rs.principal_id=$4`,
-      [rootTaskId, owner.tenant_id, owner.principal_type, owner.principal_id],
+         JOIN runs r ON r.id=rt.source_id::uuid
+         JOIN tasks t ON t.id=r.task_id
+        WHERE rt.source_kind='run' AND r.id=$1 AND t.id=$2
+          AND rs.tenant_id=$3 AND rs.principal_type=$4 AND rs.principal_id=$5`,
+      [
+        rootRunId,
+        rootTaskId,
+        owner.tenant_id,
+        owner.principal_type,
+        owner.principal_id,
+      ],
     );
-    const runtimeSession = session.rows[0];
+    const runtimeSession = session.rows.length === 1 ? session.rows[0] : null;
     if (
       !runtimeSession ||
       runtimeSession.scope_kind !== 'run' ||
-      runtimeSession.scope_id === null ||
+      runtimeSession.scope_id !== rootRunId ||
       runtimeSession.agent_version_id !== agentEntry.resolved_version_id ||
       runtimeSession.environment_version_id !==
         environmentEntry.resolved_version_id
     )
       throw new Error(
-        `inline runtime session snapshot mismatch: ${JSON.stringify(runtimeSession)}`,
+        `inline runtime session snapshot mismatch: ${JSON.stringify(session.rows)}`,
       );
 
     progress('composition_inline_verified', {

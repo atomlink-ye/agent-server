@@ -15,6 +15,7 @@ import type {
 } from '../../domain/runtime/runtime-turn.js';
 import type { RuntimeSessionId } from '../../domain/runtime/runtime-session.js';
 import type { DesiredRuntimeSystemPrompt } from '../../domain/runtime/desired-runtime-system-prompt.js';
+import type { RevokeRuntimeGrants } from '../ports/revoke-runtime-grants.js';
 
 export interface ExecuteRuntimeTurnInput {
   readonly runtimeSessionId: RuntimeSessionId;
@@ -39,6 +40,7 @@ export class ExecuteRuntimeTurn {
     private readonly turns: RuntimeTurnStore,
     private readonly ensureRuntimeSession: EnsureRuntimeSession,
     private readonly rotateRuntimeGrant: RotateRuntimeGrant,
+    private readonly revokeRuntimeGrants: RevokeRuntimeGrants,
     private readonly now: () => Date = () => new Date(),
   ) {}
 
@@ -134,6 +136,7 @@ export class ExecuteRuntimeTurn {
     }
     if (!started) {
       await ready.session.close().catch(() => undefined);
+      await this.revokeRuntimeGrants.revokeForTurn(created.id);
       throw new RuntimeTurnExecutionError('runtime_turn_cancelled');
     }
 
@@ -166,6 +169,7 @@ export class ExecuteRuntimeTurn {
         id,
         completedAt: this.now().toISOString(),
       });
+      await this.revokeRuntimeGrants.revokeForTurn(id);
       throw new RuntimeTurnExecutionError('runtime_turn_cancelled');
     }
     if (result.status === 'failed') {
@@ -179,6 +183,8 @@ export class ExecuteRuntimeTurn {
               }),
             )
           : await this.fail(id, code);
+      if (code === 'runtime_turn_cancelled' && failed)
+        await this.revokeRuntimeGrants.revokeForTurn(id);
       if (!failed) {
         const current = await this.turns.findById(id);
         if (current?.status === 'cancelled')
@@ -196,6 +202,7 @@ export class ExecuteRuntimeTurn {
         throw new RuntimeTurnExecutionError('runtime_turn_cancelled');
       throw new RuntimeTurnExecutionError('runtime_provider_unavailable');
     }
+    await this.revokeRuntimeGrants.revokeForTurn(id);
     return result.output;
   }
 
@@ -203,13 +210,15 @@ export class ExecuteRuntimeTurn {
     id: RuntimeTurnId,
     failureCode: RuntimeFailureCode,
   ): Promise<boolean> {
-    return Boolean(
+    const failed = Boolean(
       await this.turns.fail({
         id,
         failureCode,
         completedAt: this.now().toISOString(),
       }),
     );
+    if (failed) await this.revokeRuntimeGrants.revokeForTurn(id);
+    return failed;
   }
 }
 

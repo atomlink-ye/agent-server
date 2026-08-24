@@ -74,6 +74,27 @@ describe('PostgresRuntimeGrantAuthority rotation', () => {
     });
     expect(queries.some((query) => query.sql === 'COMMIT')).toBe(false);
   });
+
+  it.each([
+    ['generation_id', 'generation-1', 'revokeForGeneration'],
+    ['runtime_turn_id', 'turn-1', 'revokeForTurn'],
+    ['runtime_session_id', 'runtime-session-1', 'revokeForSession'],
+  ] as const)(
+    'revokes grants by durable %s lineage',
+    async (column, id, method) => {
+      const now = new Date('2026-08-24T00:00:00.000Z');
+      const { authority, queries } = authorityWith({ grants: [], now });
+
+      await authority[method](id as never);
+
+      expect(queries.at(-1)).toEqual({
+        sql: expect.stringContaining(
+          `WHERE ${column}=$1 AND revoked_at IS NULL`,
+        ),
+        values: [id, now.toISOString()],
+      });
+    },
+  );
 });
 
 function authorityWith(input: {
@@ -106,7 +127,10 @@ function authorityWith(input: {
     ),
     release: vi.fn(),
   };
-  const database = { connect: vi.fn(async () => client) };
+  const database = {
+    query: client.query,
+    connect: vi.fn(async () => client),
+  };
   return {
     authority: new PostgresRuntimeGrantAuthority(
       database as never,

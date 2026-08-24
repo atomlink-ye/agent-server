@@ -10,6 +10,7 @@ import type {
   RuntimeSessionId,
 } from '../../domain/runtime/runtime-session.js';
 import type { RuntimeSessionSpec } from '../../domain/runtime/runtime-session-spec.js';
+import type { RevokeRuntimeGrants } from '../ports/revoke-runtime-grants.js';
 
 export interface BeginRuntimeGenerationReplacementInput {
   readonly sessionId: RuntimeSessionId;
@@ -27,6 +28,7 @@ export interface ActivateRuntimeGenerationReplacementInput {
 export interface RuntimeGenerationManagerOptions {
   readonly generations: RuntimeGenerationStore;
   readonly generationTransaction: RuntimeGenerationTransaction;
+  readonly grants: RevokeRuntimeGrants;
   readonly now: () => Date;
 }
 
@@ -34,11 +36,13 @@ export interface RuntimeGenerationManagerOptions {
 export class RuntimeGenerationManager {
   private readonly generations: RuntimeGenerationStore;
   private readonly generationTransaction: RuntimeGenerationTransaction;
+  private readonly grants: RevokeRuntimeGrants;
   private readonly now: () => Date;
 
   public constructor(options: RuntimeGenerationManagerOptions) {
     this.generations = options.generations;
     this.generationTransaction = options.generationTransaction;
+    this.grants = options.grants;
     this.now = options.now;
   }
 
@@ -74,7 +78,7 @@ export class RuntimeGenerationManager {
       throw new Error('Provisioning runtime generation could not activate.');
 
     const activeAt = this.now().toISOString();
-    return this.generationTransaction.replaceCurrentGeneration({
+    const active = await this.generationTransaction.replaceCurrentGeneration({
       sessionId: provisioning.runtimeSessionId,
       previousGenerationId: input.expectedPreviousGenerationId,
       generation: {
@@ -89,6 +93,9 @@ export class RuntimeGenerationManager {
         activeAt,
       },
     });
+    if (input.expectedPreviousGenerationId)
+      await this.grants.revokeForGeneration(input.expectedPreviousGenerationId);
+    return active;
   }
 
   public async failProvisioning(
@@ -106,6 +113,7 @@ export class RuntimeGenerationManager {
     if (generation.status === 'closed') return;
     if (generation.status !== 'superseded')
       throw new Error('Only superseded runtime generations can close.');
+    await this.grants.revokeForGeneration(generation.id);
     await this.generations.close({
       id: generation.id,
       closedAt: this.now().toISOString(),

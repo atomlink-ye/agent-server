@@ -62,11 +62,14 @@ export function createRuntimeOwner(input: {
       ? new UnavailableRuntimeProvider()
       : createPaseoRuntimeProvider(input.config, input.logger);
   const oneShotCompletion = new PaseoOneShotRuntimeCompletion(runtimeProvider);
-  const runtimeSessions = new PostgresRuntimeSessionStore(input.database);
+  const grants = new PostgresRuntimeGrantAuthority(input.database);
+  const runtimeSessions = new PostgresRuntimeSessionStore(
+    input.database,
+    grants,
+  );
   const specs = new PostgresRuntimeSpecStore(input.database);
   const generations = new PostgresRuntimeGenerationStore(input.database);
   const turns = new PostgresRuntimeTurnStore(input.database);
-  const grants = new PostgresRuntimeGrantAuthority(input.database);
   const reader = new PostgresRuntimeGrantReader(input.database);
   const authorizeRuntimeTool = new AuthorizeRuntimeTool(
     reader,
@@ -95,6 +98,7 @@ export function createRuntimeOwner(input: {
   const generationManager = new RuntimeGenerationManager({
     generations,
     generationTransaction: generations,
+    grants,
     now: () => new Date(),
   });
   const ensureRuntimeSession = new EnsureRuntimeSessionService({
@@ -112,8 +116,13 @@ export function createRuntimeOwner(input: {
     turns,
     ensureRuntimeSession,
     grants,
+    grants,
   );
-  const cancelRuntimeTurn = new CancelRuntimeTurn(turns, ensureRuntimeSession);
+  const cancelRuntimeTurn = new CancelRuntimeTurn(
+    turns,
+    ensureRuntimeSession,
+    grants,
+  );
   const configuration = {
     provider: input.config.paseo.provider,
     model: input.config.paseo.model ?? null,

@@ -11,6 +11,7 @@ import {
   assertRuntimeSessionSpec,
   type RuntimeSessionSpec,
 } from '../../../domain/runtime/runtime-session-spec.js';
+import type { RevokeRuntimeGrants } from '../../../application/ports/revoke-runtime-grants.js';
 
 interface Queryable {
   query<Row extends Record<string, unknown> = Record<string, unknown>>(
@@ -54,7 +55,10 @@ const SESSION_COLUMNS = `id,tenant_id,workspace_id,principal_type,principal_id,
   status,created_at,updated_at,closed_at`;
 
 export class PostgresRuntimeSessionStore implements RuntimeSessionStore {
-  public constructor(private readonly database: Database) {}
+  public constructor(
+    private readonly database: Database,
+    private readonly revokeRuntimeGrants: RevokeRuntimeGrants,
+  ) {}
 
   public async findById(id: RuntimeSessionId): Promise<RuntimeSession | null> {
     const result = await this.database.query<RuntimeSessionRow>(
@@ -223,6 +227,7 @@ export class PostgresRuntimeSessionStore implements RuntimeSessionStore {
   }
 
   public async close(id: RuntimeSessionId, closedAt: string): Promise<void> {
+    await this.revokeRuntimeGrants.revokeForSession(id);
     const result = await this.database.query(
       `UPDATE runtime_sessions
           SET status='closed', closed_at=$2, updated_at=$2

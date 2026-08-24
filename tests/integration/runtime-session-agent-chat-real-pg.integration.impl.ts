@@ -6,6 +6,7 @@ import { createManagedAgentDraft } from '../../src/domain/agents/managed-agent-v
 import { PostgresAgentRegistry } from '../../src/infrastructure/postgres/postgres-agent-registry.js';
 import { PostgresConversationRepository } from '../../src/infrastructure/postgres/postgres-conversation-repository.js';
 import { PostgresRuntimeSessionStore } from '../../src/infrastructure/postgres/runtime/postgres-runtime-session-store.js';
+import { PostgresRuntimeGrantAuthority } from '../../src/infrastructure/postgres/runtime/postgres-runtime-grant-authority.js';
 import { PostgresRuntimeSpecStore } from '../../src/infrastructure/postgres/runtime/postgres-runtime-spec-store.js';
 import {
   runtimeSpecRevision,
@@ -43,7 +44,10 @@ const owner = {
 const pool = createPostgresPool({ connectionString });
 const registry = new PostgresAgentRegistry(pool);
 const conversations = new PostgresConversationRepository(pool);
-const runtimeSessions = new PostgresRuntimeSessionStore(pool);
+const runtimeSessions = new PostgresRuntimeSessionStore(
+  pool,
+  new PostgresRuntimeGrantAuthority(pool),
+);
 const runtimeSpecs = new PostgresRuntimeSpecStore(pool);
 
 beforeAll(async () => {

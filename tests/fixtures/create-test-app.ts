@@ -119,7 +119,7 @@ export type TestDatabase = {
 };
 
 export async function createTestApp(
-  _runtime: FakeAgentRuntime,
+  runtime: FakeAgentRuntime,
   options: CreateTestAppOptions = {},
 ) {
   const database = (options.database ?? new PGlite()) as TestDatabase;
@@ -196,6 +196,7 @@ export async function createTestApp(
       singleRunDebug: true,
       database: database as any,
       fileStore,
+      runtimeProvider: runtime.asRuntimeProvider(),
       ...(options.memoryReviewNotifier
         ? { memoryReviewNotifier: options.memoryReviewNotifier }
         : {}),

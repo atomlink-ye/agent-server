@@ -26,6 +26,7 @@ import {
 } from './create-work-capabilities.js';
 import { createWorkers } from './create-workers.js';
 import type { FileStore } from '../application/ports/file-store.js';
+import type { RuntimeExecutionProvider } from '../application/ports/runtime-execution-provider.js';
 import type { PostgresSessionRepository } from '../infrastructure/postgres/postgres-session-repository.js';
 import { createRuntimeToolCatalog } from '../entrypoints/mcp/runtime-tool-composition.js';
 import { createRuntimeOwner } from './create-runtime-owner.js';
@@ -50,6 +51,7 @@ export interface CreateServiceOptions {
   /** Explicit infrastructure/runtime seams retained for deterministic fixtures. */
   readonly database?: Pool;
   readonly fileStore?: FileStore;
+  readonly runtimeProvider?: RuntimeExecutionProvider;
   readonly memoryReviewNotifier?: Pick<PublishMemoryReviewSurface, 'execute'>;
 }
 
@@ -166,6 +168,9 @@ export async function createApplication(
     config,
     logger,
     toolCatalog: runtimeToolCatalog,
+    ...(options.runtimeProvider
+      ? { runtimeProvider: options.runtimeProvider }
+      : {}),
   });
   const {
     runtimeProvider,

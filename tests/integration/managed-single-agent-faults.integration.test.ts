@@ -205,17 +205,27 @@ describe('managed single-agent minimum fault evidence', () => {
       }),
     });
     expect(response.status).toBe(202);
-    const admitted = (await response.json()) as { run_id: string };
+    const admitted = (await response.json()) as { task_id: string };
     const imported = await app.request('/api/v1/agents:import', {
       method: 'POST',
       headers: { ...headers, 'idempotency-key': crypto.randomUUID() },
       body: JSON.stringify({ source }),
     });
     expect(imported.status).toBe(201);
+    const task = await app.request(`/api/v1/tasks/${admitted.task_id}`, {
+      headers: { authorization: `Bearer ${primaryServiceAccountToken}` },
+    });
+    expect(task.status).toBe(200);
+    const taskBody = (await task.json()) as {
+      invokable: { version_id: string };
+      latest_run: { run_id: string } | null;
+    };
+    expect(taskBody.invokable.version_id).toBe(defaultPublishedAgentVersionId);
+    if (!taskBody.latest_run) throw new Error('admitted task has no latest run');
     if (!runControl.control) throw new Error('missing single-run debug control');
-    await runControl.control.claimAndExecute(admitted.run_id);
-    expect(runtime.systemPrompts).toContain('Do the task.');
-    expect(runtime.systemPrompts).not.toContain('Use V2 only.');
+    await runControl.control.claimAndExecute(taskBody.latest_run.run_id);
+    expect(runtime.executeCalls).toBe(1);
+    expect(runtime.prompts).toContain('pinned');
   });
 });
 

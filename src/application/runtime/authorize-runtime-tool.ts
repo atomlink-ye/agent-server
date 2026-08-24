@@ -1,8 +1,12 @@
-import type { RuntimeGrantReader } from '../ports/runtime-grant-reader.js';
+import type {
+  RuntimeGrantReader,
+  RuntimeGrantRecord,
+} from '../ports/runtime-grant-reader.js';
 import type { RuntimeGenerationStore } from '../ports/runtime-generation-store.js';
 import type { RuntimeSessionStore } from '../ports/runtime-session-store.js';
 import type { RuntimeTurnStore } from '../ports/runtime-turn-store.js';
 import {
+  evaluateRuntimeGrantDiscoveryPolicy,
   evaluateRuntimeGrantPolicy,
   type RuntimeGrantDenialReason,
 } from './grant-policy.js';
@@ -32,9 +36,15 @@ export type AuthorizedRuntimeToolContext = Readonly<{
   readonly catalogTools: readonly string[];
   readonly runtimeSession: RuntimeSession;
   readonly generation: RuntimeSessionGeneration;
-  readonly turn: RuntimeTurn;
-  readonly requestedTool: string;
-  readonly catalogDigest: string;
+  /**
+   * Absent for a discovery-grade authorization: the MCP handshake
+   * (`initialize`/`tools/list`) happens before the grant is ever bound to a
+   * turn, so there is no turn to carry yet. No consumer of this context
+   * reads `turn` outside a real tool invocation, where it is always set.
+   */
+  readonly turn?: RuntimeTurn;
+  readonly requestedTool?: string;
+  readonly catalogDigest?: string;
 }>;
 
 export type AuthorizeRuntimeToolResult =
@@ -88,44 +98,116 @@ export class AuthorizeRuntimeTool {
     if (policy.kind === 'denied') return policy;
     return {
       kind: 'authorized',
-      context: Object.freeze({
-        grantId: grant.id,
-        tenantId: session.owner.tenantId,
-        workspaceId: session.owner.workspaceId,
-        principalType: session.owner.principalType,
-        principalId: session.owner.principalId,
-        scopeId: session.scope.id,
-        ...(session.scope.kind === 'team_member'
-          ? { teamMemberRunId: session.scope.id }
-          : {}),
-        ...(turn.source.kind === 'team_member'
-          ? {
-              activeTurn: {
-                taskId: turn.source.taskId,
-                runId: turn.source.runId,
-                contextEpoch: createHash('sha256')
-                  .update(`${turn.source.taskId}:${turn.source.runId}`)
-                  .digest('hex')
-                  .slice(0, 24),
-              },
-            }
-          : {}),
-        ...(turn.source.kind === 'conversation'
-          ? {
-              chatContext: {
-                conversationId: turn.source.conversationId,
-                triggerMessageId: turn.source.triggerMessageId,
-              },
-            }
-          : {}),
-        allowedTools: grant.allowedTools,
-        catalogTools: grant.allowedTools,
-        runtimeSession: session,
+      context: this.buildContext({
+        grant,
+        session,
         generation,
         turn,
         requestedTool: input.requestedTool,
         catalogDigest: input.currentCatalogDigest,
       }),
     };
+  }
+
+  /**
+   * Discovery-grade authorization for the MCP handshake (`initialize`,
+   * `tools/list`, `notifications/initialized`, `ping`, `resources/list`,
+   * `prompts/list`). The provider performs this handshake once per process,
+   * and `execute-runtime-turn.ts` always runs `ensureRuntimeSession` --
+   * which triggers the handshake -- strictly before `rotateRuntimeGrant`
+   * binds the grant to a turn. Requiring a bound, active turn here (the
+   * invocation predicate) therefore always denies the handshake, and the
+   * provider then caches an empty tool list for the life of the process.
+   *
+   * Delegates to `evaluateRuntimeGrantDiscoveryPolicy`, the sibling of the
+   * unchanged invocation predicate: it never checks turn binding, turn
+   * activity, or per-tool allowance, so it authorizes discovery of the
+   * catalog, not invocation of any tool. Every actual `tools/call` still
+   * goes through `execute()` and `evaluateRuntimeGrantPolicy`.
+   */
+  public async executeDiscovery(input: {
+    readonly bearerToken: string;
+    readonly currentCatalogDigest: string;
+  }): Promise<AuthorizeRuntimeToolResult> {
+    const grant = await this.grants.findByTokenHash(
+      this.hashBearer(input.bearerToken),
+    );
+    if (!grant) return { kind: 'denied', reason: 'grant_revoked' };
+    const session = await this.sessions.findById(grant.runtimeSessionId);
+    if (!session) return { kind: 'denied', reason: 'grant_session_mismatch' };
+    const generation = await this.generations.findById(grant.generationId);
+    if (!generation)
+      return { kind: 'denied', reason: 'grant_generation_mismatch' };
+    const policy = evaluateRuntimeGrantDiscoveryPolicy({
+      grant,
+      session,
+      generation,
+      currentCatalogDigest: input.currentCatalogDigest,
+      now: this.now(),
+    });
+    if (policy.kind === 'denied') return policy;
+    return {
+      kind: 'authorized',
+      context: this.buildContext({
+        grant,
+        session,
+        generation,
+        catalogDigest: input.currentCatalogDigest,
+      }),
+    };
+  }
+
+  /** Shared context construction so discovery cannot drift from invocation. */
+  private buildContext(input: {
+    readonly grant: RuntimeGrantRecord;
+    readonly session: RuntimeSession;
+    readonly generation: RuntimeSessionGeneration;
+    readonly turn?: RuntimeTurn;
+    readonly requestedTool?: string;
+    readonly catalogDigest?: string;
+  }): AuthorizedRuntimeToolContext {
+    const { grant, session, generation, turn } = input;
+    return Object.freeze({
+      grantId: grant.id,
+      tenantId: session.owner.tenantId,
+      workspaceId: session.owner.workspaceId,
+      principalType: session.owner.principalType,
+      principalId: session.owner.principalId,
+      scopeId: session.scope.id,
+      ...(session.scope.kind === 'team_member'
+        ? { teamMemberRunId: session.scope.id }
+        : {}),
+      ...(turn?.source.kind === 'team_member'
+        ? {
+            activeTurn: {
+              taskId: turn.source.taskId,
+              runId: turn.source.runId,
+              contextEpoch: createHash('sha256')
+                .update(`${turn.source.taskId}:${turn.source.runId}`)
+                .digest('hex')
+                .slice(0, 24),
+            },
+          }
+        : {}),
+      ...(turn?.source.kind === 'conversation'
+        ? {
+            chatContext: {
+              conversationId: turn.source.conversationId,
+              triggerMessageId: turn.source.triggerMessageId,
+            },
+          }
+        : {}),
+      allowedTools: grant.allowedTools,
+      catalogTools: grant.allowedTools,
+      runtimeSession: session,
+      generation,
+      ...(turn ? { turn } : {}),
+      ...(input.requestedTool !== undefined
+        ? { requestedTool: input.requestedTool }
+        : {}),
+      ...(input.catalogDigest !== undefined
+        ? { catalogDigest: input.catalogDigest }
+        : {}),
+    });
   }
 }

@@ -3,6 +3,7 @@ import { createServer, type Server } from 'node:http';
 import { createRuntimeMcpHttpHandler } from '../../adapters/mcp/runtime-mcp-http-handler.js';
 import type { AuthorizeRuntimeTool } from '../../application/runtime/authorize-runtime-tool.js';
 import type { RuntimeToolCatalog } from '../../application/extensions/runtime-tool-catalog.js';
+import type { Logger } from '../../shared/observability/logger.js';
 
 export interface RuntimeMcpEndpoint {
   readonly url: string;
@@ -21,6 +22,7 @@ export class RuntimeMcpServer {
     private readonly listenHost = '127.0.0.1',
     private readonly advertisedHost = '127.0.0.1',
     private readonly listenPort = 0,
+    private readonly logger?: Logger,
   ) {
     this.authorize = authorize;
   }
@@ -42,6 +44,7 @@ export class RuntimeMcpServer {
           createRuntimeMcpHttpHandler({
             authorize: this.authorize,
             toolCatalog: this.toolCatalog,
+            ...(this.logger ? { logger: this.logger } : {}),
           }),
         );
         this.#server = server;

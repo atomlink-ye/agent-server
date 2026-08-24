@@ -3,7 +3,7 @@ import type { ResolveRuntimeSessionSpec } from '../ports/resolve-runtime-session
 import type { RuntimeSessionStore } from '../ports/runtime-session-store.js';
 import type { RuntimeSpecStore } from '../ports/runtime-spec-store.js';
 import { runtimeSpecRevision } from '../../domain/runtime/runtime-session.js';
-import { createRuntimeSessionSpec } from '../../domain/runtime/runtime-session-spec.js';
+import { sameDesiredRuntimeSpec } from './reconciliation/compare-runtime-spec.js';
 
 /** Owns the complete desired-state transition before provider reconciliation. */
 export class EnsureDesiredRuntimeSpecService implements EnsureDesiredRuntimeSpec {
@@ -17,43 +17,38 @@ export class EnsureDesiredRuntimeSpecService implements EnsureDesiredRuntimeSpec
   public async execute(
     input: Parameters<EnsureDesiredRuntimeSpec['execute']>[0],
   ) {
-    const desired = this.resolveSpec.execute({
-      owner: input.owner,
-      agentVersionId: input.agentVersionId,
-      environmentVersionId: input.environmentVersionId,
-      resolvedSkills: input.resolvedSkills,
-      toolRefs: input.toolRefs,
-      configuration: input.configuration,
-    });
-
     let session = await this.sessions.findByScope(input.owner, input.scope);
     if (!session) {
+      const initial = this.resolve(input, { kind: 'initial' });
       session = await this.sessions.createWithInitialSpec({
         owner: input.owner,
         scope: input.scope,
-        spec: desired,
+        spec: initial,
       });
     }
     if (session.status === 'closed') throw new Error('runtime_session_closed');
 
     let persisted = await this.specs.getDesired(session);
+    let desired = this.resolve(input, {
+      kind: 'revision',
+      runtimeSessionId: session.id,
+      revision: runtimeSpecRevision(session.desiredSpecRevision + 1),
+    });
+    if (sameDesiredRuntimeSpec(persisted, desired))
+      return { session, spec: persisted };
+
     let appendError: unknown;
     for (
       let attempt = 0;
-      attempt < 2 && !sameDesiredSpec(persisted, desired);
+      attempt < 2 && !sameDesiredRuntimeSpec(persisted, desired);
       attempt += 1
     ) {
-      const next = createRuntimeSessionSpec({
-        ...desired,
-        runtimeSessionId: session.id,
-        revision: runtimeSpecRevision(session.desiredSpecRevision + 1),
-        createdAt: this.now().toISOString(),
-      });
       try {
         await this.specs.append({
-          spec: next,
+          spec: desired,
           expectedDesiredRevision: session.desiredSpecRevision,
         });
+        appendError = undefined;
       } catch (error) {
         appendError = error;
       }
@@ -61,57 +56,30 @@ export class EnsureDesiredRuntimeSpecService implements EnsureDesiredRuntimeSpec
       session = await this.sessions.findById(session.id);
       if (!session) throw new Error('Runtime session could not be loaded.');
       persisted = await this.specs.getDesired(session);
-      if (sameDesiredSpec(persisted, desired))
+      if (sameDesiredRuntimeSpec(persisted, desired))
         return { session, spec: persisted };
       if (appendError && attempt === 1) throw appendError;
+      desired = this.resolve(input, {
+        kind: 'revision',
+        runtimeSessionId: session.id,
+        revision: runtimeSpecRevision(session.desiredSpecRevision + 1),
+      });
     }
     if (appendError) throw appendError;
     return { session, spec: persisted };
   }
-}
-
-function sameDesiredSpec(
-  persisted: Awaited<ReturnType<RuntimeSpecStore['getDesired']>>,
-  desired: Awaited<ReturnType<ResolveRuntimeSessionSpec['execute']>>,
-): boolean {
-  return (
-    persisted.workspaceId === desired.workspaceId &&
-    persisted.agentVersionId === desired.agentVersionId &&
-    persisted.environmentVersionId === desired.environmentVersionId &&
-    sameSkills(persisted.resolvedSkills, desired.resolvedSkills) &&
-    sameStrings(persisted.toolRefs, desired.toolRefs) &&
-    persisted.provider === desired.provider &&
-    persisted.model === desired.model &&
-    persisted.cwd === desired.cwd &&
-    persisted.systemPromptDigest === desired.systemPromptDigest &&
-    persisted.skillSetDigest === desired.skillSetDigest &&
-    persisted.toolCatalogDigest === desired.toolCatalogDigest &&
-    persisted.extensionSetDigest === desired.extensionSetDigest &&
-    persisted.contextEpoch === desired.contextEpoch &&
-    persisted.bootstrapDigest === desired.bootstrapDigest
-  );
-}
-
-function sameSkills(
-  left: readonly { readonly ref: string; readonly digest: string }[],
-  right: readonly { readonly ref: string; readonly digest: string }[],
-): boolean {
-  return (
-    left.length === right.length &&
-    left.every(
-      (skill, index) =>
-        skill.ref === right[index]?.ref &&
-        skill.digest === right[index]?.digest,
-    )
-  );
-}
-
-function sameStrings(
-  left: readonly string[],
-  right: readonly string[],
-): boolean {
-  return (
-    left.length === right.length &&
-    left.every((value, index) => value === right[index])
-  );
+  private resolve(
+    input: Parameters<EnsureDesiredRuntimeSpec['execute']>[0],
+    target: Parameters<ResolveRuntimeSessionSpec['execute']>[0]['target'],
+  ) {
+    return this.resolveSpec.execute({
+      target,
+      owner: input.owner,
+      agentVersionId: input.agentVersionId,
+      environmentVersionId: input.environmentVersionId,
+      resolvedSkills: input.resolvedSkills,
+      toolRefs: input.toolRefs,
+      configuration: input.configuration,
+    });
+  }
 }

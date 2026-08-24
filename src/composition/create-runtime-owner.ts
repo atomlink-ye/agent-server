@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import { createHash } from 'node:crypto';
 import type { AppConfig } from '../shared/config.js';
 import type { Logger } from '../shared/observability/logger.js';
 import type { RuntimeToolCatalog } from '../application/extensions/runtime-tool-catalog.js';
@@ -91,7 +92,12 @@ export function createRuntimeOwner(input: {
   const runtimeMcpEndpoint = createRuntimeMcpEndpoint(runtimeMcpServer);
   const resolveRuntimeSpec = new ResolveRuntimeSessionSpecService(
     input.toolCatalog,
-    { digest: () => input.toolCatalog.digest },
+    {
+      digest: ({ agentVersionId, toolRefs }) =>
+        `sha256:${createHash('sha256')
+          .update(JSON.stringify({ agentVersionId, toolRefs }), 'utf8')
+          .digest('hex')}`,
+    },
   );
   const ensureDesiredRuntimeSpec = new EnsureDesiredRuntimeSpecService(
     runtimeSessions,

@@ -73,8 +73,7 @@ export class ResolveRuntimeSessionSpecService implements ResolveRuntimeSessionSp
     );
 
     return createRuntimeSessionSpec({
-      runtimeSessionId: randomUUID() as RuntimeSessionId,
-      revision: runtimeSpecRevision(1),
+      ...resolveTarget(input.target),
       workspaceId: input.owner.workspaceId,
       agentVersionId: input.agentVersionId,
       environmentVersionId: input.environmentVersionId,
@@ -97,6 +96,20 @@ export class ResolveRuntimeSessionSpecService implements ResolveRuntimeSessionSp
       createdAt: this.now().toISOString(),
     });
   }
+}
+
+function resolveTarget(
+  target: ResolveRuntimeSessionSpecInput['target'],
+): Pick<RuntimeSessionSpec, 'runtimeSessionId' | 'revision'> {
+  if (target.kind === 'revision')
+    return {
+      runtimeSessionId: target.runtimeSessionId,
+      revision: target.revision,
+    };
+  return {
+    runtimeSessionId: randomUUID() as RuntimeSessionId,
+    revision: runtimeSpecRevision(1),
+  };
 }
 
 function assertIdentity(input: ResolveRuntimeSessionSpecInput): void {

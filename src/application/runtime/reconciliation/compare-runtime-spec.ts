@@ -9,6 +9,29 @@ export interface RuntimeSpecDiff {
   readonly replacementRequired: readonly RuntimeSpecField[];
 }
 
+/** Compares the complete desired state while excluding durable identity and timestamps. */
+export function sameDesiredRuntimeSpec(
+  left: RuntimeSessionSpec,
+  right: RuntimeSessionSpec,
+): boolean {
+  return (
+    left.workspaceId === right.workspaceId &&
+    left.agentVersionId === right.agentVersionId &&
+    left.environmentVersionId === right.environmentVersionId &&
+    sameSkills(left.resolvedSkills, right.resolvedSkills) &&
+    sameStrings(left.toolRefs, right.toolRefs) &&
+    left.provider === right.provider &&
+    left.model === right.model &&
+    left.cwd === right.cwd &&
+    left.systemPromptDigest === right.systemPromptDigest &&
+    left.skillSetDigest === right.skillSetDigest &&
+    left.toolCatalogDigest === right.toolCatalogDigest &&
+    left.extensionSetDigest === right.extensionSetDigest &&
+    left.contextEpoch === right.contextEpoch &&
+    left.bootstrapDigest === right.bootstrapDigest
+  );
+}
+
 interface RuntimeSpecComparison {
   readonly field: RuntimeSpecField;
   readonly applied: string | number | null;
@@ -117,4 +140,27 @@ export function compareRuntimeSpecs(
     mutableInPlace: Object.freeze(mutableInPlace),
     replacementRequired: Object.freeze(replacementRequired),
   });
+}
+
+function sameSkills(
+  left: RuntimeSessionSpec['resolvedSkills'],
+  right: RuntimeSessionSpec['resolvedSkills'],
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every(
+      (skill, index) =>
+        skill.ref === right[index]?.ref && skill.digest === right[index]?.digest,
+    )
+  );
+}
+
+function sameStrings(
+  left: readonly string[],
+  right: readonly string[],
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every((value, index) => value === right[index])
+  );
 }

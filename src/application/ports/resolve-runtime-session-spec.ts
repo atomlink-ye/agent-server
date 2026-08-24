@@ -4,6 +4,10 @@ import type {
   RuntimeSessionSpec,
 } from '../../domain/runtime/runtime-session-spec.js';
 import type { DesiredRuntimeSystemPrompt } from '../../domain/runtime/desired-runtime-system-prompt.js';
+import type {
+  RuntimeSessionId,
+  RuntimeSpecRevision,
+} from '../../domain/runtime/runtime-session.js';
 
 /**
  * The only external desired runtime values. Digest components are assembled by
@@ -19,6 +23,13 @@ export interface RuntimeSessionSpecConfiguration {
 
 /** Exact identity and desired inputs needed for one immutable spec revision. */
 export interface ResolveRuntimeSessionSpecInput {
+  readonly target:
+    | Readonly<{ readonly kind: 'initial' }>
+    | Readonly<{
+        readonly kind: 'revision';
+        readonly runtimeSessionId: RuntimeSessionId;
+        readonly revision: RuntimeSpecRevision;
+      }>;
   readonly owner: RuntimeSessionOwner;
   readonly agentVersionId: string;
   readonly environmentVersionId: string | null;

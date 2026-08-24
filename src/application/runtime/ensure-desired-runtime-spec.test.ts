@@ -26,7 +26,19 @@ describe('EnsureDesiredRuntimeSpecService', () => {
       { findByScope, findById, createWithInitialSpec: vi.fn() } as never,
       { getDesired, append } as never,
       {
-        execute: vi.fn(() => next),
+        execute: vi.fn((input) =>
+          createRuntimeSessionSpec({
+            ...next,
+            runtimeSessionId:
+              input.target.kind === 'revision'
+                ? input.target.runtimeSessionId
+                : session.id,
+            revision:
+              input.target.kind === 'revision'
+                ? input.target.revision
+                : runtimeSpecRevision(1),
+          }),
+        ),
       },
       () => new Date('2026-08-24T00:00:00.000Z'),
     );
@@ -80,7 +92,20 @@ describe('EnsureDesiredRuntimeSpecService', () => {
         createWithInitialSpec: vi.fn(),
       } as never,
       { getDesired, append } as never,
-      { execute: vi.fn(() => desired) },
+      {
+        execute: vi.fn((input) =>
+          spec(
+            input.target.kind === 'revision'
+              ? input.target.runtimeSessionId
+              : session.id,
+            input.configuration.desiredSystemPrompt.text,
+            input.toolRefs,
+            input.target.kind === 'revision'
+              ? input.target.revision
+              : runtimeSpecRevision(1),
+          ),
+        ),
+      },
     );
 
     const result = await service.execute({
@@ -128,10 +153,11 @@ function spec(
   runtimeSessionId: RuntimeSession['id'],
   prompt: string,
   toolRefs: readonly string[],
+  revision = runtimeSpecRevision(1),
 ): RuntimeSessionSpec {
   return createRuntimeSessionSpec({
     runtimeSessionId,
-    revision: runtimeSpecRevision(1),
+    revision,
     workspaceId: 'workspace-1',
     agentVersionId: 'agent-version-1',
     environmentVersionId: null,

@@ -225,7 +225,9 @@ describe('managed single-agent minimum fault evidence', () => {
     if (!runControl.control) throw new Error('missing single-run debug control');
     await runControl.control.claimAndExecute(taskBody.latest_run.run_id);
     expect(runtime.executeCalls).toBe(1);
-    expect(runtime.prompts).toContain('pinned');
+    expect(runtime.prompts.some((prompt) => prompt.includes('pinned'))).toBe(
+      true,
+    );
   });
 });
 

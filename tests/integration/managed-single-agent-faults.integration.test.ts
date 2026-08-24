@@ -22,6 +22,13 @@ import {
 } from '../fixtures/create-test-app.js';
 import { FakeAgentRuntime } from '../fixtures/fake-agent-runtime.js';
 import { createLogger } from '../../src/shared/observability/logger.js';
+import {
+  runtimeSpecRevision,
+  type RuntimeSession,
+  type RuntimeSessionId,
+  type RuntimeSessionOwner,
+  type RuntimeScope,
+} from '../../src/domain/runtime/runtime-session.js';
 
 const connectionString = process.env.DATABASE_URL ?? process.env.POSTGRES_URL;
 if (!connectionString)
@@ -88,6 +95,10 @@ describe('managed single-agent minimum fault evidence', () => {
         executeTeamTask: team,
         runtimeTurns: runtime,
         runtimeProvider: runtime,
+        runtimeSessions: {
+          findByScope: async (runtimeOwner, scope) =>
+            readyRuntimeSession(runtimeOwner, scope),
+        },
         logger,
       });
       let available = true;
@@ -200,3 +211,21 @@ describe('managed single-agent minimum fault evidence', () => {
     ).toBe(true);
   });
 });
+
+function readyRuntimeSession(
+  owner: RuntimeSessionOwner,
+  scope: RuntimeScope,
+): RuntimeSession {
+  const now = '2026-08-24T00:00:00.000Z';
+  return {
+    id: `runtime:${scope.kind}:${scope.id}` as RuntimeSessionId,
+    owner,
+    scope,
+    desiredSpecRevision: runtimeSpecRevision(1),
+    currentGenerationId: null,
+    status: 'ready',
+    createdAt: now,
+    updatedAt: now,
+    closedAt: null,
+  };
+}

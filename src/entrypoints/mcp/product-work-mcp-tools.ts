@@ -418,33 +418,50 @@ export function registerProductWorkMcpTools(input: {
             isError: true,
             content: [{ type: 'text', text: 'not_found' }],
           };
-        try {
-          const work = await input.workIdentity.createWork({
-            owner: {
-              tenantId: current.tenantId,
-              workspaceId: current.workspaceId,
-            },
-            accessContext: {
-              tenantId: current.tenantId,
-              workspaceId: current.workspaceId,
-              principalType: 'service_account',
-              principalId: current.principalId,
-              policySnapshotVersion: 'runtime-mcp',
-            },
-            definitionId: args.definition_id,
-            definitionVersionId: args.definition_version_id,
-            title: args.title,
+        const conversationOrigin = currentConversationOrigin(current);
+        const work = await input.workIdentity.createWork({
+          owner: {
+            tenantId: current.tenantId,
+            workspaceId: current.workspaceId,
+          },
+          accessContext: {
+            tenantId: current.tenantId,
+            workspaceId: current.workspaceId,
+            principalType: 'service_account',
+            principalId: current.principalId,
+            policySnapshotVersion: 'runtime-mcp',
+          },
+          definitionId: args.definition_id,
+          definitionVersionId: args.definition_version_id,
+          title: args.title,
+        });
+        // A Work created from a Direct Chat has to be linked back to that
+        // conversation, exactly as product_work_run_start does. Without the
+        // link there is nothing to project a Work Card from, so the Coworker
+        // reports a Work the user cannot see in the conversation they asked
+        // in. This was an empty `finally` block.
+        if (conversationOrigin) {
+          if (!input.conversationWorkLinks)
+            return {
+              isError: true,
+              content: [{ type: 'text', text: 'not_found' }],
+            };
+          await input.conversationWorkLinks.linkWorkToConversation({
+            tenantId: current.tenantId,
+            workspaceId: current.workspaceId,
+            workId: work.id,
+            conversationId: conversationOrigin.conversationId,
+            triggerMessageId: conversationOrigin.triggerMessageId,
           });
-          return {
-            content: [
-              {
-                type: 'text',
-                text: JSON.stringify({ work: toWorkResponse(work) }),
-              },
-            ],
-          };
-        } finally {
         }
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({ work: toWorkResponse(work) }),
+            },
+          ],
+        };
       },
     );
   if (

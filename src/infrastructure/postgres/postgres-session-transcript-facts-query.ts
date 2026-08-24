@@ -69,7 +69,11 @@ export class PostgresSessionTranscriptFactsQuery implements ProductSessionTransc
           AND m.tenant_id=$2 AND m.workspace_id=$3
          JOIN runtime_sessions rs
            ON rs.id=m.runtime_session_id
-          AND rs.scope_id=m.id
+          -- RuntimeSession.scope_id is text because a scope id is not always a
+          -- uuid, while team_member_runs.id is. Comparing them directly raises
+          -- "operator does not exist: text = uuid", which surfaced only as a
+          -- 500 on the session-transcripts read.
+          AND rs.scope_id=m.id::text
           AND rs.scope_kind='team_member'
           AND rs.tenant_id=$2
          LEFT JOIN tasks t

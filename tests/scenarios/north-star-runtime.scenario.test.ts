@@ -6,9 +6,13 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { Pool } from 'pg';
 
 import { AGENT_SERVER_SYNTHETIC_STOCK_SNAPSHOT_TOOL_REF } from '../../src/application/agents/built-in-skills.js';
+import { AGENT_SERVER_SYNTHETIC_EVENT_BATCH_TOOL_REF } from '../../src/application/agents/built-in-skills.js';
+import { createRuntimeToolCatalog } from '../../src/application/extensions/runtime-tool-catalog.js';
 import type { ExecutionMcpServerConfig } from '../../src/application/ports/runtime-extension-binding.js';
 import { createApplication } from '../../src/composition/create-application.js';
+import { createRuntimeOwner } from '../../src/composition/create-runtime-owner.js';
 import { SYNTHETIC_MARKET_FIXTURE_REF } from '../../src/adapters/demo-market/synthetic-market-adapter.js';
+import { createSyntheticRuntimeToolsContributor } from '../../src/entrypoints/mcp/runtime-tool-contributors.js';
 import type { PaseoSdkClient as PaseoSdkClientImplementation } from '../../src/adapters/paseo/paseo-sdk-client.js';
 import type {
   PaseoClientPort,
@@ -16,9 +20,11 @@ import type {
   PaseoFinishedAgent,
 } from '../../src/adapters/paseo/paseo-client-port.js';
 import type { PaseoModelDescriptor } from '../../src/adapters/paseo/model-selector.js';
+import type { PaseoTimelinePage } from '../../src/adapters/paseo/paseo-client-port.js';
 import type { ManagedEnvironmentProvider } from '../../src/domain/environments/managed-environment-package.js';
 import { buildTurnPrompt } from '../../src/application/context/runtime-prompts.js';
 import { RUNTIME_RECOVERY_INSTRUCTION } from '../../src/application/runs/run-prompt-context.js';
+import { createDesiredRuntimeSystemPrompt } from '../../src/domain/runtime/desired-runtime-system-prompt.js';
 import { createLogger } from '../../src/shared/observability/logger.js';
 import { loadConfig } from '../../src/shared/config.js';
 import { seedCanonicalPublishedAgent } from '../fixtures/canonical-agent.js';
@@ -41,28 +47,50 @@ type SentAgentMessage = Readonly<{ agentId: string; text: string }>;
 type FinishedAgent = PaseoFinishedAgent;
 
 const paseo = vi.hoisted(() => {
-  let resolveWaitStarted!: () => void;
-  let resolveFinish!: (value: FinishedAgent) => void;
-  const waitStarted = new Promise<void>((resolve) => {
-    resolveWaitStarted = resolve;
-  });
-  const finished = new Promise<FinishedAgent>((resolve) => {
-    resolveFinish = resolve;
-  });
+  const started: Array<Promise<void>> = [];
+  const resolveStarted: Array<() => void> = [];
+  const finished: Array<Promise<FinishedAgent>> = [];
+  const resolveFinished: Array<(value: FinishedAgent) => void> = [];
+  const ensureExecution = (index: number) => {
+    while (started.length <= index) {
+      const next = started.length;
+      started.push(
+        new Promise<void>((resolve) => {
+          resolveStarted[next] = resolve;
+        }),
+      );
+      finished.push(
+        new Promise<FinishedAgent>((resolve) => {
+          resolveFinished[next] = resolve;
+        }),
+      );
+    }
+  };
   return {
     agentInputs: [] as CapturedAgentInput[],
     createdAgents: [] as PaseoCreatedAgent[],
     sendAgentMessageCalls: [] as SentAgentMessage[],
-    waitStarted,
-    finished,
-    markWaitStarted: resolveWaitStarted,
-    complete: () =>
-      resolveFinish({
+    waitStarted: (index: number) => {
+      ensureExecution(index);
+      return started[index]!;
+    },
+    waitFinished: (index: number) => {
+      ensureExecution(index);
+      return finished[index]!;
+    },
+    complete: (index: number) => {
+      ensureExecution(index);
+      resolveFinished[index]!({
         status: 'idle',
         error: null,
         lastMessage: 'NORTH_STAR_OK',
         usage: { inputTokens: 4, outputTokens: 3, totalCostUsd: 0 },
-      }),
+      });
+    },
+    markWaitStarted: (index: number) => {
+      ensureExecution(index);
+      resolveStarted[index]!();
+    },
   };
 });
 
@@ -119,7 +147,7 @@ vi.mock(import('../../src/adapters/paseo/paseo-sdk-client.js'), async () => {
         ...(input.mcpServers ? { mcpServers: input.mcpServers } : {}),
       });
       const createdAgent: PaseoCreatedAgent = {
-        id: 'north-star-provider-session',
+        id: `north-star-provider-session-${paseo.createdAgents.length + 1}`,
         provider: 'opencode',
         model: 'opencode/deepseek-v4-flash-free',
       };
@@ -134,12 +162,26 @@ vi.mock(import('../../src/adapters/paseo/paseo-sdk-client.js'), async () => {
       paseo.sendAgentMessageCalls.push({ agentId, text });
     }
 
+    public async fetchAgentTimeline(): Promise<PaseoTimelinePage> {
+      return {
+        epoch: 'north-star-timeline',
+        startCursor: null,
+        endCursor: null,
+        window: { minSeq: 0, maxSeq: 0, nextSeq: 1 },
+        entries: [],
+      };
+    }
+
     public async waitForFinish(
-      _agentId: string,
+      agentId: string,
       _timeoutMs: number,
     ): Promise<FinishedAgent> {
-      paseo.markWaitStarted();
-      return paseo.finished;
+      const index = paseo.createdAgents.findIndex(
+        (agent) => agent.id === agentId,
+      );
+      if (index < 0) throw new Error('unknown test provider agent');
+      paseo.markWaitStarted(index);
+      return paseo.waitFinished(index);
     }
 
     public async close(): Promise<void> {}
@@ -181,6 +223,14 @@ interface ScenarioState {
   mcpTools: readonly string[];
   mcpCallText: string;
   runResponse: Readonly<Record<string, unknown>>;
+  replacement: Readonly<{
+    revision: number;
+    toolCatalogDigest: string;
+    extensionSetDigest: string;
+    generation: Readonly<Record<string, unknown>>;
+    grant: Readonly<Record<string, unknown>>;
+    mcpToolDenied: boolean;
+  }>;
 }
 
 let database: RealPostgresTestDatabase | undefined;
@@ -304,7 +354,7 @@ describe('North Star production runtime authority', () => {
     if (!execution) throw new Error('single-run debug control is unavailable');
     await withTimeout(
       Promise.race([
-        paseo.waitStarted,
+        paseo.waitStarted(0),
         execution.then(
           async (result) => {
             const diagnostics = await database!.pool.query<
@@ -342,7 +392,7 @@ describe('North Star production runtime authority', () => {
       throw new Error('production provider did not receive an MCP binding');
     const mcpEvidence = await exerciseMcp(mcp);
 
-    paseo.complete();
+    paseo.complete(0);
     const executionResult = await withTimeout(
       execution,
       10_000,
@@ -398,6 +448,84 @@ describe('North Star production runtime authority', () => {
       [runId],
     );
 
+    const productionRuntimeOwner = createRuntimeOwner({
+      database: database.pool,
+      config,
+      logger,
+      toolCatalog: createRuntimeToolCatalog([
+        {
+          ref: 'synthetic',
+          toolRefs: [
+            AGENT_SERVER_SYNTHETIC_STOCK_SNAPSHOT_TOOL_REF,
+            AGENT_SERVER_SYNTHETIC_EVENT_BATCH_TOOL_REF,
+          ],
+          contribute: createSyntheticRuntimeToolsContributor({ logger }),
+        },
+      ]),
+    });
+    const replacementDesired =
+      await productionRuntimeOwner.ensureDesiredRuntimeSpec.execute({
+        owner: {
+          tenantId,
+          workspaceId,
+          principalType: 'service_account',
+          principalId: serviceAccountId,
+        },
+        scope: { kind: 'product_session', id: sessionId },
+        agentVersionId,
+        environmentVersionId,
+        resolvedSkills: [],
+        toolRefs: [AGENT_SERVER_SYNTHETIC_EVENT_BATCH_TOOL_REF],
+        configuration: {
+          provider: 'opencode',
+          model: null,
+          cwd: join(root, 'provider'),
+          contextEpoch: 0,
+          desiredSystemPrompt: createDesiredRuntimeSystemPrompt(
+            providerInput.systemPrompt,
+          ),
+        },
+      });
+    const replacementExecution =
+      productionRuntimeOwner.executeRuntimeTurn.execute({
+        runtimeSessionId: replacementDesired.session.id,
+        source: { kind: 'run', runId: randomUUID() },
+        prompt: 'Direct replacement proof turn.',
+        recoveryPrompt: 'Direct replacement proof recovery turn.',
+        desiredSystemPrompt: createDesiredRuntimeSystemPrompt(
+          providerInput.systemPrompt,
+        ),
+      });
+    await withTimeout(
+      paseo.waitStarted(1),
+      10_000,
+      'replacement provider turn did not start',
+    );
+    const replacementMcp = paseo.agentInputs[1]?.mcpServers?.[0];
+    if (!replacementMcp)
+      throw new Error('replacement provider did not receive an MCP binding');
+    const mcpToolDenied = await deniedMcpToolCall(replacementMcp);
+    paseo.complete(1);
+    await withTimeout(
+      replacementExecution,
+      10_000,
+      'replacement runtime turn did not complete',
+    );
+    const replacementGeneration = await oneRow(
+      database.pool,
+      `SELECT id,runtime_session_id,generation,applied_spec_revision,status
+         FROM runtime_session_generations
+        WHERE runtime_session_id=$1 AND generation=2`,
+      [requiredString(runtimeSession, 'id')],
+    );
+    const replacementGrant = await oneRow(
+      database.pool,
+      `SELECT id,runtime_session_id,generation_id,allowed_tools,revoked_at
+         FROM runtime_tool_grants
+        WHERE generation_id=$1`,
+      [requiredString(replacementGeneration, 'id')],
+    );
+
     state = {
       workspaceId,
       environmentVersionId,
@@ -412,11 +540,20 @@ describe('North Star production runtime authority', () => {
       mcpTools: mcpEvidence.tools,
       mcpCallText: mcpEvidence.callText,
       runResponse,
+      replacement: {
+        revision: replacementDesired.spec.revision,
+        toolCatalogDigest: replacementDesired.spec.toolCatalogDigest,
+        extensionSetDigest: replacementDesired.spec.extensionSetDigest,
+        generation: replacementGeneration,
+        grant: replacementGrant,
+        mcpToolDenied,
+      },
     };
   }, 30_000);
 
   afterAll(async () => {
-    paseo.complete();
+    paseo.complete(0);
+    paseo.complete(1);
     if (application) await application.close();
     else if (database) await database.dispose();
   });
@@ -461,7 +598,7 @@ describe('North Star production runtime authority', () => {
       provider: 'opencode',
       status: 'active',
       provider_workspace_id: 'north-star-provider-workspace',
-      provider_session_id: 'north-star-provider-session',
+      provider_session_id: 'north-star-provider-session-1',
     });
     expect(current.generation.provider_session_id).toBe(createdAgent.id);
     expect(current.runtimeSession.current_generation_id).toBe(
@@ -474,7 +611,6 @@ describe('North Star production runtime authority', () => {
     expect(current.grant).toMatchObject({
       runtime_session_id: current.runtimeSession.id,
       generation_id: current.generation.id,
-      runtime_turn_id: current.turn.id,
       revoked_at: null,
     });
     expect(current.grant.allowed_tools).toContain(
@@ -490,9 +626,10 @@ describe('North Star production runtime authority', () => {
     if (!createdAgent) throw new Error('provider create result missing');
     const sentMessage = paseo.sendAgentMessageCalls[0];
     if (!sentMessage) throw new Error('provider message call missing');
-    expect(paseo.sendAgentMessageCalls).toEqual([
-      { agentId: createdAgent.id, text: expectedDeliveredTurnPrompt },
-    ]);
+    expect(paseo.sendAgentMessageCalls[0]).toEqual({
+      agentId: createdAgent.id,
+      text: expectedDeliveredTurnPrompt,
+    });
     expect(current.turn).toMatchObject({
       runtime_session_id: current.runtimeSession.id,
       generation_id: current.generation.id,
@@ -510,6 +647,33 @@ describe('North Star production runtime authority', () => {
       status: 'succeeded',
       result: { text: 'NORTH_STAR_OK' },
     });
+  });
+
+  it('appends revision 2, replaces generation 1, and issues generation 2 a durable grant', () => {
+    const current = scenario();
+    expect(current.replacement.revision).toBe(2);
+    expect(current.replacement.toolCatalogDigest).not.toBe(
+      current.runtimeSpec.tool_catalog_digest,
+    );
+    expect(current.replacement.extensionSetDigest).not.toBe(
+      current.runtimeSpec.extension_set_digest,
+    );
+    expect(current.replacement.generation).toMatchObject({
+      runtime_session_id: current.runtimeSession.id,
+      generation: 2,
+      applied_spec_revision: 2,
+      status: 'active',
+    });
+    expect(current.replacement.grant).toMatchObject({
+      runtime_session_id: current.runtimeSession.id,
+      generation_id: current.replacement.generation.id,
+      allowed_tools: [AGENT_SERVER_SYNTHETIC_EVENT_BATCH_TOOL_REF],
+      revoked_at: null,
+    });
+  });
+
+  it('denies an MCP tool absent from the generation 2 grant', () => {
+    expect(scenario().replacement.mcpToolDenied).toBe(true);
   });
 });
 
@@ -666,6 +830,61 @@ async function exerciseMcp(
   return { tools, callText: JSON.stringify(called.body) };
 }
 
+async function deniedMcpToolCall(
+  server: ExecutionMcpServerConfig,
+): Promise<boolean> {
+  const initialized = await mcpRequest(server, {
+    jsonrpc: '2.0',
+    id: 1,
+    method: 'initialize',
+    params: {
+      protocolVersion: '2025-03-26',
+      capabilities: {},
+      clientInfo: { name: 'north-star-replacement', version: '1.0.0' },
+    },
+  });
+  if (!initialized.sessionId)
+    throw new Error('replacement MCP initialize did not return a session id');
+  await mcpRequest(
+    server,
+    {
+      jsonrpc: '2.0',
+      method: 'notifications/initialized',
+      params: {},
+    },
+    initialized.sessionId,
+    false,
+  );
+  const response = await fetch(server.url, {
+    method: 'POST',
+    headers: {
+      ...server.headers,
+      accept: 'application/json, text/event-stream',
+      'content-type': 'application/json',
+      'mcp-session-id': initialized.sessionId,
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 3,
+      method: 'tools/call',
+      params: {
+        name: 'synthetic_stock_snapshot',
+        arguments: {
+          fixture_ref: SYNTHETIC_MARKET_FIXTURE_REF,
+          symbol: 'ACME',
+        },
+      },
+    }),
+  });
+  const body = await parseMcpResponse(response);
+  return (
+    response.status === 200 &&
+    isRecord(body) &&
+    (isRecord(body.error) ||
+      (isRecord(body.result) && body.result.isError === true))
+  );
+}
+
 async function mcpRequest(
   server: ExecutionMcpServerConfig,
   body: Readonly<Record<string, unknown>>,
@@ -701,6 +920,15 @@ async function mcpRequest(
 async function parseMcpBody(
   response: Response,
 ): Promise<Readonly<Record<string, unknown>>> {
+  const parsed = await parseMcpResponse(response);
+  if (parsed.error)
+    throw new Error(`MCP response error: ${JSON.stringify(parsed.error)}`);
+  return parsed;
+}
+
+async function parseMcpResponse(
+  response: Response,
+): Promise<Readonly<Record<string, unknown>>> {
   const text = await response.text();
   const data = response.headers
     .get('content-type')
@@ -714,8 +942,6 @@ async function parseMcpBody(
   if (!data) throw new Error('MCP response body is empty');
   const parsed: unknown = JSON.parse(data);
   if (!isRecord(parsed)) throw new Error('MCP response is not an object');
-  if (parsed.error)
-    throw new Error(`MCP response error: ${JSON.stringify(parsed.error)}`);
   return parsed;
 }
 

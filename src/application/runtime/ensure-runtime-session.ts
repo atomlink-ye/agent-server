@@ -18,9 +18,22 @@ import type { RuntimeSessionId } from '../../domain/runtime/runtime-session.js';
 import type { DesiredRuntimeSystemPrompt } from '../../domain/runtime/desired-runtime-system-prompt.js';
 import { assertDesiredRuntimeSystemPrompt } from '../../domain/runtime/desired-runtime-system-prompt.js';
 import { buildReconciliationPlan } from './reconciliation/build-reconciliation-plan.js';
+import type { ReconciliationPlan } from '../../domain/runtime/reconciliation-plan.js';
 import type { Logger } from '../../shared/observability/logger.js';
 import { RuntimeGenerationManager } from './runtime-generation-manager.js';
 import { buildProviderSessionBinding } from './provider-session-binding.js';
+
+export function planWhenBootstrapDigestIsIndeterminate(input: {
+  readonly plan: ReconciliationPlan;
+  readonly canInspectBootstrapDigestComponents: boolean;
+}): ReconciliationPlan {
+  if (
+    input.plan.kind !== 'replace' &&
+    input.canInspectBootstrapDigestComponents
+  )
+    throw new Error('runtime_provider_bootstrap_digest_indeterminate');
+  return input.plan;
+}
 
 export interface EnsureRuntimeSessionServiceOptions {
   readonly provider: RuntimeExecutionProvider;
@@ -234,14 +247,12 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
       };
     }
     const components = inspection.observed.bootstrapDigestComponents;
-    if (components.status === 'indeterminate') {
-      if (
-        input.plan.kind !== 'replace' &&
-        this.provider.capabilities().canInspectBootstrapDigestComponents
-      )
-        throw new Error('runtime_provider_bootstrap_digest_indeterminate');
-      return input.plan;
-    }
+    if (components.status === 'indeterminate')
+      return planWhenBootstrapDigestIsIndeterminate({
+        plan: input.plan,
+        canInspectBootstrapDigestComponents:
+          this.provider.capabilities().canInspectBootstrapDigestComponents,
+      });
     if (
       inspection.observed.providerSessionId !==
         input.current.providerSessionId ||

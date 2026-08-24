@@ -333,7 +333,6 @@ export async function startPaseo({
         '--home',
         isolated.paseoHome,
         '--no-relay',
-        '--no-mcp',
         // Opt-in only. The dev runtime keeps the Paseo web UI off by default so
         // an isolated daemon stays headless; PASEO_DEV_WEB_UI=1 turns it on for
         // visually inspecting Team transcripts (all members share one workspace).

@@ -107,6 +107,7 @@ export interface CreateTestAppOptions {
     managedMemory?: MemoryReviewApi['managedMemory'];
   };
   readonly memoryReviewNotifier?: Pick<PublishMemoryReviewSurface, 'execute'>;
+  readonly loggerControl?: { lines?: string[] };
 }
 
 export type TestDatabase = {
@@ -174,7 +175,7 @@ export async function createTestApp(
   const logger = createLogger({
     service: testConfig.serviceName,
     minimumLevel: 'error',
-    write: () => undefined,
+    write: (line) => options.loggerControl?.lines?.push(line),
   });
   const fixtureConfig = {
     ...effectiveConfig,

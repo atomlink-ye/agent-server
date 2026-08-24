@@ -262,17 +262,7 @@ export async function createTestApp(
 
 function withTransactionClient(database: TestDatabase): TestDatabase {
   if (!(database instanceof PGlite)) return database;
-  let tail = Promise.resolve();
-  const reserve = () => {
-    let release!: () => void;
-    const reservation = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const previous = tail;
-    tail = previous.then(() => reservation);
-    return { previous, release };
-  };
-  const rawQuery: TestDatabase['query'] = async <Row = Record<string, unknown>>(
+  const query: TestDatabase['query'] = async <Row = Record<string, unknown>>(
     sql: string,
     values?: readonly unknown[],
   ) => {
@@ -282,30 +272,16 @@ function withTransactionClient(database: TestDatabase): TestDatabase {
     );
     return { ...result, rowCount: result.affectedRows };
   };
-  const query: TestDatabase['query'] = async <Row = Record<string, unknown>>(
-    sql: string,
-    values?: readonly unknown[],
-  ) => {
-    const reservation = reserve();
-    await reservation.previous;
-    try {
-      return await rawQuery<Row>(sql, values);
-    } finally {
-      reservation.release();
-    }
-  };
   const close = database.close.bind(database);
   return {
     query,
     close,
     exec: database.exec.bind(database),
     async connect() {
-      const reservation = reserve();
-      await reservation.previous;
       return {
-        query: rawQuery,
+        query,
         exec: database.exec.bind(database),
-        release: reservation.release,
+        release: () => undefined,
       };
     },
   };

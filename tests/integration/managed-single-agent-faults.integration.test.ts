@@ -220,8 +220,10 @@ describe('managed single-agent minimum fault evidence', () => {
       latest_run: { run_id: string } | null;
     };
     expect(taskBody.invokable.version_id).toBe(defaultPublishedAgentVersionId);
-    if (!taskBody.latest_run) throw new Error('admitted task has no latest run');
-    if (!runControl.control) throw new Error('missing single-run debug control');
+    if (!taskBody.latest_run)
+      throw new Error('admitted task has no latest run');
+    if (!runControl.control)
+      throw new Error('missing single-run debug control');
     await runControl.control.claimAndExecute(taskBody.latest_run.run_id);
     expect(runtime.executeCalls).toBe(1);
     expect(runtime.prompts.some((prompt) => prompt.includes('pinned'))).toBe(

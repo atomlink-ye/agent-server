@@ -114,6 +114,7 @@ export type TestDatabase = {
   query<Row = Record<string, unknown>>(
     ...args: readonly unknown[]
   ): Promise<{ rows: readonly Row[]; [key: string]: unknown }>;
+  exec?(sql: string): Promise<unknown>;
   connect?(): Promise<any>;
   close?(): Promise<void>;
   end?(): Promise<void>;
@@ -287,6 +288,7 @@ function withTransactionClient(database: TestDatabase): TestDatabase {
   return {
     query,
     close,
+    exec: database.exec.bind(database),
     async connect() {
       const reservation = reserve();
       await reservation.previous;

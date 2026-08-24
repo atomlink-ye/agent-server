@@ -523,7 +523,12 @@ describe('ExecuteRun', () => {
     expect(runtime.execute).toHaveBeenCalledWith(
       expect.objectContaining({
         runtimeSessionId: 'runtime-lead-1',
-        source: { kind: 'run', runId: claim.run.id },
+        source: {
+          kind: 'team_member',
+          teamMemberRunId: lead.id,
+          taskId: task.id,
+          runId: claim.run.id,
+        },
       }),
     );
     expect(vi.mocked(runtime.execute).mock.calls[0]?.[0]).toHaveProperty(

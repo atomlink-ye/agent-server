@@ -277,7 +277,14 @@ export class AgentRunExecutor {
       if (!sessionRuntime) throw new Error('runtime_session_required');
       execution = await this.runtime.execute({
         runtimeSessionId: sessionRuntime.id,
-        source: { kind: 'run', runId: claim.run.id },
+        source: member
+          ? {
+              kind: 'team_member',
+              teamMemberRunId: member.id,
+              taskId: task.id,
+              runId: claim.run.id,
+            }
+          : { kind: 'run', runId: claim.run.id },
         prompt: prompts.deliveredTurnPrompt,
         desiredSystemPrompt: createDesiredRuntimeSystemPrompt(
           prompts.systemPrompt,

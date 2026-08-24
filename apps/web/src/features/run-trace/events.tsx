@@ -28,7 +28,7 @@ export function Events({
       </div>
       <div className="run-trace__events-scroll">
         {model.activities.length === 0 ? (
-          <p style={{ padding: '1rem', color: '#666' }}>
+          <p style={{ padding: '1rem', color: 'var(--trace-muted)' }}>
             No collaboration MCP tool calls were captured for this Run.
           </p>
         ) : (

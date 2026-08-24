@@ -22,6 +22,43 @@
   --shadow-soft: 0 8px 24px -14px rgb(10 30 60 / 28%);
   --shadow-pop:
     0 18px 38px -18px rgb(10 30 60 / 28%), 0 2px 8px -2px rgb(10 30 60 / 6%);
+
+  /* Status accents. Previously inlined per feature, which is how Work drifted
+     onto its own off-brand palette. */
+  --grass: #6ec56a;
+  --grass-soft: #e4f5e3;
+  --grass-deep: #3e8b3a;
+  --gold-soft: #fff2d4;
+  --sky-ink: #2f4d78;
+
+  /* Scale tokens. The values are the ones the shell already renders, so
+     adopting them changes nothing in Conversations/Agents/Files; features
+     carrying odd one-off values snap onto the scale instead. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 28px;
+  --space-8: 32px;
+
+  --text-eyebrow: 10px;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-md: 13px;
+  --text-lg: 14px;
+  --text-title: 18px;
+  --text-display: 24px;
+
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 22px;
+  --radius-pill: 999px;
+
+  --transition-base: 160ms ease;
+
   color: var(--ink-900);
   background: var(--paper);
   font-family:
@@ -449,8 +486,7 @@ textarea {
   white-space: nowrap;
 }
 
-.conversation-row-copy time,
-.work-list-item time {
+.conversation-row-copy time {
   color: var(--ink-300);
   font-size: 10px;
   font-variant-numeric: tabular-nums;
@@ -781,10 +817,16 @@ textarea {
   align-items: center;
   gap: 10px;
   width: 100%;
-  border-color: transparent;
-  border-radius: 12px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
   padding: 9px 8px;
+  color: var(--ink-700);
   text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    border-color var(--transition-base),
+    background var(--transition-base);
 }
 
 .work-list-item:hover:not(:disabled) {
@@ -792,10 +834,16 @@ textarea {
   background: var(--sky-50);
 }
 
+.work-list-item[aria-current='page'] {
+  border-color: var(--sky-200);
+  background: linear-gradient(180deg, var(--sky-100), var(--sky-50));
+  box-shadow: inset 0 0 0 1px rgb(194 230 251 / 30%);
+}
+
 .work-list-mark {
   width: 32px;
   height: 32px;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--coral-soft);
   color: var(--coral-deep);
   font-size: 12px;
@@ -816,12 +864,31 @@ textarea {
   white-space: nowrap;
 }
 
-.work-list-copy > span {
+.work-list-description {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--ink-500);
+  font-size: 10px;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.work-list-summary {
+  overflow: hidden;
+  color: var(--ink-300);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.work-list-status {
   display: flex;
   align-items: center;
   gap: 5px;
   color: var(--ink-500);
   font-size: 10px;
+  white-space: nowrap;
 }
 
 .work-status-dot {
@@ -832,7 +899,7 @@ textarea {
 }
 
 .work-status-dot--running {
-  background: #6ec56a;
+  background: var(--grass);
 }
 .work-status-dot--needs_you {
   background: var(--gold);
@@ -847,24 +914,43 @@ textarea {
   background: var(--ink-300);
 }
 
+.work-pane-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
 .pane-refresh {
   display: grid;
   width: 30px;
   height: 30px;
   place-items: center;
   border-color: var(--ink-100);
-  border-radius: 9px;
+  border-radius: var(--radius-sm);
   background: var(--cloud);
   color: var(--ink-500);
   font-size: 18px;
 }
 
+/* Container contract for the Work main region.
+   Two modes, one class, because the shell test pins this single selector:
+   - default: the scroll container that Work detail renders into;
+   - [data-empty='true']: the centred placeholder shown at /work with no
+     selection, and reused by Agents/Files for their own "choose one" states.
+   Centring must not leak into the detail mode or the panes stop stretching
+   and stop scrolling. */
 .work-main-content {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   min-height: 0;
   flex: 1;
+  overflow-y: auto;
+}
+
+.work-main-content[data-empty='true'] {
+  display: grid;
   place-items: center;
-  padding: 28px;
+  padding: var(--space-7);
 }
 
 .work-main-empty {

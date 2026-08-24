@@ -57,6 +57,7 @@ type ChildLifecycleOutcome =
 
 const childLifecycles = new WeakMap<ChildProcess, ChildLifecycle>();
 const childLogPaths = new WeakMap<ChildProcess, string>();
+const childLogFlushes = new WeakMap<ChildProcess, () => Promise<void>>();
 let runtimeLogSequence = 0;
 
 type PGliteState = Readonly<{
@@ -250,6 +251,8 @@ export async function runCommand(
       readonly child: ChildProcess;
       readonly environment: NodeJS.ProcessEnv;
       readonly label: string;
+      readonly healthUrl?: string;
+      readonly healthFailureLimit?: number;
     };
   } = {},
 ): Promise<void> {
@@ -258,9 +261,11 @@ export async function runCommand(
     Boolean(options.abortOn) && process.platform !== 'win32';
   await new Promise<void>((resolveRun, reject) => {
     let settled = false;
+    let healthTimer: NodeJS.Timeout | undefined;
     const settle = (error?: Error) => {
       if (settled) return;
       settled = true;
+      if (healthTimer) clearInterval(healthTimer);
       if (error) reject(error);
       else resolveRun();
     };
@@ -288,7 +293,7 @@ export async function runCommand(
       );
       return;
     }
-    const failFromPrimary = () => {
+    const failFromPrimary = (reason: string) => {
       if (settled) return;
       terminateCommandTree(child);
       void childDiagnostic(
@@ -297,11 +302,7 @@ export async function runCommand(
         abortOn.environment,
       ).then(
         (diagnostic) => {
-          settle(
-            new Error(
-              `canary primary child exited while ${command} was running\n${diagnostic}`,
-            ),
-          );
+          settle(new Error(`${reason}\n${diagnostic}`));
         },
         (error) => {
           settle(error instanceof Error ? error : new Error(String(error)));
@@ -309,36 +310,87 @@ export async function runCommand(
       );
     };
     if (lifecycle.getOutcome()) {
-      failFromPrimary();
+      failFromPrimary(
+        `canary primary child exited while ${command} was running`,
+      );
       return;
     }
     void lifecycle.promise.then(() => {
-      failFromPrimary();
+      failFromPrimary(
+        `canary primary child exited while ${command} was running`,
+      );
     });
+    const healthUrl = abortOn.healthUrl?.trim();
+    if (!healthUrl) return;
+    const healthFailureLimit = Math.max(1, abortOn.healthFailureLimit ?? 5);
+    let consecutiveHealthFailures = 0;
+    healthTimer = setInterval(() => {
+      void (async () => {
+        if (settled) return;
+        try {
+          const response = await fetch(healthUrl, {
+            signal: AbortSignal.timeout(1_000),
+          });
+          consecutiveHealthFailures = response.ok
+            ? 0
+            : consecutiveHealthFailures + 1;
+        } catch {
+          consecutiveHealthFailures += 1;
+        }
+        if (consecutiveHealthFailures >= healthFailureLimit) {
+          failFromPrimary(
+            `canary primary child failed health while ${command} was running`,
+          );
+        }
+      })();
+    }, 1_000);
+  });
+}
+
+function signalOwnedTree(child: ChildProcess, signal: NodeJS.Signals): void {
+  const pid = child.pid;
+  if (!pid || process.platform === 'win32') {
+    child.kill(signal);
+    return;
+  }
+  try {
+    process.kill(-pid, signal);
+  } catch {
+    try {
+      process.kill(pid, signal);
+    } catch {
+      child.kill(signal);
+    }
+  }
+}
+
+function waitForChildExit(
+  child: ChildProcess,
+  timeoutMs: number,
+): Promise<boolean> {
+  if (child.exitCode !== null || child.signalCode !== null)
+    return Promise.resolve(true);
+  return new Promise((resolveExit) => {
+    const timer = setTimeout(() => {
+      child.removeListener('exit', onExit);
+      resolveExit(false);
+    }, timeoutMs);
+    const onExit = () => {
+      clearTimeout(timer);
+      resolveExit(true);
+    };
+    child.once('exit', onExit);
   });
 }
 
 function terminateCommandTree(child: ChildProcess): void {
   if (child.exitCode !== null || child.signalCode !== null) return;
-  const pid = child.pid;
-  if (pid && process.platform !== 'win32') {
-    try {
-      process.kill(-pid, 'SIGTERM');
-    } catch {
-      child.kill('SIGTERM');
-    }
-    const killer = setTimeout(() => {
-      if (child.exitCode !== null || child.signalCode !== null) return;
-      try {
-        process.kill(-pid, 'SIGKILL');
-      } catch {
-        child.kill('SIGKILL');
-      }
-    }, 2_000);
-    killer.unref?.();
-    return;
-  }
-  child.kill('SIGTERM');
+  signalOwnedTree(child, 'SIGTERM');
+  const killer = setTimeout(() => {
+    if (child.exitCode !== null || child.signalCode !== null) return;
+    signalOwnedTree(child, 'SIGKILL');
+  }, 2_000);
+  void killer;
 }
 
 export async function connectablePostgres(
@@ -729,7 +781,7 @@ function attachRuntimeLogSinks(
   child: ChildProcess,
   log: { fd: number },
   environment: NodeJS.ProcessEnv,
-): void {
+): () => Promise<void> {
   if (!child.stdout || !child.stderr) {
     throw new Error('host runtime file logging requires piped child output');
   }
@@ -745,13 +797,39 @@ function attachRuntimeLogSinks(
     return redactor;
   });
   let remaining = redactors.length;
+  let flushed = false;
+  let resolveFlushed: () => void = () => undefined;
+  const flushedPromise = new Promise<void>((resolveFlush) => {
+    resolveFlushed = resolveFlush;
+  });
+  const markFlushed = () => {
+    if (flushed) return;
+    flushed = true;
+    resolveFlushed();
+  };
   const closeLog = () => {
     remaining -= 1;
     if (remaining === 0) {
-      destination.end(() => closeSync(log.fd));
+      destination.end(() => {
+        closeSync(log.fd);
+        markFlushed();
+      });
     }
   };
   for (const redactor of redactors) redactor.once('finish', closeLog);
+  return () => {
+    if (!flushed) {
+      for (const redactor of redactors) {
+        if (!redactor.writableEnded) redactor.end();
+      }
+    }
+    return Promise.race([
+      flushedPromise,
+      new Promise<void>((resolveTimeout) => {
+        setTimeout(resolveTimeout, 2_000);
+      }),
+    ]);
+  };
 }
 
 export async function readRuntimeLogTail(
@@ -962,10 +1040,14 @@ export function spawnOwned(
       cwd: options.cwd ?? repositoryRoot,
       env: options.environment,
       stdio: log ? ['ignore', 'pipe', 'pipe'] : 'inherit',
+      detached: process.platform !== 'win32',
     });
     if (log) {
       childLogPaths.set(child, log.path);
-      attachRuntimeLogSinks(child, log, options.environment);
+      childLogFlushes.set(
+        child,
+        attachRuntimeLogSinks(child, log, options.environment),
+      );
     }
     trackChildLifecycle(child);
     return child;
@@ -978,28 +1060,26 @@ export function spawnOwned(
 export async function stopOwned(
   children: readonly ChildProcess[],
 ): Promise<void> {
-  await Promise.all(
-    children.map(
-      (child) =>
-        new Promise<void>((resolveStop) => {
-          if (child.exitCode !== null || child.signalCode !== null) {
-            resolveStop();
-            return;
-          }
-          const timeout = setTimeout(() => {
-            child.kill('SIGKILL');
-            resolveStop();
-            // Allow with-paseo's 8s SIGTERM and 2s SIGKILL cleanup to finish.
-          }, 11_000);
-          timeout.unref?.();
-          child.once('exit', () => {
-            clearTimeout(timeout);
-            resolveStop();
-          });
-          child.kill('SIGTERM');
-        }),
-    ),
-  );
+  const leftovers: string[] = [];
+  for (const child of children) {
+    if (child.exitCode === null && child.signalCode === null) {
+      signalOwnedTree(child, 'SIGTERM');
+      // Allow with-paseo's 8s SIGTERM and 2s SIGKILL cleanup to finish.
+      const stopped = await waitForChildExit(child, 11_000);
+      if (!stopped) {
+        signalOwnedTree(child, 'SIGKILL');
+        const killed = await waitForChildExit(child, 2_000);
+        if (!killed) {
+          leftovers.push(`pid=${child.pid ?? 'unknown'}`);
+        }
+      }
+    }
+    const flush = childLogFlushes.get(child);
+    if (flush) await flush();
+  }
+  if (leftovers.length > 0) {
+    throw new Error(`owned child did not exit: ${leftovers.join(', ')}`);
+  }
 }
 
 export function redactDatabaseUrl(connectionString: string): string {

@@ -194,18 +194,8 @@ describeRealPostgres('Phase C session lanes on PostgreSQL', () => {
       const proposals = await new PostgresWorkspaceMemoryRepository(
         pool,
       ).listProposalsByOwnerScope({ ...owner, workspaceId: workspace.id });
-      expect(proposals).toHaveLength(1);
-      expect(proposals[0]).toMatchObject({
-        originalContent: 'REAL_PG_PRODUCT_SESSION_CANDIDATE',
-        originalCategory: 'project_constraint',
-        sourceTaskId: first.taskId,
-        sourceSessionId: session.id,
-        sourceMessageId: first.id,
-        sourceRunId: first.runId,
-        sourceAgentVersionId: versionId,
-        sourceCandidateIndex: 0,
-        status: 'pending',
-      });
+      // MGR-030 D1/D2: worker scoped-memory has no owner, so candidates persist nowhere.
+      expect(proposals).toEqual([]);
       const completedMessages = await repository.listMessages(
         session.id,
         owner,

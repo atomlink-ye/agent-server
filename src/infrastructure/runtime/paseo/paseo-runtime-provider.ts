@@ -444,7 +444,6 @@ export class PaseoRuntimeProvider implements RuntimeExecutionProvider {
         cwd: input.spec.cwd,
         systemPromptBytes: Buffer.byteLength(input.spec.systemPrompt, 'utf8'),
       },
-      this.#gateway,
       this.#runner,
     );
   }

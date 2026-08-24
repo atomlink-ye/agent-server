@@ -10,6 +10,7 @@ import { PostgresRunRepository } from '../../src/infrastructure/postgres/postgre
 import { PostgresTaskRepository } from '../../src/infrastructure/postgres/postgres-task-repository.js';
 import { applyDurableKernelMigrations } from '../../src/infrastructure/postgres/postgres.js';
 import { PostgresRuntimeGenerationStore } from '../../src/infrastructure/postgres/runtime/postgres-runtime-generation-store.js';
+import { PostgresRuntimeGrantAuthority } from '../../src/infrastructure/postgres/runtime/postgres-runtime-grant-authority.js';
 import { PostgresRuntimeSpecStore } from '../../src/infrastructure/postgres/runtime/postgres-runtime-spec-store.js';
 import { PostgresRuntimeTurnProvenanceQuery } from '../../src/infrastructure/postgres/runtime/postgres-runtime-turn-provenance-query.js';
 import { PostgresRuntimeTurnStore } from '../../src/infrastructure/postgres/runtime/postgres-runtime-turn-store.js';
@@ -68,6 +69,7 @@ describe('durable runtime cancellation', () => {
       generationId,
       turnId,
       runId: admitted.runId,
+      seedGrant: true,
     });
 
     const cancelledTurnIds: string[] = [];
@@ -87,7 +89,10 @@ describe('durable runtime cancellation', () => {
           );
         },
       },
-      { releaseForTurn: async () => undefined },
+      new PostgresRuntimeGrantAuthority(
+        database,
+        () => new Date('2026-08-24T00:00:03.000Z'),
+      ),
     );
     const cancel = new CancelTask(
       tasks,
@@ -113,6 +118,22 @@ describe('durable runtime cancellation', () => {
         )
       ).rows[0]?.status,
     ).toBe('cancelled');
+    expect(
+      (
+        await database.query<{ runtime_turn_id: string | null }>(
+          `SELECT runtime_turn_id FROM runtime_tool_grants
+            WHERE id='00000000-0000-4000-8000-000000009907'`,
+        )
+      ).rows[0]?.runtime_turn_id,
+    ).toBeNull();
+    expect(
+      (
+        await database.query<{ runtime_turn_id: string | null }>(
+          `SELECT runtime_turn_id FROM runtime_tool_grants
+            WHERE id='00000000-0000-4000-8000-000000009908'`,
+        )
+      ).rows[0]?.runtime_turn_id,
+    ).toBe('00000000-0000-4000-8000-000000009909');
 
     const completed = await new CompleteRun(runs, tasks).execute({
       claim: claim!,
@@ -164,6 +185,72 @@ describe('durable runtime cancellation', () => {
     expect((await runs.findById(admitted.runId))?.status).toBe('cancelled');
     expect((await tasks.findById(admitted.taskId))?.status).toBe('cancelled');
   });
+
+  it('cancels pending and preparing turns before provider execution', async () => {
+    database = new PGlite();
+    await applyDurableKernelMigrations(database);
+    const runtimeSessionId = '00000000-0000-4000-8000-000000009912';
+    const generationId = '00000000-0000-4000-8000-000000009913';
+    await seedRuntime(database, {
+      runtimeSessionId,
+      generationId,
+      turnId: '00000000-0000-4000-8000-000000009914',
+      runId: 'cancel-runtime-pre-run',
+    });
+    const pendingTurnId = '00000000-0000-4000-8000-000000009915';
+    const preparingTurnId = '00000000-0000-4000-8000-000000009916';
+    await database.query(
+      `INSERT INTO runtime_turns
+        (id,runtime_session_id,generation_id,source_kind,source_id,
+         source_context,status,prompt_digest,failure_code,created_at,started_at,
+         completed_at)
+       VALUES
+        ($1,$3,NULL,'run','pending-run','{}'::jsonb,'pending',NULL,NULL,$2,NULL,NULL),
+        ($4,$3,$5,'run','preparing-run','{}'::jsonb,'preparing',NULL,NULL,$2,NULL,NULL)`,
+      [
+        pendingTurnId,
+        '2026-08-24T00:00:00.000Z',
+        runtimeSessionId,
+        preparingTurnId,
+        generationId,
+      ],
+    );
+    const calls: string[] = [];
+    const cancelRuntimeTurn = new CancelRuntimeTurn(
+      new PostgresRuntimeTurnStore(database),
+      new PostgresRuntimeGenerationStore(database),
+      new PostgresRuntimeSpecStore(database),
+      {
+        cancelTurn: async () => {
+          calls.push('provider-cancel');
+        },
+      },
+      {
+        releaseForTurn: async (turnId) => {
+          calls.push(`release:${turnId}`);
+        },
+      },
+    );
+
+    await cancelRuntimeTurn.execute({ turnId: pendingTurnId as never });
+    await cancelRuntimeTurn.execute({ turnId: preparingTurnId as never });
+
+    expect(calls).toEqual([
+      `release:${pendingTurnId}`,
+      `release:${preparingTurnId}`,
+    ]);
+    expect(
+      (
+        await database.query<{ id: string; status: string }>(
+          `SELECT id,status FROM runtime_turns WHERE id=ANY($1::uuid[]) ORDER BY id`,
+          [[pendingTurnId, preparingTurnId]],
+        )
+      ).rows,
+    ).toEqual([
+      { id: pendingTurnId, status: 'cancelled' },
+      { id: preparingTurnId, status: 'cancelled' },
+    ]);
+  });
 });
 
 async function seedRuntime(
@@ -173,6 +260,7 @@ async function seedRuntime(
     readonly generationId: string;
     readonly turnId: string;
     readonly runId: string;
+    readonly seedGrant?: boolean;
   },
 ): Promise<void> {
   const createdAt = '2026-08-24T00:00:00.000Z';
@@ -292,4 +380,34 @@ async function seedRuntime(
       createdAt,
     ],
   );
+  if (input.seedGrant)
+    await database.query(
+      `INSERT INTO runtime_turns
+        (id,runtime_session_id,generation_id,source_kind,source_id,
+         source_context,status,prompt_digest,failure_code,created_at,started_at,
+         completed_at)
+       VALUES('00000000-0000-4000-8000-000000009909',$1,$2,'run','other-run',
+         '{}'::jsonb,'succeeded',NULL,NULL,$3,$3,$3)`,
+      [input.runtimeSessionId, input.generationId, createdAt],
+    ).then(() =>
+      database.query(
+        `INSERT INTO runtime_tool_grants
+        (id,runtime_session_id,generation_id,runtime_turn_id,token_hash,
+         catalog_digest,allowed_tools,revision,expires_at,renewable_until,
+         revoked_at,created_at,updated_at)
+       VALUES
+        ('00000000-0000-4000-8000-000000009907',$1,$2,$3,'cancel-grant-target',
+         'cancel-catalog','[]'::jsonb,1,$4,NULL,NULL,$5,$5),
+        ('00000000-0000-4000-8000-000000009908',$1,$2,
+         '00000000-0000-4000-8000-000000009909','cancel-grant-other',
+         'cancel-catalog','[]'::jsonb,1,$4,NULL,NULL,$5,$5)`,
+      [
+        input.runtimeSessionId,
+        input.generationId,
+        input.turnId,
+        '2026-08-24T00:15:00.000Z',
+        createdAt,
+        ],
+      ),
+    );
 }

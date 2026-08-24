@@ -189,7 +189,6 @@ export interface ExecutionSession {
     input: ExecutionRunInput,
     observer?: ExecutionObservationSink,
   ): Promise<ExecutionResult>;
-  cancel?(runId: string): Promise<void>;
   /** Releases only process-local handles. It must not archive external state. */
   close(): Promise<void>;
 }

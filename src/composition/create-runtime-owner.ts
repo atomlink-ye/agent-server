@@ -38,7 +38,6 @@ export interface RuntimeOwner {
   readonly ensureDesiredRuntimeSpec: EnsureDesiredRuntimeSpec;
   readonly ensureRuntimeSession: EnsureRuntimeSession;
   readonly executeRuntimeTurn: Pick<ExecuteRuntimeTurnUseCase, 'execute'>;
-  readonly cancelRuntimeTurn: Pick<CancelRuntimeTurnUseCase, 'execute'>;
   readonly cancelRuntimeRun: Pick<CancelRuntimeRun, 'cancelRun'>;
   readonly chatRuntime: {
     readonly desiredSpec: EnsureDesiredRuntimeSpec;
@@ -144,7 +143,6 @@ export function createRuntimeOwner(input: {
     ensureDesiredRuntimeSpec,
     ensureRuntimeSession,
     executeRuntimeTurn,
-    cancelRuntimeTurn,
     cancelRuntimeRun,
     chatRuntime: {
       desiredSpec: ensureDesiredRuntimeSpec,

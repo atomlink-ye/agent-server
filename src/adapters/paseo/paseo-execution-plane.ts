@@ -365,7 +365,6 @@ export class PaseoExecutionPlane implements ExecutionPlanePort {
       binding,
       workspaceBinding,
       { provider, model, cwd, systemPromptBytes },
-      this.#gateway,
       this.#runner,
     );
   }

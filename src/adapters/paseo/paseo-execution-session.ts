@@ -10,7 +10,6 @@ import type {
   ExecutionSession,
   ExecutionSessionCapabilities,
 } from '../../application/ports/runtime-execution-session.js';
-import { PaseoGateway } from './paseo-gateway.js';
 import { PaseoTurnRunner } from './paseo-turn-runner.js';
 
 const PASEO_SESSION_CAPABILITIES: ExecutionSessionCapabilities = {
@@ -35,7 +34,6 @@ export class PaseoExecutionSession implements ExecutionSession {
       readonly cwd: string;
       readonly systemPromptBytes: number;
     },
-    private readonly gateway: PaseoGateway,
     private readonly turnRunner: PaseoTurnRunner,
   ) {}
 
@@ -53,11 +51,6 @@ export class PaseoExecutionSession implements ExecutionSession {
       systemPromptBytes: this.metadata.systemPromptBytes,
       ...(observer ? { observer } : {}),
     });
-  }
-
-  public async cancel(_runId: string): Promise<void> {
-    if (this.#closed) return;
-    await this.gateway.cancel(this.binding.externalSessionId);
   }
 
   /** Deliberately non-destructive: external Paseo Agent/Workspace remain durable. */

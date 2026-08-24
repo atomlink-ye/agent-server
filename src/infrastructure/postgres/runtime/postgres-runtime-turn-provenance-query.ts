@@ -48,13 +48,8 @@ export class PostgresRuntimeTurnProvenanceQuery implements RuntimeTurnProvenance
               rt.started_at,rt.completed_at
          FROM runtime_turns rt
         WHERE rt.status IN ('pending','preparing','running')
-          AND (
-            (rt.source_kind='run' AND rt.source_id=$1)
-            OR (
-              rt.source_kind='team_member'
-              AND rt.source_context->>'runId'=$1
-            )
-          )
+          AND rt.source_kind='run'
+          AND rt.source_id=$1
         LIMIT 2`,
       [runId],
     );
@@ -81,13 +76,8 @@ export class PostgresRuntimeTurnProvenanceQuery implements RuntimeTurnProvenance
         WHERE rs.scope_kind='product_session'
           AND rs.scope_id=$2
           AND rt.status='succeeded'
-          AND (
-            (rt.source_kind='run' AND rt.source_id=$1)
-            OR (
-              rt.source_kind='team_member'
-              AND rt.source_context->>'runId'=$1
-            )
-          )
+          AND rt.source_kind='run'
+          AND rt.source_id=$1
         ORDER BY rt.completed_at DESC,rt.id DESC
         LIMIT 1`,
       [input.runId, input.productSessionId],
@@ -123,24 +113,6 @@ function decodeSource(row: ActiveTurnRow): RuntimeTurnSource {
     if (Object.keys(context).length !== 0)
       throw new Error('Runtime run turn source is invalid.');
     return { kind: 'run', runId: row.source_id };
-  }
-  if (row.source_kind === 'team_member') {
-    const taskId = context.taskId;
-    const runId = context.runId;
-    if (
-      !taskId ||
-      !runId ||
-      Object.keys(context).length !== 2 ||
-      !Object.prototype.hasOwnProperty.call(context, 'taskId') ||
-      !Object.prototype.hasOwnProperty.call(context, 'runId')
-    )
-      throw new Error('Runtime team member turn source is invalid.');
-    return {
-      kind: 'team_member',
-      teamMemberRunId: row.source_id,
-      taskId,
-      runId,
-    };
   }
   throw new Error('Runtime turn source is invalid.');
 }

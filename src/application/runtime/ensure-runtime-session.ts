@@ -6,7 +6,6 @@ import type {
 } from '../ports/ensure-runtime-session.js';
 import type {
   ProviderRuntimeSpec,
-  ProviderSessionBinding,
   RuntimeExecutionProvider,
 } from '../ports/runtime-execution-provider.js';
 import type { RuntimeGenerationStore } from '../ports/runtime-generation-store.js';
@@ -21,6 +20,7 @@ import { assertDesiredRuntimeSystemPrompt } from '../../domain/runtime/desired-r
 import { buildReconciliationPlan } from './reconciliation/build-reconciliation-plan.js';
 import type { Logger } from '../../shared/observability/logger.js';
 import { RuntimeGenerationManager } from './runtime-generation-manager.js';
+import { buildProviderSessionBinding } from './provider-session-binding.js';
 
 export interface EnsureRuntimeSessionServiceOptions {
   readonly provider: RuntimeExecutionProvider;
@@ -103,7 +103,7 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
       return {
         generation: current,
         session: await this.provider.open(
-          this.binding(current, applied),
+          buildProviderSessionBinding(current, applied),
           this.providerSpec(applied, desiredSystemPrompt),
         ),
         resolution: 'reused',
@@ -208,7 +208,7 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
     readonly desiredSystemPrompt: DesiredRuntimeSystemPrompt;
   }): Promise<ReturnType<typeof buildReconciliationPlan>> {
     const inspection = await this.provider.inspect(
-      this.binding(input.current, input.applied),
+      buildProviderSessionBinding(input.current, input.applied),
     );
     if (inspection.status !== 'available') {
       if (inspection.status === 'unavailable')
@@ -253,7 +253,7 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
       });
       return;
     }
-    const binding = this.binding(previous, previousApplied);
+    const binding = buildProviderSessionBinding(previous, previousApplied);
     if (this.provider.capabilities().canCloseSession) {
       try {
         await this.provider.closeSession(binding);
@@ -304,39 +304,4 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
     };
   }
 
-  private binding(
-    generation: RuntimeSessionGeneration,
-    applied: Awaited<ReturnType<RuntimeSpecStore['getDesired']>>,
-  ): ProviderSessionBinding {
-    if (!generation.providerWorkspaceId || !generation.providerSessionId)
-      throw new Error('runtime_provider_session_missing');
-    return {
-      generation: {
-        id: generation.id,
-        runtimeSessionId: generation.runtimeSessionId,
-        provider: generation.provider,
-        providerWorkspaceId: generation.providerWorkspaceId,
-        providerSessionId: generation.providerSessionId,
-        appliedSpecRevision: generation.appliedSpecRevision,
-      },
-      applied: this.providerAppliedSpec(applied),
-    };
-  }
-
-  private providerAppliedSpec(
-    spec: Awaited<ReturnType<RuntimeSpecStore['getDesired']>>,
-  ): ProviderSessionBinding['applied'] {
-    return {
-      runtimeSessionId: spec.runtimeSessionId,
-      provider: spec.provider,
-      model: spec.model,
-      cwd: spec.cwd,
-      workspaceId: spec.workspaceId,
-      revision: spec.revision,
-      desiredRevision: spec.revision,
-      systemPromptDigest: spec.systemPromptDigest,
-      bootstrapSpecDigest: spec.bootstrapDigest,
-      endpointEpoch: spec.extensionSetDigest,
-    };
-  }
 }

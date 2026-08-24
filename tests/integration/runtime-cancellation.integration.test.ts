@@ -381,17 +381,19 @@ async function seedRuntime(
     ],
   );
   if (input.seedGrant)
-    await database.query(
-      `INSERT INTO runtime_turns
+    await database
+      .query(
+        `INSERT INTO runtime_turns
         (id,runtime_session_id,generation_id,source_kind,source_id,
          source_context,status,prompt_digest,failure_code,created_at,started_at,
          completed_at)
        VALUES('00000000-0000-4000-8000-000000009909',$1,$2,'run','other-run',
          '{}'::jsonb,'succeeded',NULL,NULL,$3,$3,$3)`,
-      [input.runtimeSessionId, input.generationId, createdAt],
-    ).then(() =>
-      database.query(
-        `INSERT INTO runtime_tool_grants
+        [input.runtimeSessionId, input.generationId, createdAt],
+      )
+      .then(() =>
+        database.query(
+          `INSERT INTO runtime_tool_grants
         (id,runtime_session_id,generation_id,runtime_turn_id,token_hash,
          catalog_digest,allowed_tools,revision,expires_at,renewable_until,
          revoked_at,created_at,updated_at)
@@ -401,13 +403,13 @@ async function seedRuntime(
         ('00000000-0000-4000-8000-000000009908',$1,$2,
          '00000000-0000-4000-8000-000000009909','cancel-grant-other',
          'cancel-catalog','[]'::jsonb,1,$4,NULL,NULL,$5,$5)`,
-      [
-        input.runtimeSessionId,
-        input.generationId,
-        input.turnId,
-        '2026-08-24T00:15:00.000Z',
-        createdAt,
-        ],
-      ),
-    );
+          [
+            input.runtimeSessionId,
+            input.generationId,
+            input.turnId,
+            '2026-08-24T00:15:00.000Z',
+            createdAt,
+          ],
+        ),
+      );
 }

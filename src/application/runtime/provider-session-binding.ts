@@ -1,8 +1,6 @@
 import type { RuntimeSessionGeneration } from '../../domain/runtime/runtime-session-generation.js';
 import type { RuntimeSessionSpec } from '../../domain/runtime/runtime-session-spec.js';
-import type {
-  ProviderSessionBinding,
-} from '../ports/runtime-execution-provider.js';
+import type { ProviderSessionBinding } from '../ports/runtime-execution-provider.js';
 
 /** Builds the provider binding for one durable generation and applied spec. */
 export function buildProviderSessionBinding(

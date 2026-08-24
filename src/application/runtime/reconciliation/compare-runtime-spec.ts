@@ -150,7 +150,8 @@ function sameSkills(
     left.length === right.length &&
     left.every(
       (skill, index) =>
-        skill.ref === right[index]?.ref && skill.digest === right[index]?.digest,
+        skill.ref === right[index]?.ref &&
+        skill.digest === right[index]?.digest,
     )
   );
 }

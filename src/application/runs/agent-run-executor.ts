@@ -361,7 +361,8 @@ export class AgentRunExecutor {
         throw new Error('WorkRun Environment no longer matches its manifest.');
     }
     return {
-      provider: policy?.provider ?? spec.provider,
+      provider:
+        policy?.provider ?? this.runtimeConfiguration?.provider ?? spec.provider,
       model: policy?.model ?? null,
       cwd:
         this.runtimeCellRoot ?? this.runtimeConfiguration?.cwd ?? process.cwd(),

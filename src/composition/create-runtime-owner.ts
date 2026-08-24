@@ -27,8 +27,6 @@ import type { OneShotRuntimeCompletion } from '../application/ports/one-shot-run
 import { hashBearerToken } from '../infrastructure/security/hash-bearer-token.js';
 import type { RuntimeExecutionProvider } from '../application/ports/runtime-execution-provider.js';
 import type { RuntimeSessionStore } from '../application/ports/runtime-session-store.js';
-import type { EnsureRuntimeSession } from '../application/ports/ensure-runtime-session.js';
-import type { RuntimeMcpEndpoint } from '../application/ports/runtime-mcp-endpoint.js';
 import type { ExecuteRuntimeTurn as ExecuteRuntimeTurnUseCase } from '../application/runtime/execute-runtime-turn.js';
 import type { CancelRuntimeTurn as CancelRuntimeTurnUseCase } from '../application/runtime/cancel-runtime-turn.js';
 import type { EnsureDesiredRuntimeSpec } from '../application/ports/ensure-desired-runtime-spec.js';
@@ -37,7 +35,6 @@ export interface RuntimeOwner {
   readonly runtimeProvider: RuntimeExecutionProvider;
   readonly runtimeSessions: RuntimeSessionStore;
   readonly ensureDesiredRuntimeSpec: EnsureDesiredRuntimeSpec;
-  readonly ensureRuntimeSession: EnsureRuntimeSession;
   readonly executeRuntimeTurn: Pick<ExecuteRuntimeTurnUseCase, 'execute'>;
   readonly cancelRuntimeRun: Pick<CancelRuntimeRun, 'cancelRun'>;
   readonly chatRuntime: {
@@ -50,7 +47,6 @@ export interface RuntimeOwner {
     readonly turnExecutor: Pick<ExecuteRuntimeTurnUseCase, 'execute'>;
   };
   readonly runtimeMcpServer: RuntimeMcpServer;
-  readonly runtimeMcpEndpoint: RuntimeMcpEndpoint;
   readonly oneShotCompletion: OneShotRuntimeCompletion;
 }
 
@@ -147,7 +143,6 @@ export function createRuntimeOwner(input: {
     runtimeProvider,
     runtimeSessions,
     ensureDesiredRuntimeSpec,
-    ensureRuntimeSession,
     executeRuntimeTurn,
     cancelRuntimeRun,
     chatRuntime: {
@@ -156,7 +151,6 @@ export function createRuntimeOwner(input: {
       turnExecutor: executeRuntimeTurn,
     },
     runtimeMcpServer,
-    runtimeMcpEndpoint,
     oneShotCompletion,
   };
 }

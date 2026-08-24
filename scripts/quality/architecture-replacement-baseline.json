@@ -40,16 +40,6 @@
       "key": "architecture.entrypoints-imports|src/entrypoints/cli/agentctl.ts|entrypoints->infrastructure:../../infrastructure/filesystem/local-project-skill-registrar.js|000001",
       "why": "Entrypoints still construct infrastructure directly instead of receiving composition.",
       "phase": "Phase 5 — composition graph"
-    },
-    {
-      "rule": "architecture.infrastructure-imports",
-      "path": "src/infrastructure/extensions/runtime-mcp-server.ts",
-      "line": 3,
-      "symbol": "infrastructure->entrypoints:../../entrypoints/mcp/direct-memory-mcp.js",
-      "occurrence": 1,
-      "key": "architecture.infrastructure-imports|src/infrastructure/extensions/runtime-mcp-server.ts|infrastructure->entrypoints:../../entrypoints/mcp/direct-memory-mcp.js|000001",
-      "why": "Infrastructure still reaches into entrypoint or composition code.",
-      "phase": "Phase 5 — composition graph"
     }
   ]
 }

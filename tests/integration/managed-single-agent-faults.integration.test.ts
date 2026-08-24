@@ -183,8 +183,7 @@ describe('managed single-agent minimum fault evidence', () => {
     }
   });
 
-  // Failure is unresolved: stale assertion vs suspected product bug; see sandbox evidence /tmp/lane-a-realpg.{log,rc}.
-  it.skip('executes an admitted v1 task from its pinned version after v2 exists', async () => {
+  it('executes an admitted v1 task from its pinned version after v2 exists', async () => {
     const runtime = new FakeAgentRuntime();
     const app = await createTestApp(runtime, { startDispatcher: true });
     const source = `apiVersion: agent-server/v1alpha1\nkind: ManagedAgent\nmetadata:\n  name: v2\nspec:\n  description: v2\n  instructions: Use V2 only.\n  runtime:\n    provider: paseo\n    modelPolicyRef: free-only\n    mode: isolated\n  tools: []\n  skills: []\n  input:\n    schema: { type: object, additionalProperties: false, properties: {} }\n    prompt: input\n  session: { invocation: fresh_per_invocation, followUps: queued, binding: reusable }\n  memory: { policy: workspace_snapshot, proposalLimit: 1 }\n  permissions: { network: none, filesystem: none }\n  completion: { type: executable, command: done }`;

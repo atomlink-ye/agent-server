@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import { planWhenBootstrapDigestIsIndeterminate } from './ensure-runtime-session.js';
 import type { ReconciliationPlan } from '../../domain/runtime/reconciliation-plan.js';
+import type { RuntimeGenerationId } from '../../domain/runtime/runtime-session.js';
 
-const generationId = '11111111-1111-4111-8111-111111111111';
+const generationId =
+  '11111111-1111-4111-8111-111111111111' as RuntimeGenerationId;
 
 const reuse: ReconciliationPlan = { kind: 'reuse', generationId };
 const replace: ReconciliationPlan = {

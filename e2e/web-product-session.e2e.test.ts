@@ -94,6 +94,12 @@ describe.skipIf(baseUrlEnv === undefined)(
             );
 
           phase = 'select conversation';
+          await page
+            .waitForURL(/\/conversations\/[0-9a-f-]+/iu, {
+              timeout: sendInteractionTimeout,
+            })
+            .catch(() => undefined);
+          const previousUrl = page.url();
           const newConversation = page.getByRole('button', {
             name: /New conversation/u,
           });
@@ -102,17 +108,20 @@ describe.skipIf(baseUrlEnv === undefined)(
             timeout: sendInteractionTimeout,
           });
           await newConversation.click({ timeout: sendInteractionTimeout });
-          const coworker = page.getByRole('button', {
-            name: /managed-environment-smoke/u,
-          });
+          const coworker = page
+            .locator('.new-conversation-form')
+            .getByRole('button', { name: /managed-environment-smoke/u });
           await coworker.waitFor({
             state: 'visible',
             timeout: sendInteractionTimeout,
           });
           await coworker.click({ timeout: sendInteractionTimeout });
-          await page.waitForURL(/\/conversations\/[0-9a-f-]+/iu, {
-            timeout: sendInteractionTimeout,
-          });
+          await page.waitForURL(
+            (url) =>
+              url.href !== previousUrl &&
+              /\/conversations\/[0-9a-f-]+$/iu.test(url.pathname),
+            { timeout: sendInteractionTimeout },
+          );
           conversationId =
             pathname(page.url()).match(
               /^\/conversations\/([0-9a-f-]+)$/iu,
@@ -121,6 +130,38 @@ describe.skipIf(baseUrlEnv === undefined)(
             throw new Error(
               `conversation was not selected: ${pathname(page.url())}`,
             );
+          const header = page.locator('.chat-header h1');
+          await header.waitFor({
+            state: 'visible',
+            timeout: sendInteractionTimeout,
+          });
+          expect((await header.innerText()).trim()).toBe(
+            'managed-environment-smoke',
+          );
+          const selected = (await page.evaluate(async (id) => {
+            const response = await fetch('/api/conversations', {
+              credentials: 'same-origin',
+            });
+            const payload = (await response.json()) as {
+              conversations?: Array<{
+                conversation_id?: string;
+                kind?: string;
+                direct_agent?: { display_name?: string | null } | null;
+              }>;
+            };
+            return payload.conversations?.find(
+              (conversation) => conversation.conversation_id === id,
+            );
+          }, conversationId)) as
+            | {
+                kind?: string;
+                direct_agent?: { display_name?: string | null } | null;
+              }
+            | undefined;
+          expect(selected?.kind).toBe('direct');
+          expect(selected?.direct_agent?.display_name).toBe(
+            'managed-environment-smoke',
+          );
 
           phase = 'send interaction';
           const input = page.locator('textarea#message');

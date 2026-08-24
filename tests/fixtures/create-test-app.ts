@@ -8,6 +8,7 @@ import { PGlite } from '@electric-sql/pglite';
 import {
   createApplication,
   type ApplicationControls,
+  type SingleRunDebugControl,
 } from '../../src/composition/create-application.js';
 import type { FakeAgentRuntime } from './fake-agent-runtime.js';
 import type { FileStore } from '../../src/application/ports/file-store.js';
@@ -85,6 +86,7 @@ export interface CreateTestAppOptions {
   readonly workspaceId?: string;
   readonly projectionFailures?: number;
   readonly dispatcherControl?: { dispatcher?: PostgresRunDispatcher };
+  readonly runControl?: { control?: SingleRunDebugControl };
   readonly databaseControl?: { database?: TestDatabase };
   readonly database?: TestDatabase;
   readonly publishedAgentVersionId?: string;
@@ -209,6 +211,8 @@ export async function createTestApp(
   const controls = application.controls as ApplicationControls;
   if (options.dispatcherControl)
     options.dispatcherControl.dispatcher = controls.dispatcher;
+  if (options.runControl && application.singleRunDebug)
+    options.runControl.control = application.singleRunDebug;
   if (options.sessionRepositoryControl)
     options.sessionRepositoryControl.repository = controls.sessions;
   if (options.memoryReviewControl) {

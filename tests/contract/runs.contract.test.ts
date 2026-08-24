@@ -254,9 +254,12 @@ describe('run HTTP contracts', () => {
   });
 
   it('returns a stable terminal representation without the prompt', async () => {
+    const runControl: {
+      control?: import('../../src/composition/create-application.js').SingleRunDebugControl;
+    } = {};
     const app = await createTestApp(
       new FakeAgentRuntime({ responseText: 'CONTRACT_OK' }),
-      { startDispatcher: true },
+      { startDispatcher: false, runControl },
     );
     const created = CreateRunResponseSchema.parse(
       await (
@@ -268,7 +271,9 @@ describe('run HTTP contracts', () => {
       ).json(),
     );
 
-    await new Promise((resolve) => setTimeout(resolve, 5));
+    if (!runControl.control)
+      throw new Error('missing single-run debug control');
+    await runControl.control.claimAndExecute(created.run_id);
     const response = await app.request(created.links.self, {
       headers: { authorization: `Bearer ${primaryServiceAccountToken}` },
     });

@@ -186,6 +186,14 @@ export async function runHostCanary(
         loaded.AGENT_SERVER_WORKSPACE_ID?.trim() || LOCAL_WORKSPACE_ID,
       WEB_E2E_BASE_URL:
         loaded.WEB_E2E_BASE_URL?.trim() || 'http://127.0.0.1:3001',
+      WEB_E2E_PROVIDER:
+        loaded.WEB_E2E_PROVIDER?.trim() ||
+        loaded.PASEO_PROVIDER?.trim() ||
+        'claude',
+      WEB_E2E_MODEL:
+        loaded.WEB_E2E_MODEL?.trim() ||
+        loaded.PASEO_MODEL?.trim() ||
+        'opencode-go/deepseek-v4-flash',
     });
     await runCommand(
       'pnpm',

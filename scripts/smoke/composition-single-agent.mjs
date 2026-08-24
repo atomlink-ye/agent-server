@@ -201,13 +201,25 @@ spec:
     });
     const workRunId = started.work_run?.id;
     const rootTaskId = started.execution_receipt?.source_refs?.task_id;
-    const rootRunId = started.execution_receipt?.source_refs?.run_id;
-    if (
-      typeof workRunId !== 'string' ||
-      typeof rootTaskId !== 'string' ||
-      typeof rootRunId !== 'string'
-    )
+    if (typeof workRunId !== 'string' || typeof rootTaskId !== 'string')
       throw new Error('composition smoke WorkRun identities missing');
+    const rootRuns = await pool.query(
+      `SELECT id FROM runs
+        WHERE task_id=$1 AND tenant_id=$2 AND workspace_id=$3
+          AND principal_type=$4 AND principal_id=$5`,
+      [
+        rootTaskId,
+        owner.tenant_id,
+        workspaceId,
+        owner.principal_type,
+        owner.principal_id,
+      ],
+    );
+    if (rootRuns.rows.length !== 1)
+      throw new Error(
+        `composition root Run provenance mismatch: ${JSON.stringify(rootRuns.rows)}`,
+      );
+    const rootRunId = rootRuns.rows[0].id;
     progress('composition_single_agent_started', {
       work_id: workId,
       work_run_id: workRunId,
@@ -571,13 +583,25 @@ spec:
     });
     const workRunId = started.work_run?.id;
     const rootTaskId = started.execution_receipt?.source_refs?.task_id;
-    const rootRunId = started.execution_receipt?.source_refs?.run_id;
-    if (
-      typeof workRunId !== 'string' ||
-      typeof rootTaskId !== 'string' ||
-      typeof rootRunId !== 'string'
-    )
+    if (typeof workRunId !== 'string' || typeof rootTaskId !== 'string')
       throw new Error('inline smoke WorkRun identities missing');
+    const rootRuns = await pool.query(
+      `SELECT id FROM runs
+        WHERE task_id=$1 AND tenant_id=$2 AND workspace_id=$3
+          AND principal_type=$4 AND principal_id=$5`,
+      [
+        rootTaskId,
+        owner.tenant_id,
+        workspaceId,
+        owner.principal_type,
+        owner.principal_id,
+      ],
+    );
+    if (rootRuns.rows.length !== 1)
+      throw new Error(
+        `inline root Run provenance mismatch: ${JSON.stringify(rootRuns.rows)}`,
+      );
+    const rootRunId = rootRuns.rows[0].id;
     progress('composition_inline_started', {
       work_id: workId,
       work_run_id: workRunId,

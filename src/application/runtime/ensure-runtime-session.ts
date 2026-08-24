@@ -179,6 +179,20 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
         providerSessionId: created.providerSessionId,
       });
     } catch (error) {
+      this.logger.log('error', 'runtime.provisioning.failed', {
+        runtime_session_id: input.session.id,
+        runtime_generation_id: generation.id,
+        desired_revision: input.desired.revision,
+        provider: input.desired.provider,
+        ...(input.desired.model ? { model: input.desired.model } : {}),
+        agent_version_id: input.desired.agentVersionId,
+        environment_version_id: input.desired.environmentVersionId,
+        scope_kind: input.session.scope.kind,
+        scope_id: input.session.scope.id,
+        provider_workspace_id: created?.providerWorkspaceId ?? null,
+        provider_session_id: created?.providerSessionId ?? null,
+        failure_class: error instanceof Error ? error.name : 'UnknownError',
+      });
       await created?.session.close().catch(() => undefined);
       if (grantId) await this.grants.revoke(grantId).catch(() => undefined);
       await this.generationManager

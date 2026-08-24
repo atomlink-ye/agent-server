@@ -94,6 +94,22 @@ describe.skipIf(baseUrlEnv === undefined)(
             );
 
           phase = 'select conversation';
+          const newConversation = page.getByRole('button', {
+            name: /New conversation/u,
+          });
+          await newConversation.waitFor({
+            state: 'visible',
+            timeout: sendInteractionTimeout,
+          });
+          await newConversation.click({ timeout: sendInteractionTimeout });
+          const coworker = page.getByRole('button', {
+            name: /managed-environment-smoke/u,
+          });
+          await coworker.waitFor({
+            state: 'visible',
+            timeout: sendInteractionTimeout,
+          });
+          await coworker.click({ timeout: sendInteractionTimeout });
           await page.waitForURL(/\/conversations\/[0-9a-f-]+/iu, {
             timeout: sendInteractionTimeout,
           });

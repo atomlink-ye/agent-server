@@ -15,6 +15,13 @@ import { createLogger } from '../../src/shared/observability/logger.js';
 import { transitionRun } from '../../src/domain/runs/run.js';
 import { applyDurableKernelMigrations } from '../../src/infrastructure/postgres/postgres.js';
 import { CancelTask } from '../../src/application/tasks/cancel-task.js';
+import {
+  runtimeSpecRevision,
+  type RuntimeSession,
+  type RuntimeSessionId,
+  type RuntimeSessionOwner,
+  type RuntimeScope,
+} from '../../src/domain/runtime/runtime-session.js';
 
 const connectionString = process.env.DATABASE_URL ?? process.env.POSTGRES_URL;
 const required = process.env.REAL_POSTGRES_REQUIRED === '1';
@@ -147,6 +154,10 @@ describeRealPostgres('Phase C session lanes on PostgreSQL', () => {
         executeTeamTask: new ExecuteTeamTask(invokables, {} as never),
         runtimeTurns: runtime,
         runtimeProvider: runtime,
+        runtimeSessions: {
+          findByScope: async (runtimeOwner, scope) =>
+            readyRuntimeSession(runtimeOwner, scope),
+        },
         logger: createLogger({
           service: 'session-lane-test',
           minimumLevel: 'error',
@@ -398,3 +409,21 @@ describeRealPostgres('Phase C session lanes on PostgreSQL', () => {
     }
   });
 });
+
+function readyRuntimeSession(
+  owner: RuntimeSessionOwner,
+  scope: RuntimeScope,
+): RuntimeSession {
+  const now = '2026-08-24T00:00:00.000Z';
+  return {
+    id: `runtime:${scope.kind}:${scope.id}` as RuntimeSessionId,
+    owner,
+    scope,
+    desiredSpecRevision: runtimeSpecRevision(1),
+    currentGenerationId: null,
+    status: 'ready',
+    createdAt: now,
+    updatedAt: now,
+    closedAt: null,
+  };
+}

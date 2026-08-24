@@ -405,8 +405,11 @@ export class PaseoRuntimeProvider implements RuntimeExecutionProvider {
       !isManagedEnvironmentProvider(desired.provider) ||
       desired.provider !== this.#options.provider
     )
+      // A mismatch here is a configuration fact (this adapter is wired to one
+      // provider), not a provider outage, so the message must name which
+      // provider was asked for alongside which provider this adapter serves.
       throw new ProtocolViolationError(
-        'The requested runtime provider is unsupported by Paseo.',
+        `The requested runtime provider "${desired.provider}" is unsupported by Paseo, which is configured for "${this.#options.provider}".`,
       );
     const model = desired.model
       ? normalizePaseoRequestedModel(desired.provider, desired.model)

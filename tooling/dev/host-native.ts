@@ -261,10 +261,12 @@ export async function runCommand(
     Boolean(options.abortOn) && process.platform !== 'win32';
   await new Promise<void>((resolveRun, reject) => {
     let settled = false;
+    let primaryFailurePending = false;
     let healthTimer: NodeJS.Timeout | undefined;
     const settle = (error?: Error) => {
       if (settled) return;
       settled = true;
+      primaryFailurePending = false;
       if (healthTimer) clearInterval(healthTimer);
       if (error) reject(error);
       else resolveRun();
@@ -275,8 +277,12 @@ export async function runCommand(
       stdio: options.stdio ?? 'inherit',
       detached: isolateCommandTree,
     });
-    child.once('error', (error) => settle(error));
+    child.once('error', (error) => {
+      if (primaryFailurePending) return;
+      settle(error);
+    });
     child.once('exit', (code, signal) => {
+      if (primaryFailurePending) return;
       if (code === 0) settle();
       else
         settle(new Error(`${command} exited ${code ?? signal ?? 'unknown'}`));
@@ -294,7 +300,8 @@ export async function runCommand(
       return;
     }
     const failFromPrimary = (reason: string) => {
-      if (settled) return;
+      if (settled || primaryFailurePending) return;
+      primaryFailurePending = true;
       terminateCommandTree(child);
       void childDiagnostic(
         abortOn.child,

@@ -11,6 +11,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 const baseUrlEnv = process.env.WEB_E2E_BASE_URL;
 const providerEnv = process.env.WEB_E2E_PROVIDER;
 const modelEnv = process.env.WEB_E2E_MODEL;
+const resolveHost = process.env.WEB_E2E_RESOLVE_HOST ?? 'web';
 const configuredEnvironmentCount = [baseUrlEnv, providerEnv, modelEnv].filter(
   (value) => value !== undefined,
 ).length;
@@ -59,7 +60,9 @@ describe.skipIf(baseUrlEnv === undefined)(
             throw new Error(
               `WEB_E2E_BASE_URL must use a trustworthy .localhost hostname: ${browserOrigin}`,
             );
-          const { address: webAddress } = await lookup('web', { family: 4 });
+          const { address: webAddress } = await lookup(resolveHost, {
+            family: 4,
+          });
           browser = await chromium.launch({
             headless: true,
             args: [

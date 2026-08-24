@@ -190,7 +190,8 @@ export async function runHostCanary(
       AGENT_SERVER_WORKSPACE_ID:
         loaded.AGENT_SERVER_WORKSPACE_ID?.trim() || LOCAL_WORKSPACE_ID,
       WEB_E2E_BASE_URL:
-        loaded.WEB_E2E_BASE_URL?.trim() || 'http://127.0.0.1:3001',
+        loaded.WEB_E2E_BASE_URL?.trim() || 'http://web.localhost:3001',
+      WEB_E2E_RESOLVE_HOST: loaded.WEB_E2E_RESOLVE_HOST?.trim() || '127.0.0.1',
       WEB_E2E_PROVIDER:
         loaded.WEB_E2E_PROVIDER?.trim() ||
         loaded.PASEO_PROVIDER?.trim() ||

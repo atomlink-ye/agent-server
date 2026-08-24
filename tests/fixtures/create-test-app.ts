@@ -123,7 +123,9 @@ export async function createTestApp(
   runtime: FakeAgentRuntime,
   options: CreateTestAppOptions = {},
 ) {
-  const database = (options.database ?? new PGlite()) as TestDatabase;
+  const database = withTransactionClient(
+    (options.database ?? new PGlite()) as TestDatabase,
+  );
   await applyDurableKernelMigrations(database as any);
   if (options.seedPublishedEnvironment)
     await seedPublishedEnvironment(database);
@@ -255,6 +257,15 @@ export async function createTestApp(
     };
   }
   return application.app;
+}
+
+function withTransactionClient(database: TestDatabase): TestDatabase {
+  if (database.connect) return database;
+  database.connect = async () => ({
+    query: database.query.bind(database),
+    release: () => undefined,
+  });
+  return database;
 }
 
 async function seedPublishedEnvironment(database: TestDatabase): Promise<void> {

@@ -1,0 +1,23 @@
+src/application/runtime/ensure-runtime-session.ts
+  aa841554b33a269e 116-133,138-141
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2-bit.10+672fbf0",
+  "base_commit_sha": "3fab027bf3fd0be13cbfbb8c00e8d32b92224378",
+  "prompts": {
+    "aa841554b33a269e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2e0ac1a9-cdbd-49b5-9938-68e78819ae91",
+        "model": "claude-opus-5"
+      },
+      "human_author": "link.ye",
+      "messages": [],
+      "total_additions": 147,
+      "total_deletions": 2,
+      "accepted_lines": 22,
+      "overriden_lines": 0
+    }
+  }
+}

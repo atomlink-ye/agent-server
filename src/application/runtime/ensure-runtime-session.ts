@@ -113,11 +113,32 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
 
     if (effectivePlan.kind === 'reuse') {
       if (!current) throw new Error('runtime_provider_session_missing');
+      // A reused session needs the extension binding just as much as a fresh
+      // one. Opening it without a grant produced a session with no MCP
+      // transport while the Agent still believed it had the tools, so the
+      // model issued a tool call that could never arrive and the turn burned
+      // its whole execution budget before timing out.
+      const grant = await this.grants.issue({
+        runtimeSessionId: session.id,
+        generationId: current.id,
+        tenantId: session.owner.tenantId,
+        principal: {
+          principalType: session.owner.principalType,
+          principalId: session.owner.principalId,
+        },
+        scope: session.scope,
+        catalogDigest: applied.toolCatalogDigest,
+        allowedTools: applied.toolRefs,
+      });
+      const endpoint = await this.mcpEndpoint.current();
       return {
         generation: current,
         session: await this.provider.open(
           buildProviderSessionBinding(current, applied),
-          this.providerSpec(applied, desiredSystemPrompt),
+          this.providerSpec(applied, desiredSystemPrompt, {
+            url: endpoint.url,
+            token: grant.token,
+          }),
         ),
         resolution: 'reused',
       };

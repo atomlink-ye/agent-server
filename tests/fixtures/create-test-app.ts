@@ -140,20 +140,19 @@ export async function createTestApp(
         })),
       }
     : testConfig;
-  if (options.workspaceId) {
-    const now = new Date().toISOString();
-    await (database as any).query(
-      `INSERT INTO workspaces(id,tenant_id,principal_type,principal_id,name,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,$6)`,
-      [
-        options.workspaceId,
-        'tenant_alpha',
-        'service_account',
-        'svc_enabled',
-        'E2E Workspace',
-        now,
-      ],
-    );
-  }
+  const fixtureWorkspaceId = options.workspaceId ?? defaultWorkspaceId;
+  const now = new Date().toISOString();
+  await (database as any).query(
+    `INSERT INTO workspaces(id,tenant_id,principal_type,principal_id,name,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,$6)`,
+    [
+      fixtureWorkspaceId,
+      'tenant_alpha',
+      'service_account',
+      'svc_enabled',
+      'E2E Workspace',
+      now,
+    ],
+  );
 
   const projectedMemory = new Map<string, string>();
   let projectionFailures = options.projectionFailures ?? 0;
@@ -186,7 +185,7 @@ export async function createTestApp(
   };
   await seedDefaultPublishedAgent(
     database,
-    options.workspaceId ?? testConfig.serviceAccounts[0].workspaceId,
+    fixtureWorkspaceId,
     options.publishedAgentVersionId,
   );
 

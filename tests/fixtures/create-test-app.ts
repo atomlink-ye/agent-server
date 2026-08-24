@@ -261,12 +261,40 @@ export async function createTestApp(
 
 function withTransactionClient(database: TestDatabase): TestDatabase {
   if (!(database instanceof PGlite)) return database;
-  const query = database.query.bind(database);
+  let tail = Promise.resolve();
+  const reserve = () => {
+    let release!: () => void;
+    const reservation = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const previous = tail;
+    tail = previous.then(() => reservation);
+    return { previous, release };
+  };
+  const query: TestDatabase['query'] = async <Row = Record<string, unknown>>(
+    sql: string,
+    values?: readonly unknown[],
+  ) => {
+    const reservation = reserve();
+    await reservation.previous;
+    try {
+      return await database.query<Row>(sql, values as unknown[] | undefined);
+    } finally {
+      reservation.release();
+    }
+  };
   const close = database.close.bind(database);
   return {
     query,
     close,
-    connect: async () => ({ query, release: () => undefined }),
+    async connect() {
+      const reservation = reserve();
+      await reservation.previous;
+      return {
+        query: database.query.bind(database),
+        release: reservation.release,
+      };
+    },
   };
 }
 

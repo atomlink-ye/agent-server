@@ -294,6 +294,7 @@ function withTransactionClient(database: TestDatabase): TestDatabase {
       await reservation.previous;
       return {
         query: database.query.bind(database),
+        exec: database.exec.bind(database),
         release: reservation.release,
       };
     },

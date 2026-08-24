@@ -6,6 +6,7 @@ import { transitionRun } from '../../domain/runs/run.js';
 import { terminalRunStatuses } from '../../domain/runs/run-status.js';
 import type { Task } from '../../domain/tasks/task.js';
 import type { Logger } from '../../shared/observability/logger.js';
+import { AGENT_SERVER_PLATFORM_COLLABORATION_TOOL_REFS } from '../agents/built-in-skills.js';
 import { resolveRuntimeModelPolicy } from '../agents/runtime-model-policy.js';
 import type { RuntimeSessionStore } from '../ports/runtime-session-store.js';
 import type {
@@ -181,7 +182,15 @@ export class AgentRunExecutor {
         : [];
 
     let sessionRuntime = runtimeSession;
-    const runtimeToolRefs = resolved.toolRefs;
+    const runtimeToolRefs =
+      collaborativeTeam != null && member
+        ? Object.freeze([
+            ...new Set([
+              ...resolved.toolRefs,
+              ...AGENT_SERVER_PLATFORM_COLLABORATION_TOOL_REFS,
+            ]),
+          ])
+        : resolved.toolRefs;
 
     const prompts = await this.promptContext.buildTurnPrompts({
       resolved: resolvedForPrompt,

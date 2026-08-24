@@ -12,6 +12,7 @@ import {
 } from '../../src/contracts/tasks.js';
 import {
   createTestApp,
+  defaultWorkspaceId,
   defaultPublishedAgentVersionId,
   disabledServiceAccountToken,
   primaryServiceAccountToken,
@@ -188,7 +189,7 @@ describe('task HTTP contracts', () => {
           kind: 'agent',
           version_id: defaultPublishedAgentVersionId,
         },
-        workspace_id: 'workspace_main',
+        workspace_id: defaultWorkspaceId,
         input: { text: '  same prompt  ' },
       }),
     });

@@ -25,6 +25,8 @@ export const secondaryServiceAccountToken = 'token-other-owner';
 export const disabledServiceAccountToken = 'token-disabled';
 export const defaultPublishedAgentVersionId =
   '00000000-0000-4000-8000-0000000a0101';
+export const defaultWorkspaceId = '00000000-0000-4000-8000-00000000a001';
+const foreignWorkspaceId = '00000000-0000-4000-8000-00000000a002';
 
 export const testConfig = {
   nodeEnv: 'test',
@@ -41,7 +43,7 @@ export const testConfig = {
       serviceAccountId: 'svc_enabled',
       token: primaryServiceAccountToken,
       tenantId: 'tenant_alpha',
-      workspaceId: 'workspace_main',
+      workspaceId: defaultWorkspaceId,
       policyVersion: 'policy-2026-07-22',
       disabled: false,
     },
@@ -49,7 +51,7 @@ export const testConfig = {
       serviceAccountId: 'svc_other_owner',
       token: secondaryServiceAccountToken,
       tenantId: 'tenant_alpha',
-      workspaceId: 'workspace_main',
+      workspaceId: defaultWorkspaceId,
       policyVersion: 'policy-2026-07-22',
       disabled: false,
     },
@@ -57,7 +59,7 @@ export const testConfig = {
       serviceAccountId: 'svc_disabled',
       token: disabledServiceAccountToken,
       tenantId: 'tenant_alpha',
-      workspaceId: 'workspace_main',
+      workspaceId: defaultWorkspaceId,
       policyVersion: 'policy-2026-07-22',
       disabled: true,
     },
@@ -134,7 +136,7 @@ export async function createTestApp(
           workspaceId:
             account.serviceAccountId === 'svc_enabled'
               ? options.workspaceId!
-              : `foreign-${options.workspaceId}`,
+              : foreignWorkspaceId,
         })),
       }
     : testConfig;

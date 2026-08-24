@@ -76,6 +76,17 @@ export function ChatTranscript({
     return <StateMessage>No messages in this conversation yet.</StateMessage>;
   }
 
+  // A Coworker turn runs against a real provider and its execution budget is
+  // minutes, not seconds. The transcript polls, so the reply does arrive, but
+  // until it does the user was looking at their own message with no feedback.
+  //
+  // Deliberately worded as waiting, not as "the Agent is running": the message
+  // projection carries no dispatch state, so the browser genuinely does not
+  // know whether a Run is active, queued behind an earlier turn, or already
+  // failed. Claiming otherwise would be the frontend inventing product state.
+  const lastMessage = state.messages[state.messages.length - 1];
+  const awaitingReply = lastMessage?.authorType === 'principal';
+
   return (
     <div
       className="chat-transcript"
@@ -89,6 +100,16 @@ export function ChatTranscript({
           onOpenWork={onOpenWork}
         />
       ))}
+      {awaitingReply ? (
+        <p className="chat-awaiting-reply" role="status">
+          <span aria-hidden="true" className="chat-awaiting-dots">
+            <span />
+            <span />
+            <span />
+          </span>
+          Waiting for a reply
+        </p>
+      ) : null}
     </div>
   );
 }

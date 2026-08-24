@@ -647,6 +647,58 @@ textarea {
   padding: 24px 28px 22px;
 }
 
+.chat-awaiting-reply {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  align-self: flex-start;
+  border-radius: var(--radius-lg);
+  background: var(--sky-50);
+  padding: var(--space-2) var(--space-3);
+  color: var(--ink-500);
+  font-size: var(--text-sm);
+}
+
+.chat-awaiting-dots {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.chat-awaiting-dots span {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--skype);
+  animation: chat-awaiting-pulse 1.2s ease-in-out infinite;
+}
+
+.chat-awaiting-dots span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.chat-awaiting-dots span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes chat-awaiting-pulse {
+  0%,
+  60%,
+  100% {
+    opacity: 0.3;
+  }
+  30% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-awaiting-dots span {
+    animation: none;
+    opacity: 0.6;
+  }
+}
+
 .chat-transcript {
   display: flex;
   width: 100%;

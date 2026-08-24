@@ -93,19 +93,32 @@ export class PostgresRuntimeGrantAuthority
       const grants = await client.query<{
         readonly id: string;
         readonly runtime_turn_id: string | null;
+        readonly expires_at: string | Date;
       }>(
-        `SELECT id,runtime_turn_id FROM runtime_tool_grants
+        `SELECT id,runtime_turn_id,expires_at FROM runtime_tool_grants
           WHERE runtime_session_id=$1 AND generation_id=$2
-            AND revoked_at IS NULL AND expires_at>$3
+            AND revoked_at IS NULL
           ORDER BY created_at DESC FOR UPDATE`,
-        [input.runtimeSessionId, input.generationId, timestamp],
+        [input.runtimeSessionId, input.generationId],
       );
-      const current = grants.rows?.find(
+      const active = grants.rows?.filter(
+        (grant) => dateValue(grant.expires_at) > timestamp,
+      );
+      const current = active?.find(
         (grant) =>
           grant.runtime_turn_id === null ||
           grant.runtime_turn_id === input.runtimeTurnId,
       );
-      if (!current) {
+      const activeOther = active?.some(
+        (grant) =>
+          grant.runtime_turn_id !== null &&
+          grant.runtime_turn_id !== input.runtimeTurnId,
+      );
+      const bootstrapLineage = grants.rows?.find(
+        (grant) => grant.runtime_turn_id === null,
+      );
+      const selected = current ?? (!activeOther ? bootstrapLineage : undefined);
+      if (!selected) {
         await client.query('ROLLBACK');
         return { kind: 'denied', reason: 'runtime_grant_rotation_fenced' };
       }
@@ -114,13 +127,18 @@ export class PostgresRuntimeGrantAuthority
             SET revoked_at=$3,updated_at=$3,revision=revision+1
           WHERE runtime_session_id=$1 AND generation_id=$2
             AND id<>$4 AND revoked_at IS NULL`,
-        [input.runtimeSessionId, input.generationId, timestamp, current.id],
+        [input.runtimeSessionId, input.generationId, timestamp, selected.id],
       );
       await client.query(
         `UPDATE runtime_tool_grants
-            SET runtime_turn_id=$2,updated_at=$3,revision=revision+1
-          WHERE id=$1 AND revoked_at IS NULL`,
-        [current.id, input.runtimeTurnId, timestamp],
+            SET runtime_turn_id=$2,expires_at=$4,updated_at=$3,revision=revision+1
+            WHERE id=$1 AND revoked_at IS NULL`,
+        [
+          selected.id,
+          input.runtimeTurnId,
+          timestamp,
+          new Date(this.now().getTime() + this.ttlMs).toISOString(),
+        ],
       );
       await client.query('COMMIT');
       return { kind: 'rotated' };
@@ -142,6 +160,10 @@ export class PostgresRuntimeGrantAuthority
       );
     return this.database.connect();
   }
+}
+
+function dateValue(value: string | Date): string {
+  return value instanceof Date ? value.toISOString() : value;
 }
 
 function hashToken(token: string): string {

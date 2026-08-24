@@ -328,20 +328,23 @@ spec:
     );
 
     const session = await pool.query(
-      `SELECT rs.id,rs.scope_kind,rs.scope_id,rs.task_id,
-              sls.agent_version_id,sls.environment_version_id
+      `SELECT rs.id,rs.scope_kind,rs.scope_id,
+              rss.agent_version_id,rss.environment_version_id
          FROM runtime_sessions rs
-         JOIN session_launch_snapshots sls ON sls.id=rs.launch_snapshot_id
-        WHERE rs.task_id=$1 AND rs.tenant_id=$2
+         JOIN runtime_session_specs rss
+           ON rss.runtime_session_id=rs.id
+          AND rss.revision=rs.desired_spec_revision
+         JOIN runtime_turns rt ON rt.runtime_session_id=rs.id
+         JOIN runs r ON r.id=rt.source_id
+        WHERE rt.source_kind='run' AND r.task_id=$1 AND rs.tenant_id=$2
           AND rs.principal_type=$3 AND rs.principal_id=$4`,
       [rootTaskId, owner.tenant_id, owner.principal_type, owner.principal_id],
     );
     const runtimeSession = session.rows[0];
     if (
       !runtimeSession ||
-      runtimeSession.scope_kind !== 'task' ||
-      runtimeSession.scope_id !== null ||
-      runtimeSession.task_id !== rootTaskId ||
+      runtimeSession.scope_kind !== 'run' ||
+      runtimeSession.scope_id === null ||
       runtimeSession.agent_version_id !== agent.id ||
       runtimeSession.environment_version_id !== environment.id
     )
@@ -702,20 +705,23 @@ spec:
     );
 
     const session = await pool.query(
-      `SELECT rs.id,rs.scope_kind,rs.scope_id,rs.task_id,
-              sls.agent_version_id,sls.environment_version_id
+      `SELECT rs.id,rs.scope_kind,rs.scope_id,
+              rss.agent_version_id,rss.environment_version_id
          FROM runtime_sessions rs
-         JOIN session_launch_snapshots sls ON sls.id=rs.launch_snapshot_id
-        WHERE rs.task_id=$1 AND rs.tenant_id=$2
+         JOIN runtime_session_specs rss
+           ON rss.runtime_session_id=rs.id
+          AND rss.revision=rs.desired_spec_revision
+         JOIN runtime_turns rt ON rt.runtime_session_id=rs.id
+         JOIN runs r ON r.id=rt.source_id
+        WHERE rt.source_kind='run' AND r.task_id=$1 AND rs.tenant_id=$2
           AND rs.principal_type=$3 AND rs.principal_id=$4`,
       [rootTaskId, owner.tenant_id, owner.principal_type, owner.principal_id],
     );
     const runtimeSession = session.rows[0];
     if (
       !runtimeSession ||
-      runtimeSession.scope_kind !== 'task' ||
-      runtimeSession.scope_id !== null ||
-      runtimeSession.task_id !== rootTaskId ||
+      runtimeSession.scope_kind !== 'run' ||
+      runtimeSession.scope_id === null ||
       runtimeSession.agent_version_id !== agentEntry.resolved_version_id ||
       runtimeSession.environment_version_id !==
         environmentEntry.resolved_version_id

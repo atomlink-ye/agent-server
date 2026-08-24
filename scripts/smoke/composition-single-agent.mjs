@@ -204,9 +204,10 @@ spec:
     if (typeof workRunId !== 'string' || typeof rootTaskId !== 'string')
       throw new Error('composition smoke WorkRun identities missing');
     const rootRuns = await pool.query(
-      `SELECT id FROM runs
-        WHERE task_id=$1 AND tenant_id=$2 AND workspace_id=$3
-          AND principal_type=$4 AND principal_id=$5`,
+      `SELECT r.id FROM runs r
+         JOIN tasks t ON t.id=r.task_id
+        WHERE r.task_id=$1 AND t.tenant_id=$2 AND t.workspace_id=$3
+          AND t.principal_type=$4 AND t.principal_id=$5`,
       [
         rootTaskId,
         owner.tenant_id,
@@ -586,9 +587,10 @@ spec:
     if (typeof workRunId !== 'string' || typeof rootTaskId !== 'string')
       throw new Error('inline smoke WorkRun identities missing');
     const rootRuns = await pool.query(
-      `SELECT id FROM runs
-        WHERE task_id=$1 AND tenant_id=$2 AND workspace_id=$3
-          AND principal_type=$4 AND principal_id=$5`,
+      `SELECT r.id FROM runs r
+         JOIN tasks t ON t.id=r.task_id
+        WHERE r.task_id=$1 AND t.tenant_id=$2 AND t.workspace_id=$3
+          AND t.principal_type=$4 AND t.principal_id=$5`,
       [
         rootTaskId,
         owner.tenant_id,

@@ -6,12 +6,14 @@ import { PostgresRuntimeSessionStore } from '../infrastructure/postgres/runtime/
 import { PostgresRuntimeSpecStore } from '../infrastructure/postgres/runtime/postgres-runtime-spec-store.js';
 import { PostgresRuntimeGenerationStore } from '../infrastructure/postgres/runtime/postgres-runtime-generation-store.js';
 import { PostgresRuntimeTurnStore } from '../infrastructure/postgres/runtime/postgres-runtime-turn-store.js';
+import { PostgresRuntimeTurnProvenanceQuery } from '../infrastructure/postgres/runtime/postgres-runtime-turn-provenance-query.js';
 import { PostgresRuntimeGrantReader } from '../infrastructure/postgres/runtime/postgres-runtime-grant-reader.js';
 import { PostgresRuntimeGrantAuthority } from '../infrastructure/postgres/runtime/postgres-runtime-grant-authority.js';
 import { AuthorizeRuntimeTool } from '../application/runtime/authorize-runtime-tool.js';
 import { EnsureRuntimeSessionService } from '../application/runtime/ensure-runtime-session.js';
 import { ExecuteRuntimeTurn } from '../application/runtime/execute-runtime-turn.js';
 import { CancelRuntimeTurn } from '../application/runtime/cancel-runtime-turn.js';
+import { CancelRuntimeRun } from '../application/runtime/cancel-runtime-run.js';
 import { ResolveRuntimeSessionSpecService } from '../application/runtime/resolve-runtime-session-spec.js';
 import { EnsureDesiredRuntimeSpecService } from '../application/runtime/ensure-desired-runtime-spec.js';
 import { RuntimeGenerationManager } from '../application/runtime/runtime-generation-manager.js';
@@ -37,6 +39,7 @@ export interface RuntimeOwner {
   readonly ensureRuntimeSession: EnsureRuntimeSession;
   readonly executeRuntimeTurn: Pick<ExecuteRuntimeTurnUseCase, 'execute'>;
   readonly cancelRuntimeTurn: Pick<CancelRuntimeTurnUseCase, 'execute'>;
+  readonly cancelRuntimeRun: Pick<CancelRuntimeRun, 'cancelRun'>;
   readonly chatRuntime: {
     readonly desiredSpec: EnsureDesiredRuntimeSpec;
     readonly configuration: {
@@ -70,6 +73,7 @@ export function createRuntimeOwner(input: {
   const specs = new PostgresRuntimeSpecStore(input.database);
   const generations = new PostgresRuntimeGenerationStore(input.database);
   const turns = new PostgresRuntimeTurnStore(input.database);
+  const turnProvenance = new PostgresRuntimeTurnProvenanceQuery(input.database);
   const reader = new PostgresRuntimeGrantReader(input.database);
   const authorizeRuntimeTool = new AuthorizeRuntimeTool(
     reader,
@@ -120,8 +124,14 @@ export function createRuntimeOwner(input: {
   );
   const cancelRuntimeTurn = new CancelRuntimeTurn(
     turns,
-    ensureRuntimeSession,
+    generations,
+    specs,
+    runtimeProvider,
     grants,
+  );
+  const cancelRuntimeRun = new CancelRuntimeRun(
+    turnProvenance,
+    cancelRuntimeTurn,
   );
   const configuration = {
     provider: input.config.paseo.provider,
@@ -135,6 +145,7 @@ export function createRuntimeOwner(input: {
     ensureRuntimeSession,
     executeRuntimeTurn,
     cancelRuntimeTurn,
+    cancelRuntimeRun,
     chatRuntime: {
       desiredSpec: ensureDesiredRuntimeSpec,
       configuration,

@@ -20,6 +20,7 @@ import type {
   ProviderObservedState,
 } from '../../../application/ports/runtime-execution-provider.js';
 import type { RuntimeProviderCapabilities } from '../../../domain/runtime/runtime-provider-capabilities.js';
+import type { RuntimeTurnId } from '../../../domain/runtime/runtime-session.js';
 import {
   isManagedEnvironmentProvider,
   type ManagedEnvironmentProvider,
@@ -367,6 +368,16 @@ export class PaseoRuntimeProvider implements RuntimeExecutionProvider {
     throw new UnsupportedCapabilityError(
       'Paseo cannot close an individual provider session.',
     );
+  }
+
+  public async cancelTurn(
+    binding: ProviderSessionBinding,
+    _turnId: RuntimeTurnId,
+  ): Promise<void> {
+    const structuralFailure = this.#validateBinding(binding);
+    if (structuralFailure) throw this.#bindingError(structuralFailure);
+    await this.#initialize();
+    await this.#gateway.cancel(binding.generation.providerSessionId!);
   }
 
   public close(): Promise<void> {

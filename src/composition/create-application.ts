@@ -6,10 +6,7 @@ import type { AppConfig } from '../shared/config.js';
 import type { PublishMemoryReviewSurface } from '../application/channels/publish-memory-review-surface.js';
 import type { Logger } from '../shared/observability/logger.js';
 import { createConfiguredRuntimeCapabilities } from './create-runtime-capabilities.js';
-import {
-  createChatExecutionConsumer,
-  createRunExecutionRegistry,
-} from './create-execution-consumers.js';
+import { createChatExecutionConsumer } from './create-execution-consumers.js';
 import { createChannelComposition } from './create-channel-composition.js';
 import { createMemoryCapabilities } from './create-memory-capabilities.js';
 import {
@@ -179,7 +176,6 @@ export async function createApplication(
     runtimeMcpServer,
     chatRuntime,
   } = runtimeOwner;
-  const executionRuns = createRunExecutionRegistry();
   const chatCapabilities =
     directChatPlane === 'absent'
       ? createChatExecutionConsumer({ directChatPlane })
@@ -211,7 +207,7 @@ export async function createApplication(
   const { cancelTask, getTask, getTaskTree } = createTaskExecutionConsumers({
     taskRepository,
     runRepository,
-    executionRuns,
+    executionRuns: runtimeOwner.cancelRuntimeRun,
     events,
   });
   const terminalActivationReconciler = options.deferTeamWakeReconcile

@@ -6,6 +6,7 @@ import type {
 import type { ExecutionExtensionBinding } from './runtime-extension-binding.js';
 import type {
   RuntimeSessionId,
+  RuntimeTurnId,
   RuntimeSpecRevision,
 } from '../../domain/runtime/runtime-session.js';
 import type { RuntimeProviderCapabilities } from '../../domain/runtime/runtime-provider-capabilities.js';
@@ -123,6 +124,12 @@ export interface RuntimeExecutionProvider {
 
   /** Closes one provider session when the provider supports that operation. */
   closeSession(binding: ProviderSessionBinding): Promise<void>;
+
+  /** Cancels a turn on the exact durable provider generation. */
+  cancelTurn(
+    binding: ProviderSessionBinding,
+    turnId: RuntimeTurnId,
+  ): Promise<void>;
 
   /** Closes the provider-global connection owned by this process. */
   close(): Promise<void>;

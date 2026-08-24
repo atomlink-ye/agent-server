@@ -12,7 +12,6 @@ import {
   type ExecuteRunOptions,
 } from '../application/runs/execute-run.js';
 import { CompleteRun } from '../application/runs/complete-run.js';
-import { ExecutionRunRegistry } from '../application/runtime/execution-run-registry.js';
 import { ClaimNextRun } from '../application/runs/claim-next-run.js';
 import { PostgresRunDispatcher } from '../infrastructure/postgres/postgres-run-dispatcher.js';
 import type { RunRepository } from '../application/ports/run-repository.js';
@@ -28,10 +27,6 @@ export function createRunExecutionConsumer(
   options: ExecuteRunOptions,
 ): ExecuteRun {
   return new ExecuteRun(options);
-}
-
-export function createRunExecutionRegistry(): ExecutionRunRegistry {
-  return new ExecutionRunRegistry();
 }
 
 export function createCompleteRunConsumer(

@@ -10,6 +10,7 @@ import type {
   RuntimeExecutionProvider,
   RuntimeProviderInspection,
 } from '../../application/ports/runtime-execution-provider.js';
+import type { RuntimeTurnId } from '../../domain/runtime/runtime-session.js';
 import type { RuntimeProviderCapabilities } from '../../domain/runtime/runtime-provider-capabilities.js';
 
 const UNAVAILABLE_CAPABILITIES: RuntimeProviderCapabilities = {
@@ -81,6 +82,11 @@ export class UnavailableRuntimeProvider implements RuntimeExecutionProvider {
   public async closeSession(_binding: ProviderSessionBinding): Promise<void> {
     return Promise.resolve();
   }
+
+  public async cancelTurn(
+    _binding: ProviderSessionBinding,
+    _turnId: RuntimeTurnId,
+  ): Promise<void> {}
 
   public async close(): Promise<void> {}
 }

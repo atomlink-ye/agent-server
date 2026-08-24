@@ -981,7 +981,7 @@ describe('ExecuteRun', () => {
     expect(runtime.execute).toHaveBeenCalledTimes(1);
     expect(runtime.execute).toHaveBeenCalledWith(
       expect.objectContaining({
-        runtimeSessionId: 'runtime:task:task-1',
+        runtimeSessionId: 'runtime:run:run-1',
         source: { kind: 'run', runId: claim.run.id },
         prompt: 'private prompt',
         desiredSystemPrompt: expect.objectContaining({

@@ -206,7 +206,10 @@ export class AgentRunExecutor {
       collaborativeTeam?.environmentVersionId ??
       compositionEnvironmentVersionId ??
       null;
-    if (this.runtimeSessions) {
+    const needsDesiredRuntimeSpec =
+      environmentVersionId !== null ||
+      (!sessionRuntime && this.runtimeConfiguration !== undefined);
+    if (this.runtimeSessions && needsDesiredRuntimeSpec) {
       if (!this.ensureDesiredRuntimeSpec)
         throw new Error('Runtime desired-spec owner is unavailable.');
       const configuration = environmentVersionId

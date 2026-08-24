@@ -185,7 +185,13 @@ describe('managed single-agent minimum fault evidence', () => {
 
   it('executes an admitted v1 task from its pinned version after v2 exists', async () => {
     const runtime = new FakeAgentRuntime();
-    const app = await createTestApp(runtime, { startDispatcher: true });
+    const runControl: {
+      control?: { claimAndExecute(runId: string): Promise<unknown> };
+    } = {};
+    const app = await createTestApp(runtime, {
+      startDispatcher: false,
+      runControl,
+    });
     const source = `apiVersion: agent-server/v1alpha1\nkind: ManagedAgent\nmetadata:\n  name: v2\nspec:\n  description: v2\n  instructions: Use V2 only.\n  runtime:\n    provider: paseo\n    modelPolicyRef: free-only\n    mode: isolated\n  tools: []\n  skills: []\n  input:\n    schema: { type: object, additionalProperties: false, properties: {} }\n    prompt: input\n  session: { invocation: fresh_per_invocation, followUps: queued, binding: reusable }\n  memory: { policy: workspace_snapshot, proposalLimit: 1 }\n  permissions: { network: none, filesystem: none }\n  completion: { type: executable, command: done }`;
     const response = await app.request('/api/v1/tasks:invoke', {
       method: 'POST',
@@ -199,15 +205,17 @@ describe('managed single-agent minimum fault evidence', () => {
       }),
     });
     expect(response.status).toBe(202);
-    await app.request('/api/v1/agents:import', {
+    const admitted = (await response.json()) as { run_id: string };
+    const imported = await app.request('/api/v1/agents:import', {
       method: 'POST',
       headers: { ...headers, 'idempotency-key': crypto.randomUUID() },
       body: JSON.stringify({ source }),
     });
-    await new Promise((r) => setTimeout(r, 40));
-    expect(
-      runtime.prompts.some((prompt) => prompt.includes('Do the task.')),
-    ).toBe(true);
+    expect(imported.status).toBe(201);
+    if (!runControl.control) throw new Error('missing single-run debug control');
+    await runControl.control.claimAndExecute(admitted.run_id);
+    expect(runtime.systemPrompts).toContain('Do the task.');
+    expect(runtime.systemPrompts).not.toContain('Use V2 only.');
   });
 });
 

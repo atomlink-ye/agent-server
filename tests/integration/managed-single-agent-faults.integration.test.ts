@@ -20,6 +20,7 @@ import {
   defaultPublishedAgentVersionId,
   primaryServiceAccountToken,
 } from '../fixtures/create-test-app.js';
+import type { SingleRunDebugControl } from '../../src/composition/create-application.js';
 import { FakeAgentRuntime } from '../fixtures/fake-agent-runtime.js';
 import { createLogger } from '../../src/shared/observability/logger.js';
 import {
@@ -185,9 +186,7 @@ describe('managed single-agent minimum fault evidence', () => {
 
   it('executes an admitted v1 task from its pinned version after v2 exists', async () => {
     const runtime = new FakeAgentRuntime();
-    const runControl: {
-      control?: { claimAndExecute(runId: string): Promise<unknown> };
-    } = {};
+    const runControl: { control?: SingleRunDebugControl } = {};
     const app = await createTestApp(runtime, {
       startDispatcher: false,
       runControl,

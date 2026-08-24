@@ -50,6 +50,11 @@ export class AgentRunExecutor {
     private readonly events?: RunEventRepository,
     private readonly runtimeSessions?: RuntimeSessionStore,
     private readonly ensureDesiredRuntimeSpec?: EnsureDesiredRuntimeSpec,
+    private readonly runtimeConfiguration?: {
+      readonly provider: string;
+      readonly model: string | null;
+      readonly cwd: string;
+    },
     private readonly sessions?: Pick<SessionRepository, 'getSession'>,
     private readonly environments?: EnvironmentReadApi,
     private readonly runtimeCellRoot?: string,
@@ -118,7 +123,7 @@ export class AgentRunExecutor {
       ? { kind: 'team_member', id: member.id }
       : task.sessionId
         ? { kind: 'product_session', id: task.sessionId }
-        : { kind: 'task', id: task.id };
+        : { kind: 'run', id: claim.run.id };
     const runtimeSession = this.runtimeSessions
       ? await this.runtimeSessions.findByScope(owner, scope)
       : null;
@@ -196,63 +201,31 @@ export class AgentRunExecutor {
       task,
     });
 
-    if (
-      this.runtimeSessions &&
-      ((task.sessionId && productSession?.environmentVersionId != null) ||
-        (member != null && collaborativeTeam != null) ||
-        (!task.sessionId && !member && compositionEnvironmentVersionId != null))
-    ) {
-      if (!this.environments)
-        throw new Error('Runtime Environment dependencies are unavailable.');
+    const environmentVersionId =
+      productSession?.environmentVersionId ??
+      collaborativeTeam?.environmentVersionId ??
+      compositionEnvironmentVersionId ??
+      null;
+    if (this.runtimeSessions) {
       if (!this.ensureDesiredRuntimeSpec)
         throw new Error('Runtime desired-spec owner is unavailable.');
-      const environmentVersionId =
-        productSession?.environmentVersionId ??
-        collaborativeTeam?.environmentVersionId ??
-        compositionEnvironmentVersionId;
-      const environment = await this.environments.findVersion(
-        {
-          tenantId: task.tenantId,
-          workspaceId: task.workspaceId,
-          principalType: task.principalType,
-          principalId: task.principalId,
-        },
-        environmentVersionId!,
-      );
-      const spec = environment?.package.spec;
-      if (
-        !environment ||
-        environment.status !== 'published' ||
-        spec?.adapter !== 'paseo' ||
-        !isManagedEnvironmentProvider(spec.provider) ||
-        spec.modelPolicyRef !== 'free-only' ||
-        spec.runtimeCellPolicy !== 'per_runtime_session'
-      )
-        throw new Error('Work runtime Environment is not supported.');
-      if (workManifest) {
-        const manifestEnvironment = workManifest.entries.find(
-          (entry) => entry.resourceKind === 'environment',
-        );
-        if (
-          manifestEnvironment &&
-          (manifestEnvironment.resolvedVersionId !== environment.id ||
-            manifestEnvironment.resolvedFingerprint !== environment.fingerprint)
-        )
-          throw new Error(
-            'WorkRun Environment no longer matches its manifest.',
-          );
-      }
+      const configuration = environmentVersionId
+        ? await this.resolveEnvironmentConfiguration(
+            environmentVersionId,
+            owner,
+            workManifest,
+            runtimeModelPolicy,
+          )
+        : this.resolveGenericConfiguration(runtimeModelPolicy);
       const ensured = await this.ensureDesiredRuntimeSpec.execute({
         owner,
         scope,
         agentVersionId: resolved.agentVersionId,
-        environmentVersionId: environmentVersionId!,
+        environmentVersionId,
         resolvedSkills: resolved.skills,
         toolRefs: runtimeToolRefs,
         configuration: {
-          provider: spec.provider,
-          model: null,
-          cwd: this.runtimeCellRoot ?? process.cwd(),
+          ...configuration,
           contextEpoch: 0,
           desiredSystemPrompt: createDesiredRuntimeSystemPrompt(
             prompts.systemPrompt,
@@ -337,6 +310,59 @@ export class AgentRunExecutor {
       },
       this.now,
     );
+  }
+
+  private resolveGenericConfiguration(
+    policy: ReturnType<typeof resolveRuntimeModelPolicy>,
+  ) {
+    if (!this.runtimeConfiguration)
+      throw new Error('Runtime fallback configuration is unavailable.');
+    return {
+      provider: policy?.provider ?? this.runtimeConfiguration.provider,
+      model: policy?.model ?? this.runtimeConfiguration.model,
+      cwd: this.runtimeCellRoot ?? this.runtimeConfiguration.cwd,
+    };
+  }
+
+  private async resolveEnvironmentConfiguration(
+    environmentVersionId: string,
+    owner: RuntimeSessionOwner,
+    workManifest: WorkRunCompositionManifest | null,
+    policy: ReturnType<typeof resolveRuntimeModelPolicy>,
+  ) {
+    if (!this.environments)
+      throw new Error('Runtime Environment dependencies are unavailable.');
+    const environment = await this.environments.findVersion(
+      owner,
+      environmentVersionId,
+    );
+    const spec = environment?.package.spec;
+    if (
+      !environment ||
+      environment.status !== 'published' ||
+      spec?.adapter !== 'paseo' ||
+      !isManagedEnvironmentProvider(spec.provider) ||
+      spec.modelPolicyRef !== 'free-only' ||
+      spec.runtimeCellPolicy !== 'per_runtime_session'
+    )
+      throw new Error('Work runtime Environment is not supported.');
+    if (workManifest) {
+      const manifestEnvironment = workManifest.entries.find(
+        (entry) => entry.resourceKind === 'environment',
+      );
+      if (
+        manifestEnvironment &&
+        (manifestEnvironment.resolvedVersionId !== environment.id ||
+          manifestEnvironment.resolvedFingerprint !== environment.fingerprint)
+      )
+        throw new Error('WorkRun Environment no longer matches its manifest.');
+    }
+    return {
+      provider: policy?.provider ?? spec.provider,
+      model: policy?.model ?? null,
+      cwd:
+        this.runtimeCellRoot ?? this.runtimeConfiguration?.cwd ?? process.cwd(),
+    };
   }
 
   private async loadPinnedWorkMemory(

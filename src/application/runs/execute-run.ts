@@ -61,6 +61,11 @@ export interface ExecuteRunOptions {
   readonly createMemoryProposal?: CreateMemoryProposal;
   readonly runtimeSessions?: RuntimeSessionStore;
   readonly ensureDesiredRuntimeSpec?: EnsureDesiredRuntimeSpec;
+  readonly runtimeConfiguration?: {
+    readonly provider: string;
+    readonly model: string | null;
+    readonly cwd: string;
+  };
   readonly sessions?: Pick<SessionRepository, 'getSession'>;
   readonly environments?: EnvironmentReadApi;
   readonly runtimeCellRoot?: string;
@@ -103,6 +108,7 @@ export class ExecuteRun {
       createMemoryProposal,
       runtimeSessions,
       ensureDesiredRuntimeSpec,
+      runtimeConfiguration,
       sessions,
       environments,
       runtimeCellRoot,
@@ -152,6 +158,7 @@ export class ExecuteRun {
       events,
       runtimeSessions,
       ensureDesiredRuntimeSpec,
+      runtimeConfiguration,
       sessions,
       environments,
       runtimeCellRoot,

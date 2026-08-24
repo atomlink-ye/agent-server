@@ -243,6 +243,7 @@ export async function createApplication(
       executeRuntimeTurn: runtimeTurns,
       runtimeSessions,
       ensureDesiredRuntimeSpec,
+      chatRuntime,
     },
     memory: memoryModule,
     ...(channelComposition.memoryReviewSurface

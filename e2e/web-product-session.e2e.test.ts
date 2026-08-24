@@ -93,39 +93,18 @@ describe.skipIf(baseUrlEnv === undefined)(
               `browser secure context unavailable for ${browserOrigin}: actualOrigin=${browserSecurity.origin} isSecureContext=${browserSecurity.isSecureContext} crypto.randomUUID=${browserSecurity.hasRandomUUID}`,
             );
 
-          phase = 'new conversation';
-          const newConversation = page.getByRole('button', {
-            name: /New conversation/u,
-          });
-          await newConversation.waitFor({
-            state: 'visible',
+          phase = 'select conversation';
+          await page.waitForURL(/\/conversations\/[0-9a-f-]+/iu, {
             timeout: sendInteractionTimeout,
           });
-          const createResponsePromise = page.waitForResponse(
-            (response) =>
-              response.request().method() === 'POST' &&
-              sameOrigin(response.url()) &&
-              pathname(response.url()) === '/api/conversations',
-            { timeout: sendInteractionTimeout },
-          );
-          await newConversation.click({ timeout: sendInteractionTimeout });
-          const coworker = page
-            .locator('.new-conversation-form button.filter-chip')
-            .filter({ hasNot: page.locator('[disabled]') })
-            .first();
-          await coworker.waitFor({
-            state: 'visible',
-            timeout: sendInteractionTimeout,
-          });
-          await coworker.click({ timeout: sendInteractionTimeout });
-          const createResponse = await createResponsePromise;
-          expect(createResponse.status()).toBe(201);
-          const created = (await createResponse.json()) as {
-            conversation?: { conversation_id?: string };
-          };
-          conversationId = created.conversation?.conversation_id ?? null;
+          conversationId =
+            pathname(page.url()).match(
+              /^\/conversations\/([0-9a-f-]+)$/iu,
+            )?.[1] ?? null;
           if (!conversationId)
-            throw new Error('create conversation response had no id');
+            throw new Error(
+              `conversation was not selected: ${pathname(page.url())}`,
+            );
 
           phase = 'send interaction';
           const input = page.locator('textarea#message');

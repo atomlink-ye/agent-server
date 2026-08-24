@@ -87,10 +87,14 @@ export async function startHostDevelopment(
     process.once(name, requestStop);
 
   try {
+    const watch =
+      applicationEnvironment.HOST_NATIVE_WATCH?.trim().toLowerCase();
     const apiArgs = [
       '--import',
       'tsx',
-      '--watch',
+      ...(watch === '0' || watch === 'false' || watch === 'off'
+        ? []
+        : ['--watch']),
       'src/entrypoints/api/server.ts',
     ];
     const api =

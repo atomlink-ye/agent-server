@@ -172,7 +172,10 @@ export async function runHostCanary(
     const dev = spawnOwned(
       'node',
       ['--import', 'tsx', 'tooling/dev/start.ts', 'runtime'],
-      { environment: loaded, logName: 'canary-golden-path-dev' },
+      {
+        environment: { ...loaded, HOST_NATIVE_WATCH: '0' },
+        logName: 'canary-golden-path-dev',
+      },
     );
     children.push(dev);
     primaryChild = dev;

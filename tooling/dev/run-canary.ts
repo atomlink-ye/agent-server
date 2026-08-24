@@ -154,6 +154,11 @@ export async function runHostCanary(
       await runCommand('node', runtimeSmokeCommand, {
         environment: commandEnvironment,
         cwd: repositoryRoot,
+        abortOn: {
+          child: api,
+          environment: runtimeEnvironment,
+          label: 'runtime canary API',
+        },
       });
       return;
     }
@@ -211,7 +216,15 @@ export async function runHostCanary(
         'vitest.e2e.config.ts',
         'e2e/web-product-session.e2e.test.ts',
       ],
-      { environment: commandEnvironment, cwd: repositoryRoot },
+      {
+        environment: commandEnvironment,
+        cwd: repositoryRoot,
+        abortOn: {
+          child: dev,
+          environment: loaded,
+          label: 'golden-path dev',
+        },
+      },
     );
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);

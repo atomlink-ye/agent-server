@@ -246,21 +246,99 @@ export async function runCommand(
     readonly environment?: NodeJS.ProcessEnv;
     readonly cwd?: string;
     readonly stdio?: 'inherit' | 'ignore';
+    readonly abortOn?: {
+      readonly child: ChildProcess;
+      readonly environment: NodeJS.ProcessEnv;
+      readonly label: string;
+    };
   } = {},
 ): Promise<void> {
+  const environment = options.environment ?? process.env;
+  const isolateCommandTree =
+    Boolean(options.abortOn) && process.platform !== 'win32';
   await new Promise<void>((resolveRun, reject) => {
+    let settled = false;
+    const settle = (error?: Error) => {
+      if (settled) return;
+      settled = true;
+      if (error) reject(error);
+      else resolveRun();
+    };
     const child = spawn(command, [...args], {
       cwd: options.cwd ?? repositoryRoot,
-      env: options.environment ?? process.env,
+      env: environment,
       stdio: options.stdio ?? 'inherit',
+      detached: isolateCommandTree,
     });
-    child.once('error', reject);
+    child.once('error', (error) => settle(error));
     child.once('exit', (code, signal) => {
-      if (code === 0) resolveRun();
+      if (code === 0) settle();
       else
-        reject(new Error(`${command} exited ${code ?? signal ?? 'unknown'}`));
+        settle(new Error(`${command} exited ${code ?? signal ?? 'unknown'}`));
+    });
+    const abortOn = options.abortOn;
+    if (!abortOn) return;
+    const lifecycle = childLifecycles.get(abortOn.child);
+    if (!lifecycle) {
+      terminateCommandTree(child);
+      settle(
+        new Error(
+          `${abortOn.label} lifecycle is not tracked; ${command} was not started safely.`,
+        ),
+      );
+      return;
+    }
+    const failFromPrimary = () => {
+      if (settled) return;
+      terminateCommandTree(child);
+      void childDiagnostic(
+        abortOn.child,
+        abortOn.label,
+        abortOn.environment,
+      ).then(
+        (diagnostic) => {
+          settle(
+            new Error(
+              `canary primary child exited while ${command} was running\n${diagnostic}`,
+            ),
+          );
+        },
+        (error) => {
+          settle(error instanceof Error ? error : new Error(String(error)));
+        },
+      );
+    };
+    if (lifecycle.getOutcome()) {
+      failFromPrimary();
+      return;
+    }
+    void lifecycle.promise.then(() => {
+      failFromPrimary();
     });
   });
+}
+
+function terminateCommandTree(child: ChildProcess): void {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  const pid = child.pid;
+  if (pid && process.platform !== 'win32') {
+    try {
+      process.kill(-pid, 'SIGTERM');
+    } catch {
+      child.kill('SIGTERM');
+    }
+    const killer = setTimeout(() => {
+      if (child.exitCode !== null || child.signalCode !== null) return;
+      try {
+        process.kill(-pid, 'SIGKILL');
+      } catch {
+        child.kill('SIGKILL');
+      }
+    }, 2_000);
+    killer.unref?.();
+    return;
+  }
+  child.kill('SIGTERM');
 }
 
 export async function connectablePostgres(

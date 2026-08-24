@@ -260,12 +260,14 @@ export async function createTestApp(
 }
 
 function withTransactionClient(database: TestDatabase): TestDatabase {
-  if (database.connect) return database;
-  database.connect = async () => ({
-    query: database.query.bind(database),
-    release: () => undefined,
-  });
-  return database;
+  if (!(database instanceof PGlite)) return database;
+  const query = database.query.bind(database);
+  const close = database.close.bind(database);
+  return {
+    query,
+    close,
+    connect: async () => ({ query, release: () => undefined }),
+  };
 }
 
 async function seedPublishedEnvironment(database: TestDatabase): Promise<void> {

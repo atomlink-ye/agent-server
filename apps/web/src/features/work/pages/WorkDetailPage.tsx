@@ -94,6 +94,7 @@ export function WorkDetailPage({
             work={detail.work}
             run={detail.run}
             latestRunId={latestRunId}
+            originConversationId={originConversationId}
           />
           <RunTrigger
             workId={detail.work.id}

@@ -32,12 +32,15 @@
   margin-bottom: var(--space-2);
 }
 
+/* This was a viewport-scaled hero heading (up to 43px) from the days when Work
+   was its own full-page dashboard. Inside the shell it is a panel title, so it
+   matches the display step the rest of the app uses. */
 .work-shell h1 {
   margin: 0;
   color: var(--ink-900);
-  font-size: clamp(2rem, 3.4vw, 2.7rem);
-  font-weight: 650;
-  letter-spacing: -0.045em;
+  font-size: var(--text-display);
+  font-weight: 700;
+  letter-spacing: -0.035em;
   line-height: 1.05;
 }
 

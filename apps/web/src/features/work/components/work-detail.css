@@ -181,3 +181,44 @@
   color: var(--ink-500);
   font-size: var(--text-eyebrow);
 }
+
+/* Starting a Run is the primary action on this page, but the button carried no
+   styling at all: transparent border, transparent background, 1px 6px padding.
+   It read as body text. Give it the shell's primary-action language. */
+.work-run-trigger {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin: var(--space-5) 0 0;
+}
+
+.work-run-trigger button {
+  border-color: var(--skype);
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, var(--skype), var(--skype-deep));
+  box-shadow: 0 8px 18px -10px rgb(0 120 200 / 70%);
+  color: var(--cloud);
+  font-size: var(--text-sm);
+  font-weight: 800;
+  padding: var(--space-2) var(--space-4);
+}
+
+.work-run-trigger button:hover:not(:disabled) {
+  border-color: var(--skype-deep);
+  color: var(--cloud);
+  box-shadow: 0 10px 20px -10px rgb(0 120 200 / 78%);
+}
+
+.work-run-trigger button:disabled {
+  border-color: var(--ink-200);
+  background: var(--ink-100);
+  box-shadow: none;
+  color: var(--ink-500);
+}
+
+.work-run-trigger p {
+  margin: 0;
+  color: var(--coral-deep);
+  font-size: var(--text-sm);
+}

@@ -15,7 +15,7 @@ import type {
 } from '../../domain/runtime/runtime-turn.js';
 import type { RuntimeSessionId } from '../../domain/runtime/runtime-session.js';
 import type { DesiredRuntimeSystemPrompt } from '../../domain/runtime/desired-runtime-system-prompt.js';
-import type { RevokeRuntimeGrants } from '../ports/revoke-runtime-grants.js';
+import type { ReleaseRuntimeGrant } from '../ports/release-runtime-grant.js';
 
 export interface ExecuteRuntimeTurnInput {
   readonly runtimeSessionId: RuntimeSessionId;
@@ -40,7 +40,7 @@ export class ExecuteRuntimeTurn {
     private readonly turns: RuntimeTurnStore,
     private readonly ensureRuntimeSession: EnsureRuntimeSession,
     private readonly rotateRuntimeGrant: RotateRuntimeGrant,
-    private readonly revokeRuntimeGrants: RevokeRuntimeGrants,
+    private readonly releaseRuntimeGrant: ReleaseRuntimeGrant,
     private readonly now: () => Date = () => new Date(),
   ) {}
 
@@ -136,7 +136,7 @@ export class ExecuteRuntimeTurn {
     }
     if (!started) {
       await ready.session.close().catch(() => undefined);
-      await this.revokeRuntimeGrants.revokeForTurn(created.id);
+      await this.releaseRuntimeGrant.releaseForTurn(created.id);
       throw new RuntimeTurnExecutionError('runtime_turn_cancelled');
     }
 
@@ -169,7 +169,7 @@ export class ExecuteRuntimeTurn {
         id,
         completedAt: this.now().toISOString(),
       });
-      await this.revokeRuntimeGrants.revokeForTurn(id);
+      await this.releaseRuntimeGrant.releaseForTurn(id);
       throw new RuntimeTurnExecutionError('runtime_turn_cancelled');
     }
     if (result.status === 'failed') {
@@ -184,7 +184,7 @@ export class ExecuteRuntimeTurn {
             )
           : await this.fail(id, code);
       if (code === 'runtime_turn_cancelled' && failed)
-        await this.revokeRuntimeGrants.revokeForTurn(id);
+        await this.releaseRuntimeGrant.releaseForTurn(id);
       if (!failed) {
         const current = await this.turns.findById(id);
         if (current?.status === 'cancelled')
@@ -202,7 +202,7 @@ export class ExecuteRuntimeTurn {
         throw new RuntimeTurnExecutionError('runtime_turn_cancelled');
       throw new RuntimeTurnExecutionError('runtime_provider_unavailable');
     }
-    await this.revokeRuntimeGrants.revokeForTurn(id);
+    await this.releaseRuntimeGrant.releaseForTurn(id);
     return result.output;
   }
 
@@ -217,7 +217,7 @@ export class ExecuteRuntimeTurn {
         completedAt: this.now().toISOString(),
       }),
     );
-    if (failed) await this.revokeRuntimeGrants.revokeForTurn(id);
+    if (failed) await this.releaseRuntimeGrant.releaseForTurn(id);
     return failed;
   }
 }

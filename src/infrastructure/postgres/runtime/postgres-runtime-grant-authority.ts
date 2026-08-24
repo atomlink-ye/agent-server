@@ -6,6 +6,7 @@ import type {
 } from '../../../application/ports/rotate-runtime-grant.js';
 import type { RuntimeGrantId } from '../../../domain/runtime/runtime-session.js';
 import type { RevokeRuntimeGrants } from '../../../application/ports/revoke-runtime-grants.js';
+import type { ReleaseRuntimeGrant } from '../../../application/ports/release-runtime-grant.js';
 import type {
   RuntimeGenerationId,
   RuntimeSessionId,
@@ -34,7 +35,11 @@ type Database = Queryable | Connectable;
 
 /** Writes only the 0056-shaped grant authority; bearer plaintext is returned once. */
 export class PostgresRuntimeGrantAuthority
-  implements IssueRuntimeToolGrant, RotateRuntimeGrant, RevokeRuntimeGrants
+  implements
+    IssueRuntimeToolGrant,
+    RotateRuntimeGrant,
+    RevokeRuntimeGrants,
+    ReleaseRuntimeGrant
 {
   public constructor(
     private readonly database: Database,
@@ -82,6 +87,17 @@ export class PostgresRuntimeGrantAuthority
 
   public revokeForTurn(runtimeTurnId: RuntimeTurnId): Promise<void> {
     return this.revokeWhere('runtime_turn_id=$1', runtimeTurnId);
+  }
+
+  public releaseForTurn(runtimeTurnId: RuntimeTurnId): Promise<void> {
+    return this.database
+      .query(
+        `UPDATE runtime_tool_grants
+            SET runtime_turn_id=NULL,updated_at=$2,revision=revision+1
+          WHERE runtime_turn_id=$1 AND revoked_at IS NULL`,
+        [runtimeTurnId, this.now().toISOString()],
+      )
+      .then(() => undefined);
   }
 
   public revokeForSession(runtimeSessionId: RuntimeSessionId): Promise<void> {

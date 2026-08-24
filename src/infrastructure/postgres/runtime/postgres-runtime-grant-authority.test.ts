@@ -5,7 +5,11 @@ const input = {
   runtimeSessionId: 'runtime-session-1',
   generationId: 'generation-1',
   runtimeTurnId: 'turn-1',
-} as never;
+} as {
+  readonly runtimeSessionId: never;
+  readonly generationId: never;
+  readonly runtimeTurnId: never;
+};
 
 describe('PostgresRuntimeGrantAuthority rotation', () => {
   it('renews the selected grant for the current turn execution window', async () => {
@@ -95,6 +99,59 @@ describe('PostgresRuntimeGrantAuthority rotation', () => {
       });
     },
   );
+
+  it('fences the next turn until the prior turn releases its binding, then rebinds it', async () => {
+    const now = new Date('2026-08-24T00:00:00.000Z');
+    let boundTurn: string | null = null;
+    let expiresAt = '2026-08-24T00:15:00.000Z';
+    const client = {
+      query: vi.fn(async (sql: string, values?: readonly unknown[]) => {
+        if (sql === 'BEGIN' || sql === 'COMMIT' || sql === 'ROLLBACK')
+          return { rows: [] };
+        if (sql.startsWith('SELECT status FROM runtime_turns'))
+          return { rows: [{ status: 'running' }] };
+        if (sql.startsWith('SELECT id,runtime_turn_id,expires_at'))
+          return {
+            rows: [
+              {
+                id: 'grant-1',
+                runtime_turn_id: boundTurn,
+                expires_at: expiresAt,
+              },
+            ],
+          };
+        if (sql.includes('SET runtime_turn_id=NULL')) {
+          boundTurn = null;
+          return { rows: [], rowCount: 1 };
+        }
+        if (sql.includes('SET runtime_turn_id=$2,expires_at=$4')) {
+          boundTurn = String(values?.[1]);
+          expiresAt = String(values?.[3]);
+          return { rows: [], rowCount: 1 };
+        }
+        return { rows: [], rowCount: 1 };
+      }),
+      release: vi.fn(),
+    };
+    const authority = new PostgresRuntimeGrantAuthority(
+      { query: client.query, connect: vi.fn(async () => client) } as never,
+      () => now,
+    );
+
+    await expect(
+      authority.execute({ ...input, runtimeTurnId: 'turn-1' as never }),
+    ).resolves.toEqual({ kind: 'rotated' });
+    await expect(
+      authority.execute({ ...input, runtimeTurnId: 'turn-2' as never }),
+    ).resolves.toEqual({
+      kind: 'denied',
+      reason: 'runtime_grant_rotation_fenced',
+    });
+    await authority.releaseForTurn('turn-1' as never);
+    await expect(
+      authority.execute({ ...input, runtimeTurnId: 'turn-2' as never }),
+    ).resolves.toEqual({ kind: 'rotated' });
+  });
 });
 
 function authorityWith(input: {

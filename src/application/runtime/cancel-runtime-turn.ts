@@ -1,7 +1,7 @@
 import type { ExecutionSession } from '../ports/runtime-execution-session.js';
 import type { EnsureRuntimeSession } from '../ports/ensure-runtime-session.js';
 import type { RuntimeTurnStore } from '../ports/runtime-turn-store.js';
-import type { RevokeRuntimeGrants } from '../ports/revoke-runtime-grants.js';
+import type { ReleaseRuntimeGrant } from '../ports/release-runtime-grant.js';
 import type { RuntimeTurnId } from '../../domain/runtime/runtime-turn.js';
 import type { DesiredRuntimeSystemPrompt } from '../../domain/runtime/desired-runtime-system-prompt.js';
 
@@ -14,7 +14,7 @@ export class CancelRuntimeTurn {
   public constructor(
     private readonly turns: RuntimeTurnStore,
     private readonly ensureRuntimeSession: EnsureRuntimeSession,
-    private readonly revokeRuntimeGrants: RevokeRuntimeGrants,
+    private readonly releaseRuntimeGrant: ReleaseRuntimeGrant,
     private readonly now: () => Date = () => new Date(),
   ) {}
 
@@ -33,7 +33,7 @@ export class CancelRuntimeTurn {
         id: turn.id,
         completedAt: this.now().toISOString(),
       });
-      await this.revokeRuntimeGrants.revokeForTurn(turn.id);
+      await this.releaseRuntimeGrant.releaseForTurn(turn.id);
       return;
     }
 
@@ -56,7 +56,7 @@ export class CancelRuntimeTurn {
       id: turn.id,
       completedAt: this.now().toISOString(),
     });
-    if (cancelled) await this.revokeRuntimeGrants.revokeForTurn(turn.id);
+    if (cancelled) await this.releaseRuntimeGrant.releaseForTurn(turn.id);
     await session.close().catch(() => undefined);
     if (!cancelled) return;
   }

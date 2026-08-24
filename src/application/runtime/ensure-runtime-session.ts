@@ -234,9 +234,14 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
       };
     }
     const components = inspection.observed.bootstrapDigestComponents;
-    if (components.status === 'indeterminate' && input.plan.kind !== 'replace')
-      throw new Error('runtime_provider_bootstrap_digest_indeterminate');
-    if (components.status === 'indeterminate') return input.plan;
+    if (components.status === 'indeterminate') {
+      if (
+        input.plan.kind !== 'replace' &&
+        this.provider.capabilities().canInspectBootstrapDigestComponents
+      )
+        throw new Error('runtime_provider_bootstrap_digest_indeterminate');
+      return input.plan;
+    }
     if (
       inspection.observed.providerSessionId !==
         input.current.providerSessionId ||

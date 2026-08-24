@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -51,6 +51,7 @@ function productionSources(): string[] {
     .split('\n')
     .filter(Boolean)
     .filter((path) => sourceFilePattern.test(path))
+    .filter((path) => existsSync(resolve(root, path)))
     .filter((path) => !path.includes('.test.'));
 }
 
@@ -86,7 +87,7 @@ describe('canonical Agent identity boundary', () => {
 
   it('requires machine-readable Agent identity in the scripted runtime', () => {
     const source = readFileSync(
-      resolve(root, 'src/adapters/runtime/scripted-execution-plane.ts'),
+      resolve(root, 'tests/harness/scripted-execution-plane.ts'),
       'utf8',
     );
     expect(source).toContain('spec.invocationContext?.agentDefinitionId');

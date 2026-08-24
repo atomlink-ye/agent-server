@@ -8,7 +8,7 @@ import { PostgresRunRepository } from '../../src/infrastructure/postgres/postgre
 import { PostgresTaskRepository } from '../../src/infrastructure/postgres/postgres-task-repository.js';
 import { PostgresWorkDefinitionSourceRepository } from '../../src/infrastructure/postgres/postgres-work-definition-source-repository.js';
 import { createWorkModule } from '../../src/composition/create-work-capabilities.js';
-import type { ScriptedExecutionPlane } from '../../src/adapters/runtime/scripted-execution-plane.js';
+import type { ScriptedExecutionPlane } from './scripted-execution-plane.js';
 
 import type { HarnessDatabase } from './database.js';
 import type { HarnessOwner } from './seed/index.js';

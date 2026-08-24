@@ -1,5 +1,5 @@
-import { ScriptedExecutionPlane } from '../../src/adapters/runtime/scripted-execution-plane.js';
-import type { ExecutionSessionSpec } from '../../src/application/ports/execution-plane.js';
+import { ScriptedExecutionPlane } from './scripted-execution-plane.js';
+import type { ScriptedExecutionSessionSpec } from './scripted-execution-plane.js';
 import type { RuntimeMcpServer } from '../../src/infrastructure/extensions/runtime-mcp-server.js';
 
 export type ScriptedRuntimeHarness = Readonly<{
@@ -7,7 +7,7 @@ export type ScriptedRuntimeHarness = Readonly<{
   createSession(input: {
     runtimeSessionId: string;
     systemPrompt: string;
-    invocationContext?: ExecutionSessionSpec['invocationContext'];
+    invocationContext?: ScriptedExecutionSessionSpec['invocationContext'];
     mcpServer?: RuntimeMcpServer;
     token?: string;
   }): ReturnType<ScriptedExecutionPlane['createSession']>;

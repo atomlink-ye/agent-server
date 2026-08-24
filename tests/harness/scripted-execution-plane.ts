@@ -3,21 +3,84 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 
 import {
   ExecutionBindingUnavailableError,
-  type AttachExecutionSessionOutcome,
-  type CreatedExecutionSession,
-  type ExecutionAppliedSessionSpec,
   type ExecutionPlaneCapabilities,
   type ExecutionPlaneHealth,
-  type ExecutionPlanePort,
   type ExecutionSessionBinding,
-  type ExecutionSessionSpec,
-} from '../../application/ports/execution-plane.js';
+  type ExecutionWorkspaceBinding,
+} from '../../src/application/ports/execution-plane.js';
 import type {
   ExecutionResult,
   ExecutionSession,
   ExecutionSessionCapabilities,
-} from '../../application/ports/runtime-execution-session.js';
-import type { ExecutionMcpServerConfig } from '../../application/ports/runtime-extension-binding.js';
+} from '../../src/application/ports/runtime-execution-session.js';
+import type {
+  ExecutionExtensionBinding,
+  ExecutionMcpServerConfig,
+} from '../../src/application/ports/runtime-extension-binding.js';
+import type { RuntimeInvocationContext } from '../../src/domain/runtime/runtime-invocation-context.js';
+
+type ScriptedExecutionWorkspaceSpec = {
+  readonly cwd: string;
+  readonly binding?: ExecutionWorkspaceBinding;
+  readonly title?: string;
+};
+
+export type ScriptedExecutionSessionSpec = {
+  readonly runtimeSessionId: string;
+  readonly workspace: ScriptedExecutionWorkspaceSpec;
+  readonly provider?: string;
+  readonly model?: string;
+  readonly systemPrompt: string;
+  readonly title?: string;
+  readonly labels?: Readonly<Record<string, string>>;
+  readonly extensions?: ExecutionExtensionBinding;
+  readonly desiredRevision?: number;
+  readonly bootstrapSpecDigest?: string;
+  readonly endpointEpoch?: string;
+  readonly invocationContext?: RuntimeInvocationContext;
+};
+
+type ScriptedExecutionAppliedSessionSpec = {
+  readonly appliedRevision: number;
+  readonly appliedSpecDigest: string | null;
+  readonly endpointEpoch: string;
+};
+
+type ScriptedCreatedExecutionSession = {
+  readonly session: ExecutionSession;
+  readonly workspaceBinding: ExecutionWorkspaceBinding;
+  readonly sessionBinding: ExecutionSessionBinding;
+};
+
+type ScriptedAttachExecutionSessionOutcome =
+  | {
+      readonly kind: 'reused' | 'reconfigured';
+      readonly session: ExecutionSession;
+      readonly appliedRevision: number;
+    }
+  | {
+      readonly kind: 'replacement_required';
+      readonly reason:
+        | 'extensions_changed'
+        | 'bootstrap_digest_changed'
+        | 'endpoint_epoch_changed'
+        | 'provider_binding_stale'
+        | 'provider_cannot_reconfigure';
+    };
+
+interface ScriptedExecutionPlanePort {
+  capabilities(): ExecutionPlaneCapabilities;
+  createSession(
+    spec: ScriptedExecutionSessionSpec,
+  ): Promise<ScriptedCreatedExecutionSession>;
+  attachSession(
+    binding: ExecutionSessionBinding,
+    spec: ScriptedExecutionSessionSpec,
+    applied?: ScriptedExecutionAppliedSessionSpec,
+  ): Promise<ScriptedAttachExecutionSessionOutcome>;
+  health(): Promise<ExecutionPlaneHealth>;
+  close(): Promise<void>;
+}
 
 const CAPABILITIES: ExecutionPlaneCapabilities = {
   supported: new Set([
@@ -38,7 +101,7 @@ const CAPABILITIES: ExecutionPlaneCapabilities = {
  * selected tools are still called through the granted MCP endpoint supplied
  * by the real runtime extension binder.
  */
-export class ScriptedExecutionPlane implements ExecutionPlanePort {
+export class ScriptedExecutionPlane implements ScriptedExecutionPlanePort {
   readonly #sessions = new Map<string, ExecutionSession>();
   #nextSession = 1;
 
@@ -47,8 +110,8 @@ export class ScriptedExecutionPlane implements ExecutionPlanePort {
   }
 
   public async createSession(
-    spec: ExecutionSessionSpec,
-  ): Promise<CreatedExecutionSession> {
+    spec: ScriptedExecutionSessionSpec,
+  ): Promise<ScriptedCreatedExecutionSession> {
     const externalSessionId = `scripted-session-${this.#nextSession++}`;
     const session = new ScriptedExecutionSession(spec);
     this.#sessions.set(externalSessionId, session);
@@ -64,9 +127,9 @@ export class ScriptedExecutionPlane implements ExecutionPlanePort {
 
   public async attachSession(
     binding: ExecutionSessionBinding,
-    spec: ExecutionSessionSpec,
-    applied?: ExecutionAppliedSessionSpec,
-  ): Promise<AttachExecutionSessionOutcome> {
+    spec: ScriptedExecutionSessionSpec,
+    applied?: ScriptedExecutionAppliedSessionSpec,
+  ): Promise<ScriptedAttachExecutionSessionOutcome> {
     const existing = this.#sessions.get(binding.externalSessionId);
     if (!existing) throw new ExecutionBindingUnavailableError();
     const desiredRevision =
@@ -114,7 +177,7 @@ class ScriptedExecutionSession implements ExecutionSession {
     supported: new Set(),
   };
 
-  public constructor(private readonly spec: ExecutionSessionSpec) {}
+  public constructor(private readonly spec: ScriptedExecutionSessionSpec) {}
 
   public async run(input: {
     readonly runId: string;
@@ -196,14 +259,16 @@ async function call(
   return JSON.parse(text);
 }
 
-function requiredMcp(spec: ExecutionSessionSpec): ExecutionMcpServerConfig {
+function requiredMcp(
+  spec: ScriptedExecutionSessionSpec,
+): ExecutionMcpServerConfig {
   const server = spec.extensions?.mcpServers?.[0];
   if (!server)
     throw new Error('Scripted execution requires a granted MCP server.');
   return server;
 }
 
-function agentDefinitionId(spec: ExecutionSessionSpec): string {
+function agentDefinitionId(spec: ScriptedExecutionSessionSpec): string {
   const id = spec.invocationContext?.agentDefinitionId;
   if (!id)
     throw new Error(

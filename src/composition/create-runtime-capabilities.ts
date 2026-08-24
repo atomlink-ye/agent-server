@@ -1,9 +1,23 @@
-import { PASEO_PLANE_CAPABILITIES } from '../adapters/paseo/paseo-execution-plane.js';
 import {
   createRuntimeCapabilities,
   type RuntimeCapabilities,
 } from '../application/runtime/runtime-capabilities.js';
+import type { ExecutionPlaneCapabilities } from '../application/ports/execution-plane.js';
 import type { AppConfig } from '../shared/config.js';
+
+const PASEO_PLANE_CAPABILITIES: ExecutionPlaneCapabilities = {
+  supported: new Set([
+    'streaming',
+    'cancellation',
+    'reusable_session',
+    'external_workspace',
+    'timeline_replay',
+    'permissions',
+    'nested_activities',
+    'provider_discovery',
+    'platform_mcp',
+  ]),
+};
 
 /**
  * Derives the execution contract from configuration before any Runtime exists.

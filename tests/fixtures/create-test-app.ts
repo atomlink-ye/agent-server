@@ -272,6 +272,16 @@ function withTransactionClient(database: TestDatabase): TestDatabase {
     tail = previous.then(() => reservation);
     return { previous, release };
   };
+  const rawQuery: TestDatabase['query'] = async <Row = Record<string, unknown>>(
+    sql: string,
+    values?: readonly unknown[],
+  ) => {
+    const result = await database.query<Row>(
+      sql,
+      values as unknown[] | undefined,
+    );
+    return { ...result, rowCount: result.affectedRows };
+  };
   const query: TestDatabase['query'] = async <Row = Record<string, unknown>>(
     sql: string,
     values?: readonly unknown[],
@@ -279,7 +289,7 @@ function withTransactionClient(database: TestDatabase): TestDatabase {
     const reservation = reserve();
     await reservation.previous;
     try {
-      return await database.query<Row>(sql, values as unknown[] | undefined);
+      return await rawQuery<Row>(sql, values);
     } finally {
       reservation.release();
     }
@@ -293,7 +303,7 @@ function withTransactionClient(database: TestDatabase): TestDatabase {
       const reservation = reserve();
       await reservation.previous;
       return {
-        query: database.query.bind(database),
+        query: rawQuery,
         exec: database.exec.bind(database),
         release: reservation.release,
       };

@@ -1,0 +1,23 @@
+src/infrastructure/postgres/postgres-session-transcript-facts-query.ts
+  aa841554b33a269e 72-76
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2-bit.10+672fbf0",
+  "base_commit_sha": "16822a2311d04652c7d44a31a1c518aad60335ca",
+  "prompts": {
+    "aa841554b33a269e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2e0ac1a9-cdbd-49b5-9938-68e78819ae91",
+        "model": "claude-opus-5"
+      },
+      "human_author": "link.ye",
+      "messages": [],
+      "total_additions": 5,
+      "total_deletions": 1,
+      "accepted_lines": 1258,
+      "overriden_lines": 0
+    }
+  }
+}

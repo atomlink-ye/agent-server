@@ -124,14 +124,14 @@ export function evaluateCompletionFacts(value) {
   const leadSession = sessions.find(
     (session) => session.name === 'lead' && session.role === 'lead',
   );
-  const leadReworkReviewTurn = leadSession?.turns?.find(
+  const leadTerminalTurn = leadSession?.turns?.find(
     (turn) =>
       turn.kind === 'lead_turn' &&
       turn.activation?.materializer ===
         'task_run_collaboration_activation_adapter' &&
       turn.activation.causes?.some((cause) => cause.type === 'final_review'),
   );
-  if (!leadReworkReviewTurn) {
+  if (!leadTerminalTurn) {
     fail(
       'assertion',
       'final_review_activation',
@@ -168,6 +168,24 @@ export function evaluateCompletionFacts(value) {
   const acknowledgedMessages = requiresAckMessages.filter(
     (message) => message.status === 'acknowledged',
   );
+  if (
+    leadTerminalTurn &&
+    acknowledgedMessages.length &&
+    !acknowledgedMessages.some((message) =>
+      leadTerminalTurn.activation?.causes?.some(
+        (cause) =>
+          cause.type === 'message' &&
+          cause.message_ref === `M-${message.sequence}`,
+      ),
+    )
+  ) {
+    fail(
+      'assertion',
+      'terminal_activation_coalesced',
+      'lead final_review activation also contains the acknowledged message cause',
+      leadTerminalTurn?.activation?.causes ?? [],
+    );
+  }
   const isMaterializedByMessage = (message) => {
     const messageRef = `M-${message.sequence}`;
     return sessions.some((session) =>
@@ -269,6 +287,81 @@ export function evaluateTraceFacts(value) {
         'synthetic_stock_snapshot mcp_activity includes status === "completed"',
       actual: stockActivities.map((activity) => activity.status),
     });
+  }
+  return { ok: failures.length === 0, failures };
+}
+
+export function evaluateLeadTerminalFacts(projection, trace) {
+  const failures = [];
+  const leadSession = Array.isArray(projection?.sessions)
+    ? projection.sessions.find(
+        (session) => session.name === 'lead' && session.role === 'lead',
+      )
+    : null;
+  const leadTurns = Array.isArray(leadSession?.turns) ? leadSession.turns : [];
+  const reviewTurns = leadTurns.filter((turn) =>
+    turn.activation?.causes?.some((cause) => cause.type === 'final_review'),
+  );
+  if (reviewTurns.length !== 1) {
+    failures.push({
+      scope: 'assertion',
+      code: 'terminal_lead_review_count',
+      expected: 'exactly one lead final_review turn',
+      actual: reviewTurns.length,
+    });
+  }
+  const terminalTurn = reviewTurns[0];
+  if (terminalTurn && leadTurns[leadTurns.length - 1] !== terminalTurn) {
+    failures.push({
+      scope: 'assertion',
+      code: 'lead_turn_after_terminal_review',
+      expected: 'no lead turn after the coalesced terminal review turn',
+      actual: leadTurns.map((turn) => turn.run_id ?? null),
+    });
+  }
+  const leadRunId = terminalTurn?.run_id;
+  const activities = Array.isArray(trace?.mcp_activities)
+    ? trace.mcp_activities
+    : [];
+  for (const toolName of [
+    'message_ack',
+    'board_accept',
+    'collaboration_finish',
+  ]) {
+    const invocations = activities.filter(
+      (activity) => activity.tool_name === toolName,
+    );
+    const invocationIds = new Set(
+      invocations
+        .map((activity) => activity.activity_id)
+        .filter((activityId) => typeof activityId === 'string'),
+    );
+    const hasMissingActivityId = invocations.some(
+      (activity) => typeof activity.activity_id !== 'string',
+    );
+    const completed = invocations.filter(
+      (activity) =>
+        activity.status === 'completed' &&
+        activity.source_refs?.run_id === leadRunId,
+    );
+    if (
+      !leadRunId ||
+      invocationIds.size !== 1 ||
+      hasMissingActivityId ||
+      completed.length !== 1 ||
+      completed[0]?.activity_id !== [...invocationIds][0]
+    ) {
+      failures.push({
+        scope: 'assertion',
+        code: `terminal_lead_${toolName}`,
+        expected: `${toolName} has exactly one activity ID with a completed event from the terminal lead run`,
+        actual: invocations.map((activity) => ({
+          activity_id: activity.activity_id ?? null,
+          status: activity.status ?? null,
+          run_id: activity.source_refs?.run_id ?? null,
+        })),
+      });
+    }
   }
   return { ok: failures.length === 0, failures };
 }

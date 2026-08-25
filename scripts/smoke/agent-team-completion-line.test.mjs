@@ -4,6 +4,7 @@ import {
   acknowledgedMessagesWithoutActivation,
   classifySmokeOutcome,
   evaluateCompletionFacts,
+  evaluateLeadTerminalFacts,
   evaluateTraceFacts,
   formatSmokeOutcome,
 } from './agent-team-completion-line.mjs';
@@ -53,13 +54,6 @@ function successfulProjection() {
               causes: [{ type: 'work_available', work_ref: 'W-1' }],
             },
           },
-          {
-            kind: 'direct_message',
-            activation: {
-              materializer: 'task_run_collaboration_activation_adapter',
-              causes: [{ type: 'message', message_ref: 'M-3' }],
-            },
-          },
         ],
       },
       {
@@ -68,9 +62,13 @@ function successfulProjection() {
         turns: [
           {
             kind: 'lead_turn',
+            run_id: 'lead-run-1',
             activation: {
               materializer: 'task_run_collaboration_activation_adapter',
-              causes: [{ type: 'final_review' }],
+              causes: [
+                { type: 'message', message_ref: 'M-3' },
+                { type: 'final_review' },
+              ],
             },
           },
         ],
@@ -101,7 +99,7 @@ describe('agent-team smoke completion line', () => {
 
   it('enforces the acknowledged-message activation invariant', () => {
     const projection = successfulProjection();
-    projection.sessions[0].turns = [];
+    projection.sessions[1].turns = [];
 
     expect(acknowledgedMessagesWithoutActivation(projection)).toEqual([
       expect.objectContaining({ sequence: 3 }),
@@ -109,10 +107,19 @@ describe('agent-team smoke completion line', () => {
     expect(codes(projection)).toContain('acknowledged_message_activation');
   });
 
+  it('requires the terminal lead activation to coalesce message and final review', () => {
+    const projection = successfulProjection();
+    projection.sessions[1].turns[0].activation.causes = [
+      { type: 'final_review' },
+    ];
+
+    expect(codes(projection)).toContain('terminal_activation_coalesced');
+  });
+
   it('rejects a durable pending message that never materialized a participant turn', () => {
     const projection = successfulProjection();
     projection.direct_messages[0].status = 'pending';
-    projection.sessions[0].turns = [];
+    projection.sessions[1].turns = [];
 
     expect(codes(projection)).toContain('pending_message_activation');
     expect(codes(projection)).not.toContain('acknowledged_direct_message');
@@ -142,7 +149,9 @@ describe('agent-team smoke completion line', () => {
 
   it('classifies an assertion-only failure without any collaboration failure', () => {
     const projection = successfulProjection();
-    projection.sessions[1].turns = [];
+    projection.sessions[1].turns[0].activation.causes = [
+      { type: 'message', message_ref: 'M-3' },
+    ];
 
     const outcome = classifySmokeOutcome({
       taskStatus: 'completed',
@@ -219,7 +228,9 @@ describe('agent-team smoke completion line', () => {
     const collaborationProjection = successfulProjection();
     collaborationProjection.direct_messages[0].status = 'presented';
     const assertionProjection = successfulProjection();
-    assertionProjection.sessions[1].turns = [];
+    assertionProjection.sessions[1].turns[0].activation.causes = [
+      { type: 'message', message_ref: 'M-3' },
+    ];
 
     const diagnostics = [
       formatSmokeOutcome(
@@ -257,10 +268,10 @@ describe('agent-team smoke completion line', () => {
     noRequiresAck.direct_messages[0].requires_ack = false;
     noRequiresAck.direct_messages[0].status = 'presented';
     const noWake = successfulProjection();
-    noWake.sessions[0].turns = [];
+    noWake.sessions[1].turns = [];
     const pendingWithoutWake = successfulProjection();
     pendingWithoutWake.direct_messages[0].status = 'pending';
-    pendingWithoutWake.sessions[0].turns = [];
+    pendingWithoutWake.sessions[1].turns = [];
     const noAcceptedWork = successfulProjection();
     noAcceptedWork.work_items[0].status = 'submitted';
 
@@ -312,5 +323,58 @@ describe('agent-team smoke completion line', () => {
         ],
       }).failures.map((failure) => failure.code),
     ).toEqual(['synthetic_stock_snapshot_activity_status']);
+  });
+
+  it('requires terminal lead mutations to come from the coalesced lead run', () => {
+    const trace = {
+      mcp_activities: [
+        {
+          activity_id: 'ack-1',
+          tool_name: 'message_ack',
+          status: 'failed',
+          source_refs: { run_id: 'lead-run-1' },
+        },
+        {
+          activity_id: 'ack-1',
+          tool_name: 'message_ack',
+          status: 'completed',
+          source_refs: { run_id: 'lead-run-1' },
+        },
+        {
+          activity_id: 'accept-1',
+          tool_name: 'board_accept',
+          status: 'completed',
+          source_refs: { run_id: 'lead-run-1' },
+        },
+        {
+          activity_id: 'finish-1',
+          tool_name: 'collaboration_finish',
+          status: 'completed',
+          source_refs: { run_id: 'lead-run-1' },
+        },
+      ],
+    };
+    expect(evaluateLeadTerminalFacts(successfulProjection(), trace)).toEqual({
+      ok: true,
+      failures: [],
+    });
+    trace.mcp_activities[3].source_refs.run_id = 'other-lead-run';
+    expect(
+      evaluateLeadTerminalFacts(successfulProjection(), trace).failures.map(
+        (failure) => failure.code,
+      ),
+    ).toContain('terminal_lead_collaboration_finish');
+    trace.mcp_activities[3].source_refs.run_id = 'lead-run-1';
+    trace.mcp_activities.push({
+      activity_id: 'ack-2',
+      tool_name: 'message_ack',
+      status: 'failed',
+      source_refs: { run_id: 'lead-run-1' },
+    });
+    expect(
+      evaluateLeadTerminalFacts(successfulProjection(), trace).failures.map(
+        (failure) => failure.code,
+      ),
+    ).toContain('terminal_lead_message_ack');
   });
 });

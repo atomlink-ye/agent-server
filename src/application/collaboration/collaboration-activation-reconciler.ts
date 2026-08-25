@@ -1,6 +1,8 @@
 import { orderedWorkItems } from '../../domain/collaboration/collaboration.js';
 import { COLLABORATION_LIMITS } from '../../domain/collaboration/collaboration-policy-definition.js';
+import { terminalRunStatuses } from '../../domain/runs/run-status.js';
 import type { Task } from '../../domain/tasks/task.js';
+import { terminalTaskStatuses } from '../../domain/tasks/task-status.js';
 import type { TeamMemberRun } from '../../domain/teams/team-member-run.js';
 import type { TeamRun } from '../../domain/teams/team-run.js';
 import type { TeamWorkItem } from '../../domain/teams/team-work-item.js';
@@ -315,6 +317,17 @@ export class CollaborationActivationReconciler implements CollaborationActivatio
           record.task.teamMemberRunId === lead.id &&
           record.task.teamTaskKind === 'lead_turn' &&
           !['completed', 'failed', 'cancelled'].includes(record.task.status),
+      )
+    )
+      return false;
+    if (
+      taskRecords.some(
+        (record) =>
+          record.task.teamMemberRunId !== null &&
+          record.task.teamMemberRunId !== lead.id &&
+          (!terminalTaskStatuses.has(record.task.status) ||
+            (record.latestRun !== null &&
+              !terminalRunStatuses.has(record.latestRun.status))),
       )
     )
       return false;

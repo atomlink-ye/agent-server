@@ -85,7 +85,9 @@ It proves only the bounded current collaboration flow exercised by that smoke: e
 two real-provider participants (lead and member), one claimed/submitted/accepted Work,
 one acknowledged durable direct message, and one completed deterministic
 `synthetic_stock_snapshot` trace activity for `ACME`. The smoke gate is 5 minutes;
-the CI job allows 20 minutes for checkout, install, and runtime startup. The previous
+the member sends the message after submitting so the terminal lead turn coalesces
+message acknowledgement with final review, acceptance, and finish.
+The CI job allows 20 minutes for checkout, install, and runtime startup. The previous
 three-agent/two-Work/rework flow used a 15-minute gate and was observed at roughly
 7 minutes, so that historical ceiling is no longer the target. This does not imply
 generalized dynamic rosters, restart recovery, retries, reconciliation, or production

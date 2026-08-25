@@ -4,6 +4,9 @@ import {
   acknowledgedMessagesWithoutActivation,
   classifySmokeOutcome,
   evaluateCompletionFacts,
+  evaluateLeadTerminalFacts,
+  evaluateMemberWorkTraceFacts,
+  evaluateTraceFacts,
   formatSmokeOutcome,
 } from './agent-team-completion-line.mjs';
 
@@ -20,29 +23,11 @@ function successfulProjection() {
       {
         work_ref: 'work-1',
         status: 'accepted',
-        assignee_name: 'builder',
+        assignee_name: 'member',
         attempts: [
           {
             attempt_no: 1,
             status: 'completed',
-            result_summary: 'AGENT_TEAM_SMOKE_BUILDER_OK',
-          },
-        ],
-      },
-      {
-        work_ref: 'work-2',
-        status: 'accepted',
-        assignee_name: 'analyst',
-        attempts: [
-          {
-            attempt_no: 1,
-            status: 'completed',
-            result_summary: 'AGENT_TEAM_SMOKE_ATTEMPT_1',
-          },
-          {
-            attempt_no: 2,
-            status: 'completed',
-            feedback_summary: 'AGENT_TEAM_SMOKE_REWORK_REQUIRED',
             result_summary: 'AGENT_TEAM_SMOKE_MEMBER_OK',
           },
         ],
@@ -51,36 +36,31 @@ function successfulProjection() {
     direct_messages: [
       {
         sequence: 3,
-        sender_name: 'analyst',
-        recipient_name: 'builder',
-        summary: 'agent collaboration update',
+        sender_name: 'member',
+        recipient_name: 'lead',
+        summary: 'AGENT_TEAM_SMOKE_DIRECT_REQUIRES_ACK',
         requires_ack: true,
         status: 'acknowledged',
       },
     ],
     sessions: [
       {
-        name: 'analyst',
+        name: 'member',
         role: 'member',
         turns: [
           {
             kind: 'direct_message',
             activation: {
               materializer: 'task_run_collaboration_activation_adapter',
-              causes: [{ type: 'work_available', work_ref: 'W-2' }],
+              causes: [{ type: 'work_available', work_ref: 'W-1' }],
             },
           },
-        ],
-      },
-      {
-        name: 'builder',
-        role: 'member',
-        turns: [
           {
-            kind: 'direct_message',
+            kind: 'work_attempt',
+            run_id: 'member-run-1',
             activation: {
               materializer: 'task_run_collaboration_activation_adapter',
-              causes: [{ type: 'message', message_ref: 'M-3' }],
+              causes: [{ type: 'assignment', work_ref: 'W-1' }],
             },
           },
         ],
@@ -91,9 +71,13 @@ function successfulProjection() {
         turns: [
           {
             kind: 'lead_turn',
+            run_id: 'lead-run-1',
             activation: {
               materializer: 'task_run_collaboration_activation_adapter',
-              causes: [{ type: 'final_review' }],
+              causes: [
+                { type: 'message', message_ref: 'M-3' },
+                { type: 'final_review' },
+              ],
             },
           },
         ],
@@ -132,6 +116,15 @@ describe('agent-team smoke completion line', () => {
     expect(codes(projection)).toContain('acknowledged_message_activation');
   });
 
+  it('requires the terminal lead activation to coalesce message and final review', () => {
+    const projection = successfulProjection();
+    projection.sessions[1].turns[0].activation.causes = [
+      { type: 'final_review' },
+    ];
+
+    expect(codes(projection)).toContain('terminal_activation_coalesced');
+  });
+
   it('rejects a durable pending message that never materialized a participant turn', () => {
     const projection = successfulProjection();
     projection.direct_messages[0].status = 'pending';
@@ -145,7 +138,7 @@ describe('agent-team smoke completion line', () => {
     const projection = successfulProjection();
     projection.direct_messages = [];
 
-    expect(codes(projection)).toContain('direct_message_missing');
+    expect(codes(projection)).toContain('direct_message_count');
   });
 
   it('rejects a direct message that does not require an acknowledgement', () => {
@@ -158,14 +151,16 @@ describe('agent-team smoke completion line', () => {
 
   it('rejects work that was not accepted', () => {
     const projection = successfulProjection();
-    projection.work_items[1].status = 'submitted';
+    projection.work_items[0].status = 'submitted';
 
-    expect(codes(projection)).toContain('work_2_accepted');
+    expect(codes(projection)).toContain('work_1_accepted');
   });
 
   it('classifies an assertion-only failure without any collaboration failure', () => {
     const projection = successfulProjection();
-    projection.sessions[2].turns = [];
+    projection.sessions[1].turns[0].activation.causes = [
+      { type: 'message', message_ref: 'M-3' },
+    ];
 
     const outcome = classifySmokeOutcome({
       taskStatus: 'completed',
@@ -242,7 +237,9 @@ describe('agent-team smoke completion line', () => {
     const collaborationProjection = successfulProjection();
     collaborationProjection.direct_messages[0].status = 'presented';
     const assertionProjection = successfulProjection();
-    assertionProjection.sessions[2].turns = [];
+    assertionProjection.sessions[1].turns[0].activation.causes = [
+      { type: 'message', message_ref: 'M-3' },
+    ];
 
     const diagnostics = [
       formatSmokeOutcome(
@@ -285,7 +282,7 @@ describe('agent-team smoke completion line', () => {
     pendingWithoutWake.direct_messages[0].status = 'pending';
     pendingWithoutWake.sessions[1].turns = [];
     const noAcceptedWork = successfulProjection();
-    noAcceptedWork.work_items[1].status = 'submitted';
+    noAcceptedWork.work_items[0].status = 'submitted';
 
     const diagnostics = [
       noAck,
@@ -304,6 +301,126 @@ describe('agent-team smoke completion line', () => {
     expect(diagnostics[1]).toContain('requires_ack_direct_message');
     expect(diagnostics[2]).toContain('acknowledged_message_activation');
     expect(diagnostics[3]).toContain('pending_message_activation');
-    expect(diagnostics[4]).toContain('work_2_accepted');
+    expect(diagnostics[4]).toContain('work_1_accepted');
+  });
+
+  it('requires one completed synthetic stock trace activity', () => {
+    expect(
+      evaluateTraceFacts({
+        mcp_activities: [
+          {
+            activity_id: 'stock-1',
+            tool_name: 'synthetic_stock_snapshot',
+            status: 'running',
+          },
+          {
+            activity_id: 'stock-1',
+            tool_name: 'synthetic_stock_snapshot',
+            status: 'completed',
+          },
+        ],
+      }),
+    ).toEqual({ ok: true, failures: [] });
+    expect(
+      evaluateTraceFacts({
+        mcp_activities: [
+          {
+            activity_id: 'stock-1',
+            tool_name: 'synthetic_stock_snapshot',
+            status: 'failed',
+          },
+        ],
+      }).failures.map((failure) => failure.code),
+    ).toEqual(['synthetic_stock_snapshot_activity_status']);
+  });
+
+  it('requires terminal lead mutations to come from the coalesced lead run', () => {
+    const trace = {
+      mcp_activities: [
+        {
+          activity_id: 'ack-1',
+          tool_name: 'message_ack',
+          status: 'failed',
+          source_refs: { run_id: 'lead-run-1' },
+        },
+        {
+          activity_id: 'ack-1',
+          tool_name: 'message_ack',
+          status: 'completed',
+          source_refs: { run_id: 'lead-run-1' },
+        },
+        {
+          activity_id: 'accept-1',
+          tool_name: 'board_accept',
+          status: 'completed',
+          source_refs: { run_id: 'lead-run-1' },
+        },
+        {
+          activity_id: 'finish-1',
+          tool_name: 'collaboration_finish',
+          status: 'completed',
+          source_refs: { run_id: 'lead-run-1' },
+        },
+      ],
+    };
+    expect(evaluateLeadTerminalFacts(successfulProjection(), trace)).toEqual({
+      ok: true,
+      failures: [],
+    });
+    trace.mcp_activities[3].source_refs.run_id = 'other-lead-run';
+    expect(
+      evaluateLeadTerminalFacts(successfulProjection(), trace).failures.map(
+        (failure) => failure.code,
+      ),
+    ).toContain('terminal_lead_collaboration_finish');
+    trace.mcp_activities[3].source_refs.run_id = 'lead-run-1';
+    trace.mcp_activities.push({
+      activity_id: 'ack-2',
+      tool_name: 'message_ack',
+      status: 'failed',
+      source_refs: { run_id: 'lead-run-1' },
+    });
+    expect(
+      evaluateLeadTerminalFacts(successfulProjection(), trace).failures.map(
+        (failure) => failure.code,
+      ),
+    ).toContain('terminal_lead_message_ack');
+  });
+
+  it('requires member work tools to complete in synthetic, message, submit order', () => {
+    const trace = {
+      mcp_activities: [
+        {
+          activity_id: 'stock-1',
+          sequence: 10,
+          tool_name: 'synthetic_stock_snapshot',
+          status: 'completed',
+          source_refs: { run_id: 'member-run-1' },
+        },
+        {
+          activity_id: 'message-1',
+          sequence: 11,
+          tool_name: 'message_send',
+          status: 'completed',
+          source_refs: { run_id: 'member-run-1' },
+        },
+        {
+          activity_id: 'submit-1',
+          sequence: 12,
+          tool_name: 'board_submit',
+          status: 'completed',
+          source_refs: { run_id: 'member-run-1' },
+        },
+      ],
+    };
+    expect(evaluateMemberWorkTraceFacts(successfulProjection(), trace)).toEqual(
+      { ok: true, failures: [] },
+    );
+    trace.mcp_activities[2].sequence = 9;
+    expect(
+      evaluateMemberWorkTraceFacts(successfulProjection(), trace).failures.map(
+        (failure) => failure.code,
+      ),
+    ).toContain('member_work_tool_order');
   });
 });

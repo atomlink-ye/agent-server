@@ -14,6 +14,9 @@ export const applicationEnvironmentNames = [
   'DATABASE_URL',
   'POSTGRES_URL',
   'SERVICE_ACCOUNTS_JSON',
+  'PASEO_RUNTIME_ROOT',
+  'PASEO_RUNTIME_CELL_ROOT',
+  'AGENT_SERVER_SKILL_REGISTRY_ROOT',
 ];
 
 export function createApplicationEnvironment({

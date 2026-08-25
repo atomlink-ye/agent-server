@@ -36,7 +36,8 @@ const PGLITE_STATE_PATH = resolve(
 const PGLITE_DATA_PATH = resolve(repositoryRoot, '.local/dev-runtime/pglite');
 const HOST_RUNTIME_LOG_DIRECTORY = resolve(
   repositoryRoot,
-  '.local/dev-runtime/logs',
+  process.env.PASEO_RUNTIME_ROOT?.trim() || '.local/dev-runtime',
+  'logs',
 );
 const MAX_LOG_TAIL_LINES = 80;
 const MAX_LOG_TAIL_CHARACTERS = 16_384;
@@ -846,7 +847,9 @@ export async function readRuntimeLogTail(
   const resolvedPath = resolve(path);
   const logRoot = `${HOST_RUNTIME_LOG_DIRECTORY}${resolve('/')}`;
   if (!resolvedPath.startsWith(logRoot)) {
-    throw new Error('runtime log path must be under .local/dev-runtime/logs');
+    throw new Error(
+      'runtime log path must be under the configured runtime logs',
+    );
   }
   let content: string;
   try {

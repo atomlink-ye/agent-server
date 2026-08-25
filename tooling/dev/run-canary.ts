@@ -168,7 +168,11 @@ export async function runHostCanary(
           ? { SMOKE_OUTPUT_FILE: '.local/test-runs/team-registry-work.ndjson' }
           : {}),
         ...(kind === 'agent-team'
-          ? { AGENT_TEAM_SMOKE_TIMEOUT_MS: '900000' }
+          ? {
+              AGENT_TEAM_SMOKE_TIMEOUT_MS:
+                runtimeEnvironment.AGENT_TEAM_SMOKE_TIMEOUT_MS?.trim() ||
+                '300000',
+            }
           : {}),
       };
       await runCommand('node', runtimeSmokeCommand, {

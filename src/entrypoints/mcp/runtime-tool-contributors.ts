@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import {
   McpServer,
   type RegisteredTool,
@@ -5,6 +6,7 @@ import {
 import { z } from 'zod';
 import { registerCollaborationMcpTools } from '../../adapters/collaboration-mcp/collaboration-mcp-tools.js';
 import { SyntheticMarketAdapter } from '../../adapters/demo-market/synthetic-market-adapter.js';
+import { SYNTHETIC_MARKET_FIXTURE_REF } from '../../adapters/demo-market/synthetic-market-adapter.js';
 import type { CollaborationKernel } from '../../application/collaboration/collaboration-kernel.js';
 import { CreateLearningProposal } from '../../application/learning/learning-proposals.js';
 import type { MemoryApiRepository } from '../../application/ports/memory-api-repository.js';
@@ -22,6 +24,9 @@ import type { Logger } from '../../shared/observability/logger.js';
 import { AGENT_SERVER_MEMORY_READ_TOOL_REF } from '../../application/agents/built-in-skills.js';
 import type { AuthorizedRuntimeToolContext } from '../../application/runtime/authorize-runtime-tool.js';
 import type { RuntimeToolContributor } from '../../application/extensions/runtime-tool-catalog.js';
+import type { SyntheticToolReceipt } from '../../application/runtime/synthetic-tool-receipt.js';
+import type { RunEventRepository } from '../../application/ports/run-events.js';
+import { SERVER_AUTHORIZED_TEAM_MCP_CATALOG } from '../../contracts/product-projection/edges.js';
 
 const UUID = z.string().uuid();
 const AGENT_SERVER_MEMORY_READ_MCP_NAME = 'agent_server_memory_read';
@@ -61,6 +66,7 @@ export function createMemoryRuntimeContributor(input: {
 export function createCollaborationRuntimeContributor(input: {
   readonly contextResolver: TeamToolContextResolver;
   readonly kernel: CollaborationKernel;
+  readonly syntheticToolReceipt?: SyntheticToolReceipt;
 }): RuntimeToolContributor {
   return ({ server, grant, authorize }) => {
     if (!grant.teamMemberRunId) return;
@@ -69,6 +75,9 @@ export function createCollaborationRuntimeContributor(input: {
       grant,
       authorize,
       kernel: input.kernel,
+      ...(input.syntheticToolReceipt
+        ? { syntheticToolReceipt: input.syntheticToolReceipt }
+        : {}),
     });
   };
 }
@@ -77,6 +86,8 @@ export function createSyntheticRuntimeToolsContributor(
   input: {
     readonly market?: SyntheticMarketAdapter;
     readonly logger?: Logger;
+    readonly syntheticToolReceipt?: SyntheticToolReceipt;
+    readonly events?: Pick<RunEventRepository, 'append'>;
   } = {},
 ): RuntimeToolContributor {
   return ({ server, grant, authorize }) => {
@@ -95,6 +106,8 @@ function registerTools(
     };
     readonly market?: SyntheticMarketAdapter;
     readonly logger?: Logger;
+    readonly syntheticToolReceipt?: SyntheticToolReceipt;
+    readonly events?: Pick<RunEventRepository, 'append'>;
   },
   authorize: (toolRef: string) => Promise<AuthorizedRuntimeToolContext | null>,
   mode: 'memory' | 'synthetic',
@@ -166,11 +179,16 @@ function registerTools(
         description: 'Read the fixed synthetic ACME snapshot.',
         inputSchema: fixtureInput,
       },
-      (args) =>
+      (args, currentGrant) =>
         loggedSynthetic(
           'synthetic_stock_snapshot',
+          args,
           () => market.stockSnapshot(args),
           input.logger,
+          currentGrant,
+          AGENT_SERVER_SYNTHETIC_STOCK_SNAPSHOT_TOOL_REF,
+          input.syntheticToolReceipt,
+          input.events,
         ),
     );
   if (grant.catalogTools.includes(AGENT_SERVER_SYNTHETIC_EVENT_BATCH_TOOL_REF))
@@ -181,11 +199,16 @@ function registerTools(
         description: 'Read the fixed synthetic ACME event batch.',
         inputSchema: fixtureInput,
       },
-      (args) =>
+      (args, currentGrant) =>
         loggedSynthetic(
           'synthetic_event_batch',
+          args,
           () => market.eventBatch(args),
           input.logger,
+          currentGrant,
+          AGENT_SERVER_SYNTHETIC_EVENT_BATCH_TOOL_REF,
+          input.syntheticToolReceipt,
+          input.events,
         ),
     );
   if (
@@ -198,11 +221,16 @@ function registerTools(
         description: 'Read the fixed synthetic ACME analog summary.',
         inputSchema: fixtureInput,
       },
-      (args) =>
+      (args, currentGrant) =>
         loggedSynthetic(
           'synthetic_analog_summary',
+          args,
           () => market.analogSummary(args),
           input.logger,
+          currentGrant,
+          AGENT_SERVER_SYNTHETIC_ANALOG_SUMMARY_TOOL_REF,
+          input.syntheticToolReceipt,
+          input.events,
         ),
     );
   return new Map();
@@ -252,8 +280,13 @@ async function readMemory(
 
 function loggedSynthetic<T>(
   toolName: string,
+  args: { readonly fixture_ref?: unknown; readonly symbol?: unknown },
   operation: () => T,
   logger?: Logger,
+  grant?: AuthorizedRuntimeToolContext,
+  toolRef?: string,
+  receipt?: SyntheticToolReceipt,
+  events?: Pick<RunEventRepository, 'append'>,
 ) {
   const startedAt = Date.now();
   logger?.log('info', 'runtime.mcp.tool.started', { tool_name: toolName });
@@ -270,7 +303,48 @@ function loggedSynthetic<T>(
     elapsed_ms: Date.now() - startedAt,
     outcome,
   });
+  const isValidStockSnapshot =
+    toolRef === AGENT_SERVER_SYNTHETIC_STOCK_SNAPSHOT_TOOL_REF &&
+    args.fixture_ref === SYNTHETIC_MARKET_FIXTURE_REF &&
+    args.symbol === 'ACME';
+  if (outcome === 'success' && grant && toolRef) {
+    const protectedTeamStockCall =
+      isValidStockSnapshot && grant.activeTurn && grant.teamMemberRunId;
+    if (protectedTeamStockCall) {
+      // The durable trace is the commit point for the in-memory proof. A
+      // missing or failed sink must never unlock board_submit.
+      if (!events || !receipt) return result;
+      return recordSyntheticActivity(events, grant, toolName).then(() => {
+        receipt.recordSuccessfulInvocation({ grant, toolRef });
+        return result;
+      });
+    }
+    if (isValidStockSnapshot)
+      receipt?.recordSuccessfulInvocation({ grant, toolRef });
+  }
   return result;
+}
+
+async function recordSyntheticActivity(
+  events: Pick<RunEventRepository, 'append'>,
+  grant: AuthorizedRuntimeToolContext,
+  toolName: string,
+): Promise<void> {
+  const activeTurn = grant.activeTurn;
+  if (!activeTurn) return;
+  await events.append(activeTurn.runId, 'output', {
+    kind: 'tool_status',
+    activity_id: randomUUID(),
+    category: 'read',
+    status: 'completed',
+    label: 'Synthetic stock snapshot',
+    summary: 'Synthetic market snapshot completed.',
+    tool_name: toolName,
+    provenance: SERVER_AUTHORIZED_TEAM_MCP_CATALOG,
+    tool_identity_capture_status: 'present',
+    response_observed: true,
+    provider: 'agent-server',
+  });
 }
 
 function safeSynthetic<T>(operation: () => T) {

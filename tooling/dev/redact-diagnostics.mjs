@@ -11,9 +11,11 @@ const secretBytes = Buffer.from(secret, 'utf8');
 const files = [];
 for (const root of roots) {
   try {
-    if ((await stat(root)).isDirectory()) await collectFiles(root, files);
+    const rootStat = await stat(root);
+    if (rootStat.isDirectory()) await collectFiles(root, files);
+    else if (rootStat.isFile()) files.push(root);
   } catch {
-    // A skipped flow does not create a diagnostics root.
+    // A skipped flow does not create a diagnostics root or file.
   }
 }
 

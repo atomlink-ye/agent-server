@@ -12,7 +12,11 @@ import type {
   OwnerScope,
   TeamExecutionRepository,
 } from '../ports/team-execution-repository.js';
-import { CollaborationActivationReconciler } from './collaboration-activation-reconciler.js';
+import { CollaborationActivationPlanner } from './collaboration-activation-planner.js';
+import {
+  CollaborationActivationReconciler,
+  filterQueuedLeadMessagesForTerminalSources,
+} from './collaboration-activation-reconciler.js';
 
 const now = () => new Date('2026-08-08T00:00:00.000Z');
 const owner = {
@@ -245,6 +249,140 @@ describe('CollaborationActivationReconciler', () => {
     await expect(
       readyForLeadReview(team, lead, [], [], [], owner),
     ).resolves.toBe(false);
+  });
+
+  it('waits for member Work Task/Run terminal state before queued-message final review', async () => {
+    const reviewAttempt: TeamWorkItemAttempt = {
+      ...attempt,
+      id: 'attempt-review-ready',
+      status: 'completed',
+      resultSummary: 'AGENT_TEAM_SMOKE_MEMBER_OK',
+      executionTaskId: 'member-work-attempt',
+    };
+    const reviewWork: TeamWorkItem = {
+      ...work,
+      id: 'work-review-ready',
+      status: 'pending',
+    };
+    const queuedMessage = {
+      ...createTeamMessage({
+        id: 'queued-review-message',
+        teamRunId: team.id,
+        ...owner,
+        senderMemberRunId: member.id,
+        recipientMemberRunId: lead.id,
+        workItemId: reviewWork.id,
+        attemptId: reviewAttempt.id,
+        kind: 'direct',
+        dedupKey: 'queued-review-message',
+        body: 'AGENT_TEAM_SMOKE_DIRECT_REQUIRES_ACK',
+        requiresAck: true,
+        sourceTaskId: 'member-work-attempt',
+        sourceRunId: 'member-work-run',
+        now,
+      }),
+      sequence: 1,
+    };
+    // The readiness predicate is evaluated before the planner coalesces this
+    // queued message with final_review; only the member child terminal fence
+    // belongs in this predicate.
+    expect(queuedMessage.status).toBe('queued');
+    const memberTask = {
+      ...createChildTask({
+        id: 'member-work-attempt',
+        ...owner,
+        policySnapshotVersion: 'policy-approval',
+        rootTaskId: team.rootTaskId,
+        parentTaskId: team.rootTaskId,
+        parentRunId: team.rootRunId,
+        invokableKind: 'agent',
+        invokableVersionId: member.agentVersionId,
+        inputSnapshotRef: 'snapshot:member-work',
+        inputFingerprint: 'fingerprint:member-work',
+        logicalStepKey: 'attempt:review-ready',
+        nodePath: 'attempt:review-ready',
+        teamMemberRunId: member.id,
+        teamSequence: 1,
+        teamTaskKind: 'work_attempt',
+        now,
+      }),
+      status: 'active' as 'active' | 'completed',
+    };
+    let taskRecord = {
+      task: memberTask,
+      latestRun: {
+        runId: 'member-work-run',
+        attempt: 1,
+        status: 'running' as 'running' | 'succeeded',
+        runtime: null,
+        result: null,
+        error: null,
+        createdAt: now().toISOString(),
+        updatedAt: now().toISOString(),
+      },
+    };
+    const tasks = {
+      findByRootTaskIdForOwner: vi.fn(async () => [taskRecord]),
+    };
+    const reconciler = new CollaborationActivationReconciler(
+      {} as never,
+      {} as never,
+      tasks as never,
+      {} as never,
+      undefined,
+      now,
+    );
+    const readyForLeadReview = (
+      reconciler as unknown as {
+        readyForLeadReview(
+          team: TeamRun,
+          lead: TeamMemberRun,
+          attempts: readonly TeamWorkItemAttempt[],
+          workItems: readonly TeamWorkItem[],
+          dependencies: readonly unknown[],
+          owner: OwnerScope,
+        ): Promise<boolean>;
+      }
+    ).readyForLeadReview.bind(reconciler);
+    const ready = () =>
+      readyForLeadReview(team, lead, [reviewAttempt], [reviewWork], [], owner);
+
+    await expect(ready()).resolves.toBe(false);
+    const planner = new CollaborationActivationPlanner();
+    expect(
+      planner.plan({
+        participantId: lead.id,
+        participantRole: 'lead',
+        messages: filterQueuedLeadMessagesForTerminalSources(
+          [queuedMessage],
+          [taskRecord],
+        ),
+        workItems: [reviewWork],
+        attempts: [reviewAttempt],
+        dependencies: [],
+      }),
+    ).toBeNull();
+    taskRecord = {
+      task: { ...memberTask, status: 'completed' as const },
+      latestRun: { ...taskRecord.latestRun, status: 'succeeded' as const },
+    };
+    await expect(ready()).resolves.toBe(true);
+    const plan = planner.plan({
+      participantId: lead.id,
+      participantRole: 'lead',
+      messages: filterQueuedLeadMessagesForTerminalSources(
+        [queuedMessage],
+        [taskRecord],
+      ),
+      workItems: [reviewWork],
+      attempts: [reviewAttempt],
+      dependencies: [],
+      finalReview: true,
+    });
+    expect(plan?.activation.causes).toEqual([
+      { type: 'final_review' },
+      { type: 'message', messageRef: `M-${queuedMessage.sequence}` },
+    ]);
   });
 
   it('freezes participant activation while human completion approval is pending', async () => {

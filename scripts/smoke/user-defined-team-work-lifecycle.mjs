@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { appendFileSync, mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 
 import { loadRealProviderDefaults } from '../dev/real-provider-defaults.mjs';
 
@@ -26,13 +26,17 @@ const validCompletionApprovalValue = ['true', 'false', '1', '0'].includes(
 );
 const startedAt = Date.now();
 const scenarioId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-const transcriptDirectory = join(
-  process.cwd(),
-  '.local',
-  'test-runs',
-  `user-defined-team-work-lifecycle-${scenarioId}`,
-);
-const transcriptPath = join(transcriptDirectory, 'http-transcript.jsonl');
+const configuredOutputFile = process.env.SMOKE_OUTPUT_FILE?.trim();
+const transcriptPath = configuredOutputFile
+  ? resolve(configuredOutputFile)
+  : join(
+      process.cwd(),
+      '.local',
+      'test-runs',
+      `user-defined-team-work-lifecycle-${scenarioId}`,
+      'http-transcript.jsonl',
+    );
+const transcriptDirectory = dirname(transcriptPath);
 
 if (!baseUrl || !token) {
   throw new Error(

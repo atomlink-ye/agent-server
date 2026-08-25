@@ -161,6 +161,7 @@ export async function createApplication(
       kernel: collaboration,
     },
     logger,
+    events,
     ...(workModule ? { work: workModule.contributeRuntime } : {}),
   });
   const runtimeOwner = createRuntimeOwner({

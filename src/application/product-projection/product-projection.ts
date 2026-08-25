@@ -35,6 +35,12 @@ import type {
 } from '../../contracts/product-projection/index.js';
 import { canonicalCollaborationMcpName } from '../../domain/collaboration/canonical-collaboration-tools.js';
 
+const SYNTHETIC_TRACE_TOOL_NAMES = new Set([
+  'synthetic_stock_snapshot',
+  'synthetic_event_batch',
+  'synthetic_analog_summary',
+]);
+
 export interface ProductProjectionOwnerScope {
   readonly tenantId: string;
   readonly workspaceId: string;
@@ -537,7 +543,11 @@ function mapMcpActivity(
     !event.taskId
   )
     return null;
-  const canonicalToolName = canonicalCollaborationMcpName(event.toolName);
+  const canonicalToolName =
+    canonicalCollaborationMcpName(event.toolName) ??
+    (event.toolName && SYNTHETIC_TRACE_TOOL_NAMES.has(event.toolName)
+      ? event.toolName
+      : null);
   if (
     !canonicalToolName ||
     event.provenance !== SERVER_AUTHORIZED_TEAM_MCP_CATALOG ||

@@ -1,7 +1,7 @@
 // A green result proves canonical collaboration primitives work end-to-end with
-// a real provider: work_available and final_review provenance exist, a
-// requires-ack direct message completes a round trip and materializes a
-// participant turn, and two Work items are accepted with one rework.
+// a real provider: one member claims and submits one Work item, a requires-ack
+// direct message completes a round trip and materializes a participant turn,
+// and the member invokes the fixed synthetic stock tool once.
 //
 // It does not prove Agent autonomous, flexible collaboration. The fixture
 // instructions are still a literal script, so green means the Agent followed
@@ -11,6 +11,9 @@ import { createHash, randomUUID } from 'node:crypto';
 import pg from 'pg';
 import {
   classifySmokeOutcome,
+  evaluateLeadTerminalFacts,
+  evaluateMemberWorkTraceFacts,
+  evaluateTraceFacts,
   formatSmokeOutcome,
 } from './agent-team-completion-line.mjs';
 import { loadRealProviderDefaults } from '../dev/real-provider-defaults.mjs';
@@ -196,11 +199,9 @@ function agentYaml(name, instructions, refs) {
 }
 
 const leadInstructions =
-  'Act as the Lead using only the canonical collaboration tools. On every turn read collaboration_state and board_list first. If the board is empty, make exactly two board_create calls before stopping: first create W-1 assigned to builder with subject "Builder smoke marker" and description "Submit exactly AGENT_TEAM_SMOKE_BUILDER_OK"; then create W-2 with subject "Return smoke marker" and description "Submit exactly AGENT_TEAM_SMOKE_MEMBER_OK" but omit assignee so it is OPEN. Do not assign or claim W-2. If you receive direct message M-1 from analyst, call message_ack for M-1 exactly once, then stop. During review, accept completed W-1 exactly once. After analyst submits W-2 attempt 1, call board_request_changes exactly once for W-2 with assignee analyst and feedback "AGENT_TEAM_SMOKE_REWORK_REQUIRED"; do not accept that attempt. After analyst submits W-2 attempt 2, call board_accept exactly once for W-2. Only after W-1 and W-2 are accepted and no active attempt remains, call collaboration_finish exactly once. If work is open or in progress without a submitted attempt to review, make no mutation and stop. Never create duplicate Work, never use legacy Team command vocabulary, and never substitute prose for a required collaboration mutation.';
-const analystInstructions =
-  'Act as the analyst using only the canonical collaboration tools. On the work-availability delivery, read collaboration_state, board_list, and inbox_list, then explicitly call board_claim for W-2 and message_send exactly once to lead with body "AGENT_TEAM_SMOKE_DIRECT_REQUIRES_ACK", about_work_ref W-2, and requires_ack true; perform these actions once and stop. On the resulting work-attempt turn for attempt 1, call board_submit exactly once with summary "AGENT_TEAM_SMOKE_ATTEMPT_1". On the resulting rework attempt 2, call board_submit exactly once with summary "AGENT_TEAM_SMOKE_MEMBER_OK". Never create Work, request changes, accept Work, finish the collaboration, claim W-2 twice, use provider subagents, or substitute prose for a required collaboration mutation.';
-const builderInstructions =
-  'Act as the builder using only the canonical collaboration tools. On your assigned work-attempt turn, read collaboration_state and board_list, then call board_submit exactly once with summary "AGENT_TEAM_SMOKE_BUILDER_OK" and stop. Never create Work, claim Work, request changes, accept Work, finish the collaboration, use provider subagents, or substitute prose for the required board_submit mutation.';
+  'Act as the Lead using only the canonical collaboration tools. On every turn read collaboration_state and board_list first. If the board is empty, create exactly one Work with subject "Member smoke marker" and description "Claim and submit exactly AGENT_TEAM_SMOKE_MEMBER_OK"; omit assignee so the member can claim it, then stop. On the single terminal lead turn, read inbox_list, identify the one pending requires_ack direct message from member, and acknowledge that message exactly once using its returned M-N ref. Then call board_accept for W-1 exactly once and collaboration_finish exactly once; perform all three mutations in this turn without waiting for another turn. If Work is open or in progress without a submitted attempt to review, make no mutation and stop. Never create duplicate Work, request changes, use legacy Team command vocabulary, provider subagents, or substitute prose for a required collaboration mutation.';
+const memberInstructions =
+  'Act as the member using only the canonical collaboration tools plus the registered synthetic stock tool. On the work-availability delivery, read collaboration_state, board_list, and inbox_list, then call board_claim exactly once for W-1 and stop. On the resulting work-attempt turn, call synthetic_stock_snapshot exactly once with fixture_ref "fixture://self-learning-market-research/acme-v1" and symbol "ACME", then call message_send exactly once to lead with body "AGENT_TEAM_SMOKE_DIRECT_REQUIRES_ACK", about_work_ref W-1, and requires_ack true, then call board_submit exactly once with summary "AGENT_TEAM_SMOKE_MEMBER_OK" as the final mutation; perform these actions in this order and stop. Never create Work, request changes, accept Work, finish the collaboration, claim W-1 twice, use provider subagents, or substitute prose for a required collaboration mutation.';
 
 const leadVersion = await importAndPublish(
   agentYaml('smoke-lead', leadInstructions, []),
@@ -208,23 +209,14 @@ const leadVersion = await importAndPublish(
   (id) => `/api/v1/agent-versions/${id}:publish`,
 );
 progress('agent_version_published', { role: 'lead', version_id: leadVersion });
-const analystVersion = await importAndPublish(
-  agentYaml('smoke-analyst', analystInstructions, []),
+const memberVersion = await importAndPublish(
+  agentYaml('smoke-member', memberInstructions, ['synthetic-stock-snapshot']),
   '/api/v1/agents:import',
   (id) => `/api/v1/agent-versions/${id}:publish`,
 );
 progress('agent_version_published', {
-  role: 'analyst',
-  version_id: analystVersion,
-});
-const builderVersion = await importAndPublish(
-  agentYaml('smoke-builder', builderInstructions, []),
-  '/api/v1/agents:import',
-  (id) => `/api/v1/agent-versions/${id}:publish`,
-);
-progress('agent_version_published', {
-  role: 'builder',
-  version_id: builderVersion,
+  role: 'member',
+  version_id: memberVersion,
 });
 const environmentVersion = await importAndPublish(
   `apiVersion: agent-server/v1alpha1\nkind: ManagedEnvironment\nmetadata:\n  name: agent-team-smoke\nspec:\n  adapter: paseo\n  provider: opencode\n  modelPolicyRef: free-only\n  runtimeCellPolicy: per_runtime_session\n`,
@@ -236,7 +228,7 @@ const importedTeam = await request('/api/v1/teams:import', {
   method: 'POST',
   status: 201,
   body: {
-    source: `apiVersion: agent-server/v1alpha1\nkind: ManagedTeam\nmetadata:\n  name: agent-team-smoke\nspec:\n  environmentVersionId: ${environmentVersion}\n  lead:\n    name: lead\n    agentVersionId: ${leadVersion}\n  roster:\n    - name: builder\n      agentVersionId: ${builderVersion}\n    - name: analyst\n      agentVersionId: ${analystVersion}\n  coordination:\n    taskAssignment: lead_or_self_claim\n`,
+    source: `apiVersion: agent-server/v1alpha1\nkind: ManagedTeam\nmetadata:\n  name: agent-team-smoke\nspec:\n  environmentVersionId: ${environmentVersion}\n  lead:\n    name: lead\n    agentVersionId: ${leadVersion}\n  roster:\n    - name: member\n      agentVersionId: ${memberVersion}\n  coordination:\n    taskAssignment: lead_or_self_claim\n`,
   },
 });
 const teamVersion = await request(
@@ -486,6 +478,17 @@ if (
 const trace = await request(`/api/v1/works/${workId}/runs/${workRunId}/trace`);
 if (!Array.isArray(trace.runs) || trace.runs.length === 0)
   throw new Error('composition team WorkRun trace is missing execution runs');
+const traceOutcome = evaluateTraceFacts(trace);
+const memberWorkTraceOutcome = evaluateMemberWorkTraceFacts(projection, trace);
+const leadTerminalOutcome = evaluateLeadTerminalFacts(projection, trace);
+if (!traceOutcome.ok || !memberWorkTraceOutcome.ok || !leadTerminalOutcome.ok)
+  throw new Error(
+    `composition team WorkRun trace assertion failed: ${JSON.stringify([
+      ...traceOutcome.failures,
+      ...memberWorkTraceOutcome.failures,
+      ...leadTerminalOutcome.failures,
+    ])}`,
+  );
 const manifestPool = new Pool({ connectionString: databaseUrl, max: 1 });
 let manifestRows;
 try {
@@ -507,8 +510,7 @@ const manifestHas = (kind, value) =>
 if (
   !manifestHas('definition', definitionVersionId) ||
   !manifestHas('agent', leadVersion) ||
-  !manifestHas('agent', analystVersion) ||
-  !manifestHas('agent', builderVersion) ||
+  !manifestHas('agent', memberVersion) ||
   !manifestHas('environment', environmentVersion) ||
   !manifestHas('platform_capability', 'collaboration') ||
   !manifestHas('platform_capability', 'platform_mcp')
@@ -528,6 +530,18 @@ progress('completed', {
   work_run_id: workRunId,
   task_id: invoked.task_id,
   team_status: projection.project.status,
+  participant_count: projection.sessions.length,
+  accepted_work_count: projection.work_items.filter(
+    (item) => item.status === 'accepted',
+  ).length,
+  acknowledged_message_count: projection.direct_messages.filter(
+    (message) =>
+      message.requires_ack === true && message.status === 'acknowledged',
+  ).length,
+  mcp_activities: trace.mcp_activities.map((activity) => ({
+    tool_name: activity.tool_name,
+    status: activity.status,
+  })),
   runtime_models: [...runtimeModels],
   usage: usageSummary(usage),
 });
@@ -538,6 +552,22 @@ process.stdout.write(
     work_run_id: workRunId,
     task_id: invoked.task_id,
     team_status: projection.project.status,
+    completion_facts: {
+      participant_count: projection.sessions.length,
+      accepted_work_count: projection.work_items.filter(
+        (item) => item.status === 'accepted',
+      ).length,
+      no_active_attempts: projection.gates.no_active_attempts,
+      all_members_idle: projection.gates.all_members_idle,
+      acknowledged_message_count: projection.direct_messages.filter(
+        (message) =>
+          message.requires_ack === true && message.status === 'acknowledged',
+      ).length,
+      mcp_activity: {
+        tool_name: 'synthetic_stock_snapshot',
+        status: 'completed',
+      },
+    },
     runtime_models: [...runtimeModels],
     usage,
   })}\n`,

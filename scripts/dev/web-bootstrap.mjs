@@ -86,12 +86,27 @@ export async function main() {
         // exactly like the "no cached id yet" case.
         recreate: () => '',
       });
+  let workerVersionId = '';
   if (!skipProductWork) {
+    workerVersionId = await resolveCachedId({
+      label: 'sample Worker version',
+      cachedId: env('WEB_WORKER_VERSION_ID'),
+      check: (id) => readPublished(`${baseUrl}/api/v1/worker-versions/${id}`),
+      recreate: () =>
+        bootstrapPublishedWorker(
+          `apiVersion: agent-server/v1alpha1\nkind: Worker\nmetadata:\n  name: web-bootstrap-work-worker\nspec:\n  description: Formal execution role for Web sample Work\n  instructions: Complete the requested Work safely.\n  runtime:\n    provider: paseo\n    modelPolicyRef: free-only\n    mode: isolated\n  tools: []\n  skills: []\n  input:\n    schema:\n      type: object\n      properties: {}\n      additionalProperties: false\n    prompt: Complete the Work.\n  session:\n    invocation: fresh_per_invocation\n    followUps: queued\n    binding: reusable\n  memory:\n    policy: workspace_snapshot\n    proposalLimit: 0\n  permissions:\n    network: read_only\n    filesystem: workspace_read\n  completion:\n    type: executable\n    command: done\n`,
+          'web-bootstrap-work-worker',
+        ),
+    });
     const { definitionId, definitionVersionId } = await bootstrapWorkDefinition(
-      agentVersionId,
+      workerVersionId,
       environmentVersionId,
     );
-    await bootstrapAgentWorkflowAssociation(agentVersionId, definitionId);
+    await bootstrapAgentWorkflowAssociation(
+      agentVersionId,
+      definitionId,
+      definitionVersionId,
+    );
     if (!sampleWorkId)
       sampleWorkId = await bootstrapWork(definitionId, definitionVersionId);
   }
@@ -102,6 +117,7 @@ export async function main() {
     [
       `AGENT_SERVER_BASE_URL=${baseUrl}`,
       `WEB_AGENT_VERSION_ID=${agentVersionId}`,
+      ...(skipProductWork ? [] : [`WEB_WORKER_VERSION_ID=${workerVersionId}`]),
       `WEB_ENVIRONMENT_VERSION_ID=${environmentVersionId}`,
       `WEB_AGENTIC_TEAM_VERSION_ID=${agenticTeamVersionId}`,
       `WEB_WORKSPACE_NAME=${quoteEnv(workspaceName)}`,
@@ -283,14 +299,14 @@ async function bootstrapEnvironmentVersion() {
   return versionId;
 }
 
-async function bootstrapWorkDefinition(agentVersionId, environmentVersionId) {
+async function bootstrapWorkDefinition(workerVersionId, environmentVersionId) {
   const workDefinitionSource = `apiVersion: agentserver.dev/v1alpha1
 kind: WorkDefinition
 metadata:
-  name: web-bootstrap-single-agent
+  name: web-bootstrap-single-worker
 spec:
-  kind: single_agent
-  agent_version_id: ${agentVersionId}
+  kind: single_worker
+  worker_version_id: ${workerVersionId}
   environment_version_id: ${environmentVersionId}`;
 
   // Only the fetch itself (a network-level failure) belongs in this try/catch.
@@ -304,7 +320,7 @@ spec:
       headers: {
         authorization: `Bearer ${token}`,
         'content-type': 'application/json',
-        'idempotency-key': 'web-bootstrap-single-agent-work-tools-apply-v1',
+        'idempotency-key': 'web-bootstrap-single-worker-work-tools-apply-v1',
       },
       body: JSON.stringify({ source: workDefinitionSource }),
       signal: AbortSignal.timeout(15_000),
@@ -348,7 +364,11 @@ async function bootstrapWork(definitionId, definitionVersionId) {
   return workId;
 }
 
-async function bootstrapAgentWorkflowAssociation(agentVersionId, definitionId) {
+async function bootstrapAgentWorkflowAssociation(
+  agentVersionId,
+  definitionId,
+  definitionVersionId,
+) {
   const version = await readPublished(
     `${baseUrl}/api/v1/agent-versions/${agentVersionId}`,
   );
@@ -366,14 +386,14 @@ async function bootstrapAgentWorkflowAssociation(agentVersionId, definitionId) {
   const pool = new Pool({ connectionString: databaseUrl, max: 1 });
   try {
     const result = await pool.query(
-      `INSERT INTO agent_workflow_associations
-         (tenant_id,workspace_id,agent_definition_id,work_definition_id,created_at)
-       SELECT tenant_id,workspace_id,$1,id,now()
+      `INSERT INTO agent_work_bindings
+         (tenant_id,workspace_id,agent_definition_id,work_definition_id,active_work_definition_version_id,status,created_at,updated_at)
+       SELECT tenant_id,workspace_id,$1,id,$3,'enabled',now(),now()
          FROM work_definition_source_definitions
         WHERE id=$2
        ON CONFLICT (tenant_id,workspace_id,agent_definition_id,work_definition_id)
-       DO NOTHING`,
-      [agentDefinitionId, definitionId],
+       DO UPDATE SET active_work_definition_version_id=EXCLUDED.active_work_definition_version_id,status='enabled',updated_at=EXCLUDED.updated_at`,
+      [agentDefinitionId, definitionId, definitionVersionId],
     );
     if (result.rowCount === 0) {
       const existing = await pool.query(

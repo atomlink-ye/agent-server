@@ -1,0 +1,33 @@
+src/entrypoints/api/routes/browser-bff-transport.ts
+  aa841554b33a269e 10-34,76,110
+src/entrypoints/api/routes/browser-bff-transport.test.ts
+  aa841554b33a269e 1-131
+src/entrypoints/api/routes/browser-web.ts
+  aa841554b33a269e 29,33,141,144-149,158,170,180,194,205,217,228,238,249,263,274,288,300,310,322,334,346,354,361-367,375,386,398,411,417,427,438,457,464,475,483,498,515-526,622-641
+src/entrypoints/api/routes/browser-web.test.ts
+  aa841554b33a269e 6,19-25,27,160-218
+src/entrypoints/api/server.ts
+  aa841554b33a269e 31
+src/entrypoints/api/routes/browser-context.ts
+  aa841554b33a269e 7,67-72,74
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2-bit.10+672fbf0",
+  "base_commit_sha": "66135f4e9669fa1a131d38d2421a1fac55e032be",
+  "prompts": {
+    "aa841554b33a269e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2e0ac1a9-cdbd-49b5-9938-68e78819ae91",
+        "model": "claude-opus-5"
+      },
+      "human_author": "link.ye",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 313,
+      "overriden_lines": 0
+    }
+  }
+}

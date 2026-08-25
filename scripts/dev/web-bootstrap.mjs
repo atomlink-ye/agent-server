@@ -397,13 +397,24 @@ async function bootstrapAgentWorkflowAssociation(
     );
     if (result.rowCount === 0) {
       const existing = await pool.query(
-        `SELECT 1
-           FROM agent_workflow_associations
-          WHERE agent_definition_id=$1 AND work_definition_id=$2`,
+        `SELECT b.active_work_definition_version_id,b.status
+           FROM agent_work_bindings b
+           JOIN work_definition_source_definitions d
+             ON d.id=b.work_definition_id
+            AND d.tenant_id=b.tenant_id
+            AND d.workspace_id=b.workspace_id
+          WHERE b.agent_definition_id=$1 AND b.work_definition_id=$2`,
         [agentDefinitionId, definitionId],
       );
-      if (existing.rowCount !== 1)
-        fail('Agent workflow association bootstrap did not persist.');
+      const binding = existing.rows[0];
+      if (
+        existing.rowCount !== 1 ||
+        binding.active_work_definition_version_id !== definitionVersionId ||
+        binding.status !== 'enabled'
+      )
+        fail(
+          'Agent Work binding bootstrap did not persist the requested version.',
+        );
     }
   } finally {
     await pool.end();

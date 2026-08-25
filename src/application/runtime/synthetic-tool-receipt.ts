@@ -27,8 +27,13 @@ export function createSyntheticToolReceipt(): SyntheticToolReceipt {
     readonly toolRef: string;
   }): string | null => {
     const activeTurn = input.grant.activeTurn;
-    if (!activeTurn) return null;
-    return `${input.grant.turn.id}:${activeTurn.runId}:${input.toolRef}`;
+    // A grant authorized only for capability discovery carries no turn, and a
+    // receipt is proof that something ran inside one. Absent either, there is
+    // nothing to key a receipt on — the same answer as an absent active turn,
+    // rather than an assertion that would be wrong for a discovery context.
+    const turn = input.grant.turn;
+    if (!activeTurn || !turn) return null;
+    return `${turn.id}:${activeTurn.runId}:${input.toolRef}`;
   };
 
   return Object.freeze({

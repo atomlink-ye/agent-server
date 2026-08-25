@@ -174,16 +174,17 @@ it('renders recorder-backed proportional normal and rework geometry', async () =
       const laneNodes = [
         ...host.querySelectorAll<HTMLElement>('.run-trace__lane'),
       ];
-      // Both recordings carry one Run with no resolvable actor (the
-      // WorkRun's own bootstrap Run, actor_id null) -- it lands in the
-      // honest "Name not captured" catch-all lane alongside the captured
-      // actor lanes, rather than being dropped or mislabeled.
-      const hasUncapturedActorRun = trace.runs.some(
-        (run) => run.actorId === null,
+      // Both recordings carry the WorkRun's own bootstrap Run: actor_id null
+      // because it belongs to the Work rather than to an agent, and its task
+      // IS the root task. It gets its own named lane alongside the captured
+      // actor lanes -- not dropped, and not reported as a missing name.
+      const hasRootRun = trace.runs.some(
+        (run) =>
+          run.actorId === null &&
+          run.taskId !== null &&
+          run.taskId === run.rootTaskId,
       );
-      expect(laneNodes).toHaveLength(
-        trace.actors.size + (hasUncapturedActorRun ? 1 : 0),
-      );
+      expect(laneNodes).toHaveLength(trace.actors.size + (hasRootRun ? 1 : 0));
       for (const actor of trace.actors.values()) {
         const lane = laneNodes.find(
           (candidate) =>
@@ -220,9 +221,13 @@ it('renders recorder-backed proportional normal and rework geometry', async () =
           ...[...trace.actors.values()].map(
             (actor) => actor.name ?? 'Name not captured',
           ),
-          // The uncaptured-actor lane is always appended last.
-          ...(hasUncapturedActorRun ? ['Name not captured'] : []),
+          // The Work Run's own lane is always appended after the agents.
+          ...(hasRootRun ? ['Work Run'] : []),
         ]);
+        const rootLane = laneNodes.at(-1);
+        expect(
+          rootLane?.querySelector('.run-trace__lane-note')?.textContent,
+        ).toBe('The Work Run itself, not an agent');
       }
       expect(
         attemptButtons.every(

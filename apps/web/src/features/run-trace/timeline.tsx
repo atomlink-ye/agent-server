@@ -10,7 +10,8 @@ import {
 } from './geometry';
 import {
   actorTone,
-  interactionsForWorkItem,
+  interactionsForRow,
+  type RowInteractions,
   type TimelineModel,
 } from './selectors';
 import type { NormalizedTrace } from './normalized';
@@ -41,37 +42,26 @@ export function Timeline({
           >
             <div className="run-trace__lane-name">
               <span>{actor.name}</span>
+              {actor.note ? (
+                <small className="run-trace__lane-note">{actor.note}</small>
+              ) : null}
               <small>
                 {formatActiveDuration(actor.rows.flatMap((row) => row.spans))}
               </small>
             </div>
             <div className="run-trace__actor-rows">
               {actor.rows.map((row) => {
-                const interactions = row.workItemId
-                  ? interactionsForWorkItem(trace, row.workItemId)
-                  : { messages: 0, activities: 0 };
+                const interactions = interactionsForRow(trace, row);
                 return (
                   <div className="run-trace__item-row" key={row.key}>
                     <div className="run-trace__item-name">
                       {row.subject ? <span>{row.subject}</span> : null}
-                      {interactions.messages || interactions.activities ? (
-                        <small>
-                          {interactions.messages
-                            ? `${interactions.messages} msg`
-                            : ''}
-                          {interactions.messages && interactions.activities
-                            ? ' · '
-                            : ''}
-                          {interactions.activities
-                            ? `${interactions.activities} MCP`
-                            : ''}
-                        </small>
-                      ) : null}
+                      <RowInteractionSummary interactions={interactions} />
                     </div>
                     <div className="run-trace__track">
                       {row.spans.map((span) => (
                         <RunSpan
-                          activityCount={interactions.activities}
+                          activityCount={interactions.calls}
                           attemptNo={
                             span.attemptId !== null
                               ? (trace.attempts.get(span.attemptId)
@@ -110,6 +100,48 @@ export function Timeline({
   );
 }
 
+const shownToolNames = 3;
+
+/**
+ * A bar and a duration said a lane was busy without saying what it did. The
+ * captured facts already name every tool the run dispatched, so the row says
+ * which ones and how often — that is the interaction, in the place someone
+ * looks first. The full list is in the title, and the Inspector holds the
+ * detail.
+ */
+function RowInteractionSummary({
+  interactions,
+}: {
+  readonly interactions: RowInteractions;
+}) {
+  if (!interactions.calls && !interactions.messages) return null;
+  const shown = interactions.tools.slice(0, shownToolNames);
+  const remaining = interactions.tools.length - shown.length;
+  const toolText = shown
+    .map((tool) => (tool.count > 1 ? `${tool.name} ×${tool.count}` : tool.name))
+    .join(', ');
+  return (
+    <small
+      className="run-trace__item-interactions"
+      title={interactions.tools
+        .map((tool) => `${tool.name} ×${tool.count}`)
+        .join(', ')}
+    >
+      {interactions.calls
+        ? `${interactions.calls} ${interactions.calls === 1 ? 'call' : 'calls'}`
+        : ''}
+      {interactions.calls && interactions.messages ? ' · ' : ''}
+      {interactions.messages ? `${interactions.messages} msg` : ''}
+      {toolText ? (
+        <span className="run-trace__item-tools">
+          {toolText}
+          {remaining > 0 ? ` +${remaining} more` : ''}
+        </span>
+      ) : null}
+    </small>
+  );
+}
+
 function TimelineMessages({
   range,
   trace,
@@ -128,41 +160,52 @@ function TimelineMessages({
     (edge) => edge.kind === 'observed_message',
   );
   if (!messageEdges.length) return null;
+  // The markers are positioned as a percentage of the track, so the row has to
+  // start where the track starts. It used to span the full width, which put
+  // every handoff 286px to the left of the moment it happened -- the one part of
+  // the Timeline that says agents talked to each other, pointing at the wrong
+  // time. The gutter now says what the row is, so a lone dot is not a mystery.
   return (
     <div
       className="run-trace__timeline-messages"
       aria-label="Message markers"
       data-testid="timeline-messages"
     >
-      {messageEdges.map((edge) => {
-        if (edge.kind !== 'observed_message') return null;
-        const position =
-          ((Date.parse(edge.sourceCreatedAt) - start) / span) * 100;
-        if (position < 0 || position > 100) return null;
-        const canDrawLine =
-          edge.senderActorId !== null && edge.recipientActorId !== null;
-        return (
-          <button
-            className={`run-trace__message-marker${canDrawLine ? '' : ' run-trace__message-marker--partial'}`}
-            data-testid="timeline-message-marker"
-            key={edge.messageId}
-            onClick={() => onSelectMessage(edge.messageId)}
-            style={{ '--marker-position': `${position}%` } as CSSProperties}
-            title={
-              trace.messages.get(edge.messageId)?.summary ??
-              'Message summary not captured'
-            }
-            type="button"
-          >
-            <span className="run-trace__message-marker-label">
-              {edge.senderActorId
-                ? (trace.actors.get(edge.senderActorId)?.name ?? '?')
-                : '?'}{' '}
-              → {trace.actors.get(edge.recipientActorId)?.name ?? '?'}
-            </span>
-          </button>
-        );
-      })}
+      <div className="run-trace__timeline-messages-name">
+        <span>Handoffs</span>
+        <small>{messageEdges.length}</small>
+      </div>
+      <div className="run-trace__timeline-message-track">
+        {messageEdges.map((edge) => {
+          if (edge.kind !== 'observed_message') return null;
+          const position =
+            ((Date.parse(edge.sourceCreatedAt) - start) / span) * 100;
+          if (position < 0 || position > 100) return null;
+          const canDrawLine =
+            edge.senderActorId !== null && edge.recipientActorId !== null;
+          return (
+            <button
+              className={`run-trace__message-marker${canDrawLine ? '' : ' run-trace__message-marker--partial'}`}
+              data-testid="timeline-message-marker"
+              key={edge.messageId}
+              onClick={() => onSelectMessage(edge.messageId)}
+              style={{ '--marker-position': `${position}%` } as CSSProperties}
+              title={
+                trace.messages.get(edge.messageId)?.summary ??
+                'Message summary not captured'
+              }
+              type="button"
+            >
+              <span className="run-trace__message-marker-label">
+                {edge.senderActorId
+                  ? (trace.actors.get(edge.senderActorId)?.name ?? '?')
+                  : '?'}{' '}
+                → {trace.actors.get(edge.recipientActorId)?.name ?? '?'}
+              </span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

@@ -5,6 +5,7 @@ import {
   type AgentSummary,
   type WorkDetailData,
 } from '../../queries/load-work-detail';
+import { AssistantMarkdown } from '@/features/conversations/components/assistant-markdown';
 import { RunTrace } from '@/features/run-trace/run-trace-view';
 import {
   productStatePresentation,
@@ -44,10 +45,23 @@ export function OverviewPane({
         </span>
         <div>
           <p className="work-shell-kicker">Latest recorded outcome</p>
+          {/* A Work's result is a document, not a title. Putting the whole
+              thing in the heading turned a several-thousand-character report
+              into a wall of unrendered markdown at the top of the page: the
+              heading now carries its first line, and the report itself is
+              rendered below through the same sanitized renderer the chat and
+              the session transcripts use. */}
           <h2>
-            {outcome ?? resultCaptureLabel(run.work_run.result_capture_status)}
+            {outcome
+              ? outcomeHeadline(outcome)
+              : resultCaptureLabel(run.work_run.result_capture_status)}
           </h2>
           <p data-testid="attention-basis">{stateView.description}</p>
+          {outcome ? (
+            <div className="work-overview__outcome">
+              <AssistantMarkdown text={outcomeBody(outcome)} />
+            </div>
+          ) : null}
           {live ? (
             <p className="work-live-note">
               Refreshing captured Product facts while this Run is active.
@@ -63,6 +77,42 @@ export function OverviewPane({
       />
     </section>
   );
+}
+
+const outcomeHeadlineLimit = 120;
+
+/** The report's own title line, flattened out of markdown, as the heading. */
+function outcomeHeadline(outcome: string): string {
+  const flat = (titleLine(outcome)?.text ?? outcome)
+    .replace(/[*_`]/g, '')
+    .trim();
+  return flat.length > outcomeHeadlineLimit
+    ? `${flat.slice(0, outcomeHeadlineLimit).trimEnd()}…`
+    : flat;
+}
+
+/** The report without the title the heading above it already shows. */
+function outcomeBody(outcome: string): string {
+  const title = titleLine(outcome);
+  if (!title?.isHeading) return outcome;
+  const lines = outcome.split('\n');
+  lines.splice(0, title.index + 1);
+  return lines.join('\n').trimStart();
+}
+
+function titleLine(outcome: string): {
+  readonly text: string;
+  readonly index: number;
+  readonly isHeading: boolean;
+} | null {
+  const lines = outcome.split('\n');
+  for (const [index, line] of lines.entries()) {
+    const heading = /^\s{0,3}(#{1,6})\s+(.*)$/.exec(line);
+    if (heading) return { text: heading[2]!.trim(), index, isHeading: true };
+    if (line.trim().length > 0)
+      return { text: line.trim(), index, isHeading: false };
+  }
+  return null;
 }
 
 function RunRoleCards({

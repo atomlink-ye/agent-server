@@ -12,6 +12,7 @@ import pg from 'pg';
 import {
   classifySmokeOutcome,
   evaluateLeadTerminalFacts,
+  evaluateMemberWorkTraceFacts,
   evaluateTraceFacts,
   formatSmokeOutcome,
 } from './agent-team-completion-line.mjs';
@@ -200,7 +201,7 @@ function agentYaml(name, instructions, refs) {
 const leadInstructions =
   'Act as the Lead using only the canonical collaboration tools. On every turn read collaboration_state and board_list first. If the board is empty, create exactly one Work with subject "Member smoke marker" and description "Claim and submit exactly AGENT_TEAM_SMOKE_MEMBER_OK"; omit assignee so the member can claim it, then stop. On the single terminal lead turn, read inbox_list, identify the one pending requires_ack direct message from member, and acknowledge that message exactly once using its returned M-N ref. Then call board_accept for W-1 exactly once and collaboration_finish exactly once; perform all three mutations in this turn without waiting for another turn. If Work is open or in progress without a submitted attempt to review, make no mutation and stop. Never create duplicate Work, request changes, use legacy Team command vocabulary, provider subagents, or substitute prose for a required collaboration mutation.';
 const memberInstructions =
-  'Act as the member using only the canonical collaboration tools plus the registered synthetic stock tool. On the work-availability delivery, read collaboration_state, board_list, and inbox_list, then call board_claim exactly once for W-1 and stop. On the resulting work-attempt turn, call synthetic_stock_snapshot exactly once with fixture_ref "fixture://self-learning-market-research/acme-v1" and symbol "ACME", then call board_submit exactly once with summary "AGENT_TEAM_SMOKE_MEMBER_OK", then call message_send exactly once to lead with body "AGENT_TEAM_SMOKE_DIRECT_REQUIRES_ACK", about_work_ref W-1, and requires_ack true; perform these actions in this order and stop. Never create Work, request changes, accept Work, finish the collaboration, claim W-1 twice, use provider subagents, or substitute prose for a required collaboration mutation.';
+  'Act as the member using only the canonical collaboration tools plus the registered synthetic stock tool. On the work-availability delivery, read collaboration_state, board_list, and inbox_list, then call board_claim exactly once for W-1 and stop. On the resulting work-attempt turn, call synthetic_stock_snapshot exactly once with fixture_ref "fixture://self-learning-market-research/acme-v1" and symbol "ACME", then call message_send exactly once to lead with body "AGENT_TEAM_SMOKE_DIRECT_REQUIRES_ACK", about_work_ref W-1, and requires_ack true, then call board_submit exactly once with summary "AGENT_TEAM_SMOKE_MEMBER_OK" as the final mutation; perform these actions in this order and stop. Never create Work, request changes, accept Work, finish the collaboration, claim W-1 twice, use provider subagents, or substitute prose for a required collaboration mutation.';
 
 const leadVersion = await importAndPublish(
   agentYaml('smoke-lead', leadInstructions, []),
@@ -478,10 +479,15 @@ const trace = await request(`/api/v1/works/${workId}/runs/${workRunId}/trace`);
 if (!Array.isArray(trace.runs) || trace.runs.length === 0)
   throw new Error('composition team WorkRun trace is missing execution runs');
 const traceOutcome = evaluateTraceFacts(trace);
+const memberWorkTraceOutcome = evaluateMemberWorkTraceFacts(projection, trace);
 const leadTerminalOutcome = evaluateLeadTerminalFacts(projection, trace);
-if (!traceOutcome.ok || !leadTerminalOutcome.ok)
+if (!traceOutcome.ok || !memberWorkTraceOutcome.ok || !leadTerminalOutcome.ok)
   throw new Error(
-    `composition team WorkRun trace assertion failed: ${JSON.stringify([...traceOutcome.failures, ...leadTerminalOutcome.failures])}`,
+    `composition team WorkRun trace assertion failed: ${JSON.stringify([
+      ...traceOutcome.failures,
+      ...memberWorkTraceOutcome.failures,
+      ...leadTerminalOutcome.failures,
+    ])}`,
   );
 const manifestPool = new Pool({ connectionString: databaseUrl, max: 1 });
 let manifestRows;

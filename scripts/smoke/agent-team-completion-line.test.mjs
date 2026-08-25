@@ -5,6 +5,7 @@ import {
   classifySmokeOutcome,
   evaluateCompletionFacts,
   evaluateLeadTerminalFacts,
+  evaluateMemberWorkTraceFacts,
   evaluateTraceFacts,
   formatSmokeOutcome,
 } from './agent-team-completion-line.mjs';
@@ -52,6 +53,14 @@ function successfulProjection() {
             activation: {
               materializer: 'task_run_collaboration_activation_adapter',
               causes: [{ type: 'work_available', work_ref: 'W-1' }],
+            },
+          },
+          {
+            kind: 'work_attempt',
+            run_id: 'member-run-1',
+            activation: {
+              materializer: 'task_run_collaboration_activation_adapter',
+              causes: [{ type: 'assignment', work_ref: 'W-1' }],
             },
           },
         ],
@@ -376,5 +385,42 @@ describe('agent-team smoke completion line', () => {
         (failure) => failure.code,
       ),
     ).toContain('terminal_lead_message_ack');
+  });
+
+  it('requires member work tools to complete in synthetic, message, submit order', () => {
+    const trace = {
+      mcp_activities: [
+        {
+          activity_id: 'stock-1',
+          sequence: 10,
+          tool_name: 'synthetic_stock_snapshot',
+          status: 'completed',
+          source_refs: { run_id: 'member-run-1' },
+        },
+        {
+          activity_id: 'message-1',
+          sequence: 11,
+          tool_name: 'message_send',
+          status: 'completed',
+          source_refs: { run_id: 'member-run-1' },
+        },
+        {
+          activity_id: 'submit-1',
+          sequence: 12,
+          tool_name: 'board_submit',
+          status: 'completed',
+          source_refs: { run_id: 'member-run-1' },
+        },
+      ],
+    };
+    expect(evaluateMemberWorkTraceFacts(successfulProjection(), trace)).toEqual(
+      { ok: true, failures: [] },
+    );
+    trace.mcp_activities[2].sequence = 9;
+    expect(
+      evaluateMemberWorkTraceFacts(successfulProjection(), trace).failures.map(
+        (failure) => failure.code,
+      ),
+    ).toContain('member_work_tool_order');
   });
 });

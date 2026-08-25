@@ -4,6 +4,7 @@ import { terminalRunStatuses } from '../../domain/runs/run-status.js';
 import type { Task } from '../../domain/tasks/task.js';
 import { terminalTaskStatuses } from '../../domain/tasks/task-status.js';
 import type { TeamMemberRun } from '../../domain/teams/team-member-run.js';
+import type { TeamMessage } from '../../domain/teams/team-message.js';
 import type { TeamRun } from '../../domain/teams/team-run.js';
 import type { TeamWorkItem } from '../../domain/teams/team-work-item.js';
 import type { TeamWorkItemAttempt } from '../../domain/teams/team-work-item-attempt.js';
@@ -14,7 +15,7 @@ import type {
   TeamExecutionRepository,
 } from '../ports/team-execution-repository.js';
 import { TeamExecutionError } from '../ports/team-execution-repository.js';
-import type { TaskRepository } from '../ports/task-repository.js';
+import type { TaskRecord, TaskRepository } from '../ports/task-repository.js';
 import type { TeamMessageRepository } from '../ports/team-message-repository.js';
 import { isTeamCompletionApprovalPending } from '../teams/team-policy-evaluator.js';
 import { CollaborationActivationPlanner } from './collaboration-activation-planner.js';
@@ -148,6 +149,10 @@ export class CollaborationActivationReconciler implements CollaborationActivatio
         lead.id,
         owner,
       );
+      const eligibleLeadMessages = filterQueuedLeadMessagesForTerminalSources(
+        leadMessages,
+        taskRecords,
+      );
       const finalReview = await this.readyForLeadReview(
         team,
         lead,
@@ -160,7 +165,7 @@ export class CollaborationActivationReconciler implements CollaborationActivatio
         participantId: lead.id,
         participantRole: 'lead',
         teamRevision: team.revision,
-        messages: leadMessages,
+        messages: eligibleLeadMessages,
         workItems,
         attempts,
         dependencies,
@@ -415,6 +420,30 @@ export class CollaborationActivationReconciler implements CollaborationActivatio
       return false;
     return true;
   }
+}
+
+export function filterQueuedLeadMessagesForTerminalSources(
+  messages: readonly TeamMessage[],
+  taskRecords: readonly TaskRecord[],
+): readonly TeamMessage[] {
+  return messages.filter((message) => {
+    if (!message.sourceTaskId && !message.sourceRunId) return true;
+    if (message.sourceTaskId) {
+      const sourceTask = taskRecords.find(
+        (record) => record.task.id === message.sourceTaskId,
+      );
+      if (!sourceTask || !terminalTaskStatuses.has(sourceTask.task.status))
+        return false;
+    }
+    if (message.sourceRunId) {
+      const sourceRun = taskRecords.find(
+        (record) => record.latestRun?.runId === message.sourceRunId,
+      )?.latestRun;
+      if (!sourceRun || !terminalRunStatuses.has(sourceRun.status))
+        return false;
+    }
+    return true;
+  });
 }
 
 function isIdle(member: TeamMemberRun): boolean {

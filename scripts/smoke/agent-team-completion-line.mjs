@@ -291,6 +291,95 @@ export function evaluateTraceFacts(value) {
   return { ok: failures.length === 0, failures };
 }
 
+export function evaluateMemberWorkTraceFacts(projection, trace) {
+  const failures = [];
+  const memberSession = Array.isArray(projection?.sessions)
+    ? projection.sessions.find(
+        (session) => session.name === 'member' && session.role === 'member',
+      )
+    : null;
+  const workTurns = Array.isArray(memberSession?.turns)
+    ? memberSession.turns.filter((turn) => turn.kind === 'work_attempt')
+    : [];
+  if (workTurns.length !== 1) {
+    failures.push({
+      scope: 'assertion',
+      code: 'member_work_attempt_count',
+      expected: 'exactly one member work_attempt turn',
+      actual: workTurns.length,
+    });
+  }
+  const workRunId = workTurns[0]?.run_id;
+  const activities = Array.isArray(trace?.mcp_activities)
+    ? trace.mcp_activities
+    : [];
+  const completedByTool = new Map();
+  for (const toolName of [
+    'synthetic_stock_snapshot',
+    'message_send',
+    'board_submit',
+  ]) {
+    const invocations = activities.filter(
+      (activity) => activity.tool_name === toolName,
+    );
+    const invocationIds = new Set(
+      invocations
+        .map((activity) => activity.activity_id)
+        .filter((activityId) => typeof activityId === 'string'),
+    );
+    const completed = invocations.filter(
+      (activity) =>
+        activity.status === 'completed' &&
+        activity.source_refs?.run_id === workRunId,
+    );
+    if (
+      !workRunId ||
+      invocationIds.size !== 1 ||
+      invocations.some(
+        (activity) => typeof activity.activity_id !== 'string',
+      ) ||
+      completed.length !== 1
+    ) {
+      failures.push({
+        scope: 'assertion',
+        code: `member_work_${toolName}`,
+        expected: `${toolName} has exactly one activity ID with a completed event from the member work-attempt run`,
+        actual: invocations.map((activity) => ({
+          activity_id: activity.activity_id ?? null,
+          status: activity.status ?? null,
+          run_id: activity.source_refs?.run_id ?? null,
+          sequence: activity.sequence ?? null,
+        })),
+      });
+    } else {
+      completedByTool.set(toolName, completed[0]);
+    }
+  }
+  const orderedTools = [
+    'synthetic_stock_snapshot',
+    'message_send',
+    'board_submit',
+  ];
+  const sequences = orderedTools.map(
+    (toolName) => completedByTool.get(toolName)?.sequence,
+  );
+  if (
+    sequences.some((sequence) => !Number.isInteger(sequence)) ||
+    sequences.some(
+      (sequence, index) => index > 0 && sequence <= sequences[index - 1],
+    )
+  ) {
+    failures.push({
+      scope: 'assertion',
+      code: 'member_work_tool_order',
+      expected:
+        'synthetic_stock_snapshot completed before message_send, then board_submit',
+      actual: sequences,
+    });
+  }
+  return { ok: failures.length === 0, failures };
+}
+
 export function evaluateLeadTerminalFacts(projection, trace) {
   const failures = [];
   const leadSession = Array.isArray(projection?.sessions)

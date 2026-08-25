@@ -168,15 +168,15 @@ metadata:
   name: ${name}
   description: Real-browser MVE gardening golden path.
 spec:
-  kind: single_agent
-  agent:
+  kind: single_worker
+  worker:
     source: |
       apiVersion: agent-server/v1alpha1
-      kind: ManagedAgent
+      kind: Worker
       metadata:
-        name: web-gardening-agent-${suffix}
+        name: web-gardening-worker-${suffix}
       spec:
-        description: Real browser MVE golden path Agent
+        description: Real browser MVE golden path Worker
         instructions: "Return exactly ${marker}. Do not call tools."
         runtime:
           provider: paseo

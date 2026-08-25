@@ -1,5 +1,3 @@
-import { createHash } from 'node:crypto';
-
 import {
   canonicalizeManagedAgentJson,
   parseManagedAgentPackage,
@@ -32,14 +30,16 @@ export class WorkerPackageError extends Error {
  * boundary is the resource kind: Workers are formal Work execution roles and
  * can never become Coworker/Chat identities as a publication side effect.
  *
- * Keeping the parser shared preserves YAML limits, schema validation, pattern
- * compilation and secret scanning while the two product types evolve
- * independently above the package grammar.
+ * Keeping the executable fingerprint stable lets historical Work participants
+ * move into the Worker namespace without pretending their executable payload
+ * changed merely because its product type is now explicit.
  */
 export function parseWorkerPackage(source: string): ParsedWorkerPackage {
   if (typeof source !== 'string' || !/^\s*apiVersion:/m.test(source))
     throw new WorkerPackageError('invalid_worker_source');
-  const kindMatches = [...source.matchAll(/^\s*kind\s*:\s*([^#\r\n]+?)\s*$/gim)];
+  const kindMatches = [
+    ...source.matchAll(/^\s*kind\s*:\s*([^#\r\n]+?)\s*$/gim),
+  ];
   if (kindMatches.length !== 1 || kindMatches[0]?.[1]?.trim() !== 'Worker')
     throw new WorkerPackageError('invalid_worker_kind');
   const managedSource = source.replace(
@@ -51,11 +51,10 @@ export function parseWorkerPackage(source: string): ParsedWorkerPackage {
     ...parsed.package,
     kind: 'Worker' as const,
   }) as WorkerPackage;
-  const canonicalJson = canonicalizeManagedAgentJson(packageValue);
   return {
     package: packageValue,
-    canonicalJson,
-    fingerprint: `sha256:${createHash('sha256').update(canonicalJson).digest('hex')}`,
+    canonicalJson: canonicalizeManagedAgentJson(packageValue),
+    fingerprint: parsed.fingerprint,
     normalizedName: parsed.normalizedName,
     compiler: parsed.compiler,
   };

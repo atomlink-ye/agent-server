@@ -259,12 +259,6 @@ ALTER TABLE team_versions
     AND nullif(btrim(spec #>> '{lead,name}'), '') IS NOT NULL
     AND nullif(btrim(spec #>> '{lead,workerVersionId}'), '') IS NOT NULL
     AND nullif(btrim(spec ->> 'environmentVersionId'), '') IS NOT NULL
-    AND NOT EXISTS (
-      SELECT 1
-      FROM jsonb_array_elements(spec -> 'roster') AS member
-      WHERE nullif(btrim(member ->> 'name'), '') IS NULL
-         OR nullif(btrim(member ->> 'workerVersionId'), '') IS NULL
-    )
   );
 
 ALTER TABLE team_member_runs

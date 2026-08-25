@@ -1,0 +1,29 @@
+src/composition/create-run-execution-composition.ts
+  aa841554b33a269e 116-130
+src/application/ports/run-repository.ts
+  aa841554b33a269e 54-58,84-89
+src/infrastructure/postgres/postgres-run-repository.test.ts
+  aa841554b33a269e 1-157
+src/infrastructure/postgres/postgres-run-repository.ts
+  aa841554b33a269e 6,390-429
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2-bit.10+672fbf0",
+  "base_commit_sha": "27445c7f99ff342ac9395c9d22dcfaa1e1a9329d",
+  "prompts": {
+    "aa841554b33a269e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2e0ac1a9-cdbd-49b5-9938-68e78819ae91",
+        "model": "claude-opus-5"
+      },
+      "human_author": "link.ye",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 224,
+      "overriden_lines": 0
+    }
+  }
+}

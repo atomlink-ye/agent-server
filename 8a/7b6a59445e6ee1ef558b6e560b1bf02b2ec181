@@ -1,0 +1,39 @@
+config/real-provider-defaults.env
+  aa841554b33a269e 3-7
+src/infrastructure/runtime/paseo/paseo-runtime-provider.test.ts
+  aa841554b33a269e 8-11,21-24,106-108,118,256-287
+src/shared/config.test.ts
+  aa841554b33a269e 148-160
+src/infrastructure/runtime/paseo/paseo-config-mapper.ts
+  aa841554b33a269e 12-14
+src/shared/config.ts
+  aa841554b33a269e 50-61,152-153,306-307,410-416
+scripts/dev/real-provider-defaults.mjs
+  aa841554b33a269e 13,25-31,48-51
+src/infrastructure/runtime/paseo/paseo-runtime-provider.ts
+  aa841554b33a269e 71-72,95-96,111-114,414,416-419,421,423-427,430-432,480-481
+scripts/dev/paseo-runtime.mjs
+  aa841554b33a269e 14
+scripts/dev/with-paseo.mjs
+  aa841554b33a269e 19
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2-bit.10+672fbf0",
+  "base_commit_sha": "8a7b6a59445e6ee1ef558b6e560b1bf02b2ec181",
+  "prompts": {
+    "aa841554b33a269e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2e0ac1a9-cdbd-49b5-9938-68e78819ae91",
+        "model": "claude-opus-5"
+      },
+      "human_author": "link.ye",
+      "messages": [],
+      "total_additions": 128,
+      "total_deletions": 10,
+      "accepted_lines": 126,
+      "overriden_lines": 0
+    }
+  }
+}

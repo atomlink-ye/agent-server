@@ -1,0 +1,25 @@
+apps/web/src/features/conversations/components/ChatTranscript.tsx
+  aa841554b33a269e 79-89,103-112
+apps/web/src/index.css
+  aa841554b33a269e 25-61,489,734-735,872-873,875,877-881,889-894,898,919-937,943,954,969-974,981,987-993,995-996,999-1003,1005
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2-bit.10+672fbf0",
+  "base_commit_sha": "d637018f8367357e6ccad31fd1ae522d23697d2b",
+  "prompts": {
+    "aa841554b33a269e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2e0ac1a9-cdbd-49b5-9938-68e78819ae91",
+        "model": "claude-opus-5"
+      },
+      "human_author": "link.ye",
+      "messages": [],
+      "total_additions": 73,
+      "total_deletions": 0,
+      "accepted_lines": 41,
+      "overriden_lines": 0
+    }
+  }
+}

@@ -1,0 +1,23 @@
+src/entrypoints/mcp/product-work-mcp-tools.ts
+  aa841554b33a269e 421-454,457-464
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2-bit.10+672fbf0",
+  "base_commit_sha": "aac5a01b0f032ac2c5582aa3d05c65f54b47262f",
+  "prompts": {
+    "aa841554b33a269e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2e0ac1a9-cdbd-49b5-9938-68e78819ae91",
+        "model": "claude-opus-5"
+      },
+      "human_author": "link.ye",
+      "messages": [],
+      "total_additions": 82,
+      "total_deletions": 26,
+      "accepted_lines": 42,
+      "overriden_lines": 0
+    }
+  }
+}

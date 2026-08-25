@@ -67,7 +67,7 @@ export class PostgresSessionTranscriptFactsQuery implements ProductSessionTransc
          FROM (
            SELECT
              COALESCE(t.team_member_run_id,t.id) AS activity_key,
-             COALESCE(m.name,av.name) AS name,
+             COALESCE(m.name,av.name,wv.name) AS name,
              m.role AS role,
              m.status AS member_status,
              t.team_member_run_id AS team_member_run_id,
@@ -104,6 +104,12 @@ export class PostgresSessionTranscriptFactsQuery implements ProductSessionTransc
            LEFT JOIN agent_versions av
              ON av.id::text=t.invokable_version_id
             AND av.tenant_id=$2 AND av.workspace_id=$3
+           -- Since the Coworker/Worker split, a Team's child Tasks pin a
+           -- WorkerVersion, so the agent_versions join above resolves to NULL
+           -- for them and the name has to come from here instead.
+           LEFT JOIN worker_versions wv
+             ON wv.id::text=t.invokable_version_id
+            AND wv.tenant_id=$2 AND wv.workspace_id=$3
            LEFT JOIN team_work_item_attempts attempt
              ON attempt.execution_task_id=t.id
             AND attempt.tenant_id=$2 AND attempt.workspace_id=$3
@@ -114,7 +120,15 @@ export class PostgresSessionTranscriptFactsQuery implements ProductSessionTransc
             -- root Task) is control-plane orchestration, not an agent turn,
             -- and never had a stream under the old team_member_runs-rooted
             -- query either; keep it out of the activity-derived branch.
-            AND t.invokable_kind='agent'
+            --
+            -- 'worker' has to be admitted alongside 'agent': this filter was
+            -- written before the Coworker/Worker split, when every executing
+            -- Task was an Agent. After the split a Team's children are Workers,
+            -- so an 'agent'-only filter matched nothing and the endpoint
+            -- answered 200 with an empty sessions array — a Work whose
+            -- Transcript was blank in the UI while its trace held tens of
+            -- thousands of bytes of recorded activity.
+            AND t.invokable_kind IN ('agent','worker')
 
           UNION ALL
 

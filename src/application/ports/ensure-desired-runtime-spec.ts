@@ -11,7 +11,10 @@ export interface EnsureDesiredRuntimeSpecInput {
   readonly owner: RuntimeSessionOwner;
   readonly scope: RuntimeScope;
   readonly subject?:
-    | Readonly<{ readonly kind: 'agent_chat' | 'legacy_agent_task'; readonly agentVersionId: string }>
+    | Readonly<{
+        readonly kind: 'agent_chat' | 'legacy_agent_task';
+        readonly agentVersionId: string;
+      }>
     | Readonly<{ readonly kind: 'worker'; readonly workerVersionId: string }>;
   /** Compatibility for Chat callers. Formal Work must supply Worker subject. */
   readonly agentVersionId?: string;

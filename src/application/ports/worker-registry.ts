@@ -7,10 +7,20 @@ import type { ModelPolicyRef } from '../../domain/agents/managed-agent-package.j
 import type { ResolvedSkillPackage } from '../extensions/skill-catalog.js';
 
 export interface WorkerRegistry {
-  importWorker(command: ImportWorkerAtomicCommand): Promise<ImportWorkerAtomicResult>;
-  publishWorkerVersion(command: PublishWorkerAtomicCommand): Promise<WorkerVersion>;
-  findDefinition(owner: WorkerOwner, definitionId: string): Promise<WorkerDefinition | null>;
-  findVersion(owner: WorkerOwner, versionId: string): Promise<WorkerVersion | null>;
+  importWorker(
+    command: ImportWorkerAtomicCommand,
+  ): Promise<ImportWorkerAtomicResult>;
+  publishWorkerVersion(
+    command: PublishWorkerAtomicCommand,
+  ): Promise<WorkerVersion>;
+  findDefinition(
+    owner: WorkerOwner,
+    definitionId: string,
+  ): Promise<WorkerDefinition | null>;
+  findVersion(
+    owner: WorkerOwner,
+    versionId: string,
+  ): Promise<WorkerVersion | null>;
   findVersionByTenant(input: {
     readonly tenantId: string;
     readonly versionId: string;

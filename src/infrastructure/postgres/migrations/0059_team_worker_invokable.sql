@@ -30,4 +30,16 @@ ALTER TABLE runtime_session_specs
     OR (subject_kind IN ('agent_chat', 'legacy_agent_task') AND agent_version_id IS NOT NULL AND worker_version_id IS NULL)
   );
 
+CREATE TABLE agent_work_bindings (
+  tenant_id text NOT NULL,
+  workspace_id uuid NOT NULL,
+  agent_definition_id uuid NOT NULL,
+  work_definition_id uuid NOT NULL REFERENCES work_definition_source_definitions(id),
+  active_work_definition_version_id uuid NOT NULL REFERENCES work_definition_source_versions(id),
+  status text NOT NULL CHECK (status IN ('enabled','disabled')),
+  created_at timestamptz NOT NULL,
+  updated_at timestamptz NOT NULL,
+  PRIMARY KEY (tenant_id,workspace_id,agent_definition_id,work_definition_id)
+);
+
 COMMIT;

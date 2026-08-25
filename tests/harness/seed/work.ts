@@ -94,6 +94,7 @@ ${inputSchemaYaml}
       workspaceId: owner.workspaceId,
       agentDefinitionId: options.agentDefinitionId,
       definitionId,
+      definitionVersionId: versionId,
       now,
     });
   }

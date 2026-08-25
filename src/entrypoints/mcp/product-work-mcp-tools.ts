@@ -474,11 +474,13 @@ export function registerProductWorkMcpTools(input: {
         inputSchema: z.strictObject({
           agent_definition_id: z.string().trim().min(1).max(256),
           definition_id: z.string().uuid(),
+          definition_version_id: z.string().uuid(),
         }),
       },
       async (args: {
         readonly agent_definition_id: string;
         readonly definition_id: string;
+        readonly definition_version_id: string;
       }) => {
         const current = await authorize(
           PRODUCT_WORK_ASSOCIATE_AGENT_WORKFLOW_TOOL_REF,
@@ -521,6 +523,7 @@ export function registerProductWorkMcpTools(input: {
             workspaceId: current.workspaceId,
             agentDefinitionId: args.agent_definition_id,
             definitionId: args.definition_id,
+            definitionVersionId: args.definition_version_id,
             now: new Date().toISOString(),
           });
           return {

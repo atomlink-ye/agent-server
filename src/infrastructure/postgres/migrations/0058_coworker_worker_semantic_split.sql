@@ -250,16 +250,30 @@ WHERE spec ? 'lead' AND (spec -> 'lead') ? 'agentVersionId';
 
 ALTER TABLE team_versions
   DROP CONSTRAINT IF EXISTS team_versions_spec_shape_check;
+CREATE OR REPLACE FUNCTION team_version_spec_shape_is_valid(value jsonb)
+RETURNS boolean
+LANGUAGE sql
+IMMUTABLE
+AS $$
+  SELECT CASE
+    WHEN value IS NULL OR jsonb_typeof(value) <> 'object' THEN false
+    WHEN jsonb_typeof(value -> 'lead') <> 'object' THEN false
+    WHEN jsonb_typeof(value -> 'roster') <> 'array' THEN false
+    WHEN jsonb_array_length(value -> 'roster') NOT BETWEEN 1 AND 16 THEN false
+    WHEN nullif(btrim(value #>> '{lead,name}'), '') IS NULL THEN false
+    WHEN nullif(btrim(value #>> '{lead,workerVersionId}'), '') IS NULL THEN false
+    WHEN nullif(btrim(value ->> 'environmentVersionId'), '') IS NULL THEN false
+    ELSE NOT EXISTS (
+      SELECT 1
+      FROM jsonb_array_elements(value -> 'roster') AS member
+      WHERE nullif(btrim(member ->> 'name'), '') IS NULL
+         OR nullif(btrim(member ->> 'workerVersionId'), '') IS NULL
+    )
+  END;
+$$;
 ALTER TABLE team_versions
-  ADD CONSTRAINT team_versions_spec_shape_check CHECK (
-    jsonb_typeof(spec) = 'object'
-    AND jsonb_typeof(spec -> 'lead') = 'object'
-    AND jsonb_typeof(spec -> 'roster') = 'array'
-    AND jsonb_array_length(spec -> 'roster') BETWEEN 1 AND 16
-    AND nullif(btrim(spec #>> '{lead,name}'), '') IS NOT NULL
-    AND nullif(btrim(spec #>> '{lead,workerVersionId}'), '') IS NOT NULL
-    AND nullif(btrim(spec ->> 'environmentVersionId'), '') IS NOT NULL
-  );
+  ADD CONSTRAINT team_versions_spec_shape_check
+  CHECK (team_version_spec_shape_is_valid(spec));
 
 ALTER TABLE team_member_runs
   ADD COLUMN IF NOT EXISTS worker_version_id uuid NULL;

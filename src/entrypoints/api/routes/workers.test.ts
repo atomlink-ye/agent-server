@@ -25,6 +25,13 @@ describe('formal Worker API lifecycle', () => {
       workerRegistry: registry(commands),
     });
 
+    const denied = await app.request('/api/v1/workers:import', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ source: source() }),
+    });
+    expect(denied.status).toBe(401);
+
     const validation = await app.request('/api/v1/worker-packages:validate', {
       method: 'POST',
       headers: headers(),

@@ -6,6 +6,7 @@ import {
   relativeTicks,
   type Geometry,
   type CapturedRange,
+  type TimelineSpan,
 } from './geometry';
 import {
   actorTone,
@@ -40,18 +41,19 @@ export function Timeline({
           >
             <div className="run-trace__lane-name">
               <span>{actor.name}</span>
-              <small>{formatActiveDuration(actor.items)}</small>
+              <small>
+                {formatActiveDuration(actor.rows.flatMap((row) => row.spans))}
+              </small>
             </div>
             <div className="run-trace__actor-rows">
-              {actor.items.map((workItem) => {
-                const interactions = interactionsForWorkItem(
-                  trace,
-                  workItem.id,
-                );
+              {actor.rows.map((row) => {
+                const interactions = row.workItemId
+                  ? interactionsForWorkItem(trace, row.workItemId)
+                  : { messages: 0, activities: 0 };
                 return (
-                  <div className="run-trace__item-row" key={workItem.id}>
+                  <div className="run-trace__item-row" key={row.key}>
                     <div className="run-trace__item-name">
-                      <span>{workItem.subject}</span>
+                      {row.subject ? <span>{row.subject}</span> : null}
                       {interactions.messages || interactions.activities ? (
                         <small>
                           {interactions.messages
@@ -67,18 +69,27 @@ export function Timeline({
                       ) : null}
                     </div>
                     <div className="run-trace__track">
-                      {workItem.attempts.map((attempt) => (
-                        <AttemptSpan
+                      {row.spans.map((span) => (
+                        <RunSpan
                           activityCount={interactions.activities}
-                          attempt={attempt}
-                          feedbackSource={model.feedbackAttemptIds.has(
-                            attempt.id,
-                          )}
-                          geometry={model.geometry.get(attempt.id)}
-                          key={attempt.id}
-                          live={live && attempt.status === 'running'}
-                          selected={selectedAttemptId === attempt.id}
-                          subject={workItem.subject}
+                          attemptNo={
+                            span.attemptId !== null
+                              ? (trace.attempts.get(span.attemptId)
+                                  ?.attemptNo ?? null)
+                              : null
+                          }
+                          feedbackSource={
+                            span.attemptId !== null &&
+                            model.feedbackAttemptIds.has(span.attemptId)
+                          }
+                          geometry={model.geometry.get(span.key)}
+                          key={span.key}
+                          live={live && span.status === 'running'}
+                          selected={
+                            selectedAttemptId === (span.attemptId ?? span.key)
+                          }
+                          span={span}
+                          subject={row.subject}
                           onSelect={onSelect}
                         />
                       ))}
@@ -182,60 +193,80 @@ function TimeAxis({ range }: { readonly range: CapturedRange | null }) {
   );
 }
 
-function AttemptSpan({
+function RunSpan({
   activityCount,
-  attempt,
+  attemptNo,
   feedbackSource,
   geometry,
   live,
   selected,
   onSelect,
+  span,
   subject,
 }: {
   readonly activityCount: number;
-  readonly attempt: TimelineModel['attempts'][number]['attempt'];
+  readonly attemptNo: number | null;
   readonly feedbackSource: boolean;
   readonly geometry: Geometry | undefined;
   readonly live: boolean;
   readonly selected: boolean;
   readonly onSelect: (id: string) => void;
-  readonly subject: string;
+  readonly span: TimelineSpan;
+  readonly subject: string | null;
 }) {
+  // Team shapes still carry an attempt label; a run with no attempt join
+  // (a single-agent run, or a lead's own coordination run) is described
+  // as a Run instead of inventing an Attempt number for it. The number
+  // itself is not on the span (spans are run-shaped) -- it is looked up
+  // from trace.attempts by the caller, the same join selectTimelineSpans
+  // used to set span.attemptId in the first place.
+  const attemptLabel = attemptNo !== null ? `Attempt ${attemptNo}` : null;
+  const selectionId = span.attemptId ?? span.key;
   if (!geometry)
     return (
       <button
-        aria-label={`${subject}, Attempt ${attempt.attemptNo}, timing not captured`}
+        aria-label={
+          subject && attemptLabel
+            ? `${subject}, ${attemptLabel}, timing not captured`
+            : 'Run, timing not captured'
+        }
         aria-pressed={selected}
         className="run-trace__attempt-unpositioned"
-        onClick={() => onSelect(attempt.id)}
+        onClick={() => onSelect(selectionId)}
         type="button"
       >
-        Attempt {attempt.attemptNo} · Timing not captured
+        {subject && attemptLabel
+          ? `${attemptLabel} · Timing not captured`
+          : 'Run · Timing not captured'}
       </button>
     );
   return (
     <button
-      aria-label={`${subject}, Attempt ${attempt.attemptNo}, ${durationLabel(attempt)}`}
+      aria-label={
+        subject && attemptLabel
+          ? `${subject}, ${attemptLabel}, ${durationLabel(span)}`
+          : `Run, ${durationLabel(span)}`
+      }
       aria-pressed={selected}
       className={`run-trace__attempt${live ? ' run-trace__attempt--live' : ''}`}
       data-testid="trace-attempt"
-      onClick={() => onSelect(attempt.id)}
+      onClick={() => onSelect(selectionId)}
       style={
         {
           '--attempt-left': `${geometry.left}%`,
           '--attempt-width': `${geometry.width}%`,
         } as CSSProperties
       }
-      title={subject}
+      title={subject ?? 'Run'}
       type="button"
     >
       <span className="run-trace__attempt-label">
-        Attempt {attempt.attemptNo} · {durationLabel(attempt)}
+        {subject && attemptLabel ? attemptLabel : 'Run'} · {durationLabel(span)}
       </span>
       {feedbackSource ? (
         <span
           aria-label="Recorded feedback relation"
-          data-attempt-id={attempt.id}
+          data-attempt-id={span.attemptId}
         >
           Feedback recorded
         </span>

@@ -31,28 +31,40 @@ function recordedAttempts(
   );
 }
 
-function expectedGeometryFromRecording(attempts: readonly RecordedAttempt[]) {
+/**
+ * Runs -- not Attempts -- now set the plotted range and proportions: a
+ * single-agent Work has no Attempts at all, and a reworked task's own
+ * coordination Runs (e.g. a lead's handoff turns) widen the captured window
+ * beyond what its two Attempts alone would show. An Attempt's own timing
+ * still equals its one matching Run's timing exactly (both recordings carry
+ * identical started_at/ended_at on the joined pair), so an Attempt's
+ * position is still exact here -- only the normalizing range changed.
+ */
+function runRange(trace: ReturnType<typeof parseRecordedTrace>) {
+  const captured = trace.runs.filter(
+    (run) => run.startedAt !== null && run.endedAt !== null,
+  );
+  const start = Math.min(...captured.map((run) => Date.parse(run.startedAt!)));
+  const end = Math.max(...captured.map((run) => Date.parse(run.endedAt!)));
+  return { start, end, range: end - start };
+}
+
+function expectedGeometryFromRecording(
+  attempts: readonly RecordedAttempt[],
+  range: ReturnType<typeof runRange>,
+) {
   const captured = attempts.filter(
     ({ attempt }) =>
       attempt.startedAt && attempt.endedAt && attempt.durationMs !== null,
   );
-  const start = Math.min(
-    ...captured.map(({ attempt: candidate }) =>
-      Date.parse(candidate.startedAt!),
-    ),
-  );
-  const end = Math.max(
-    ...captured.map(({ attempt: candidate }) => Date.parse(candidate.endedAt!)),
-  );
-  const range = end - start;
   return new Map(
     captured.map(({ attempt }) => [
       attempt.id,
       {
-        left: range
-          ? ((Date.parse(attempt.startedAt!) - start) / range) * 100
+        left: range.range
+          ? ((Date.parse(attempt.startedAt!) - range.start) / range.range) * 100
           : 0,
-        width: range ? (attempt.durationMs! / range) * 100 : 100,
+        width: range.range ? (attempt.durationMs! / range.range) * 100 : 100,
       },
     ]),
   );
@@ -74,7 +86,8 @@ it('renders recorder-backed proportional normal and rework geometry', async () =
 
   for (const trace of traces) {
     const entries = recordedAttempts(trace);
-    const expectedGeometry = expectedGeometryFromRecording(entries);
+    const range = runRange(trace);
+    const expectedGeometry = expectedGeometryFromRecording(entries, range);
     if (trace === traces[0])
       expect(
         entries
@@ -82,32 +95,33 @@ it('renders recorder-backed proportional normal and rework geometry', async () =
           .sort((a, b) => (a ?? 0) - (b ?? 0)),
       ).toEqual([308425, 312707]);
     else
+      // The rework task's second Attempt now renders its own Run span
+      // instead of being silently dropped behind a `not_captured` Attempt
+      // that required exactly one Run per task -- this is the intended fix
+      // from the server side of this change, not fallout to work around.
       expect(
         entries
           .filter(({ workItem }) => workItem.attempts.length === 2)
           .map(({ attempt }) => attempt.durationMs),
       ).toEqual([177206, 19179]);
-    const captured = entries.filter(
-      ({ attempt }) =>
-        attempt.timingCaptured &&
-        attempt.startedAt !== null &&
-        attempt.endedAt !== null &&
-        attempt.durationMs !== null,
+    // The captured range is now min(run.startedAt) / max(run.endedAt) --
+    // Runs, not Attempts, are the plotted source (see selectTimelineSpans).
+    // Both recordings carry full started_at/ended_at on every Run.
+    const runsWithTiming = trace.runs.filter(
+      (run) => run.startedAt !== null && run.endedAt !== null,
     );
-    expect(captured.length).toBeGreaterThan(0);
-    const earliestStartedAt = captured.reduce(
-      (earliest, entry) =>
-        Date.parse(entry.attempt.startedAt!) < Date.parse(earliest)
-          ? entry.attempt.startedAt!
+    expect(runsWithTiming.length).toBe(trace.runs.length);
+    const earliestStartedAt = runsWithTiming.reduce(
+      (earliest, run) =>
+        Date.parse(run.startedAt!) < Date.parse(earliest)
+          ? run.startedAt!
           : earliest,
-      captured[0]!.attempt.startedAt!,
+      runsWithTiming[0]!.startedAt!,
     );
-    const latestEndedAt = captured.reduce(
-      (latest, entry) =>
-        Date.parse(entry.attempt.endedAt!) > Date.parse(latest)
-          ? entry.attempt.endedAt!
-          : latest,
-      captured[0]!.attempt.endedAt!,
+    const latestEndedAt = runsWithTiming.reduce(
+      (latest, run) =>
+        Date.parse(run.endedAt!) > Date.parse(latest) ? run.endedAt! : latest,
+      runsWithTiming[0]!.endedAt!,
     );
 
     const { host, root } = mountTrace(trace);
@@ -126,7 +140,9 @@ it('renders recorder-backed proportional normal and rework geometry', async () =
           '[data-testid="trace-attempt"]',
         ),
       ];
-      expect(attemptButtons.length).toBe(entries.length);
+      // Spans are Runs now, not Attempts -- a lead's own coordination Runs
+      // (no Work Item, no Attempt) render alongside the Attempt-joined ones.
+      expect(attemptButtons.length).toBe(trace.runs.length);
       const domGeometry = attemptButtons.map((button) => ({
         button,
         left: stylePercent(button, '--attempt-left'),
@@ -158,7 +174,16 @@ it('renders recorder-backed proportional normal and rework geometry', async () =
       const laneNodes = [
         ...host.querySelectorAll<HTMLElement>('.run-trace__lane'),
       ];
-      expect(laneNodes).toHaveLength(trace.actors.size);
+      // Both recordings carry one Run with no resolvable actor (the
+      // WorkRun's own bootstrap Run, actor_id null) -- it lands in the
+      // honest "Name not captured" catch-all lane alongside the captured
+      // actor lanes, rather than being dropped or mislabeled.
+      const hasUncapturedActorRun = trace.runs.some(
+        (run) => run.actorId === null,
+      );
+      expect(laneNodes).toHaveLength(
+        trace.actors.size + (hasUncapturedActorRun ? 1 : 0),
+      );
       for (const actor of trace.actors.values()) {
         const lane = laneNodes.find(
           (candidate) =>
@@ -185,17 +210,19 @@ it('renders recorder-backed proportional normal and rework geometry', async () =
         }
       }
       if (trace === traces[0]) {
-        expect(laneNodes).toHaveLength(3);
+        expect(laneNodes).toHaveLength(4);
         expect(
           laneNodes.map(
             (lane) =>
               lane.querySelector('.run-trace__lane-name span')?.textContent,
           ),
-        ).toEqual(
-          [...trace.actors.values()].map(
+        ).toEqual([
+          ...[...trace.actors.values()].map(
             (actor) => actor.name ?? 'Name not captured',
           ),
-        );
+          // The uncaptured-actor lane is always appended last.
+          ...(hasUncapturedActorRun ? ['Name not captured'] : []),
+        ]);
       }
       expect(
         attemptButtons.every(

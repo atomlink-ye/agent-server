@@ -15,6 +15,20 @@ import type { ProductExecutionDetailEvent } from '../../contracts/product-projec
 const MAX_SESSION_TRANSCRIPT_ENTRIES = 2_000;
 const PAGE_SIZE = 100;
 
+// MAX_SESSION_TRANSCRIPT_ENTRIES alone does not bound the emitted JSON size:
+// a Team run's worth of tool/assistant entries average well over 1KB each
+// (a real 26-minute Team run produced ~3.3KB/entry), so 2,000 entries can
+// serialize to several megabytes. The browser BFF forwards this response
+// verbatim and discards anything above its own byte cap rather than
+// truncating it, so an oversized-but-valid projection is unreachable in the
+// browser even though the authenticated API serves it fine. This budget
+// keeps the entries this projection emits well under that transport cap
+// (with headroom left for per-session label/summary bytes and JSON
+// structural overhead) so the projection stays deliverable. This module must
+// not import the transport's cap -- a transport detail -- so this number is
+// chosen independently and is only obligated to stay comfortably below it.
+const MAX_SESSION_TRANSCRIPT_BYTES = 700 * 1024;
+
 export class GetProductSessionTranscripts {
   public constructor(
     private readonly workIdentity: Pick<
@@ -45,21 +59,55 @@ export class GetProductSessionTranscripts {
     )
       throw new ProductProjectionNotFoundError();
 
-    const members = await this.sessionFacts.listByRootTask({
+    const streams = await this.sessionFacts.listByRootTask({
       ...owner,
       rootTaskId: workRun.rootTaskId,
     });
     const sessions = [];
-    for (const member of members) {
+    // Split the byte budget evenly across sessions up front, as a fixed
+    // per-session allotment rather than a shared pool that shrinks as
+    // sessions are processed in order. A shared pool would let whichever
+    // session is iterated first (e.g. a Team lead with 2,000 entries)
+    // consume the whole budget and starve every session behind it; an equal
+    // split guarantees a quiet member's small share is never touched by a
+    // noisy member's overflow.
+    const perSessionByteBudget = Math.floor(
+      MAX_SESSION_TRANSCRIPT_BYTES / Math.max(streams.length, 1),
+    );
+    for (const stream of streams) {
       const entries: ProductExecutionDetailEvent[] = [];
       let truncated = false;
-      for (const [runIndex, run] of member.runs.entries()) {
+      let entryBytes = 0;
+      let byteBudgetExhausted = false;
+      for (const [runIndex, run] of stream.runs.entries()) {
         let after = 0;
-        while (entries.length < MAX_SESSION_TRANSCRIPT_ENTRIES) {
+        while (
+          entries.length < MAX_SESSION_TRANSCRIPT_ENTRIES &&
+          !byteBudgetExhausted
+        ) {
           const page = await this.runEvents.list(run.runId, after, PAGE_SIZE);
           for (const [eventIndex, event] of page.events.entries()) {
             const projected = projectRunEvent(event);
+            // Cost each entry from its own serialized size once. Re-serializing
+            // the whole accumulated `entries` array on every iteration would
+            // make this loop O(n^2) in the entry count.
+            const projectedBytes = Buffer.byteLength(JSON.stringify(projected));
+            if (entryBytes + projectedBytes > perSessionByteBudget) {
+              // The entry we declined to add is a real entry that exists,
+              // so there is unambiguously more transcript than is shown.
+              // This keeps the oldest entries and drops the newest, matching
+              // the pre-existing entry-count truncation immediately below:
+              // both walk runs oldest-first via forward, after-cursor
+              // pagination (RunEventRepository.list has no reverse/tail
+              // pagination), so retaining the tail instead would require a
+              // new backward-pagination port method -- a larger change than
+              // this defect fix warrants.
+              truncated = true;
+              byteBudgetExhausted = true;
+              break;
+            }
             entries.push(projected);
+            entryBytes += projectedBytes;
             if (entries.length >= MAX_SESSION_TRANSCRIPT_ENTRIES) {
               truncated =
                 eventIndex < page.events.length - 1 ||
@@ -70,18 +118,25 @@ export class GetProductSessionTranscripts {
                 )) ||
                 (await hasMoreRuns(
                   this.runEvents,
-                  member.runs.slice(runIndex + 1),
+                  stream.runs.slice(runIndex + 1),
                 ));
               break;
             }
           }
-          if (entries.length >= MAX_SESSION_TRANSCRIPT_ENTRIES) {
+          if (
+            entries.length >= MAX_SESSION_TRANSCRIPT_ENTRIES ||
+            byteBudgetExhausted
+          ) {
             break;
           }
           if (page.nextCursor === null || page.nextCursor <= after) break;
           after = page.nextCursor;
         }
-        if (entries.length >= MAX_SESSION_TRANSCRIPT_ENTRIES) break;
+        if (
+          entries.length >= MAX_SESSION_TRANSCRIPT_ENTRIES ||
+          byteBudgetExhausted
+        )
+          break;
       }
 
       entries.sort(
@@ -102,12 +157,21 @@ export class GetProductSessionTranscripts {
         responseEntries[responseEntries.length - 1]?.created_at ?? null;
       sessions.push({
         label: {
-          name: member.name,
-          role: member.role,
-          status: member.status,
+          name: stream.name,
+          role: stream.role,
+          status: stream.status,
+          status_basis: stream.statusBasis,
+          source_refs: {
+            ...(stream.sourceRefs.teamMemberRunId
+              ? { team_member_run_id: stream.sourceRefs.teamMemberRunId }
+              : {}),
+            ...(stream.sourceRefs.taskId
+              ? { task_id: stream.sourceRefs.taskId }
+              : {}),
+          },
         },
         summary: {
-          status: member.status,
+          status: stream.status,
           entry_count: responseEntries.length,
           last_timestamp: lastTimestamp,
           last_meaningful: lastMeaningful,

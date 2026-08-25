@@ -33,6 +33,9 @@ export type TraceAttempt = {
   readonly resultSummary: string | null;
   readonly resultCaptureStatus: string;
   readonly workItemId: string;
+  // Joins an attempt to the run(s) that executed it. Same column the
+  // server already joins on: runs.task_id vs execution_task_id.
+  readonly taskId: string | null;
 };
 
 export type TraceWorkItem = {
@@ -90,9 +93,14 @@ export type TraceEdge =
     };
 
 export type TraceExecutionRun = {
+  // The run's own identity. Timeline spans are keyed on this -- a run is
+  // what is actually plotted; an attempt is a team-shaped label a run may
+  // or may not carry.
+  readonly id: string;
   readonly status: string;
   readonly actorId: string | null;
   readonly workItemId: string | null;
+  readonly taskId: string | null;
   readonly startedAt: string | null;
   readonly endedAt: string | null;
 };
@@ -101,6 +109,7 @@ export type TraceExecutionEvent = {
   readonly sequence: number;
   readonly type: string;
   readonly createdAt: string;
+  readonly runId: string;
 };
 
 export type TraceCoverage = {
@@ -148,6 +157,7 @@ export function normalizeProductRunTrace(
       resultSummary: attempt.result_summary,
       resultCaptureStatus: attempt.result_capture_status,
       workItemId: item.id,
+      taskId: attempt.source_refs.task_id ?? null,
     }));
     const normalizedItem = {
       id: item.id,
@@ -220,19 +230,29 @@ export function normalizeProductRunTrace(
       reviewerActorId: edge.reviewer_actor_id,
     };
   });
-  const capturedAttempts = [...attempts.values()].filter(
-    (attempt) => attempt.startedAt !== null && attempt.endedAt !== null,
+  // The subhead range is min(run.started_at) / max(run.ended_at), with a
+  // live fallback to the latest observed event when no run has ended yet.
+  // Runs -- not attempts -- are the source: a single-agent Work has no
+  // attempts at all, and this field previously read null for it. Never
+  // fall back to wall-clock time; that would assert activity beyond what
+  // was captured.
+  const runStartedAtValues = productTrace.runs
+    .map((run) => run.started_at)
+    .filter((value): value is string => value !== null);
+  const runEndedAtValues = productTrace.runs
+    .map((run) => run.ended_at)
+    .filter((value): value is string => value !== null);
+  const eventCreatedAtValues = productTrace.events.map(
+    (event) => event.created_at,
   );
-  const startedAt = capturedAttempts.length
-    ? Math.min(
-        ...capturedAttempts.map((attempt) => Date.parse(attempt.startedAt!)),
-      )
+  const startedAt = runStartedAtValues.length
+    ? Math.min(...runStartedAtValues.map((value) => Date.parse(value)))
     : null;
-  const endedAt = capturedAttempts.length
-    ? Math.max(
-        ...capturedAttempts.map((attempt) => Date.parse(attempt.endedAt!)),
-      )
-    : null;
+  const endedAt = runEndedAtValues.length
+    ? Math.max(...runEndedAtValues.map((value) => Date.parse(value)))
+    : eventCreatedAtValues.length
+      ? Math.max(...eventCreatedAtValues.map((value) => Date.parse(value)))
+      : null;
   return {
     runId: productTrace.work_run.id,
     work: { id: productTrace.work.id, title: productTrace.work.title },
@@ -247,9 +267,16 @@ export function normalizeProductRunTrace(
     activities,
     edges,
     runs: productTrace.runs.map((run) => ({
+      // The mapper on the server side always sets source_refs.run_id for
+      // execution runs (see mapRun in product-projection.ts); the field is
+      // typed optional only because ProductSourceRefsSchema is one fixed
+      // shared shape. Same non-null idiom already used for run_id in
+      // edges.ts's event/activity ordering comparators.
+      id: run.source_refs.run_id!,
       status: run.status,
       actorId: run.actor_id,
       workItemId: run.work_item_id,
+      taskId: run.source_refs.task_id ?? null,
       startedAt: run.started_at,
       endedAt: run.ended_at,
     })),
@@ -257,6 +284,7 @@ export function normalizeProductRunTrace(
       sequence: event.sequence,
       type: event.type,
       createdAt: event.created_at,
+      runId: event.source_refs.run_id,
     })),
     timeline: { startedAt, endedAt },
     coverage: {

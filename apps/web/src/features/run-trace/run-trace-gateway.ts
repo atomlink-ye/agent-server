@@ -11,8 +11,15 @@ import { apiTransport, ApiTransportError } from '../../api/transport';
 
 export type SessionLabel = {
   readonly name: string;
-  readonly role: string;
+  // Team membership is optional extra structure, not a precondition for a
+  // stream to exist: a lone agent (no Team) has no role.
+  readonly role: string | null;
   readonly status: string;
+  readonly status_basis: 'team_member_run' | 'agent_runs';
+  readonly source_refs: {
+    readonly task_id?: string;
+    readonly team_member_run_id?: string;
+  };
 };
 export type SessionMeaningful = {
   readonly kind: string;

@@ -1,6 +1,3 @@
-import { useState } from 'react';
-
-import { ExecutionTranscript } from '@/features/run-trace/execution-transcript';
 import { SessionTranscripts } from '@/features/run-trace/session-transcripts';
 import type { WorkDetailData } from '../../queries/load-work-detail';
 
@@ -11,7 +8,6 @@ export function TranscriptPane({
   readonly data: WorkDetailData;
   readonly selectedSessionIndex?: number;
 }) {
-  const [view, setView] = useState<'sessions' | 'execution'>('sessions');
   if (!data.run || !data.trace)
     return (
       <section className="work-detail-state" data-testid="work-no-runs">
@@ -21,40 +17,23 @@ export function TranscriptPane({
       </section>
     );
   const live = data.run.work_run.product_state === 'running';
+  // The former Session/Execution sub-tabs projected the identical stream
+  // through the identical machinery (projectTranscript + ActivityRow); the
+  // only real differences -- grouping by agent vs by attempt, and the
+  // Agent-to-Agent message block -- are now inside SessionTranscripts
+  // itself (grouped by agent, with the message block scoped by an optional
+  // per-agent attempt/work-item filter). There is nothing left to tab
+  // between.
   return (
     <section
       className="work-transcript-panel run-trace"
       data-testid="work-transcript-panel"
     >
-      <div
-        className="run-trace__tabs"
-        role="tablist"
-        aria-label="Transcript views"
-      >
-        {(['sessions', 'execution'] as const).map((item) => (
-          <button
-            aria-selected={view === item}
-            className="run-trace__tab"
-            key={item}
-            onClick={() => setView(item)}
-            role="tab"
-            type="button"
-          >
-            {item === 'sessions'
-              ? 'Session Transcripts'
-              : 'Execution Transcript'}
-          </button>
-        ))}
-      </div>
-      {view === 'sessions' ? (
-        <SessionTranscripts
-          live={live}
-          trace={data.trace}
-          initialSelectedIndex={selectedSessionIndex}
-        />
-      ) : (
-        <ExecutionTranscript live={live} trace={data.trace} />
-      )}
+      <SessionTranscripts
+        live={live}
+        trace={data.trace}
+        initialSelectedIndex={selectedSessionIndex}
+      />
     </section>
   );
 }

@@ -27,11 +27,18 @@ export type StartWorkRunResponse = {
   readonly work_run: WorkRunSummary;
 };
 
-export type RoleSummary = {
+export type AgentSummary = {
   readonly label: {
     readonly name: string;
-    readonly role: string;
+    // Team membership is optional extra structure, not a precondition for a
+    // stream to exist: a lone agent (no Team) has no role.
+    readonly role: string | null;
     readonly status: string;
+    readonly status_basis: 'team_member_run' | 'agent_runs';
+    readonly source_refs: {
+      readonly task_id?: string;
+      readonly team_member_run_id?: string;
+    };
   };
   readonly summary: {
     readonly entry_count: number;
@@ -109,7 +116,7 @@ export class WorkRunClient {
   async sessionTranscripts(
     workId: string,
     runId: string,
-  ): Promise<readonly RoleSummary[]> {
+  ): Promise<readonly AgentSummary[]> {
     const body = parseProduct(
       ProductSessionTranscriptsResponseSchema,
       await readProductJson(

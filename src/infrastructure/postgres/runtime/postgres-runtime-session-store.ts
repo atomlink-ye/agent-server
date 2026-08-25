@@ -161,7 +161,7 @@ export class PostgresRuntimeSessionStore implements RuntimeSessionStore {
           environment_version_id,resolved_skills,tool_refs,provider,model,cwd,
           system_prompt_digest,skill_set_digest,tool_catalog_digest,
           extension_set_digest,context_epoch,bootstrap_digest,created_at)
-         VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
         [
           initialSpec.runtimeSessionId,
           initialSpec.revision,

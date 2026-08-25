@@ -117,7 +117,7 @@ export class PostgresRuntimeSpecStore implements RuntimeSpecStore {
       await database.query(
         `INSERT INTO runtime_session_specs
          (${SPEC_COLUMNS})
-         VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
         [
           persisted.runtimeSessionId,
           persisted.revision,

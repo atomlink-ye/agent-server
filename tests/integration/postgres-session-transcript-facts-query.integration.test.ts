@@ -192,7 +192,10 @@ async function insertSucceededRun(
     [
       input.id,
       input.taskId,
-      JSON.stringify({ provider: input.provider ?? null, model: input.model ?? null }),
+      JSON.stringify({
+        provider: input.provider ?? null,
+        model: input.model ?? null,
+      }),
       JSON.stringify({ text: 'done' }),
       timestamp,
     ],
@@ -353,7 +356,10 @@ async function seedTeamFixture(database: PGlite): Promise<void> {
     teamMemberRunId: ids.workerMember,
     owner: ownerA,
   });
-  await insertRunningRun(database, { id: ids.workerRun, taskId: ids.workerTask });
+  await insertRunningRun(database, {
+    id: ids.workerRun,
+    taskId: ids.workerTask,
+  });
 
   await insertTeamMember(database, {
     id: ids.startingMember,
@@ -473,7 +479,9 @@ describe('PostgresSessionTranscriptFactsQuery (PGlite)', () => {
       rootTaskId: ids.teamRootTask,
     });
 
-    const starting = streams.find((stream) => stream.name === 'starting-member');
+    const starting = streams.find(
+      (stream) => stream.name === 'starting-member',
+    );
     expect(starting).toMatchObject({
       name: 'starting-member',
       role: 'member',
@@ -495,9 +503,9 @@ describe('PostgresSessionTranscriptFactsQuery (PGlite)', () => {
       rootTaskId: ids.teamRootTask,
     });
 
-    expect(streams.some((stream) => stream.name === 'foreign-leak-member')).toBe(
-      false,
-    );
+    expect(
+      streams.some((stream) => stream.name === 'foreign-leak-member'),
+    ).toBe(false);
     expect(
       streams.some((stream) =>
         stream.runs.some((run) => run.runId === ids.foreignRunLeak),
@@ -509,7 +517,9 @@ describe('PostgresSessionTranscriptFactsQuery (PGlite)', () => {
       ),
     ).toBe(false);
     expect(
-      streams.some((stream) => stream.sourceRefs.taskId === ids.foreignTaskLeak),
+      streams.some(
+        (stream) => stream.sourceRefs.taskId === ids.foreignTaskLeak,
+      ),
     ).toBe(false);
   });
 });

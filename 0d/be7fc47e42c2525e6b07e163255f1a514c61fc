@@ -1,0 +1,25 @@
+src/infrastructure/postgres/runtime/postgres-runtime-grant-authority.ts
+  aa841554b33a269e 36-44,121,130,134-138,143,145-150,154,164-165,167-173,175,230-235
+src/infrastructure/postgres/runtime/postgres-runtime-grant-authority.test.ts
+  aa841554b33a269e 82-183,215,222-224,266-273,281-288,300-301
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2-bit.10+672fbf0",
+  "base_commit_sha": "0dbe7fc47e42c2525e6b07e163255f1a514c61fc",
+  "prompts": {
+    "aa841554b33a269e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2e0ac1a9-cdbd-49b5-9938-68e78819ae91",
+        "model": "claude-opus-5"
+      },
+      "human_author": "link.ye",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 2077,
+      "overriden_lines": 0
+    }
+  }
+}

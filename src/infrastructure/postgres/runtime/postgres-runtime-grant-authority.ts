@@ -33,6 +33,15 @@ interface Connectable extends Queryable {
 
 type Database = Queryable | Connectable;
 
+// A turn is only "live" while it can still act on its grant. Every other
+// status is terminal and can never call releaseForTurn/revokeForTurn again,
+// so a grant left bound to one of those turns must be reclaimable rather
+// than fenced forever.
+const LIVE_TURN_STATUSES: ReadonlySet<string> = new Set([
+  'preparing',
+  'running',
+]);
+
 /** Writes only the 0056-shaped grant authority; bearer plaintext is returned once. */
 export class PostgresRuntimeGrantAuthority
   implements
@@ -109,6 +118,7 @@ export class PostgresRuntimeGrantAuthority
   ): Promise<RotateRuntimeGrantResult> {
     const client = await this.transactionClient();
     const timestamp = this.now().toISOString();
+    const nowMs = toEpochMillis(timestamp);
     try {
       await client.query('BEGIN');
       const turn = await client.query<{ readonly status: string }>(
@@ -117,26 +127,31 @@ export class PostgresRuntimeGrantAuthority
           FOR UPDATE`,
         [input.runtimeTurnId, input.runtimeSessionId, input.generationId],
       );
-      if (
-        !turn.rows?.[0] ||
-        !['preparing', 'running'].includes(turn.rows[0].status)
-      ) {
+      if (!turn.rows?.[0] || !LIVE_TURN_STATUSES.has(turn.rows[0].status)) {
         await client.query('ROLLBACK');
         return { kind: 'denied', reason: 'runtime_turn_not_active' };
       }
+      // Join the bound turn's status in the same locked read: releaseForTurn
+      // and revokeForTurn are in-process-only, so a grant can be left bound
+      // to a turn that already finished (or died) without ever clearing
+      // runtime_turn_id. Knowing that status here is what lets a dead
+      // binding be reclaimed instead of fencing the generation forever.
       const grants = await client.query<{
         readonly id: string;
         readonly runtime_turn_id: string | null;
         readonly expires_at: string | Date;
+        readonly bound_turn_status: string | null;
       }>(
-        `SELECT id,runtime_turn_id,expires_at FROM runtime_tool_grants
-          WHERE runtime_session_id=$1 AND generation_id=$2
-            AND revoked_at IS NULL
-          ORDER BY created_at DESC FOR UPDATE`,
+        `SELECT g.id,g.runtime_turn_id,g.expires_at,t.status AS bound_turn_status
+           FROM runtime_tool_grants g
+           LEFT JOIN runtime_turns t ON t.id=g.runtime_turn_id
+          WHERE g.runtime_session_id=$1 AND g.generation_id=$2
+            AND g.revoked_at IS NULL
+          ORDER BY g.created_at DESC FOR UPDATE OF g`,
         [input.runtimeSessionId, input.generationId],
       );
       const active = grants.rows?.filter(
-        (grant) => dateValue(grant.expires_at) > timestamp,
+        (grant) => toEpochMillis(grant.expires_at) > nowMs,
       );
       const current = active?.find(
         (grant) =>
@@ -146,12 +161,18 @@ export class PostgresRuntimeGrantAuthority
       const activeOther = active?.some(
         (grant) =>
           grant.runtime_turn_id !== null &&
-          grant.runtime_turn_id !== input.runtimeTurnId,
+          grant.runtime_turn_id !== input.runtimeTurnId &&
+          LIVE_TURN_STATUSES.has(grant.bound_turn_status ?? ''),
       );
-      const bootstrapLineage = grants.rows?.find(
-        (grant) => grant.runtime_turn_id === null,
+      // Reclaimable exactly like a NULL-turn bootstrap grant: either nothing
+      // ever bound this grant to a turn, or the turn it was bound to is
+      // terminal and will never call release/revoke for it again.
+      const reclaimable = grants.rows?.find(
+        (grant) =>
+          grant.runtime_turn_id === null ||
+          !LIVE_TURN_STATUSES.has(grant.bound_turn_status ?? ''),
       );
-      const selected = current ?? (!activeOther ? bootstrapLineage : undefined);
+      const selected = current ?? (!activeOther ? reclaimable : undefined);
       if (!selected) {
         await client.query('ROLLBACK');
         return { kind: 'denied', reason: 'runtime_grant_rotation_fenced' };
@@ -206,8 +227,12 @@ export class PostgresRuntimeGrantAuthority
   }
 }
 
-function dateValue(value: string | Date): string {
-  return value instanceof Date ? value.toISOString() : value;
+// node-postgres parses timestamptz into a Date, but that is a driver/type-
+// parser detail, not a contract. Compare instants numerically so a change in
+// either shape (or a driver upgrade) cannot silently reclassify every grant
+// as expired.
+function toEpochMillis(value: string | Date): number {
+  return value instanceof Date ? value.getTime() : new Date(value).getTime();
 }
 
 function hashToken(token: string): string {

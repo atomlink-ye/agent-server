@@ -184,6 +184,19 @@ async function importTeam(source) {
   };
 }
 
+async function applyProductWorkDefinition(source) {
+  const applied = await request('/api/v1/work-definitions:apply', {
+    method: 'POST',
+    body: { source },
+    idempotencyKey: randomUUID(),
+  });
+  expectStatus(applied, 201, 'apply Product WorkDefinition');
+  return {
+    definitionId: requiredString(applied.body?.definition?.id, 'definition.id'),
+    versionId: requiredString(applied.body?.version?.id, 'version.id'),
+  };
+}
+
 async function publishTeam(versionId) {
   const published = await request(
     `/api/v1/team-versions/${versionId}:publish`,
@@ -299,20 +312,46 @@ if (teamAVersion.body?.id !== teamA.versionId)
 assertWorkerBindings(teamAVersion, leadWorker.versionId, [
   { name: 'reviewer', workerVersionId: memberWorker.versionId },
 ]);
+
+const productWorkDefinition = await applyProductWorkDefinition(
+  `apiVersion: agentserver.dev/v1alpha1
+kind: WorkDefinition
+metadata:
+  name: external-actor-work-${suffix}
+  description: External actor Product Work lineage validation
+spec:
+  kind: collaboration
+  lead:
+    name: planner
+    worker_version_id: ${leadWorker.versionId}
+  members:
+    - name: reviewer
+      worker_version_id: ${memberWorker.versionId}
+  environment_version_id: ${environment.versionId}
+  memory_version_ids: []
+  input_schema:
+    type: object
+    properties: {}
+    required: []
+    additional_properties: false
+`,
+);
 const workA = await request('/api/v1/works', {
   method: 'POST',
   body: {
-    definition_id: teamA.definitionId,
-    definition_version_id: teamA.versionId,
+    definition_id: productWorkDefinition.definitionId,
+    definition_version_id: productWorkDefinition.versionId,
     title: `External actor work ${suffix}`,
   },
 });
 expectStatus(workA, 201, 'create Work from Team A');
 if (
-  workA.body?.work?.definition_id !== teamA.definitionId ||
-  workA.body?.work?.definition_version_id !== teamA.versionId
+  workA.body?.work?.definition_id !== productWorkDefinition.definitionId ||
+  workA.body?.work?.definition_version_id !== productWorkDefinition.versionId
 )
-  throw new Error('Product Work response does not pin Team A lineage');
+  throw new Error(
+    'Product Work response does not pin Product WorkDefinition lineage',
+  );
 const workId = requiredString(workA.body?.work?.id, 'work.id');
 const startedWorkRun = await request(`/api/v1/works/${workId}/runs`, {
   method: 'POST',
@@ -339,13 +378,16 @@ while (Date.now() < traceDeadline) {
     )
       throw new Error('trace response does not identify the requested WorkRun');
     if (
-      candidate.body?.work?.definition_id !== teamA.definitionId ||
-      candidate.body?.work?.definition_version_id !== teamA.versionId ||
+      candidate.body?.work?.definition_id !==
+        productWorkDefinition.definitionId ||
+      candidate.body?.work?.definition_version_id !==
+        productWorkDefinition.versionId ||
       candidate.body?.work_run?.work_id !== workId ||
-      candidate.body?.work_run?.definition_version_id !== teamA.versionId
+      candidate.body?.work_run?.definition_version_id !==
+        productWorkDefinition.versionId
     )
       throw new Error(
-        'formal Worker Product Work trace does not preserve Team A definition/version binding',
+        'formal Worker Product Work trace does not preserve Product WorkDefinition lineage',
       );
     trace = candidate;
     break;
@@ -398,18 +440,15 @@ const teamC = await importTeam(
     ],
   }),
 );
-const workC = await request('/api/v1/works', {
-  method: 'POST',
-  body: {
-    definition_id: teamC.definitionId,
-    definition_version_id: teamC.versionId,
-    title: `Rejected unpublished Team ${suffix}`,
-  },
-});
-expectStatus(workC, 400, 'reject Work from unpublished Team C');
-if (workC.body?.error?.code !== 'invalid_work_definition')
+const teamCVersion = await request(`/api/v1/team-versions/${teamC.versionId}`);
+expectStatus(teamCVersion, 200, 'get unpublished Team C version');
+if (
+  teamCVersion.body?.id !== teamC.versionId ||
+  teamCVersion.body?.definition_id !== teamC.definitionId ||
+  teamCVersion.body?.status !== 'draft'
+)
   throw new Error(
-    `unpublished Team C expected invalid_work_definition, received ${JSON.stringify(workC.body)}`,
+    `unpublished Team C must remain a draft Team registry version, received ${JSON.stringify(teamCVersion.body)}`,
   );
 
 await record({
@@ -420,13 +459,16 @@ await record({
     team_a_work_run_id: workRunId,
     team_a_trace_anchored: true,
     formal_worker_team_bindings_asserted: true,
-    team_a_work_definition_pinned: true,
+    product_work_definition_applied: true,
+    product_work_definition_pinned: true,
+    product_work_definition_id: productWorkDefinition.definitionId,
+    product_work_definition_version_id: productWorkDefinition.versionId,
     team_a_version_read: teamA.versionId,
     team_b_version_read: teamB.versionId,
     team_a_and_b_specs_differ: true,
-    unpublished_team_c_rejected: true,
+    unpublished_team_c_remains_draft: true,
   },
 });
 process.stdout.write(
-  `${JSON.stringify({ outcome: 'PASS', formal_worker_registry_asserted: true, execution_asserted: false, output_file: outputPath, team_a: teamA, work_id: workId, work_run_id: workRunId, team_b: teamB, team_c: teamC })}\n`,
+  `${JSON.stringify({ outcome: 'PASS', formal_worker_registry_asserted: true, execution_asserted: false, output_file: outputPath, product_work_definition: productWorkDefinition, team_a: teamA, work_id: workId, work_run_id: workRunId, team_b: teamB, team_c: teamC })}\n`,
 );

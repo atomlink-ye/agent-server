@@ -159,6 +159,25 @@ async function importAndPublish(source, importPath, publishPath) {
   return { imported, published };
 }
 
+async function applyProductWorkDefinition(source) {
+  const applied = await request('/api/v1/work-definitions:apply', {
+    method: 'POST',
+    body: { source },
+    expectedStatus: 201,
+    idempotency: true,
+  });
+  if (
+    typeof applied.definition?.id !== 'string' ||
+    typeof applied.version?.id !== 'string' ||
+    !applied.resolved?.resource_manifest_fingerprint
+  ) {
+    throw new Error(
+      `Product WorkDefinition apply invalid: ${JSON.stringify(applied)}`,
+    );
+  }
+  return applied;
+}
+
 async function pollWorkRun(workId, workRunId) {
   const deadline = Date.now() + timeoutMs;
   let lastState;
@@ -341,23 +360,23 @@ spec:
     version_id: draftVersionId,
   });
 
-  const unpublishedRejected = await request('/api/v1/works', {
-    method: 'POST',
-    body: {
-      definition_id: teamId,
-      definition_version_id: draftVersionId,
-      title: 'Draft Team must not be runnable',
-    },
-    expectedStatus: 400,
-  });
-  if (unpublishedRejected?.error?.code !== 'invalid_work_definition') {
+  const draftTeamVersion = await request(
+    `/api/v1/team-versions/${draftVersionId}`,
+    { expectedStatus: 200 },
+  );
+  if (
+    draftTeamVersion.id !== draftVersionId ||
+    draftTeamVersion.definition_id !== teamId ||
+    draftTeamVersion.status !== 'draft'
+  ) {
     throw new Error(
-      `draft team mutation did not reject correctly: ${JSON.stringify(unpublishedRejected)}`,
+      `draft Team registry version did not remain a draft: ${JSON.stringify(draftTeamVersion)}`,
     );
   }
-  progress('unpublished_team_version_rejected', {
-    status: 400,
-    error_code: unpublishedRejected.error.code,
+  progress('team_draft_registry_asserted', {
+    team_id: teamId,
+    version_id: draftVersionId,
+    status: draftTeamVersion.status,
   });
 
   const publishedTeam = await request(
@@ -401,21 +420,54 @@ spec:
     ),
   });
 
+  const appliedProductWorkDefinition = await applyProductWorkDefinition(
+    `apiVersion: agentserver.dev/v1alpha1
+kind: WorkDefinition
+metadata:
+  name: user-work-lifecycle-product-${scenarioId}
+  description: User-defined Product Work collaboration lifecycle
+spec:
+  kind: collaboration
+  lead:
+    name: lead
+    worker_version_id: ${lead.published.id}
+  members:
+    - name: analyst
+      worker_version_id: ${analyst.published.id}
+  environment_version_id: ${environment.published.id}
+  memory_version_ids: []
+  input_schema:
+    type: object
+    properties: {}
+    required: []
+    additional_properties: false
+`,
+  );
+  const productDefinitionId = appliedProductWorkDefinition.definition.id;
+  const productDefinitionVersionId = appliedProductWorkDefinition.version.id;
+  progress('product_work_definition_applied', {
+    definition_id: productDefinitionId,
+    definition_version_id: productDefinitionVersionId,
+    environment_version_id: environment.published.id,
+    lead_worker_version_id: lead.published.id,
+    member_worker_version_id: analyst.published.id,
+  });
+
   const createdWork = await request('/api/v1/works', {
     method: 'POST',
     body: {
-      definition_id: teamId,
-      definition_version_id: publishedTeam.id,
+      definition_id: productDefinitionId,
+      definition_version_id: productDefinitionVersionId,
       title: 'Run user-defined Team through Product Work lifecycle',
     },
     expectedStatus: 201,
   });
   if (
-    createdWork.work?.definition_id !== teamId ||
-    createdWork.work?.definition_version_id !== publishedTeam.id
+    createdWork.work?.definition_id !== productDefinitionId ||
+    createdWork.work?.definition_version_id !== productDefinitionVersionId
   ) {
     throw new Error(
-      `Product Work did not pin the published Team definition/version: ${JSON.stringify(createdWork.work)}`,
+      `Product Work did not pin the applied Product WorkDefinition lineage: ${JSON.stringify(createdWork.work)}`,
     );
   }
   const workId = createdWork.work?.id;
@@ -423,7 +475,8 @@ spec:
     throw new Error('Work response did not contain id');
   progress('work_created', {
     work_id: workId,
-    definition_version_id: publishedTeam.id,
+    definition_id: productDefinitionId,
+    definition_version_id: productDefinitionVersionId,
   });
 
   const startedWorkRun = await request(`/api/v1/works/${workId}/runs`, {
@@ -440,10 +493,11 @@ spec:
     throw new Error('WorkRun response did not contain id');
   if (
     startedWorkRun.work_run?.work_id !== workId ||
-    startedWorkRun.work_run?.definition_version_id !== publishedTeam.id
+    startedWorkRun.work_run?.definition_version_id !==
+      productDefinitionVersionId
   ) {
     throw new Error(
-      `WorkRun did not preserve the immutable Product Work definition version: ${JSON.stringify(startedWorkRun.work_run)}`,
+      `WorkRun did not preserve the immutable Product WorkDefinition version: ${JSON.stringify(startedWorkRun.work_run)}`,
     );
   }
   progress('work_run_started', {
@@ -454,13 +508,13 @@ spec:
 
   const projection = await pollWorkRun(workId, workRunId);
   if (
-    projection.work?.definition_id !== teamId ||
-    projection.work?.definition_version_id !== publishedTeam.id ||
+    projection.work?.definition_id !== productDefinitionId ||
+    projection.work?.definition_version_id !== productDefinitionVersionId ||
     projection.work_run?.work_id !== workId ||
-    projection.work_run?.definition_version_id !== publishedTeam.id
+    projection.work_run?.definition_version_id !== productDefinitionVersionId
   ) {
     throw new Error(
-      `Product Work projection did not preserve the immutable Team definition/version binding: ${JSON.stringify({ work: projection.work, work_run: projection.work_run })}`,
+      `Product Work projection did not preserve the immutable Product WorkDefinition lineage: ${JSON.stringify({ work: projection.work, work_run: projection.work_run })}`,
     );
   }
   if (projection.work_run?.product_state !== 'complete') {
@@ -474,13 +528,13 @@ spec:
     { expectedStatus: 200 },
   );
   if (
-    trace.work?.definition_id !== teamId ||
-    trace.work?.definition_version_id !== publishedTeam.id ||
+    trace.work?.definition_id !== productDefinitionId ||
+    trace.work?.definition_version_id !== productDefinitionVersionId ||
     trace.work_run?.work_id !== workId ||
-    trace.work_run?.definition_version_id !== publishedTeam.id
+    trace.work_run?.definition_version_id !== productDefinitionVersionId
   ) {
     throw new Error(
-      `formal Worker Product Work trace did not preserve the immutable Team definition/version binding: ${JSON.stringify({ work: trace.work, work_run: trace.work_run })}`,
+      `formal Worker Product Work trace did not preserve the immutable Product WorkDefinition lineage: ${JSON.stringify({ work: trace.work, work_run: trace.work_run })}`,
     );
   }
   const traceRuns = Array.isArray(trace.runs) ? trace.runs : [];

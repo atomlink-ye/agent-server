@@ -1,0 +1,63 @@
+apps/web/src/features/run-trace/map.tsx
+  aa841554b33a269e 19-40
+src/application/product-projection/session-transcript-facts-source.ts
+  aa841554b33a269e 3-9,11,13-17,26
+src/contracts/product-accepted-subset/read.ts
+  aa841554b33a269e 205
+apps/web/src/features/run-trace/selectors.ts
+  aa841554b33a269e 6,18-31,35,39,99-141,143,145,147-148,228-238,240-252,256,258,264,270-309,325-328,330-333
+apps/web/src/features/work/components/panes/transcript-pane.tsx
+  aa841554b33a269e 20-26,32-36
+apps/web/src/features/run-trace/normalized.ts
+  aa841554b33a269e 36-38,96-99,103,112,160,233-246,248-249,251-255,270-275,279,287
+apps/web/src/features/run-trace/timeline.tsx
+  aa841554b33a269e 9,44-46,49-52,54,56,72-73,75-92,196,198,204,208,214-215,217-224,228-232,235,238-240,245-249,253,260,264,269
+apps/web/src/features/run-trace/session-transcripts.tsx
+  aa841554b33a269e 14,18-19,45-58,71,87-91,93-104,112,131,154,164-187,198,200-202,222,231-253,262-264,270-319,597-634
+apps/web/src/features/run-trace/map.browser.test.tsx
+  aa841554b33a269e 10-46,217-298
+src/application/product-projection/get-product-session-transcripts.test.ts
+  aa841554b33a269e 1-335
+apps/web/src/features/work/components/panes/overview-pane.tsx
+  aa841554b33a269e 5,77-79,121-126
+src/contracts/product-projection/session-transcripts.ts
+  aa841554b33a269e 4,16-18,20-21
+apps/web/src/features/run-trace/selectors.test.ts
+  aa841554b33a269e 1-189
+apps/web/src/features/run-trace/inspector.tsx
+  aa841554b33a269e 70-73
+apps/web/src/features/run-trace/session-transcripts.browser.test.tsx
+  aa841554b33a269e 22-30,83-94,126-134,216-238,256-262,336-416
+apps/web/src/features/work/queries/load-work-detail.ts
+  aa841554b33a269e 8,93,97
+apps/web/src/features/run-trace/geometry.ts
+  aa841554b33a269e 1-18,32,34-39,43,45,48-49,51-52,59,61-63,67,69,93-94,96,99-101
+apps/web/src/features/work/clients/work-run-client.ts
+  aa841554b33a269e 30,33-35,37-41,119
+apps/web/src/features/run-trace/run-trace-gateway.ts
+  aa841554b33a269e 14-16,18-22
+src/application/product-projection/get-product-session-transcripts.ts
+  aa841554b33a269e 18-31,62,67-77,80-82,84-87,91-108,110,121,126-129,135-139,160-171,174
+apps/web/src/features/run-trace/run-trace.browser.test.tsx
+  aa841554b33a269e 34-55,64-65,67,89-90,98-101,107-111,113-117,119,121-124,143-145,177-186,213,219-220,223-225
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2-bit.10+672fbf0",
+  "base_commit_sha": "ce068422e53755b77e5a41c89f82bf9bcc7e1da9",
+  "prompts": {
+    "aa841554b33a269e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2e0ac1a9-cdbd-49b5-9938-68e78819ae91",
+        "model": "claude-opus-5"
+      },
+      "human_author": "link.ye",
+      "messages": [],
+      "total_additions": 3897,
+      "total_deletions": 848,
+      "accepted_lines": 3709,
+      "overriden_lines": 0
+    }
+  }
+}

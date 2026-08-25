@@ -37,13 +37,11 @@ export class WorkerPackageError extends Error {
 export function parseWorkerPackage(source: string): ParsedWorkerPackage {
   if (typeof source !== 'string' || !/^\s*apiVersion:/m.test(source))
     throw new WorkerPackageError('invalid_worker_source');
-  const kindMatches = [
-    ...source.matchAll(/^\s*kind\s*:\s*([^#\r\n]+?)\s*$/gim),
-  ];
+  const kindMatches = [...source.matchAll(/^kind\s*:\s*([^#\r\n]+?)\s*$/gim)];
   if (kindMatches.length !== 1 || kindMatches[0]?.[1]?.trim() !== 'Worker')
     throw new WorkerPackageError('invalid_worker_kind');
   const managedSource = source.replace(
-    /^([ \t]*kind[ \t]*:[ \t]*)Worker([ \t]*)$/im,
+    /^(kind[ \t]*:[ \t]*)Worker([ \t]*)$/im,
     '$1ManagedAgent$2',
   );
   const parsed = parseManagedAgentPackage(managedSource);

@@ -78,6 +78,7 @@ spec:
     mode: isolated
   tools:
     - ref: agent-server/memory-read
+      kind: tool
   skills:
     - ref: agent-server/memory-api
   input:

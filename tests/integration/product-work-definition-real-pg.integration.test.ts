@@ -21,7 +21,7 @@ if (!connectionString)
 const tenantId = 'product_definition_real_pg_tenant';
 const workspaceId = 'b1111111-1111-4111-8111-111111111111';
 const principalId = 'product-definition-real-pg';
-const agentVersionId = 'b2222222-2222-4222-8222-222222222222';
+const workerVersionId = 'b2222222-2222-4222-8222-222222222222';
 const environmentVersionId = 'b3333333-3333-4333-8333-333333333333';
 const at = '2026-08-16T00:00:00.000Z';
 
@@ -43,8 +43,8 @@ metadata:
   name: api-earnings-research
   description: Research an earnings event through the Product API.
 spec:
-  kind: single_agent
-  agent_version_id: ${agentVersionId}
+  kind: single_worker
+  worker_version_id: ${workerVersionId}
   environment_version_id: ${environmentVersionId}
   input_schema:
     type: object
@@ -95,12 +95,14 @@ describe('Product Work Definition API persistence on real PostgreSQL', () => {
 
   it('applies, owner-isolates exact reads, converges versions, then creates Work', async () => {
     const sources = new PostgresWorkDefinitionSourceRepository(pool);
-    const agentResolution = {
+    const workerResolution = {
       async resolvePublished(id: string) {
-        return id === agentVersionId
+        return id === workerVersionId
           ? ({
-              source: 'managed',
+              source: 'worker',
               id,
+              definitionId: workerVersionId,
+              workerOwner: {} as any,
               instructions: 'research the typed input',
               modelPolicyRef: 'free-only',
               proposalLimit: 0,
@@ -122,11 +124,18 @@ describe('Product Work Definition API persistence on real PostgreSQL', () => {
       },
     };
     const resolver = new ResolveWorkDefinition({
-      agents: {
-        findDefinition: async () => null,
-        findVersion: async () => null,
+      workers: {
+        findVersion: async (_owner: unknown, id: string) =>
+          id === workerVersionId
+            ? ({
+                id,
+                definitionId: workerVersionId,
+                status: 'published',
+                fingerprint: `sha256:${'w'.repeat(64)}`,
+              } as any)
+            : null,
       } as any,
-      agentResolution,
+      workerResolution,
       definitions: {
         findTeamDefinitionById: async () => null,
         findPublishedTeamVersionById: async () => null,
@@ -138,7 +147,7 @@ describe('Product Work Definition API persistence on real PostgreSQL', () => {
     const product = new ProductWorkDefinitionApi({
       repository: sources,
       resolver,
-      agents: agentResolution,
+      workers: workerResolution,
       invokables: {
         saveTeamDefinition: async () => undefined,
         findTeamDefinitionById: async () => null,
@@ -181,7 +190,7 @@ describe('Product Work Definition API persistence on real PostgreSQL', () => {
     expect(converged.version.version.id).toBe(created.version.version.id);
     expect(changed.version.version.id).not.toBe(created.version.version.id);
     expect(created.version.authorSource).toMatchObject({
-      spec: { kind: 'single_agent', agent_version_id: agentVersionId },
+      spec: { kind: 'single_worker', worker_version_id: workerVersionId },
     });
     expect(created.version.resolvedFingerprint).toMatch(
       /^sha256:[0-9a-f]{64}$/,

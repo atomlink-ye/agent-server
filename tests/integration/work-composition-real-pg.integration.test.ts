@@ -97,11 +97,11 @@ describe('Composition-first Work on real PostgreSQL', () => {
     await pool?.end();
   });
 
-  it('publishes Definition intent, freezes exact resources, then admits the Agent', async () => {
+  it('publishes Definition intent, freezes exact resources, then admits the Worker', async () => {
     const sources = new PostgresWorkDefinitionSourceRepository(pool);
     const source = {
-      kind: 'single_agent' as const,
-      agentVersionId,
+      kind: 'single_worker' as const,
+      workerVersionId: agentVersionId,
       environmentVersionId,
       memoryVersionIds: [memoryVersionId],
     } as any;
@@ -115,15 +115,14 @@ describe('Composition-first Work on real PostgreSQL', () => {
         principalId,
       },
       name: 'Composition Real PG Work',
-      description: 'Agent + Environment + Memory + Skill + domain Tool',
+      description: 'Worker + Environment + Memory + Skill + domain Tool',
       source,
       fingerprint: fingerprintWorkDefinitionSource(source),
       now: at,
     });
 
     const resolver = new ResolveWorkDefinition({
-      agents: {
-        findDefinition: async () => null,
+      workers: {
         findVersion: async (_owner: unknown, id: string) =>
           id === agentVersionId
             ? ({
@@ -133,12 +132,14 @@ describe('Composition-first Work on real PostgreSQL', () => {
               } as any)
             : null,
       } as any,
-      agentResolution: {
+      workerResolution: {
         resolvePublished: async (id: string) =>
           id === agentVersionId
             ? ({
-                source: 'managed',
+                source: 'worker',
                 id,
+                definitionId,
+                workerOwner: {} as any,
                 instructions: 'research with pinned resources',
                 modelPolicyRef: 'free-only',
                 proposalLimit: 0,
@@ -242,7 +243,7 @@ describe('Composition-first Work on real PostgreSQL', () => {
     });
     expect(admitRoot).toHaveBeenCalledWith(
       expect.objectContaining({
-        invokable: { kind: 'agent', versionId: agentVersionId },
+        invokable: { kind: 'worker', versionId: agentVersionId },
       }),
     );
     expect(started.workRun.rootTaskId).not.toBeNull();
@@ -258,7 +259,7 @@ describe('Composition-first Work on real PostgreSQL', () => {
           resolvedVersionId: definitionVersionId,
         }),
         expect.objectContaining({
-          resourceKind: 'agent',
+          resourceKind: 'worker',
           resolvedVersionId: agentVersionId,
         }),
         expect.objectContaining({

@@ -87,12 +87,7 @@ describe('Cumora-style Coworker lifecycle provisioning', () => {
       `INSERT INTO agent_chat_runtimes
        (tenant_id,agent_definition_id,active_agent_version_id,epoch,status,created_at,updated_at)
        VALUES($1,$2,$3,1,'available',$4,$4)`,
-      [
-        tenantId,
-        legacyDefinitionId,
-        legacyVersionId,
-        now().toISOString(),
-      ],
+      [tenantId, legacyDefinitionId, legacyVersionId, now().toISOString()],
     );
     await database.query(
       `INSERT INTO agent_identity_classes

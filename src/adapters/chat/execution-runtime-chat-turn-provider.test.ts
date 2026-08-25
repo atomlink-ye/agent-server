@@ -282,7 +282,7 @@ class RecordingDesiredSpec {
         runtimeSessionId: session.id,
         revision: runtimeSpecRevision(1),
         workspaceId: session.owner.workspaceId,
-        agentVersionId: input.agentVersionId,
+        agentVersionId: input.agentVersionId ?? null,
         environmentVersionId: input.environmentVersionId,
         resolvedSkills: input.resolvedSkills,
         toolRefs: input.toolRefs,

@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 
-// Scope: registry (agents/environments/teams import+publish) + work identity
+// Scope: registry (Workers/environments/teams import+publish) + work identity
 // + projection reachability. NOT execution: this actor does not wait for a
 // terminal WorkRun state or assert provider usage.
 //
 // Intentional limitations:
-// - agentYaml() uses tools: [], so its lead/member cannot use the Team board or
+// - workerYaml() uses tools: [], so its lead/member cannot use the Team board or
 //   finish tools; this Team cannot produce useful Team work even if awaited.
 // - POST /works/:id/runs omits trigger_ref. Work identity consequently assigns
 //   the lead a generated UUID target (triggerRef ?? randomUUID()).
@@ -107,9 +107,9 @@ function requiredString(value, path) {
   return value;
 }
 
-function agentYaml(name, role) {
+function workerYaml(name, role) {
   return `apiVersion: agent-server/v1alpha1
-kind: ManagedAgent
+kind: Worker
 metadata:
   name: ${name}
 spec:
@@ -184,6 +184,19 @@ async function importTeam(source) {
   };
 }
 
+async function applyProductWorkDefinition(source) {
+  const applied = await request('/api/v1/work-definitions:apply', {
+    method: 'POST',
+    body: { source },
+    idempotencyKey: randomUUID(),
+  });
+  expectStatus(applied, 201, 'apply Product WorkDefinition');
+  return {
+    definitionId: requiredString(applied.body?.definition?.id, 'definition.id'),
+    versionId: requiredString(applied.body?.version?.id, 'version.id'),
+  };
+}
+
 async function publishTeam(versionId) {
   const published = await request(
     `/api/v1/team-versions/${versionId}:publish`,
@@ -205,7 +218,7 @@ function teamYaml({
   name,
   environmentVersionId,
   leadName,
-  leadVersionId,
+  leadWorkerVersionId,
   roster,
 }) {
   return `apiVersion: agent-server/v1alpha1
@@ -216,9 +229,9 @@ spec:
   environmentVersionId: ${environmentVersionId}
   lead:
     name: ${leadName}
-    agentVersionId: ${leadVersionId}
+    workerVersionId: ${leadWorkerVersionId}
   roster:
-${roster.map(({ name: memberName, versionId }) => `    - name: ${memberName}\n      agentVersionId: ${versionId}`).join('\n')}
+${roster.map(({ name: memberName, workerVersionId }) => `    - name: ${memberName}\n      workerVersionId: ${workerVersionId}`).join('\n')}
   coordination:
     taskAssignment: lead_or_self_claim
 `;
@@ -235,18 +248,36 @@ function assertDifferentTeamSpecs(first, second) {
     throw new Error('Team A and Team B must have different lead roles');
 }
 
+function assertWorkerBindings(version, expectedLeadVersionId, expectedRoster) {
+  const spec = version.body?.spec;
+  if (spec?.lead?.workerVersionId !== expectedLeadVersionId)
+    throw new Error(
+      'published Team version does not pin the expected formal Worker lead',
+    );
+  const actualRoster = Array.isArray(spec?.roster)
+    ? spec.roster.map(({ name, workerVersionId }) => ({
+        name,
+        workerVersionId,
+      }))
+    : [];
+  if (JSON.stringify(actualRoster) !== JSON.stringify(expectedRoster))
+    throw new Error(
+      'published Team version does not pin the expected formal Worker roster',
+    );
+}
+
 const suffix = runId.slice(0, 8);
-const lead = await importAndPublish(
-  agentYaml(`external-actor-lead-${suffix}`, 'lead'),
-  '/api/v1/agents:import',
-  (id) => `/api/v1/agent-versions/${id}:publish`,
-  'agent',
+const leadWorker = await importAndPublish(
+  workerYaml(`external-actor-lead-${suffix}`, 'lead'),
+  '/api/v1/workers:import',
+  (id) => `/api/v1/worker-versions/${id}:publish`,
+  'worker',
 );
-const member = await importAndPublish(
-  agentYaml(`external-actor-member-${suffix}`, 'member'),
-  '/api/v1/agents:import',
-  (id) => `/api/v1/agent-versions/${id}:publish`,
-  'agent',
+const memberWorker = await importAndPublish(
+  workerYaml(`external-actor-member-${suffix}`, 'member'),
+  '/api/v1/workers:import',
+  (id) => `/api/v1/worker-versions/${id}:publish`,
+  'worker',
 );
 const environment = await importAndPublish(
   `apiVersion: agent-server/v1alpha1
@@ -269,8 +300,8 @@ const teamA = await importTeam(
     name: `external-actor-atlas-${suffix}`,
     environmentVersionId: environment.versionId,
     leadName: 'planner',
-    leadVersionId: lead.versionId,
-    roster: [{ name: 'reviewer', versionId: member.versionId }],
+    leadWorkerVersionId: leadWorker.versionId,
+    roster: [{ name: 'reviewer', workerVersionId: memberWorker.versionId }],
   }),
 );
 await publishTeam(teamA.versionId);
@@ -278,20 +309,49 @@ const teamAVersion = await request(`/api/v1/team-versions/${teamA.versionId}`);
 expectStatus(teamAVersion, 200, 'get Team A version');
 if (teamAVersion.body?.id !== teamA.versionId)
   throw new Error('Team A GET version id does not match imported version');
+assertWorkerBindings(teamAVersion, leadWorker.versionId, [
+  { name: 'reviewer', workerVersionId: memberWorker.versionId },
+]);
+
+const productWorkDefinition = await applyProductWorkDefinition(
+  `apiVersion: agentserver.dev/v1alpha1
+kind: WorkDefinition
+metadata:
+  name: external-actor-work-${suffix}
+  description: External actor Product Work lineage validation
+spec:
+  kind: collaboration
+  lead:
+    name: planner
+    worker_version_id: ${leadWorker.versionId}
+  members:
+    - name: reviewer
+      worker_version_id: ${memberWorker.versionId}
+  environment_version_id: ${environment.versionId}
+  memory_version_ids: []
+  input_schema:
+    type: object
+    properties: {}
+    required: []
+    additional_properties: false
+`,
+);
 const workA = await request('/api/v1/works', {
   method: 'POST',
   body: {
-    definition_id: teamA.definitionId,
-    definition_version_id: teamA.versionId,
+    definition_id: productWorkDefinition.definitionId,
+    definition_version_id: productWorkDefinition.versionId,
     title: `External actor work ${suffix}`,
   },
 });
 expectStatus(workA, 201, 'create Work from Team A');
 if (
-  workA.body?.work?.definition_id !== teamA.definitionId ||
-  workA.body?.work?.definition_version_id !== teamA.versionId
+  workA.body?.work?.definition_id !== productWorkDefinition.definitionId ||
+  workA.body?.work?.definition_version_id !== productWorkDefinition.versionId
 )
-  throw new Error('Work response does not pin Team A lineage');
+  throw new Error(
+    'Product Work response does not pin Product WorkDefinition lineage',
+  );
 const workId = requiredString(workA.body?.work?.id, 'work.id');
 const startedWorkRun = await request(`/api/v1/works/${workId}/runs`, {
   method: 'POST',
@@ -317,6 +377,18 @@ while (Date.now() < traceDeadline) {
       candidate.body?.work_run?.id !== workRunId
     )
       throw new Error('trace response does not identify the requested WorkRun');
+    if (
+      candidate.body?.work?.definition_id !==
+        productWorkDefinition.definitionId ||
+      candidate.body?.work?.definition_version_id !==
+        productWorkDefinition.versionId ||
+      candidate.body?.work_run?.work_id !== workId ||
+      candidate.body?.work_run?.definition_version_id !==
+        productWorkDefinition.versionId
+    )
+      throw new Error(
+        'formal Worker Product Work trace does not preserve Product WorkDefinition lineage',
+      );
     trace = candidate;
     break;
   }
@@ -339,10 +411,10 @@ const teamB = await importTeam(
     name: `external-actor-orbit-${suffix}`,
     environmentVersionId: environment.versionId,
     leadName: 'reviewer',
-    leadVersionId: member.versionId,
+    leadWorkerVersionId: memberWorker.versionId,
     roster: [
-      { name: 'planner', versionId: lead.versionId },
-      { name: 'navigator', versionId: member.versionId },
+      { name: 'planner', workerVersionId: leadWorker.versionId },
+      { name: 'navigator', workerVersionId: memberWorker.versionId },
     ],
   }),
 );
@@ -351,6 +423,10 @@ const teamBVersion = await request(`/api/v1/team-versions/${teamB.versionId}`);
 expectStatus(teamBVersion, 200, 'get Team B version');
 if (teamBVersion.body?.id !== teamB.versionId)
   throw new Error('Team B GET version id does not match imported version');
+assertWorkerBindings(teamBVersion, memberWorker.versionId, [
+  { name: 'planner', workerVersionId: leadWorker.versionId },
+  { name: 'navigator', workerVersionId: memberWorker.versionId },
+]);
 assertDifferentTeamSpecs(teamAVersion, teamBVersion);
 
 const teamC = await importTeam(
@@ -358,22 +434,21 @@ const teamC = await importTeam(
     name: `external-actor-unpublished-${suffix}`,
     environmentVersionId: environment.versionId,
     leadName: 'draft-planner',
-    leadVersionId: lead.versionId,
-    roster: [{ name: 'draft-reviewer', versionId: member.versionId }],
+    leadWorkerVersionId: leadWorker.versionId,
+    roster: [
+      { name: 'draft-reviewer', workerVersionId: memberWorker.versionId },
+    ],
   }),
 );
-const workC = await request('/api/v1/works', {
-  method: 'POST',
-  body: {
-    definition_id: teamC.definitionId,
-    definition_version_id: teamC.versionId,
-    title: `Rejected unpublished Team ${suffix}`,
-  },
-});
-expectStatus(workC, 400, 'reject Work from unpublished Team C');
-if (workC.body?.error?.code !== 'invalid_work_definition')
+const teamCVersion = await request(`/api/v1/team-versions/${teamC.versionId}`);
+expectStatus(teamCVersion, 200, 'get unpublished Team C version');
+if (
+  teamCVersion.body?.id !== teamC.versionId ||
+  teamCVersion.body?.definition_id !== teamC.definitionId ||
+  teamCVersion.body?.status !== 'draft'
+)
   throw new Error(
-    `unpublished Team C expected invalid_work_definition, received ${JSON.stringify(workC.body)}`,
+    `unpublished Team C must remain a draft Team registry version, received ${JSON.stringify(teamCVersion.body)}`,
   );
 
 await record({
@@ -383,12 +458,17 @@ await record({
     team_a_work_id: workId,
     team_a_work_run_id: workRunId,
     team_a_trace_anchored: true,
+    formal_worker_team_bindings_asserted: true,
+    product_work_definition_applied: true,
+    product_work_definition_pinned: true,
+    product_work_definition_id: productWorkDefinition.definitionId,
+    product_work_definition_version_id: productWorkDefinition.versionId,
     team_a_version_read: teamA.versionId,
     team_b_version_read: teamB.versionId,
     team_a_and_b_specs_differ: true,
-    unpublished_team_c_rejected: true,
+    unpublished_team_c_remains_draft: true,
   },
 });
 process.stdout.write(
-  `${JSON.stringify({ outcome: 'PASS', execution_asserted: false, output_file: outputPath, team_a: teamA, work_id: workId, work_run_id: workRunId, team_b: teamB, team_c: teamC })}\n`,
+  `${JSON.stringify({ outcome: 'PASS', formal_worker_registry_asserted: true, execution_asserted: false, output_file: outputPath, product_work_definition: productWorkDefinition, team_a: teamA, work_id: workId, work_run_id: workRunId, team_b: teamB, team_c: teamC })}\n`,
 );

@@ -13,7 +13,7 @@ const access = {
 const workId = '22222222-2222-4222-8222-222222222222';
 const definitionId = '33333333-3333-4333-8333-333333333333';
 const definitionVersionId = '44444444-4444-4444-8444-444444444444';
-const agentVersionId = '55555555-5555-4555-8555-555555555555';
+const workerVersionId = '55555555-5555-4555-8555-555555555555';
 const workRunId = '66666666-6666-4666-8666-666666666666';
 const taskId = '77777777-7777-4777-8777-777777777777';
 const now = '2026-08-16T00:00:00.000Z';
@@ -21,7 +21,7 @@ const now = '2026-08-16T00:00:00.000Z';
 const resolved = {
   definitionId,
   definitionVersionId,
-  kind: 'single_agent' as const,
+  kind: 'single_worker' as const,
   name: 'earnings-research',
   description: 'Research one company earnings release.',
   sourceFingerprint: `sha256:${'a'.repeat(64)}`,
@@ -30,8 +30,8 @@ const resolved = {
     {
       logicalName: 'earnings-research',
       role: 'primary' as const,
-      agentVersionId,
-      agentFingerprint: `sha256:${'c'.repeat(64)}`,
+      workerVersionId,
+      workerFingerprint: `sha256:${'c'.repeat(64)}`,
       toolRefs: [],
       skills: [],
     },
@@ -40,7 +40,7 @@ const resolved = {
   memories: [],
   platformCapabilities: [],
   executionPolicy: {
-    invokable: { kind: 'agent' as const, versionId: agentVersionId },
+    invokable: { kind: 'worker' as const, versionId: workerVersionId },
     runtimeSessionPolicy: 'fresh' as const,
     runtimeWorkspacePolicy: 'run_scoped' as const,
     requiredRuntimeCapabilities: [],
@@ -150,7 +150,7 @@ describe('StartWorkRun Product input contract', () => {
     );
     expect(admitRoot).toHaveBeenCalledWith(
       expect.objectContaining({
-        invokable: { kind: 'agent', versionId: agentVersionId },
+        invokable: { kind: 'worker', versionId: workerVersionId },
         input: {
           text: expect.stringContaining('"symbol":"AAPL"'),
         },

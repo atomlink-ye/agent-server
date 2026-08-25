@@ -1,5 +1,5 @@
 apiVersion: agent-server/v1alpha1
-kind: ManagedAgent
+kind: Worker
 metadata:
   name: self-learning-market-research-lead
 spec:

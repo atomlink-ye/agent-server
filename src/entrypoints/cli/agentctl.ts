@@ -491,7 +491,7 @@ function counts(
     toolProfiles: project.toolProfiles.size,
     skills: project.skills.size,
     environments: project.environments.size,
-    agents: project.agents.size,
+    workers: project.workers.size,
     teams: project.teams.size,
     memoryStores: project.memoryStores.size,
     entrypoints: project.entrypoints.length,

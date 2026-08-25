@@ -7,6 +7,7 @@ import { transitionTask, type Task } from '../../domain/tasks/task.js';
 import { errorDiagnostic } from '../../shared/observability/error-diagnostic.js';
 import type { Logger } from '../../shared/observability/logger.js';
 import type { AgentResolutionApi } from '../ports/agent-resolution-api.js';
+import type { WorkerResolutionApi } from '../ports/worker-registry.js';
 import type { DefinitionReadApi } from '../ports/definition-read-api.js';
 import type { FileStore } from '../ports/file-store.js';
 import type { MemoryVersionReadApi } from '../ports/memory-version-read-api.js';
@@ -57,6 +58,7 @@ export interface ExecuteRunOptions {
   readonly logger: Logger;
   readonly now?: () => Date;
   readonly resolver?: AgentResolutionApi;
+  readonly workerResolver?: WorkerResolutionApi;
   readonly events?: RunEventRepository;
   readonly fileStore?: FileStore;
   readonly createMemoryProposal?: CreateMemoryProposal;
@@ -104,6 +106,7 @@ export class ExecuteRun {
       logger,
       now = () => new Date(),
       resolver = { resolvePublished: async () => null },
+      workerResolver,
       events,
       fileStore,
       createMemoryProposal,
@@ -136,6 +139,7 @@ export class ExecuteRun {
     const promptContext = new RunPromptContext(
       resolver,
       tasks,
+      workerResolver,
       fileStore,
       collaborativeExecutions,
     );

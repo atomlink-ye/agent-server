@@ -13,7 +13,7 @@ export const CancelTaskResponseSchema = z.object({
 
 export const TaskInvokableSchema = z
   .object({
-    kind: z.enum(['agent', 'team']),
+    kind: z.enum(['agent', 'worker', 'team']),
     version_id: z.uuid(),
   })
   .strict();

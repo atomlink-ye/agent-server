@@ -23,7 +23,10 @@ export interface RuntimeSessionSpec {
   readonly revision: RuntimeSpecRevision;
 
   readonly workspaceId: string;
-  readonly agentVersionId: string;
+  /** Chat identity and Work execution identity share a substrate, never a type. */
+  readonly subjectKind: 'agent_chat' | 'worker' | 'legacy_agent_task';
+  readonly agentVersionId: string | null;
+  readonly workerVersionId: string | null;
   readonly environmentVersionId: string | null;
   readonly resolvedSkills: readonly RuntimeResolvedSkill[];
   readonly toolRefs: readonly string[];
@@ -44,8 +47,9 @@ export interface RuntimeSessionSpec {
 
 export type RuntimeSessionSpecInput = Omit<
   RuntimeSessionSpec,
-  'bootstrapDigest'
->;
+  'bootstrapDigest' | 'subjectKind' | 'workerVersionId'
+> &
+  Partial<Pick<RuntimeSessionSpec, 'subjectKind' | 'workerVersionId'>>;
 
 /**
  * The complete runtime-owned bootstrap-digest contract. Bootstrap identity is
@@ -60,7 +64,9 @@ export interface RuntimeBootstrapDigestInput {
   readonly model: string | null;
   readonly cwd: string;
   readonly workspaceId: string;
-  readonly agentVersionId: string;
+  readonly subjectKind: RuntimeSessionSpec['subjectKind'];
+  readonly agentVersionId: string | null;
+  readonly workerVersionId: string | null;
   readonly environmentVersionId: string | null;
   readonly systemPromptDigest: RuntimeDigestComponent;
   readonly skillSetDigest: RuntimeDigestComponent;
@@ -85,7 +91,9 @@ export function computeRuntimeBootstrapDigest(
         model: input.model,
         cwd: input.cwd,
         workspaceId: input.workspaceId,
+        subjectKind: input.subjectKind,
         agentVersionId: input.agentVersionId,
+        workerVersionId: input.workerVersionId,
         environmentVersionId: input.environmentVersionId,
         systemPromptDigest: input.systemPromptDigest,
         skillSetDigest: input.skillSetDigest,
@@ -102,9 +110,17 @@ export function computeRuntimeBootstrapDigest(
 export function createRuntimeSessionSpec(
   input: RuntimeSessionSpecInput,
 ): RuntimeSessionSpec {
+  const subjectKind = input.subjectKind ?? 'agent_chat';
+  const workerVersionId = input.workerVersionId ?? null;
   return Object.freeze({
     ...input,
-    bootstrapDigest: computeRuntimeBootstrapDigest(input),
+    subjectKind,
+    workerVersionId,
+    bootstrapDigest: computeRuntimeBootstrapDigest({
+      ...input,
+      subjectKind,
+      workerVersionId,
+    }),
   });
 }
 

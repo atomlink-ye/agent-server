@@ -16,7 +16,9 @@ export function sameDesiredRuntimeSpec(
 ): boolean {
   return (
     left.workspaceId === right.workspaceId &&
+    left.subjectKind === right.subjectKind &&
     left.agentVersionId === right.agentVersionId &&
+    left.workerVersionId === right.workerVersionId &&
     left.environmentVersionId === right.environmentVersionId &&
     sameSkills(left.resolvedSkills, right.resolvedSkills) &&
     sameStrings(left.toolRefs, right.toolRefs) &&
@@ -63,8 +65,8 @@ export function compareRuntimeSpecs(
     },
     {
       field: 'agent_version',
-      applied: applied.agentVersionId,
-      desired: desired.agentVersionId,
+      applied: applied.agentVersionId ?? applied.workerVersionId,
+      desired: desired.agentVersionId ?? desired.workerVersionId,
       mutable: false,
     },
     {

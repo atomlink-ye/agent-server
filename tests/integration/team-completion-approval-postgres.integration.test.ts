@@ -166,7 +166,7 @@ async function seedCompletionApprovalFixture(database: PGlite): Promise<void> {
 
   await database.query(
     `INSERT INTO team_member_runs(
-      id,team_run_id,name,role,agent_version_id,status,tenant_id,workspace_id,
+      id,team_run_id,name,role,worker_version_id,status,tenant_id,workspace_id,
       principal_type,principal_id,created_at,updated_at
     ) VALUES
       ($1::uuid,$3::uuid,'reviewer','member',$5::uuid,'active',$7::text,$8::text,$9::text,$10::text,$11::timestamptz,$11::timestamptz),
@@ -188,7 +188,7 @@ async function seedCompletionApprovalFixture(database: PGlite): Promise<void> {
 
   await database.query(
     `INSERT INTO team_member_runs(
-      id,team_run_id,name,role,agent_version_id,status,tenant_id,workspace_id,
+      id,team_run_id,name,role,worker_version_id,status,tenant_id,workspace_id,
       principal_type,principal_id,created_at,updated_at
     ) VALUES ($1,$2,'fixture-lead','lead',$3,'active',$4,$5,$6,$7,$8,$8)`,
     [
@@ -295,7 +295,7 @@ async function seedActiveLeadSource(database: PGlite): Promise<void> {
   const timestamp = '2026-08-08T00:00:00.000Z';
   await database.query(
     `INSERT INTO team_member_runs(
-      id,team_run_id,name,role,agent_version_id,status,tenant_id,workspace_id,
+      id,team_run_id,name,role,worker_version_id,status,tenant_id,workspace_id,
       principal_type,principal_id,created_at,updated_at
     ) VALUES ($1,$2,'active-lead','lead',$3,'active',$4,$5,$6,$7,$8,$8)`,
     [

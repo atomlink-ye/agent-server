@@ -95,7 +95,7 @@ function parseLock(source: string): AgentProjectLock {
     'toolProfiles',
     'skills',
     'environments',
-    'agents',
+    'workers',
     'teams',
     'memoryStores',
     'entrypoints',
@@ -106,7 +106,7 @@ function parseLock(source: string): AgentProjectLock {
     exact(object(item), ['ref', 'sourceFingerprint', 'tools']);
   for (const item of array(lock.skills))
     exact(object(item), ['ref', 'catalogRef', 'digest', 'requiredTools']);
-  for (const section of ['environments', 'agents', 'teams'])
+  for (const section of ['environments', 'workers', 'teams'])
     for (const item of array(lock[section]))
       exact(object(item), [
         'ref',
@@ -196,17 +196,17 @@ function validateLock(lock: Record<string, unknown>): void {
   }
   sortedBy(array(lock.skills), 'ref');
   unique(array(lock.skills).map((x) => string(object(x).ref)));
-  for (const section of ['environments', 'agents', 'teams'] as const)
+  for (const section of ['environments', 'workers', 'teams'] as const)
     sortedBy(array(lock[section]), 'ref');
-  for (const section of ['environments', 'agents', 'teams'] as const)
+  for (const section of ['environments', 'workers', 'teams'] as const)
     for (const item of array(lock[section])) {
       const x = object(item);
       logical(
         x.ref,
         section === 'environments'
           ? 'environment'
-          : section === 'agents'
-            ? 'agent'
+          : section === 'workers'
+            ? 'worker'
             : 'team',
       );
       fingerprint(x.sourceFingerprint);
@@ -215,7 +215,7 @@ function validateLock(lock: Record<string, unknown>): void {
       uuid(x.versionId);
     }
   unique(array(lock.environments).map((x) => string(object(x).ref)));
-  unique(array(lock.agents).map((x) => string(object(x).ref)));
+  unique(array(lock.workers).map((x) => string(object(x).ref)));
   unique(array(lock.teams).map((x) => string(object(x).ref)));
   sortedBy(array(lock.memoryStores), 'ref');
   for (const item of array(lock.memoryStores)) {

@@ -372,8 +372,8 @@ function compatibilityTeamResolution(
         Object.freeze({
           logicalName: version.spec.lead.name,
           role: 'lead' as const,
-          agentVersionId: version.spec.lead.agentVersionId,
-          agentFingerprint: null,
+          workerVersionId: version.spec.lead.workerVersionId,
+          workerFingerprint: null,
           toolRefs: Object.freeze([] as string[]),
           skills: Object.freeze([]),
         }),
@@ -381,8 +381,8 @@ function compatibilityTeamResolution(
           Object.freeze({
             logicalName: member.name,
             role: 'member' as const,
-            agentVersionId: member.agentVersionId,
-            agentFingerprint: null,
+            workerVersionId: member.workerVersionId,
+            workerFingerprint: null,
             toolRefs: Object.freeze([] as string[]),
             skills: Object.freeze([]),
           }),

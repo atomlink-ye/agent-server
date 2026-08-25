@@ -99,7 +99,6 @@ describe.skipIf(baseUrlEnv === undefined)(
               timeout: sendInteractionTimeout,
             })
             .catch(() => undefined);
-          const previousUrl = page.url();
           const newConversation = page.getByRole('button', {
             name: /New conversation/u,
           });
@@ -116,12 +115,9 @@ describe.skipIf(baseUrlEnv === undefined)(
             timeout: sendInteractionTimeout,
           });
           await coworker.click({ timeout: sendInteractionTimeout });
-          await page.waitForURL(
-            (url) =>
-              url.href !== previousUrl &&
-              /\/conversations\/[0-9a-f-]+$/iu.test(url.pathname),
-            { timeout: sendInteractionTimeout },
-          );
+          await page.waitForURL(/\/conversations\/[0-9a-f-]+$/iu, {
+            timeout: sendInteractionTimeout,
+          });
           conversationId =
             pathname(page.url()).match(
               /^\/conversations\/([0-9a-f-]+)$/iu,

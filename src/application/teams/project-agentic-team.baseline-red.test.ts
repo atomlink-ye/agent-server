@@ -29,7 +29,7 @@ describe('ProjectAgenticTeam baseline RED coverage', () => {
       teamRunId: team.id,
       name: 'lead',
       role: 'lead',
-      agentVersionId: 'strategy-version-provider',
+      workerVersionId: 'strategy-version-provider',
       ...owner,
       now,
     });
@@ -40,7 +40,7 @@ describe('ProjectAgenticTeam baseline RED coverage', () => {
       rootTaskId: team.rootTaskId,
       parentTaskId: team.rootTaskId,
       parentRunId: team.rootRunId,
-      invokableKind: 'agent',
+      invokableKind: 'worker',
       invokableVersionId: 'strategy-version-provider',
       inputSnapshotRef: 'snapshot-provider',
       inputFingerprint: 'fingerprint-provider',

@@ -3,6 +3,7 @@ import type { WorkOwnerScope } from './work.js';
 export type ResourceKind =
   | 'definition'
   | 'agent'
+  | 'worker'
   | 'environment'
   | 'memory'
   | 'skill'

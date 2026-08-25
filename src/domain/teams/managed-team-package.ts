@@ -26,12 +26,12 @@ export interface ManagedTeamSpec {
 
 export interface LeadSpec {
   readonly name: string;
-  readonly agentVersionId: string;
+  readonly workerVersionId: string;
 }
 
 export interface RosterMemberSpec {
   readonly name: string;
-  readonly agentVersionId: string;
+  readonly workerVersionId: string;
 }
 
 export interface CoordinationSpec {
@@ -178,16 +178,16 @@ export function validateAndCanonicalizeTeamPackage(source: string): {
     );
   }
   if (
-    typeof lead.agentVersionId !== 'string' ||
-    !UUID_RE.test(lead.agentVersionId)
+    typeof lead.workerVersionId !== 'string' ||
+    !UUID_RE.test(lead.workerVersionId)
   ) {
     throw new TeamPackageValidationError(
       'invalid_lead',
-      'spec.lead.agentVersionId must be a valid UUID.',
+      'spec.lead.workerVersionId must be a valid UUID.',
     );
   }
   for (const key of Object.keys(lead)) {
-    if (!['name', 'agentVersionId'].includes(key)) {
+    if (!['name', 'workerVersionId'].includes(key)) {
       throw new TeamPackageValidationError(
         'unknown_field',
         `Unknown lead field: ${key}`,
@@ -221,16 +221,16 @@ export function validateAndCanonicalizeTeamPackage(source: string): {
       );
     }
     if (
-      typeof m.agentVersionId !== 'string' ||
-      !UUID_RE.test(m.agentVersionId)
+      typeof m.workerVersionId !== 'string' ||
+      !UUID_RE.test(m.workerVersionId)
     ) {
       throw new TeamPackageValidationError(
         'invalid_roster',
-        'Each roster member requires a valid agentVersionId UUID.',
+        'Each roster member requires a valid workerVersionId UUID.',
       );
     }
     for (const key of Object.keys(m)) {
-      if (!['name', 'agentVersionId'].includes(key)) {
+      if (!['name', 'workerVersionId'].includes(key)) {
         throw new TeamPackageValidationError(
           'unknown_field',
           `Unknown roster member field: ${key}`,
@@ -245,7 +245,10 @@ export function validateAndCanonicalizeTeamPackage(source: string): {
       );
     }
     names.add(memberName);
-    rosterMembers.push({ name: memberName, agentVersionId: m.agentVersionId });
+    rosterMembers.push({
+      name: memberName,
+      workerVersionId: m.workerVersionId,
+    });
   }
 
   const coordination = spec.coordination as Record<string, unknown> | undefined;
@@ -278,7 +281,7 @@ export function validateAndCanonicalizeTeamPackage(source: string): {
       environmentVersionId: spec.environmentVersionId as string,
       lead: {
         name: leadName,
-        agentVersionId: lead.agentVersionId as string,
+        workerVersionId: lead.workerVersionId as string,
       },
       roster: rosterMembers,
       coordination: {

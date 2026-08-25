@@ -39,7 +39,7 @@ export const WorkDefinitionParticipantPlanSchema = z
     name: z.string().min(1),
     role: z.enum(['primary', 'lead', 'member']),
     source: z.enum(['referenced', 'inline']),
-    agent_version_id: z.uuid().nullable(),
+    worker_version_id: z.uuid().nullable(),
     skills: z.array(z.string()),
     tools: z.array(z.string()),
   })
@@ -52,7 +52,7 @@ export const WorkDefinitionPlanResponseSchema = z
     metadata: z.object({ normalized_name: z.string().min(1) }).strict(),
     resolved: z
       .object({
-        kind: z.enum(['single_agent', 'collaboration']),
+        kind: z.enum(['single_worker', 'collaboration']),
         participants: z.array(WorkDefinitionParticipantPlanSchema).min(1),
         environment: z
           .object({
@@ -65,7 +65,7 @@ export const WorkDefinitionPlanResponseSchema = z
         platform_capabilities: z.array(z.string()),
         materialization: z
           .object({
-            inline_agents: z.number().int().nonnegative(),
+            inline_workers: z.number().int().nonnegative(),
             inline_environment: z.boolean(),
             internal_team: z.boolean(),
           })

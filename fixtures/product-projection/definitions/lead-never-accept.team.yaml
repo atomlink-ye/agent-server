@@ -9,11 +9,11 @@ spec:
   environmentVersionId: 00000000-0000-0000-0000-000000000000
   lead:
     name: projection-lead
-    agentVersionId: 00000000-0000-0000-0000-000000000000
+    workerVersionId: 00000000-0000-0000-0000-000000000000
   roster:
     - name: projection-worker
-      agentVersionId: 00000000-0000-0000-0000-000000000000
+      workerVersionId: 00000000-0000-0000-0000-000000000000
     - name: projection-observer
-      agentVersionId: 00000000-0000-0000-0000-000000000000
+      workerVersionId: 00000000-0000-0000-0000-000000000000
   coordination:
     taskAssignment: lead_or_self_claim

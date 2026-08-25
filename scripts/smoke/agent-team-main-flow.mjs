@@ -3,8 +3,8 @@
 // direct message completes a round trip and materializes a participant turn,
 // and the member invokes the fixed synthetic stock tool once.
 //
-// It does not prove Agent autonomous, flexible collaboration. The fixture
-// instructions are still a literal script, so green means the Agent followed
+// It does not prove Worker autonomous, flexible collaboration. The fixture
+// instructions are still a literal script, so green means the Worker followed
 // that script and the pipeline worked. Reading this green result as proof that
 // “C capability is established” is incorrect.
 import { createHash, randomUUID } from 'node:crypto';
@@ -24,7 +24,7 @@ const token = process.env.AGENT_SERVER_SERVICE_TOKEN?.trim();
 const workspaceId =
   process.env.AGENT_SERVER_WORKSPACE_ID?.trim() ??
   '00000000-0000-4000-8000-000000000001';
-const timeoutMs = Number(process.env.AGENT_TEAM_SMOKE_TIMEOUT_MS ?? 300_000);
+const timeoutMs = Number(process.env.AGENT_TEAM_SMOKE_TIMEOUT_MS ?? 420_000);
 const startedAt = Date.now();
 const progressIntervalMs = 5_000;
 const { Pool } = pg;
@@ -56,7 +56,7 @@ function fingerprint(source) {
 function progress(stage, details = {}) {
   process.stdout.write(
     `${JSON.stringify({
-      event: 'agent_team_smoke_progress',
+      event: 'worker_team_smoke_progress',
       at: new Date().toISOString(),
       elapsed_ms: Date.now() - startedAt,
       stage,
@@ -189,13 +189,13 @@ async function importAndPublish(source, importPath, publishPath) {
   return published.id ?? imported.version.id;
 }
 
-function agentYaml(name, instructions, refs) {
+function workerYaml(name, instructions, refs) {
   const tools = refs.length
     ? `tools:\n${refs
         .map((ref) => `    - ref: agent-server/${ref}\n      kind: tool`)
         .join('\n')}`
     : 'tools: []';
-  return `apiVersion: agent-server/v1alpha1\nkind: ManagedAgent\nmetadata:\n  name: ${name}\nspec:\n  description: Canonical Agent Team smoke role\n  instructions: ${JSON.stringify(instructions)}\n  runtime:\n    provider: paseo\n    modelPolicyRef: free-only\n    mode: isolated\n  ${tools}\n  skills: []\n  input:\n    schema:\n      type: object\n      properties: {}\n      additionalProperties: false\n    prompt: "Execute exactly the next legal Team transition for your role."\n  session:\n    invocation: fresh_per_invocation\n    followUps: queued\n    binding: reusable\n  memory:\n    policy: workspace_snapshot\n    proposalLimit: 0\n  permissions:\n    network: read_only\n    filesystem: workspace_read\n  completion:\n    type: executable\n    command: "done"\n`;
+  return `apiVersion: agent-server/v1alpha1\nkind: Worker\nmetadata:\n  name: ${name}\nspec:\n  description: Canonical Worker Team smoke role\n  instructions: ${JSON.stringify(instructions)}\n  runtime:\n    provider: paseo\n    modelPolicyRef: free-only\n    mode: isolated\n  ${tools}\n  skills: []\n  input:\n    schema:\n      type: object\n      properties: {}\n      additionalProperties: false\n    prompt: "Execute exactly the next legal Team transition for your role."\n  session:\n    invocation: fresh_per_invocation\n    followUps: queued\n    binding: reusable\n  memory:\n    policy: workspace_snapshot\n    proposalLimit: 0\n  permissions:\n    network: read_only\n    filesystem: workspace_read\n  completion:\n    type: executable\n    command: "done"\n`;
 }
 
 const leadInstructions =
@@ -203,20 +203,23 @@ const leadInstructions =
 const memberInstructions =
   'Act as the member using only the canonical collaboration tools plus the registered synthetic stock tool. On the work-availability delivery, read collaboration_state, board_list, and inbox_list, then call board_claim exactly once for W-1 and stop. On the resulting work-attempt turn, call synthetic_stock_snapshot exactly once with fixture_ref "fixture://self-learning-market-research/acme-v1" and symbol "ACME", then call message_send exactly once to lead with body "AGENT_TEAM_SMOKE_DIRECT_REQUIRES_ACK", about_work_ref W-1, and requires_ack true, then call board_submit exactly once with summary "AGENT_TEAM_SMOKE_MEMBER_OK" as the final mutation; perform these actions in this order and stop. Never create Work, request changes, accept Work, finish the collaboration, claim W-1 twice, use provider subagents, or substitute prose for a required collaboration mutation.';
 
-const leadVersion = await importAndPublish(
-  agentYaml('smoke-lead', leadInstructions, []),
-  '/api/v1/agents:import',
-  (id) => `/api/v1/agent-versions/${id}:publish`,
+const leadWorkerVersion = await importAndPublish(
+  workerYaml('smoke-lead', leadInstructions, []),
+  '/api/v1/workers:import',
+  (id) => `/api/v1/worker-versions/${id}:publish`,
 );
-progress('agent_version_published', { role: 'lead', version_id: leadVersion });
-const memberVersion = await importAndPublish(
-  agentYaml('smoke-member', memberInstructions, ['synthetic-stock-snapshot']),
-  '/api/v1/agents:import',
-  (id) => `/api/v1/agent-versions/${id}:publish`,
+progress('worker_version_published', {
+  role: 'lead',
+  worker_version_id: leadWorkerVersion,
+});
+const memberWorkerVersion = await importAndPublish(
+  workerYaml('smoke-member', memberInstructions, ['synthetic-stock-snapshot']),
+  '/api/v1/workers:import',
+  (id) => `/api/v1/worker-versions/${id}:publish`,
 );
-progress('agent_version_published', {
+progress('worker_version_published', {
   role: 'member',
-  version_id: memberVersion,
+  worker_version_id: memberWorkerVersion,
 });
 const environmentVersion = await importAndPublish(
   `apiVersion: agent-server/v1alpha1\nkind: ManagedEnvironment\nmetadata:\n  name: agent-team-smoke\nspec:\n  adapter: paseo\n  provider: opencode\n  modelPolicyRef: free-only\n  runtimeCellPolicy: per_runtime_session\n`,
@@ -228,7 +231,7 @@ const importedTeam = await request('/api/v1/teams:import', {
   method: 'POST',
   status: 201,
   body: {
-    source: `apiVersion: agent-server/v1alpha1\nkind: ManagedTeam\nmetadata:\n  name: agent-team-smoke\nspec:\n  environmentVersionId: ${environmentVersion}\n  lead:\n    name: lead\n    agentVersionId: ${leadVersion}\n  roster:\n    - name: member\n      agentVersionId: ${memberVersion}\n  coordination:\n    taskAssignment: lead_or_self_claim\n`,
+    source: `apiVersion: agent-server/v1alpha1\nkind: ManagedTeam\nmetadata:\n  name: agent-team-smoke\nspec:\n  environmentVersionId: ${environmentVersion}\n  lead:\n    name: lead\n    workerVersionId: ${leadWorkerVersion}\n  roster:\n    - name: member\n      workerVersionId: ${memberWorkerVersion}\n  coordination:\n    taskAssignment: lead_or_self_claim\n`,
   },
 });
 const teamVersion = await request(
@@ -455,7 +458,7 @@ for (const runId of runIds) {
     if (typeof value !== 'number' || !Number.isFinite(value)) continue;
     const total = (usage[field] ?? 0) + value;
     if (!Number.isFinite(total)) {
-      throw new Error(`agent team smoke usage is not finite: ${field}`);
+      throw new Error(`worker team smoke usage is not finite: ${field}`);
     }
     usage[field] = total;
   }
@@ -472,7 +475,7 @@ if (
   )
 ) {
   throw new Error(
-    `agent team smoke did not report expected real-provider usage: ${JSON.stringify({ usage, runtime_models: [...runtimeModels] })}`,
+    `worker team smoke did not report expected real-provider usage: ${JSON.stringify({ usage, runtime_models: [...runtimeModels] })}`,
   );
 }
 const trace = await request(`/api/v1/works/${workId}/runs/${workRunId}/trace`);
@@ -509,8 +512,8 @@ const manifestHas = (kind, value) =>
   );
 if (
   !manifestHas('definition', definitionVersionId) ||
-  !manifestHas('agent', leadVersion) ||
-  !manifestHas('agent', memberVersion) ||
+  !manifestHas('worker', leadWorkerVersion) ||
+  !manifestHas('worker', memberWorkerVersion) ||
   !manifestHas('environment', environmentVersion) ||
   !manifestHas('platform_capability', 'collaboration') ||
   !manifestHas('platform_capability', 'platform_mcp')
@@ -524,7 +527,7 @@ const outputs = projection.sessions.flatMap((session) =>
     }))
     .filter((output) => output.text !== undefined),
 );
-progress('agent_outputs', { outputs });
+progress('worker_outputs', { outputs });
 progress('completed', {
   work_id: workId,
   work_run_id: workRunId,

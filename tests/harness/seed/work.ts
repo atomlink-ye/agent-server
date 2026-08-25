@@ -14,7 +14,7 @@ export async function seedPublishedWorkDefinition(
   db: SeedDatabase,
   owner: HarnessOwner,
   options: {
-    readonly agentVersionId: string;
+    readonly workerVersionId: string;
     readonly environmentVersionId: string;
     readonly agentDefinitionId?: string;
     readonly definitionId?: string;
@@ -53,8 +53,8 @@ export async function seedPublishedWorkDefinition(
     ? `    properties:\n      ${options.inputField}:\n        type: string\n    required: [${options.inputField}]\n    additional_properties: false`
     : `    properties:\n      query:\n        type: string\n      feedback:\n        type: string\n    required: []\n    additional_properties: false`;
   const source: WorkDefinitionCompositionSource = {
-    kind: 'single_agent',
-    agentVersionId: options.agentVersionId,
+    kind: 'single_worker',
+    workerVersionId: options.workerVersionId,
     environmentVersionId: options.environmentVersionId,
     memoryVersionIds: [],
     inputSchema,
@@ -66,8 +66,8 @@ metadata:
   name: ${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}
   description: ${name}
 spec:
-  kind: single_agent
-  agent_version_id: ${options.agentVersionId}
+  kind: single_worker
+  worker_version_id: ${options.workerVersionId}
   environment_version_id: ${options.environmentVersionId}
   input_schema:
     type: object
@@ -94,6 +94,7 @@ ${inputSchemaYaml}
       workspaceId: owner.workspaceId,
       agentDefinitionId: options.agentDefinitionId,
       definitionId,
+      definitionVersionId: versionId,
       now,
     });
   }

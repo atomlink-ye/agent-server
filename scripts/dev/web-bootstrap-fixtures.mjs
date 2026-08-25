@@ -70,20 +70,25 @@ function mixedTeamInstructions(name) {
   return `Act directly as the assigned reviewer using canonical Team tools plus the available workspace terminal. Do not create or mutate another Work and do not use provider subagents. Starting from the current working directory, walk parent directories until package.json has name @atomlink-ye/agent-server; never use version-control commands or print an absolute path. Then read and run repo-root relative mixed_team_rework.v1.py (the preserved first attempt) with --text ''. Genuinely verify the declared tokens[0] defect produces an IndexError, and use board_submit to submit a completed result containing marker REVIEW_REJECT and exact blocking reason: "empty input is mishandled: the utility indexes the first token instead of returning an empty result." Include the relative path and safe run observation. Do not edit either file, do not accept Work, never send messages, and stop after one submit.`;
 }
 
-export function mixedTeamAgentYaml(name) {
+export function mixedTeamWorkerYaml(name) {
   // Team collaboration is composed by the runtime, not declared by the author:
   // agent-run-executor strips collaboration refs out of a member's declared
   // tools, and SUPPORTED_MANAGED_AGENT_TOOL_REFS deliberately excludes them.
-  // Declaring them here produced Agents that published successfully and then
+  // Declaring them here produced Workers that published successfully and then
   // failed to resolve in Chat.
   const refs = [];
-  return `apiVersion: agent-server/v1alpha1\nkind: ManagedAgent\nmetadata:\n  name: ${name}\nspec:\n  description: Mixed-provider TeamRun proof role\n  instructions: ${JSON.stringify(mixedTeamInstructions(name))}\n  runtime:\n    provider: paseo\n    modelPolicyRef: ${mixedTeamModelPolicies[name]}\n    mode: isolated\n  tools:${refs.length ? `\n${refs.map((ref) => `    - ref: agent-server/${ref}\n      kind: tool`).join('\n')}` : ' []'}\n  skills: []\n  input:\n    schema:\n      type: object\n      properties: {}\n      additionalProperties: false\n    prompt: "Execute exactly the next legal Team transition for your role."\n  session:\n    invocation: fresh_per_invocation\n    followUps: queued\n    binding: reusable\n  memory:\n    policy: workspace_snapshot\n    proposalLimit: 0\n  permissions:\n    network: read_only\n    filesystem: workspace_read\n  completion:\n    type: executable\n    command: "done"\n`;
+  return `apiVersion: agent-server/v1alpha1\nkind: Worker\nmetadata:\n  name: ${name}\nspec:\n  description: Mixed-provider TeamRun proof role\n  instructions: ${JSON.stringify(mixedTeamInstructions(name))}\n  runtime:\n    provider: paseo\n    modelPolicyRef: ${mixedTeamModelPolicies[name]}\n    mode: isolated\n  tools:${refs.length ? `\n${refs.map((ref) => `    - ref: agent-server/${ref}\n      kind: tool`).join('\n')}` : ' []'}\n  skills: []\n  input:\n    schema:\n      type: object\n      properties: {}\n      additionalProperties: false\n    prompt: "Execute exactly the next legal Team transition for your role."\n  session:\n    invocation: fresh_per_invocation\n    followUps: queued\n    binding: reusable\n  memory:\n    policy: workspace_snapshot\n    proposalLimit: 0\n  permissions:\n    network: read_only\n    filesystem: workspace_read\n  completion:\n    type: executable\n    command: "done"\n`;
 }
 
 export function mixedTeamEnvironmentYaml() {
   return `apiVersion: agent-server/v1alpha1\nkind: ManagedEnvironment\nmetadata:\n  name: mixed-provider-proof\nspec:\n  adapter: paseo\n  provider: opencode\n  modelPolicyRef: free-only\n  runtimeCellPolicy: per_runtime_session\n`;
 }
 
-export function mixedTeamYaml(lead, fixer, reviewer, environment) {
-  return `apiVersion: agent-server/v1alpha1\nkind: ManagedTeam\nmetadata:\n  name: mixed-provider-proof-team\nspec:\n  environmentVersionId: ${environment}\n  lead:\n    name: lead\n    agentVersionId: ${lead}\n  roster:\n    - name: fixer\n      agentVersionId: ${fixer}\n    - name: reviewer\n      agentVersionId: ${reviewer}\n  coordination:\n    taskAssignment: lead_or_self_claim\n`;
+export function mixedTeamYaml(
+  leadWorkerVersionId,
+  fixerWorkerVersionId,
+  reviewerWorkerVersionId,
+  environment,
+) {
+  return `apiVersion: agent-server/v1alpha1\nkind: ManagedTeam\nmetadata:\n  name: mixed-provider-proof-team\nspec:\n  environmentVersionId: ${environment}\n  lead:\n    name: lead\n    workerVersionId: ${leadWorkerVersionId}\n  roster:\n    - name: fixer\n      workerVersionId: ${fixerWorkerVersionId}\n    - name: reviewer\n      workerVersionId: ${reviewerWorkerVersionId}\n  coordination:\n    taskAssignment: lead_or_self_claim\n`;
 }

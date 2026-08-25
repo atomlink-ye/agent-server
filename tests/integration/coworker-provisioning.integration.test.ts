@@ -26,6 +26,85 @@ afterEach(async () => {
 });
 
 describe('Cumora-style Coworker lifecycle provisioning', () => {
+  it('keeps a migrated Work-internal Agent out of the Coworker roster', async () => {
+    database = new PGlite();
+    await applyDurableKernelMigrations(database);
+    const legacyDefinitionId = '83000000-0000-4000-8000-000000000001';
+    const legacyVersionId = '84000000-0000-4000-8000-000000000001';
+    await database.query(
+      `INSERT INTO agent_definitions
+       (id,tenant_id,workspace_id,principal_type,principal_id,name,managed_discriminator,normalized_name,created_at,updated_at)
+       VALUES($1,$2,$3,'service_account',$4,'Legacy Work Worker','managed_agent_v1','legacy-work-worker',$5,$5)`,
+      [
+        legacyDefinitionId,
+        tenantId,
+        workspaceId,
+        ownerPrincipalId,
+        now().toISOString(),
+      ],
+    );
+    await database.query(
+      `INSERT INTO agent_versions
+       (id,definition_id,tenant_id,workspace_id,principal_type,principal_id,status,name,instructions,managed_discriminator,canonical_package,fingerprint,pattern_metadata,compiler_metadata,policy_snapshot,reference_snapshot,tool_skill_snapshot,validation_report,compiled_package,execution_snapshot,created_at,updated_at,published_at)
+       VALUES($1,$2,$3,$4,'service_account',$5,'published','Legacy Work Worker','execute','managed_agent_v1','{"kind":"ManagedAgent","spec":{"tools":[],"skills":[],"runtime":{"modelPolicyRef":"free-only"}}}',$6,'{}','{}','{}','{}','{}','{}','{}','{}',$7,$7,$7)`,
+      [
+        legacyVersionId,
+        legacyDefinitionId,
+        tenantId,
+        workspaceId,
+        ownerPrincipalId,
+        'a'.repeat(64),
+        now().toISOString(),
+      ],
+    );
+    await database.query(
+      `INSERT INTO worker_definitions (id,tenant_id,workspace_id,principal_type,principal_id,name,normalized_name,description,created_at,updated_at)
+       VALUES($1,$2,$3,'service_account',$4,'Legacy Work Worker','legacy-work-worker',NULL,$5,$5)
+       ON CONFLICT DO NOTHING`,
+      [
+        legacyDefinitionId,
+        tenantId,
+        workspaceId,
+        ownerPrincipalId,
+        now().toISOString(),
+      ],
+    );
+    await database.query(
+      `INSERT INTO worker_versions (id,definition_id,tenant_id,workspace_id,principal_type,principal_id,status,name,description,instructions,canonical_package,fingerprint,compiler_metadata,created_at,updated_at,published_at)
+       VALUES($1,$2,$3,$4,'service_account',$5,'published','Legacy Work Worker',NULL,'execute','{"kind":"Worker","spec":{"tools":[],"skills":[],"runtime":{"modelPolicyRef":"free-only"}}}',$6,'{}',$7,$7,$7)
+       ON CONFLICT DO NOTHING`,
+      [
+        legacyVersionId,
+        legacyDefinitionId,
+        tenantId,
+        workspaceId,
+        ownerPrincipalId,
+        'a'.repeat(64),
+        now().toISOString(),
+      ],
+    );
+    await database.query(
+      `INSERT INTO agent_chat_runtimes
+       (tenant_id,agent_definition_id,active_agent_version_id,epoch,status,created_at,updated_at)
+       VALUES($1,$2,$3,1,'available',$4,$4)`,
+      [tenantId, legacyDefinitionId, legacyVersionId, now().toISOString()],
+    );
+    await database.query(
+      `INSERT INTO agent_identity_classes
+       (tenant_id,agent_definition_id,identity_class,created_at,updated_at)
+       VALUES($1,$2,'legacy_work_internal',$3,$3)
+       ON CONFLICT (tenant_id,agent_definition_id) DO UPDATE
+         SET identity_class='legacy_work_internal',updated_at=EXCLUDED.updated_at`,
+      [tenantId, legacyDefinitionId, now().toISOString()],
+    );
+    const registry = new PostgresAgentRegistry(database);
+    const roster = await registry.listManagedDefinitionsByTenant({
+      tenantId,
+      command: { cursor: null, limit: 20 },
+    });
+    expect(roster.items).toEqual([]);
+  });
+
   it('lists published Coworkers, reuses the Direct Chat, and auto-binds Work only for the unambiguous owner', async () => {
     database = new PGlite();
     await applyDurableKernelMigrations(database);

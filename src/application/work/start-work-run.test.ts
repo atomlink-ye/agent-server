@@ -21,7 +21,7 @@ const now = '2026-08-16T00:00:00.000Z';
 const definitionVersionId = '22222222-2222-4222-8222-222222222222';
 
 function resolved(
-  kind: 'single_agent' | 'collaboration',
+  kind: 'single_worker' | 'collaboration',
 ): ResolvedWorkDefinition {
   const collaboration = kind === 'collaboration';
   return {
@@ -36,8 +36,8 @@ function resolved(
       {
         logicalName: collaboration ? 'lead' : 'primary',
         role: collaboration ? 'lead' : 'primary',
-        agentVersionId: '44444444-4444-4444-8444-444444444444',
-        agentFingerprint: 'sha256:agent',
+        workerVersionId: '44444444-4444-4444-8444-444444444444',
+        workerFingerprint: 'sha256:worker',
         toolRefs: [],
         skills: [],
       },
@@ -54,7 +54,7 @@ function resolved(
       : [],
     executionPolicy: {
       invokable: {
-        kind: collaboration ? 'team' : 'agent',
+        kind: collaboration ? 'team' : 'worker',
         versionId: definitionVersionId,
       },
       requiredRuntimeCapabilities: collaboration
@@ -105,9 +105,9 @@ function fakeIdentity(definition: ResolvedWorkDefinition) {
 }
 
 describe('StartWorkRun composition admission', () => {
-  it('dispatches a single-Agent Work through the Agent invokable and pins its manifest', async () => {
+  it('dispatches a single-Worker Work through the Worker invokable and pins its manifest', async () => {
     const { identity, recordResolvedManifest } = fakeIdentity(
-      resolved('single_agent'),
+      resolved('single_worker'),
     );
     const admitRoot = vi.fn(async () => ({
       taskId: '88888888-8888-4888-8888-888888888888',
@@ -129,7 +129,7 @@ describe('StartWorkRun composition admission', () => {
 
     expect(admitRoot).toHaveBeenCalledWith(
       expect.objectContaining({
-        invokable: { kind: 'agent', versionId: definitionVersionId },
+        invokable: { kind: 'worker', versionId: definitionVersionId },
       }),
     );
     expect(result.workRun.rootTaskId).toBe(
@@ -139,7 +139,7 @@ describe('StartWorkRun composition admission', () => {
       expect.objectContaining({
         entries: expect.arrayContaining([
           expect.objectContaining({ resourceKind: 'definition' }),
-          expect.objectContaining({ resourceKind: 'agent' }),
+          expect.objectContaining({ resourceKind: 'worker' }),
         ]),
       }),
     );

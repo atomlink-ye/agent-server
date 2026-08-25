@@ -309,24 +309,10 @@ export class PostgresAgentRegistry implements AgentRegistry {
          FROM agent_definitions d
          JOIN agent_chat_runtimes r
            ON r.tenant_id=d.tenant_id AND r.agent_definition_id=d.id::text
+         JOIN agent_identity_classes c
+           ON c.tenant_id=d.tenant_id AND c.agent_definition_id=d.id
         WHERE d.tenant_id=$1 AND d.managed_discriminator='managed_agent_v1'
-          AND NOT EXISTS (
-            SELECT 1
-              FROM team_versions tv
-              JOIN agent_versions av
-                ON av.definition_id = d.id
-             WHERE tv.tenant_id = d.tenant_id
-               AND (
-                     tv.spec #>> '{lead,agentVersionId}' = av.id::text
-                  OR EXISTS (
-                       SELECT 1
-                         FROM jsonb_array_elements(
-                                coalesce(tv.spec -> 'roster', '[]'::jsonb)
-                              ) member
-                        WHERE member ->> 'agentVersionId' = av.id::text
-                     )
-                   )
-          )
+          AND c.identity_class='coworker'
           ${cursorSql}
         ORDER BY d.created_at ASC,d.id ASC LIMIT $2`,
       values,

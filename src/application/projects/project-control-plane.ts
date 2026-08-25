@@ -54,12 +54,12 @@ export interface ProjectControlPlane {
     versionId: string,
     idempotencyKey: string,
   ): Promise<PublishedResource>;
-  validateAgent(source: string): Promise<ValidationResult>;
-  importAgent(
+  validateWorker(source: string): Promise<ValidationResult>;
+  importWorker(
     source: string,
     idempotencyKey: string,
   ): Promise<PublishedResource>;
-  publishAgent(
+  publishWorker(
     versionId: string,
     idempotencyKey: string,
   ): Promise<PublishedResource>;

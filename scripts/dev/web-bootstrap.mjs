@@ -5,7 +5,7 @@ import { Pool } from 'pg';
 import {
   managedAgentYaml,
   managedEnvironmentYaml,
-  mixedTeamAgentYaml,
+  mixedTeamWorkerYaml,
   mixedTeamYaml,
 } from './web-bootstrap-fixtures.mjs';
 
@@ -86,12 +86,27 @@ export async function main() {
         // exactly like the "no cached id yet" case.
         recreate: () => '',
       });
+  let workerVersionId = '';
   if (!skipProductWork) {
+    workerVersionId = await resolveCachedId({
+      label: 'sample Worker version',
+      cachedId: env('WEB_WORKER_VERSION_ID'),
+      check: (id) => readPublished(`${baseUrl}/api/v1/worker-versions/${id}`),
+      recreate: () =>
+        bootstrapPublishedWorker(
+          `apiVersion: agent-server/v1alpha1\nkind: Worker\nmetadata:\n  name: web-bootstrap-work-worker\nspec:\n  description: Formal execution role for Web sample Work\n  instructions: Complete the requested Work safely.\n  runtime:\n    provider: paseo\n    modelPolicyRef: free-only\n    mode: isolated\n  tools: []\n  skills: []\n  input:\n    schema:\n      type: object\n      properties: {}\n      additionalProperties: false\n    prompt: Complete the Work.\n  session:\n    invocation: fresh_per_invocation\n    followUps: queued\n    binding: reusable\n  memory:\n    policy: workspace_snapshot\n    proposalLimit: 0\n  permissions:\n    network: read_only\n    filesystem: workspace_read\n  completion:\n    type: executable\n    command: done\n`,
+          'web-bootstrap-work-worker',
+        ),
+    });
     const { definitionId, definitionVersionId } = await bootstrapWorkDefinition(
-      agentVersionId,
+      workerVersionId,
       environmentVersionId,
     );
-    await bootstrapAgentWorkflowAssociation(agentVersionId, definitionId);
+    await bootstrapAgentWorkflowAssociation(
+      agentVersionId,
+      definitionId,
+      definitionVersionId,
+    );
     if (!sampleWorkId)
       sampleWorkId = await bootstrapWork(definitionId, definitionVersionId);
   }
@@ -102,6 +117,7 @@ export async function main() {
     [
       `AGENT_SERVER_BASE_URL=${baseUrl}`,
       `WEB_AGENT_VERSION_ID=${agentVersionId}`,
+      ...(skipProductWork ? [] : [`WEB_WORKER_VERSION_ID=${workerVersionId}`]),
       `WEB_ENVIRONMENT_VERSION_ID=${environmentVersionId}`,
       `WEB_AGENTIC_TEAM_VERSION_ID=${agenticTeamVersionId}`,
       `WEB_WORKSPACE_NAME=${quoteEnv(workspaceName)}`,
@@ -186,21 +202,48 @@ async function bootstrapPublishedAgent(source, key) {
   return versionId;
 }
 
+async function bootstrapPublishedWorker(source, key) {
+  await request(`${baseUrl}/api/v1/worker-packages:validate`, {
+    method: 'POST',
+    body: { source },
+  });
+  const imported = await request(`${baseUrl}/api/v1/workers:import`, {
+    method: 'POST',
+    idempotencyKey: `${key}-import-v1`,
+    body: { source },
+    expectedStatus: 201,
+  });
+  const versionId = imported.version?.id;
+  if (typeof versionId !== 'string')
+    fail(`Worker bootstrap returned no version for ${key}.`);
+  const published = await request(
+    `${baseUrl}/api/v1/worker-versions/${versionId}:publish`,
+    {
+      method: 'POST',
+      idempotencyKey: `${key}-publish-v1`,
+      body: {},
+    },
+  );
+  if (published.status !== 'published')
+    fail(`Worker publish did not complete for ${key}.`);
+  return versionId;
+}
+
 async function bootstrapMixedTeamVersion(environmentVersionId) {
-  const agents = {};
+  const workers = {};
   for (const name of ['lead', 'fixer', 'reviewer'])
-    agents[name] = await bootstrapPublishedAgent(
-      mixedTeamAgentYaml(name),
-      `web-chat-mixed-team-${name}`,
+    workers[name] = await bootstrapPublishedWorker(
+      mixedTeamWorkerYaml(name),
+      `web-chat-mixed-team-worker-${name}`,
     );
   const imported = await request(`${baseUrl}/api/v1/teams:import`, {
     method: 'POST',
-    idempotencyKey: 'web-chat-mixed-team-import-v1',
+    idempotencyKey: 'web-chat-mixed-team-worker-import-v1',
     body: {
       source: mixedTeamYaml(
-        agents.lead,
-        agents.fixer,
-        agents.reviewer,
+        workers.lead,
+        workers.fixer,
+        workers.reviewer,
         environmentVersionId,
       ),
     },
@@ -213,7 +256,7 @@ async function bootstrapMixedTeamVersion(environmentVersionId) {
     `${baseUrl}/api/v1/team-versions/${versionId}:publish`,
     {
       method: 'POST',
-      idempotencyKey: 'web-chat-mixed-team-publish-v1',
+      idempotencyKey: 'web-chat-mixed-team-worker-publish-v1',
       body: {},
     },
   );
@@ -256,14 +299,14 @@ async function bootstrapEnvironmentVersion() {
   return versionId;
 }
 
-async function bootstrapWorkDefinition(agentVersionId, environmentVersionId) {
+async function bootstrapWorkDefinition(workerVersionId, environmentVersionId) {
   const workDefinitionSource = `apiVersion: agentserver.dev/v1alpha1
 kind: WorkDefinition
 metadata:
-  name: web-bootstrap-single-agent
+  name: web-bootstrap-single-worker
 spec:
-  kind: single_agent
-  agent_version_id: ${agentVersionId}
+  kind: single_worker
+  worker_version_id: ${workerVersionId}
   environment_version_id: ${environmentVersionId}`;
 
   // Only the fetch itself (a network-level failure) belongs in this try/catch.
@@ -277,7 +320,7 @@ spec:
       headers: {
         authorization: `Bearer ${token}`,
         'content-type': 'application/json',
-        'idempotency-key': 'web-bootstrap-single-agent-work-tools-apply-v1',
+        'idempotency-key': 'web-bootstrap-single-worker-work-tools-apply-v1',
       },
       body: JSON.stringify({ source: workDefinitionSource }),
       signal: AbortSignal.timeout(15_000),
@@ -321,7 +364,11 @@ async function bootstrapWork(definitionId, definitionVersionId) {
   return workId;
 }
 
-async function bootstrapAgentWorkflowAssociation(agentVersionId, definitionId) {
+async function bootstrapAgentWorkflowAssociation(
+  agentVersionId,
+  definitionId,
+  definitionVersionId,
+) {
   const version = await readPublished(
     `${baseUrl}/api/v1/agent-versions/${agentVersionId}`,
   );
@@ -339,24 +386,35 @@ async function bootstrapAgentWorkflowAssociation(agentVersionId, definitionId) {
   const pool = new Pool({ connectionString: databaseUrl, max: 1 });
   try {
     const result = await pool.query(
-      `INSERT INTO agent_workflow_associations
-         (tenant_id,workspace_id,agent_definition_id,work_definition_id,created_at)
-       SELECT tenant_id,workspace_id,$1,id,now()
+      `INSERT INTO agent_work_bindings
+         (tenant_id,workspace_id,agent_definition_id,work_definition_id,active_work_definition_version_id,status,created_at,updated_at)
+       SELECT tenant_id,workspace_id,$1,id,$3,'enabled',now(),now()
          FROM work_definition_source_definitions
         WHERE id=$2
        ON CONFLICT (tenant_id,workspace_id,agent_definition_id,work_definition_id)
-       DO NOTHING`,
-      [agentDefinitionId, definitionId],
+       DO UPDATE SET active_work_definition_version_id=EXCLUDED.active_work_definition_version_id,status='enabled',updated_at=EXCLUDED.updated_at`,
+      [agentDefinitionId, definitionId, definitionVersionId],
     );
     if (result.rowCount === 0) {
       const existing = await pool.query(
-        `SELECT 1
-           FROM agent_workflow_associations
-          WHERE agent_definition_id=$1 AND work_definition_id=$2`,
+        `SELECT b.active_work_definition_version_id,b.status
+           FROM agent_work_bindings b
+           JOIN work_definition_source_definitions d
+             ON d.id=b.work_definition_id
+            AND d.tenant_id=b.tenant_id
+            AND d.workspace_id=b.workspace_id
+          WHERE b.agent_definition_id=$1 AND b.work_definition_id=$2`,
         [agentDefinitionId, definitionId],
       );
-      if (existing.rowCount !== 1)
-        fail('Agent workflow association bootstrap did not persist.');
+      const binding = existing.rows[0];
+      if (
+        existing.rowCount !== 1 ||
+        binding.active_work_definition_version_id !== definitionVersionId ||
+        binding.status !== 'enabled'
+      )
+        fail(
+          'Agent Work binding bootstrap did not persist the requested version.',
+        );
     }
   } finally {
     await pool.end();

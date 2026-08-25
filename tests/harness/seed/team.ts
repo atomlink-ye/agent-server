@@ -10,7 +10,7 @@ export async function seedPublishedTeamVersion(
     readonly definitionId?: string;
     readonly versionId?: string;
     readonly environmentVersionId: string;
-    readonly agentVersionId: string;
+    readonly workerVersionId: string;
     readonly name?: string;
     readonly now?: string;
   },
@@ -49,8 +49,10 @@ export async function seedPublishedTeamVersion(
       owner.principalId,
       name,
       JSON.stringify({
-        lead: { name: 'lead', agentVersionId: options.agentVersionId },
-        roster: [{ name: 'reviewer', agentVersionId: options.agentVersionId }],
+        lead: { name: 'lead', workerVersionId: options.workerVersionId },
+        roster: [
+          { name: 'reviewer', workerVersionId: options.workerVersionId },
+        ],
         environmentVersionId: options.environmentVersionId,
       }),
       options.environmentVersionId,

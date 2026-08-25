@@ -2,7 +2,17 @@
 
 Status: MVE Product API contract
 
-This contract is the public authoring boundary for Composition-first Work. It exposes Product intent (`Definition -> Work -> Run`) and deliberately hides Agent Server registry choreography, internal Team materialization, Task, TeamRun, RuntimeSession, and provider identities.
+This contract is the public authoring boundary for Composition-first Work. It
+exposes Product intent (`Definition -> Work -> WorkRun`) and deliberately hides
+registry choreography, internal Team materialization, Task, TeamRun,
+RuntimeSession, and provider identities.
+
+The canonical formal shape is Worker-based: Work selects published
+`WorkerVersion` references, while Coworker `AgentVersion` remains Chat-plane
+identity. The current implementation baseline still has a compatibility
+`single_agent` / `agent_version_id` path and may materialize/publish Agents;
+that path is legacy and is not the target contract. See [Coworker Agent /
+Worker semantic split](../features/coworker-worker-semantic-split.md).
 
 ## Author document
 
@@ -15,8 +25,8 @@ metadata:
   name: earnings-research
   description: Research one earnings event.
 spec:
-  kind: single_agent
-  agent_version_id: 11111111-1111-4111-8111-111111111111
+  kind: single_worker
+  worker_version_id: 11111111-1111-4111-8111-111111111111
   environment_version_id: 22222222-2222-4222-8222-222222222222
   memory_version_ids: []
   input_schema:
@@ -41,10 +51,10 @@ spec:
   kind: collaboration
   lead:
     name: lead
-    agent_version_id: 11111111-1111-4111-8111-111111111111
+    worker_version_id: 11111111-1111-4111-8111-111111111111
   members:
     - name: risk
-      agent_version_id: 33333333-3333-4333-8333-333333333333
+      worker_version_id: 33333333-3333-4333-8333-333333333333
   environment_version_id: 22222222-2222-4222-8222-222222222222
   memory_version_ids: []
   input_schema:
@@ -56,9 +66,17 @@ spec:
     additional_properties: false
 ```
 
-The author never supplies a Team ID. For collaboration, `apply` materializes the immutable internal execution binding from the declared lead/member Agent versions. That Team lineage remains an implementation detail and is not a primary Product API field.
+The author never supplies a Team ID. For collaboration, `apply` materializes
+the immutable internal execution binding from the declared lead/member Worker
+versions. That Team lineage remains an implementation detail and is not a
+primary Product API field. Worker publication does not create a Coworker Chat
+runtime or Conversation.
 
-`metadata.name` uses lowercase kebab-case. Agent, Environment, and Memory references are immutable version UUIDs. The MVE input schema is deliberately bounded and JSON-Schema-like rather than claiming full JSON Schema support: object input with string/number/integer/boolean properties, required keys, simple bounds/enums, and `additional_properties`.
+`metadata.name` uses lowercase kebab-case. Worker, Environment, and Memory
+references are immutable version UUIDs. The MVE input schema is deliberately
+bounded and JSON-Schema-like rather than claiming full JSON Schema support:
+object input with string/number/integer/boolean properties, required keys,
+simple bounds/enums, and `additional_properties`.
 
 ## Validate
 
@@ -88,7 +106,7 @@ Invalid author source returns `422` with safe, source-oriented diagnostics:
   "valid": false,
   "diagnostics": [
     {
-      "path": "$.spec.agent_version_id",
+      "path": "$.spec.worker_version_id",
       "code": "invalid_invalid_format",
       "message": "must be a canonical UUID",
       "severity": "error"
@@ -109,7 +127,10 @@ Content-Type: application/json
 {"source":"<YAML>"}
 ```
 
-`plan` is also side-effect free. It resolves immutable references and returns an author-facing summary of participants, Skills, domain Tools, Environment/Memory refs, required runtime capabilities, and platform capabilities. Missing/unpublished/cross-owner refs fail before `apply`.
+`plan` is also side-effect free. It resolves immutable Worker references and
+returns an author-facing summary of participants, Skills, domain Tools,
+Environment/Memory refs, required runtime capabilities, and platform
+capabilities. Missing/unpublished/cross-owner refs fail before `apply`.
 
 It is not an execution DAG and does not create Team/Work/Task resources.
 
@@ -128,7 +149,7 @@ Successful `apply` performs:
 
 ```text
 validate
--> resolve immutable refs
+-> resolve immutable Worker/Environment/Memory refs
 -> materialize/converge internal collaboration binding when required
 -> publish immutable WorkDefinitionVersion
 -> resolve composition IR
@@ -184,7 +205,7 @@ GET /api/v1/work-definition-versions/{version_id}
 
 Owner reads may return the normalized author source. Product responses do not return internal Team IDs, Task IDs, TeamRun IDs, RuntimeSession IDs, or provider transport data.
 
-## DefinitionVersion -> Work -> Run
+## DefinitionVersion -> Work -> WorkRun
 
 Create a durable Work from the immutable Product Definition version:
 
@@ -214,8 +235,8 @@ Before technical Task/provider admission the server:
 1. loads the exact Product Definition version input contract;
 2. validates the bounded object input;
 3. persists an immutable input snapshot/fingerprint on the WorkRun;
-4. renders a deterministic execution prompt for the participant;
-5. pins the resolved composition manifest;
+4. renders a deterministic execution prompt for the selected Worker;
+5. pins the resolved Worker composition manifest;
 6. only then admits the technical Task.
 
 Invalid input returns `422 input_validation_failed` with a safe source path and does not invoke the provider. The input snapshot is available for internal replay/debug but intentionally omitted from normal Product WorkRun responses.
@@ -230,6 +251,12 @@ GET /api/v1/works/{work_id}/runs/{work_run_id}/trace
 ```
 
 The Product client should reason about Work/WorkRun/Product state. Technical Task/Run identities are limited to explicit `source_refs` for audit/debug.
+
+Retries and replay use the WorkRun's persisted input and resolved Worker
+manifest. They do not reload the latest WorkerVersion or silently substitute an
+AgentVersion. Existing recorded `single_agent` / `agent_version_id` rows may
+remain readable during migration, but new formal callers must use the Worker
+shape and the legacy fallback must be removed once those callers are cut over.
 
 ## Explicit non-goals
 

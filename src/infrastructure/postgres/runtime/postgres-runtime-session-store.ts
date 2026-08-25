@@ -157,16 +157,18 @@ export class PostgresRuntimeSessionStore implements RuntimeSessionStore {
 
       await database.query(
         `INSERT INTO runtime_session_specs
-         (runtime_session_id,revision,workspace_id,agent_version_id,
+         (runtime_session_id,revision,workspace_id,subject_kind,agent_version_id,worker_version_id,
           environment_version_id,resolved_skills,tool_refs,provider,model,cwd,
           system_prompt_digest,skill_set_digest,tool_catalog_digest,
           extension_set_digest,context_epoch,bootstrap_digest,created_at)
-         VALUES($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
         [
           initialSpec.runtimeSessionId,
           initialSpec.revision,
           initialSpec.workspaceId,
+          initialSpec.subjectKind,
           initialSpec.agentVersionId,
+          initialSpec.workerVersionId,
           initialSpec.environmentVersionId,
           JSON.stringify(initialSpec.resolvedSkills),
           JSON.stringify(initialSpec.toolRefs),

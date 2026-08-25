@@ -14,10 +14,10 @@ spec:
   kind: collaboration
   lead:
     name: lead
-    agent_version_id: ${lead}
+    worker_version_id: ${lead}
   members:
     - name: risk
-      agent_version_id: ${member}
+      worker_version_id: ${member}
   environment_version_id: ${environment}
   input_schema:
     type: object
@@ -38,10 +38,10 @@ describe('Product Work Definition collaboration contract', () => {
     if (result.document.spec.kind !== 'collaboration') return;
     expect(result.document.spec.lead).toMatchObject({
       name: 'lead',
-      agent_version_id: lead,
+      worker_version_id: lead,
     });
     expect(result.document.spec.members).toEqual([
-      expect.objectContaining({ name: 'risk', agent_version_id: member }),
+      expect.objectContaining({ name: 'risk', worker_version_id: member }),
     ]);
     expect(result.document.spec).not.toHaveProperty('team_version_id');
   });

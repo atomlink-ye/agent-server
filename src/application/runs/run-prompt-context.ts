@@ -13,6 +13,7 @@ import type {
   AgentResolutionApi,
   ResolvedAgentVersion,
 } from '../ports/agent-resolution-api.js';
+import type { WorkerResolutionApi } from '../ports/worker-registry.js';
 import type { FileStore } from '../ports/file-store.js';
 import type { InvokableOwnerScope } from '../ports/invokable-repository.js';
 import type { TaskRepository } from '../ports/task-repository.js';
@@ -36,6 +37,7 @@ export interface ResolvedRunPrompt {
   readonly turnPrompt: string;
   readonly proposalLimit: number;
   readonly agentVersionId: string;
+  readonly workerVersionId?: string;
   readonly agentDefinitionId?: string;
   readonly agentOwner?: ResourceOwner;
   readonly modelPolicyRef: ResolvedAgentVersion['modelPolicyRef'];
@@ -60,6 +62,7 @@ export class RunPromptContext {
   public constructor(
     private readonly resolver: AgentResolutionApi,
     private readonly tasks: TaskRepository,
+    private readonly workerResolver?: WorkerResolutionApi,
     private readonly fileStore?: FileStore,
     private readonly collaborativeExecutions?: TeamExecutionRepository,
   ) {}
@@ -113,6 +116,28 @@ export class RunPromptContext {
         modelPolicyRef: 'free-only',
         skills: [],
         toolRefs: [],
+      };
+    }
+
+    if (input.task.invokableKind === 'worker') {
+      const worker = await this.workerResolver?.resolvePublished(
+        input.invokableVersionId,
+        input.ownerScope,
+      );
+      if (!worker)
+        throw new Error(
+          `Published worker version ${input.invokableVersionId} could not be loaded for execution`,
+        );
+      const memory = await this.loadPinnedMemory(input.task);
+      return {
+        systemPrompt: buildBootstrapPrompt(worker.instructions, worker.skills),
+        turnPrompt: buildTurnPrompt({ taskInput: input.prompt, memory }),
+        proposalLimit: worker.proposalLimit,
+        agentVersionId: input.invokableVersionId,
+        workerVersionId: input.invokableVersionId,
+        modelPolicyRef: worker.modelPolicyRef,
+        skills: worker.skills,
+        toolRefs: worker.toolRefs,
       };
     }
 

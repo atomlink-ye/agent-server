@@ -7,7 +7,7 @@ function pause(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export async function runCompositionSingleAgentSmoke({
+export async function runCompositionSingleWorkerSmoke({
   baseUrl,
   token,
   workspaceId,
@@ -20,7 +20,7 @@ export async function runCompositionSingleAgentSmoke({
   if (!databaseUrl)
     throw new Error('composition smoke requires a host-native DATABASE_URL');
   const scenarioId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-  const marker = `COMPOSITION_SINGLE_AGENT_OK_${scenarioId}`;
+  const marker = `COMPOSITION_SINGLE_WORKER_OK_${scenarioId}`;
 
   async function request(path, { method = 'GET', body, expectedStatus } = {}) {
     const response = await fetch(new URL(path, baseUrl), {
@@ -64,14 +64,13 @@ export async function runCompositionSingleAgentSmoke({
     });
   }
 
-  progress('composition_single_agent_importing');
-  const agent = await importAndPublish(
-    `apiVersion: agent-server/v1alpha1
-kind: ManagedAgent
+  progress('composition_single_worker_importing');
+  const workerSource = `apiVersion: agent-server/v1alpha1
+kind: Worker
 metadata:
   name: composition-single-${scenarioId}
 spec:
-  description: Composition-first single Agent real-provider smoke
+  description: Composition-first single Worker real-provider smoke
   instructions: 'Return exactly the marker contained in the Work input. Do not call tools unless execution cannot proceed otherwise.'
   runtime:
     provider: paseo
@@ -101,9 +100,20 @@ spec:
   completion:
     type: executable
     command: "done"
-`,
-    '/api/v1/agents:import',
-    (id) => `/api/v1/agent-versions/${id}:publish`,
+`;
+  const workerValidation = await request('/api/v1/worker-packages:validate', {
+    method: 'POST',
+    body: { source: workerSource },
+    expectedStatus: 200,
+  });
+  if (workerValidation.valid !== true || !workerValidation.fingerprint)
+    throw new Error(
+      `composition Worker package validation failed: ${JSON.stringify(workerValidation)}`,
+    );
+  const worker = await importAndPublish(
+    workerSource,
+    '/api/v1/workers:import',
+    (id) => `/api/v1/worker-versions/${id}:publish`,
   );
   const environment = await importAndPublish(
     `apiVersion: agent-server/v1alpha1
@@ -126,8 +136,8 @@ metadata:
   name: composition-single-${scenarioId}
   description: Real-provider Product Definition -> Work -> Run smoke.
 spec:
-  kind: single_agent
-  agent_version_id: ${agent.id}
+  kind: single_worker
+  worker_version_id: ${worker.id}
   environment_version_id: ${environment.id}
   memory_version_ids: []
   input_schema:
@@ -221,7 +231,7 @@ spec:
         `composition root Run provenance mismatch: ${JSON.stringify(rootRuns.rows)}`,
       );
     const rootRunId = rootRuns.rows[0].id;
-    progress('composition_single_agent_started', {
+    progress('composition_single_worker_started', {
       work_id: workId,
       work_run_id: workRunId,
     });
@@ -271,7 +281,7 @@ spec:
       );
     }
     if (projection?.work_run?.product_state !== 'complete')
-      throw new Error('composition single-Agent WorkRun timed out');
+      throw new Error('composition single-Worker WorkRun timed out');
 
     const trace = await request(
       `/api/v1/works/${workId}/runs/${workRunId}/trace`,
@@ -327,7 +337,7 @@ spec:
       'definition',
       (row) => row.resolved_version_id === definitionVersionId,
     );
-    requireEntry('agent', (row) => row.resolved_version_id === agent.id);
+    requireEntry('worker', (row) => row.resolved_version_id === worker.id);
     requireEntry(
       'environment',
       (row) => row.resolved_version_id === environment.id,
@@ -347,7 +357,8 @@ spec:
 
     const session = await pool.query(
       `SELECT rs.id,rs.scope_kind,rs.scope_id,
-              rss.agent_version_id,rss.environment_version_id
+              rss.subject_kind,rss.agent_version_id,rss.worker_version_id,
+              rss.environment_version_id
          FROM runtime_sessions rs
          JOIN runtime_session_specs rss
            ON rss.runtime_session_id=rs.id
@@ -356,6 +367,7 @@ spec:
          JOIN runs r ON r.id=rt.source_id::uuid
          JOIN tasks t ON t.id=r.task_id
         WHERE rt.source_kind='run' AND r.id=$1 AND t.id=$2
+          AND rss.subject_kind='worker'
           AND rs.tenant_id=$3 AND rs.principal_type=$4 AND rs.principal_id=$5`,
       [
         rootRunId,
@@ -370,14 +382,16 @@ spec:
       !runtimeSession ||
       runtimeSession.scope_kind !== 'run' ||
       runtimeSession.scope_id !== rootRunId ||
-      runtimeSession.agent_version_id !== agent.id ||
+      runtimeSession.subject_kind !== 'worker' ||
+      runtimeSession.agent_version_id !== null ||
+      runtimeSession.worker_version_id !== worker.id ||
       runtimeSession.environment_version_id !== environment.id
     )
       throw new Error(
         `composition runtime session snapshot mismatch: ${JSON.stringify(session.rows)}`,
       );
 
-    progress('composition_single_agent_verified', {
+    progress('composition_single_worker_verified', {
       work_id: workId,
       work_run_id: workRunId,
       root_task_id: rootTaskId,
@@ -396,7 +410,7 @@ spec:
   }
 }
 
-export async function runCompositionSingleAgentInlineSmoke({
+export async function runCompositionSingleWorkerInlineSmoke({
   baseUrl,
   token,
   workspaceId,
@@ -411,7 +425,7 @@ export async function runCompositionSingleAgentInlineSmoke({
       'inline composition smoke requires a host-native DATABASE_URL',
     );
   const scenarioId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-  const marker = `COMPOSITION_INLINE_OK_${scenarioId}`;
+  const marker = `COMPOSITION_SINGLE_WORKER_INLINE_OK_${scenarioId}`;
 
   async function request(path, { method = 'GET', body, expectedStatus } = {}) {
     const response = await fetch(new URL(path, baseUrl), {
@@ -448,16 +462,16 @@ metadata:
   name: composition-inline-${scenarioId}
   description: Inline Product Definition real-provider smoke (quickstart path).
 spec:
-  kind: single_agent
+  kind: single_worker
 
-  agent:
+  worker:
     source: |
       apiVersion: agent-server/v1alpha1
-      kind: ManagedAgent
+      kind: Worker
       metadata:
-        name: composition-inline-agent-${scenarioId}
+        name: composition-inline-worker-${scenarioId}
       spec:
-        description: Inline smoke Agent
+        description: Inline smoke Worker
         instructions: 'Return exactly the marker contained in the Work input. Do not call tools unless execution cannot proceed otherwise.'
         runtime:
           provider: paseo
@@ -509,7 +523,7 @@ spec:
     additional_properties: false
 `;
 
-  progress('composition_inline_definition_ready');
+  progress('composition_single_worker_inline_definition_ready');
 
   const validated = await request('/api/v1/work-definitions:validate', {
     method: 'POST',
@@ -527,8 +541,8 @@ spec:
   const planMat = planned.resolved?.materialization;
   if (
     !planMat ||
-    typeof planMat.inline_agents !== 'number' ||
-    planMat.inline_agents < 1 ||
+    typeof planMat.inline_workers !== 'number' ||
+    planMat.inline_workers < 1 ||
     planMat.inline_environment !== true
   )
     throw new Error(
@@ -604,7 +618,7 @@ spec:
         `inline root Run provenance mismatch: ${JSON.stringify(rootRuns.rows)}`,
       );
     const rootRunId = rootRuns.rows[0].id;
-    progress('composition_inline_started', {
+    progress('composition_single_worker_inline_started', {
       work_id: workId,
       work_run_id: workRunId,
     });
@@ -672,7 +686,7 @@ spec:
       } catch {
         /* best-effort */
       }
-      progress('composition_inline_failed_trace', {
+      progress('composition_single_worker_inline_failed_trace', {
         work_run: projection.work_run,
         trace: failTrace,
         run_events: failRunEvents,
@@ -682,7 +696,7 @@ spec:
       );
     }
     if (projection?.work_run?.product_state !== 'complete')
-      throw new Error('inline single-Agent WorkRun timed out');
+      throw new Error('inline single-Worker WorkRun timed out');
 
     const trace = await request(
       `/api/v1/works/${workId}/runs/${workRunId}/trace`,
@@ -738,8 +752,8 @@ spec:
       'definition',
       (row) => row.resolved_version_id === definitionVersionId,
     );
-    const agentEntry = requireEntry(
-      'agent',
+    const workerEntry = requireEntry(
+      'worker',
       (row) => typeof row.resolved_version_id === 'string',
     );
     const environmentEntry = requireEntry(
@@ -749,7 +763,8 @@ spec:
 
     const session = await pool.query(
       `SELECT rs.id,rs.scope_kind,rs.scope_id,
-              rss.agent_version_id,rss.environment_version_id
+              rss.subject_kind,rss.agent_version_id,rss.worker_version_id,
+              rss.environment_version_id
          FROM runtime_sessions rs
          JOIN runtime_session_specs rss
            ON rss.runtime_session_id=rs.id
@@ -758,6 +773,7 @@ spec:
          JOIN runs r ON r.id=rt.source_id::uuid
          JOIN tasks t ON t.id=r.task_id
         WHERE rt.source_kind='run' AND r.id=$1 AND t.id=$2
+          AND rss.subject_kind='worker'
           AND rs.tenant_id=$3 AND rs.principal_type=$4 AND rs.principal_id=$5`,
       [
         rootRunId,
@@ -772,7 +788,9 @@ spec:
       !runtimeSession ||
       runtimeSession.scope_kind !== 'run' ||
       runtimeSession.scope_id !== rootRunId ||
-      runtimeSession.agent_version_id !== agentEntry.resolved_version_id ||
+      runtimeSession.subject_kind !== 'worker' ||
+      runtimeSession.agent_version_id !== null ||
+      runtimeSession.worker_version_id !== workerEntry.resolved_version_id ||
       runtimeSession.environment_version_id !==
         environmentEntry.resolved_version_id
     )
@@ -780,7 +798,7 @@ spec:
         `inline runtime session snapshot mismatch: ${JSON.stringify(session.rows)}`,
       );
 
-    progress('composition_inline_verified', {
+    progress('composition_single_worker_inline_verified', {
       work_id: workId,
       work_run_id: workRunId,
       root_task_id: rootTaskId,
@@ -788,7 +806,7 @@ spec:
       manifest_entries: rows.length,
       runtime: `${providerRun.provider}/${providerRun.model}`,
       materialization: {
-        inline_agents: planMat.inline_agents,
+        inline_workers: planMat.inline_workers,
         inline_environment: planMat.inline_environment,
       },
     });

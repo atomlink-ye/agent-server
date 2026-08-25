@@ -8,10 +8,6 @@ import {
   MAX_SCALAR_LENGTH,
 } from '../../domain/agents/managed-agent-yaml.js';
 import {
-  ManagedAgentPackageError,
-  parseManagedAgentPackage,
-} from '../../domain/agents/managed-agent-package.js';
-import {
   ManagedEnvironmentPackageError,
   parseManagedEnvironmentPackage,
 } from '../../domain/environments/managed-environment-package.js';
@@ -113,7 +109,7 @@ async function loadLocalAgentProjectUnsafe(
   const toolProfiles = new Map();
   const skills = new Map();
   const environments = new Map();
-  const agents = new Map();
+  const workers = new Map();
   const teams = new Map();
   const memoryStores = new Map();
 
@@ -219,31 +215,37 @@ async function loadLocalAgentProjectUnsafe(
       digest: bareSha256(item.source),
     });
   }
-  for (const [name, spec] of Object.entries(manifest.spec.agents) as [
+  for (const [name, spec] of Object.entries(manifest.spec.workers) as [
     string,
     any,
   ][]) {
     let item: Awaited<ReturnType<typeof readProjectSource>>;
     try {
-      item = await readProjectSource(root, spec, name, 'agent');
-      parseManagedAgentPackage(item.source);
+      item = await readProjectSource(root, spec, name, 'worker');
+      parseProjectNativeEnvelope(
+        item.source,
+        'Worker',
+        `source.worker.${name}`,
+      );
     } catch (error) {
-      rethrowResourceError(error, `$.spec.agents.${name}`);
+      rethrowResourceError(error, `$.spec.workers.${name}`);
     }
-    agents.set(logicalRef('agent', name), {
+    workers.set(logicalRef('worker', name), {
       name,
-      path: virtualPath('agent', name),
+      path: virtualPath('worker', name),
       source: item.source,
       sourceFingerprint: sha256(item.source),
     });
     tuples.push({
-      type: 'agent',
+      type: 'worker',
       name,
-      path: virtualPath('agent', name),
+      path: virtualPath('worker', name),
       digest: bareSha256(item.source),
     });
     for (const role of ['lead', 'member'] as const) {
-      if (!agentDeclaresToolProfile(item.source, `tool-profile://team-${role}`))
+      if (
+        !workerDeclaresToolProfile(item.source, `tool-profile://team-${role}`)
+      )
         continue;
       const profileName = `team-${role}`;
       const ref = logicalRef('tool-profile', profileName);
@@ -280,7 +282,7 @@ async function loadLocalAgentProjectUnsafe(
         'ManagedTeam',
         `source.team.${name}`,
         environments,
-        agents,
+        workers,
       );
     } catch (error) {
       rethrowResourceError(error, `$.spec.teams.${name}`);
@@ -368,10 +370,10 @@ async function loadLocalAgentProjectUnsafe(
           { file: virtualPath('environment', name) },
         ]),
       ),
-      agents: Object.fromEntries(
-        Object.keys(manifest.spec.agents).map((name) => [
+      workers: Object.fromEntries(
+        Object.keys(manifest.spec.workers).map((name) => [
           name,
-          { file: virtualPath('agent', name) },
+          { file: virtualPath('worker', name) },
         ]),
       ),
       teams: Object.fromEntries(
@@ -400,7 +402,7 @@ async function loadLocalAgentProjectUnsafe(
     toolProfiles,
     skills,
     environments,
-    agents,
+    workers,
     teams,
     memoryStores,
     entrypoints: [...entrypoints].sort(compareStrings),
@@ -458,7 +460,7 @@ function parseManifest(input: unknown): AgentProjectManifest {
       'toolProfiles',
       'skills',
       'environments',
-      'agents',
+      'workers',
       'teams',
       'memoryStores',
       'entrypoints',
@@ -474,7 +476,7 @@ function parseManifest(input: unknown): AgentProjectManifest {
     'toolProfiles',
     'skills',
     'environments',
-    'agents',
+    'workers',
     'teams',
     'memoryStores',
   ]) {
@@ -594,7 +596,7 @@ function parseManifest(input: unknown): AgentProjectManifest {
   if (
     !maps.environments ||
     !Object.keys(maps.environments).length ||
-    !Object.keys(maps.agents).length ||
+    !Object.keys(maps.workers).length ||
     !Object.keys(maps.teams).length
   )
     fail('required_section_empty');
@@ -607,7 +609,7 @@ function parseManifest(input: unknown): AgentProjectManifest {
       toolProfiles,
       skills,
       environments: simple('environments'),
-      agents: simple('agents'),
+      workers: simple('workers'),
       teams: simple('teams'),
       memoryStores,
       entrypoints,
@@ -644,7 +646,7 @@ function validateProjectToolRef(
     return;
   }
   if (
-    /^(tool-profile|skill|environment|agent|team|memory|workspace):\/\//.test(
+    /^(tool-profile|skill|environment|worker|agent|team|memory|workspace):\/\//.test(
       value,
     )
   )
@@ -658,7 +660,7 @@ function parseProjectNativeEnvelope(
   kind: string,
   path: string,
   environments?: ReadonlyMap<string, unknown>,
-  agents?: ReadonlyMap<string, unknown>,
+  workers?: ReadonlyMap<string, unknown>,
 ): void {
   const raw = parseYaml(source);
   if (!obj(raw)) fail('invalid_native_package', path);
@@ -673,14 +675,13 @@ function parseProjectNativeEnvelope(
       envelope.spec as RecordValue,
       path,
       environments,
-      agents,
+      workers,
     );
 }
 
 function rethrowResourceError(error: unknown, prefix: string): never {
   if (
     error instanceof LocalAgentProjectLoaderError ||
-    error instanceof ManagedAgentPackageError ||
     error instanceof ManagedEnvironmentPackageError ||
     error instanceof ProjectTeamRenderError ||
     error instanceof TeamPackageValidationError
@@ -716,12 +717,12 @@ function validateLogicalTeamSpec(
   spec: RecordValue,
   path: string,
   environments?: ReadonlyMap<string, unknown>,
-  agents?: ReadonlyMap<string, unknown>,
+  workers?: ReadonlyMap<string, unknown>,
 ): void {
   const check = (
     value: unknown,
     prefix: string,
-    kind: 'environment' | 'agent',
+    kind: 'environment' | 'worker',
   ) => {
     if (typeof value !== 'string' || !value.includes('://')) return;
     let ref = '';
@@ -732,7 +733,7 @@ function validateLogicalTeamSpec(
     }
     if (!ref.startsWith(`${kind}://`)) fail('invalid_reference', prefix);
     const exists =
-      kind === 'environment' ? environments?.has(ref) : agents?.has(ref);
+      kind === 'environment' ? environments?.has(ref) : workers?.has(ref);
     if (exists === false) fail('missing_reference', prefix);
   };
   check(
@@ -742,17 +743,17 @@ function validateLogicalTeamSpec(
   );
   if (obj(spec.lead))
     check(
-      spec.lead.agentVersionId,
-      `${path}.spec.lead.agentVersionId`,
-      'agent',
+      spec.lead.workerVersionId,
+      `${path}.spec.lead.workerVersionId`,
+      'worker',
     );
   if (Array.isArray(spec.roster))
     spec.roster.forEach((member, index) => {
       if (obj(member))
         check(
-          member.agentVersionId,
-          `${path}.spec.roster[${index}].agentVersionId`,
-          'agent',
+          member.workerVersionId,
+          `${path}.spec.roster[${index}].workerVersionId`,
+          'worker',
         );
     });
 }
@@ -761,7 +762,7 @@ async function readProjectSource(
   root: string,
   spec: AgentProjectSectionEntry,
   name: string,
-  kind: 'environment' | 'agent' | 'team',
+  kind: 'environment' | 'worker' | 'team',
 ): Promise<{ source: string; relativePath?: string }> {
   let raw: unknown;
   const fileBacked = obj(spec) && typeof spec.file === 'string';
@@ -781,8 +782,8 @@ async function readProjectSource(
       kind:
         kind === 'environment'
           ? 'ManagedEnvironment'
-          : kind === 'agent'
-            ? 'ManagedAgent'
+          : kind === 'worker'
+            ? 'Worker'
             : 'ManagedTeam',
       metadata: { name },
       spec: spec as RecordValue,
@@ -800,7 +801,7 @@ async function readProjectSource(
   };
 }
 
-function defaultsFor(kind: 'environment' | 'agent' | 'team'): RecordValue {
+function defaultsFor(kind: 'environment' | 'worker' | 'team'): RecordValue {
   if (kind === 'environment')
     return {
       adapter: 'paseo',
@@ -847,14 +848,14 @@ function canonicalizeSource(source: string): string {
 }
 
 function virtualPath(
-  type: 'tool-profile' | 'environment' | 'agent' | 'team',
+  type: 'tool-profile' | 'environment' | 'worker' | 'team',
   name: string,
 ): string {
   const directory = type === 'tool-profile' ? 'tool-profiles' : `${type}s`;
   return `${directory}/${name}.yaml`;
 }
 
-function agentDeclaresToolProfile(source: string, ref: string): boolean {
+function workerDeclaresToolProfile(source: string, ref: string): boolean {
   const raw = parseYaml(source);
   if (!obj(raw) || !obj(raw.spec) || !Array.isArray(raw.spec.tools))
     return false;

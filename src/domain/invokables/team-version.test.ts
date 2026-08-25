@@ -12,16 +12,16 @@ const ownerScope = {
 const spec = {
   lead: {
     name: 'Lead',
-    agentVersionId: '00000000-0000-4000-8000-000000001001',
+    workerVersionId: '00000000-0000-4000-8000-000000001001',
   },
   roster: [
     {
       name: 'Analyst',
-      agentVersionId: '00000000-0000-4000-8000-000000001003',
+      workerVersionId: '00000000-0000-4000-8000-000000001003',
     },
     {
       name: 'Researcher',
-      agentVersionId: '00000000-0000-4000-8000-000000001002',
+      workerVersionId: '00000000-0000-4000-8000-000000001002',
     },
   ],
   environmentVersionId: '00000000-0000-4000-8000-000000002001',

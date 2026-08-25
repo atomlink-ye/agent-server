@@ -44,7 +44,7 @@ export async function seedGoldenPathWorld(
   });
   const team = await seedPublishedTeamVersion(db, owner, {
     environmentVersionId: environment.versionId,
-    agentVersionId: agent.versionId,
+    workerVersionId: agent.versionId,
     name: `${options.name ?? 'Golden Path'} Team`,
   });
 
@@ -78,7 +78,7 @@ export async function seedGoldenPathWorld(
     agentDefinitionId: agent.definitionId,
   });
   const workDefinition = await seedPublishedWorkDefinition(db, owner, {
-    agentVersionId: agent.versionId,
+    workerVersionId: agent.versionId,
     environmentVersionId: environment.versionId,
     agentDefinitionId: agent.definitionId,
     name: `${options.name ?? 'Golden Path'} Work`,

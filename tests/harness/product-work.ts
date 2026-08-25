@@ -55,7 +55,7 @@ export function createHarnessProductWork(input: {
       async findDefinition() {
         return null;
       },
-      async findVersion(_owner, id) {
+      async findVersion(_owner: unknown, id: string) {
         return id === world.agent.versionId
           ? ({
               id,
@@ -78,7 +78,7 @@ export function createHarnessProductWork(input: {
       },
     },
     agentResolution: {
-      async resolvePublished(id) {
+      async resolvePublished(id: string) {
         return id === world.agent.versionId
           ? {
               source: 'managed' as const,
@@ -95,7 +95,7 @@ export function createHarnessProductWork(input: {
     definitions: invokables,
     authoredDefinitions,
     environments: {
-      async findVersion(_owner, id) {
+      async findVersion(_owner: unknown, id: string) {
         return id === world.environment.versionId
           ? ({
               id,
@@ -116,7 +116,7 @@ export function createHarnessProductWork(input: {
           : null;
       },
     },
-  });
+  } as any);
 
   const workModule = createWorkModule({
     database: db as any,

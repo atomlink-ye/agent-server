@@ -8,6 +8,14 @@ not-found response. A Work's definition lineage is also fixed: its
 `definition_id` is the Team definition ID, and its `definition_version_id` is
 the ID of the published Team version whose `definition_id` is that Team ID.
 
+Compatibility status: this document describes the current legacy Team-backed
+flow, whose examples import/publish Agent versions and whose active callers may
+still use Agent-shaped composition. It is not the post-cutover Worker
+contract. New formal Work documentation must use published WorkerVersion refs,
+pin them in the WorkRun snapshot, and keep Worker publication free of Chat
+side effects. See [Coworker Agent / Worker semantic split](../features/coworker-worker-semantic-split.md)
+for the target chain and migration rules.
+
 The endpoint examples below show only contract fields. Replace angle-bracket
 placeholders with IDs returned by the preceding response. Every request uses
 the same API bearer authentication described in [Authentication and

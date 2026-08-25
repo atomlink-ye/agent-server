@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 
 import type { AccessContext } from '../../domain/access-context.js';
 import type { AgentResolutionApi } from '../ports/agent-resolution-api.js';
+import type { WorkerResolutionApi } from '../ports/worker-registry.js';
 import type {
   AdmissionOwnerScope,
   AdmissionRepository,
@@ -24,7 +25,7 @@ import {
 
 export interface InvokeTaskRequest {
   readonly invokable: {
-    readonly kind: 'agent' | 'team';
+    readonly kind: 'agent' | 'worker' | 'team';
     readonly versionId: string;
   };
   readonly input: {
@@ -45,8 +46,19 @@ export class InvokeTask {
     private readonly admissions: AdmissionRepository,
     private readonly definitions: DefinitionReadApi,
     private readonly resolver: AgentResolutionApi,
-    private readonly now: () => Date = () => new Date(),
-  ) {}
+    workerResolutionOrNow?: WorkerResolutionApi | (() => Date),
+    now: () => Date = () => new Date(),
+  ) {
+    this.workerResolution =
+      typeof workerResolutionOrNow === 'function'
+        ? undefined
+        : workerResolutionOrNow;
+    this.now =
+      typeof workerResolutionOrNow === 'function' ? workerResolutionOrNow : now;
+  }
+
+  private readonly workerResolution: WorkerResolutionApi | undefined;
+  private readonly now: () => Date;
 
   public async execute(request: InvokeTaskRequest): Promise<InvokeTaskResult> {
     const resolvedWorkspaceId = resolveWorkspaceId(
@@ -181,16 +193,22 @@ export class InvokeTask {
   private async assertPublishedInvokableExists(
     request: InvokeTaskRequest,
   ): Promise<void> {
+    const owner = toInvokableOwnerScope(request.accessContext);
     const version =
       request.invokable.kind === 'agent'
         ? await this.resolver.resolvePublished(
             request.invokable.versionId,
-            toInvokableOwnerScope(request.accessContext),
+            owner,
           )
-        : await this.definitions.findPublishedTeamVersionById(
-            request.invokable.versionId,
-            toInvokableOwnerScope(request.accessContext),
-          );
+        : request.invokable.kind === 'worker'
+          ? await this.workerResolution?.resolvePublished(
+              request.invokable.versionId,
+              owner,
+            )
+          : await this.definitions.findPublishedTeamVersionById(
+              request.invokable.versionId,
+              owner,
+            );
     if (!version) throw new InvokableNotFoundError();
   }
 }
@@ -232,7 +250,7 @@ function resolveWorkspaceId(
 }
 
 function fingerprintInvokeTaskRequest(input: {
-  readonly invokableKind: 'agent' | 'team';
+  readonly invokableKind: 'agent' | 'worker' | 'team';
   readonly invokableVersionId: string;
   readonly workspaceId: string;
   readonly inputText: string;

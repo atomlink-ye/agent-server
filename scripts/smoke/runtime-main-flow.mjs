@@ -3,8 +3,8 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { loadRealProviderDefaults } from '../dev/real-provider-defaults.mjs';
 import {
-  runCompositionSingleAgentSmoke,
-  runCompositionSingleAgentInlineSmoke,
+  runCompositionSingleWorkerSmoke,
+  runCompositionSingleWorkerInlineSmoke,
 } from './composition-single-agent.mjs';
 
 const realProviderDefaults = loadRealProviderDefaults();
@@ -245,8 +245,8 @@ async function main() {
       usage: usageSummary(usage),
     });
 
-    stage = 'composition_single_agent';
-    const composition = await runCompositionSingleAgentSmoke({
+    stage = 'composition_single_worker';
+    const compositionSingleWorker = await runCompositionSingleWorkerSmoke({
       baseUrl,
       token,
       workspaceId,
@@ -256,23 +256,26 @@ async function main() {
       progress,
     });
 
-    stage = 'composition_inline';
-    const compositionInline = await runCompositionSingleAgentInlineSmoke({
-      baseUrl,
-      token,
-      workspaceId,
-      expectedProvider: realProviderDefaults.PASEO_PROVIDER,
-      expectedModel,
-      timeoutMs: stageTimeouts.run,
-      progress,
-    });
+    stage = 'composition_single_worker_inline';
+    const compositionSingleWorkerInline =
+      await runCompositionSingleWorkerInlineSmoke({
+        baseUrl,
+        token,
+        workspaceId,
+        expectedProvider: realProviderDefaults.PASEO_PROVIDER,
+        expectedModel,
+        timeoutMs: stageTimeouts.run,
+        progress,
+      });
 
     progress('completed', {
       run_id: created.run_id,
-      composition_work_id: composition.workId,
-      composition_work_run_id: composition.workRunId,
-      composition_inline_work_id: compositionInline.workId,
-      composition_inline_work_run_id: compositionInline.workRunId,
+      composition_single_worker_work_id: compositionSingleWorker.workId,
+      composition_single_worker_work_run_id: compositionSingleWorker.workRunId,
+      composition_single_worker_inline_work_id:
+        compositionSingleWorkerInline.workId,
+      composition_single_worker_inline_work_run_id:
+        compositionSingleWorkerInline.workRunId,
     });
     process.stdout.write(
       `${JSON.stringify({
@@ -285,8 +288,8 @@ async function main() {
           sha256: typeof resultText === 'string' ? sha256(resultText) : null,
           marker_matched: markerMatched,
         },
-        composition,
-        composition_inline: compositionInline,
+        composition_single_worker: compositionSingleWorker,
+        composition_single_worker_inline: compositionSingleWorkerInline,
         duration_ms: Date.now() - startedAt,
       })}\n`,
     );

@@ -2,6 +2,7 @@ import { fileURLToPath } from 'node:url';
 import type { Hono } from 'hono';
 
 import { ResolveAgentVersion } from '../application/agents/resolve-agent-version.js';
+import { ResolveWorkerVersion } from '../application/workers/resolve-worker-version.js';
 import {
   AGENT_SERVER_MEMORY_API_SKILL_REF,
   AGENT_SERVER_MEMORY_READ_TOOL_REF,
@@ -9,6 +10,10 @@ import {
 import { EnsureCoworkerConversation } from '../application/chat/ensure-coworker-conversation.js';
 import { ReconcileCoworkerConversations } from '../application/chat/reconcile-coworker-conversations.js';
 import type { AgentResolutionApi } from '../application/ports/agent-resolution-api.js';
+import type {
+  WorkerRegistry,
+  WorkerResolutionApi,
+} from '../application/ports/worker-registry.js';
 import type { ManagedAgentDefinitionRead } from '../application/ports/agent-registry.js';
 import type { DefinitionReadApi } from '../application/ports/definition-read-api.js';
 import type { EnvironmentReadApi } from '../application/ports/environment-read-api.js';
@@ -19,12 +24,14 @@ import { ProductWorkDefinitionApi } from '../application/work/product-work-defin
 import { ResolveWorkDefinition } from '../application/work/resolve-work-definition.js';
 import type { ApiEnvironment } from '../entrypoints/api/http-types.js';
 import { registerAgentRoutes } from '../entrypoints/api/routes/agents.js';
+import { registerWorkerRoutes } from '../entrypoints/api/routes/workers.js';
 import { registerAgentProfileRoute } from '../entrypoints/api/routes/agent-profile.js';
 import { registerEnvironmentRoutes } from '../entrypoints/api/routes/environments.js';
 import { registerProductWorkDefinitionRoutes } from '../entrypoints/api/routes/product-work-definitions.js';
 import { registerTeamRoutes } from '../entrypoints/api/routes/teams.js';
 import { LocalSkillCatalog } from '../infrastructure/filesystem/local-skill-catalog.js';
 import { PostgresAgentRegistry } from '../infrastructure/postgres/postgres-agent-registry.js';
+import { PostgresWorkerRegistry } from '../infrastructure/postgres/postgres-worker-registry.js';
 import { PostgresConversationRepository } from '../infrastructure/postgres/postgres-conversation-repository.js';
 import { PostgresConversationWorkEntitlementRepository } from '../infrastructure/postgres/postgres-conversation-work-entitlement-repository.js';
 import { PostgresEnvironmentRegistry } from '../infrastructure/postgres/postgres-environment-registry.js';
@@ -49,6 +56,8 @@ export interface ResourceModuleHttpOptions {
 export interface ResourceModule {
   readonly managedAgentDefinitions: ManagedAgentDefinitionRead;
   readonly agentResolutionApi: AgentResolutionApi;
+  readonly workerRegistry: WorkerRegistry;
+  readonly workerResolutionApi: WorkerResolutionApi;
   readonly definitionReadApi: DefinitionReadApi;
   readonly environmentReadApi: EnvironmentReadApi;
   readonly memoryVersionReadApi: MemoryVersionReadApi;
@@ -81,6 +90,7 @@ export async function createResourceModule(
   });
 
   const agentRegistry = new PostgresAgentRegistry(options.database);
+  const workerRegistry = new PostgresWorkerRegistry(options.database);
   const invokableRepository = new PostgresInvokableRepository(options.database);
   const environmentRegistry = new PostgresEnvironmentRegistry(options.database);
   const memoryVersionReadApi = new PostgresMemoryVersionReadApi(
@@ -100,6 +110,10 @@ export async function createResourceModule(
     agentRegistry,
     skillCatalog,
   );
+  const workerResolutionApi = new ResolveWorkerVersion(
+    workerRegistry,
+    skillCatalog,
+  );
   const definitionReadApi: DefinitionReadApi = {
     findTeamDefinitionById: (id) =>
       invokableRepository.findTeamDefinitionById(id),
@@ -115,8 +129,8 @@ export async function createResourceModule(
     memoryVersions: memoryVersionReadApi,
   };
   const workDefinitionResolution = new ResolveWorkDefinition({
-    agents: agentRegistry,
-    agentResolution: agentResolutionApi,
+    workers: workerRegistry,
+    workerResolution: workerResolutionApi,
     definitions: definitionReadApi,
     environments: environmentReadApi,
     authoredDefinitions: workDefinitionSources,
@@ -125,8 +139,8 @@ export async function createResourceModule(
   const productWorkDefinitions = new ProductWorkDefinitionApi({
     repository: workDefinitionSources,
     resolver: workDefinitionResolution,
-    agents: agentResolutionApi,
-    agentRegistry,
+    workers: workerResolutionApi,
+    workerRegistry,
     invokables: invokableRepository,
     environments: environmentRegistry,
     environmentRegistry,
@@ -170,6 +184,8 @@ export async function createResourceModule(
   return {
     managedAgentDefinitions: agentRegistry,
     agentResolutionApi,
+    workerRegistry,
+    workerResolutionApi,
     definitionReadApi,
     environmentReadApi,
     memoryVersionReadApi,
@@ -190,6 +206,7 @@ export async function createResourceModule(
           ? { coworkerProvisioning: configuredCoworkerProvisioning }
           : {}),
       });
+      registerWorkerRoutes(app, { config, workerRegistry });
       registerAgentProfileRoute(app, {
         config,
         agents: agentRegistry,
@@ -198,7 +215,7 @@ export async function createResourceModule(
       registerTeamRoutes(app, {
         config,
         invokableRepository,
-        agentResolution: agentResolutionApi,
+        workerResolution: workerResolutionApi,
         environmentRegistry,
       });
       registerEnvironmentRoutes(app, { config, environmentRegistry });

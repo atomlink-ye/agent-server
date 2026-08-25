@@ -16,12 +16,12 @@ describe('local agent project loader', () => {
     });
 
     expect(project.fingerprint).toBe(
-      'sha256:75241dadf6f15bd20f4dc2c6be4dde2fd62e0b10ed1ae7e5f1f9e3db3d0ddb66',
+      'sha256:7db4c1575b97a84dd363289075b590b253162f90c8afa229aacd45ea6032256a',
     );
     expect(project.toolProfiles.size).toBe(3);
     expect(project.skills.size).toBe(4);
     expect(project.environments.size).toBe(1);
-    expect(project.agents.size).toBe(3);
+    expect(project.workers.size).toBe(3);
     expect(project.teams.size).toBe(1);
     expect(project.memoryStores.size).toBe(1);
     expect(project.entrypoints).toHaveLength(1);

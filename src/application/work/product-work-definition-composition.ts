@@ -1,15 +1,17 @@
 import { createHash } from 'node:crypto';
 
-import { importAgent } from '../agents/import-agent.js';
-import { publishAgentVersion } from '../agents/publish-agent-version.js';
-import { parseForImport } from '../agents/validate-agent-package.js';
+import { importWorker } from '../workers/import-worker.js';
+import { publishWorkerVersion } from '../workers/publish-worker-version.js';
+import { parseWorkerForImport } from '../workers/validate-worker-package.js';
 import {
   importEnvironment,
   publishEnvironmentVersion,
   validateEnvironmentPackage,
 } from '../environments/environment-use-cases.js';
-import type { AgentRegistry } from '../ports/agent-registry.js';
-import type { AgentResolutionApi } from '../ports/agent-resolution-api.js';
+import type {
+  WorkerRegistry,
+  WorkerResolutionApi,
+} from '../ports/worker-registry.js';
 import type { EnvironmentRegistry } from '../ports/environment-registry.js';
 import type { InvokableRepository } from '../ports/invokable-repository.js';
 import type { MemoryVersionReadApi } from '../ports/memory-version-read-api.js';
@@ -32,7 +34,7 @@ export type ProductWorkDefinitionParticipantInspection = {
   readonly name: string;
   readonly role: 'primary' | 'lead' | 'member';
   readonly source: 'referenced' | 'inline';
-  readonly agentVersionId: string | null;
+  readonly workerVersionId: string | null;
   readonly skills: readonly string[];
   readonly tools: readonly string[];
 };
@@ -48,7 +50,7 @@ export type ProductWorkDefinitionInspection = {
 export class ProductWorkDefinitionInspector {
   public constructor(
     private readonly options: {
-      readonly agents: AgentResolutionApi;
+      readonly workers: WorkerResolutionApi;
       readonly environments: Pick<EnvironmentRegistry, 'findVersion'>;
       readonly memories?: MemoryVersionReadApi;
     },
@@ -61,10 +63,10 @@ export class ProductWorkDefinitionInspector {
     const bindings: readonly {
       readonly name: string;
       readonly role: 'primary' | 'lead' | 'member';
-      readonly binding: ProductWorkParticipantBinding | SingleAgentBinding;
+      readonly binding: ProductWorkParticipantBinding | SingleWorkerBinding;
       readonly path: string;
     }[] =
-      document.spec.kind === 'single_agent'
+      document.spec.kind === 'single_worker'
         ? [
             {
               name: document.metadata.name,
@@ -90,44 +92,44 @@ export class ProductWorkDefinitionInspector {
 
     const participants: ProductWorkDefinitionParticipantInspection[] = [];
     for (const item of bindings) {
-      if (item.binding.agent_version_id) {
-        const agent = await this.options.agents.resolvePublished(
-          item.binding.agent_version_id,
+      if (item.binding.worker_version_id) {
+        const worker = await this.options.workers.resolvePublished(
+          item.binding.worker_version_id,
           owner,
           { resolveExtensions: true },
         );
-        if (!agent)
+        if (!worker)
           throw new ProductWorkDefinitionReferenceError(
-            `${item.path}.agent_version_id`,
-            'Referenced Agent version was not found or is not published in this owner scope.',
+            `${item.path}.worker_version_id`,
+            'Referenced Worker version was not found or is not published in this owner scope.',
           );
         participants.push(
           Object.freeze({
             name: item.name,
             role: item.role,
             source: 'referenced' as const,
-            agentVersionId: item.binding.agent_version_id,
-            skills: Object.freeze(agent.skills.map((skill) => skill.ref)),
-            tools: Object.freeze([...agent.toolRefs]),
+            workerVersionId: item.binding.worker_version_id,
+            skills: Object.freeze(worker.skills.map((skill) => skill.ref)),
+            tools: Object.freeze([...worker.toolRefs]),
           }),
         );
         continue;
       }
 
-      const inline = item.binding.agent?.source;
+      const inline = item.binding.worker?.source;
       if (!inline)
         throw new ProductWorkDefinitionReferenceError(
-          `${item.path}.agent`,
-          'An inline Agent source is required.',
+          `${item.path}.worker`,
+          'An inline Worker source is required.',
         );
       try {
-        const parsed = parseForImport(inline);
+        const parsed = parseWorkerForImport(inline);
         participants.push(
           Object.freeze({
             name: item.name,
             role: item.role,
             source: 'inline' as const,
-            agentVersionId: null,
+            workerVersionId: null,
             skills: Object.freeze(
               parsed.package.spec.skills.map((skill) => skill.ref),
             ),
@@ -138,8 +140,8 @@ export class ProductWorkDefinitionInspector {
         );
       } catch {
         throw new ProductWorkDefinitionReferenceError(
-          `${item.path}.agent.source`,
-          'Inline Agent source is invalid.',
+          `${item.path}.worker.source`,
+          'Inline Worker source is invalid.',
         );
       }
     }
@@ -215,7 +217,7 @@ export class ProductWorkDefinitionMaterializer {
 
   public constructor(
     private readonly options: {
-      readonly agentRegistry?: AgentRegistry;
+      readonly workerRegistry?: WorkerRegistry;
       readonly environmentRegistry?: EnvironmentRegistry;
       readonly invokables: Pick<
         InvokableRepository,
@@ -253,19 +255,19 @@ export class ProductWorkDefinitionMaterializer {
       inputSchema: input.document.spec.input_schema,
     };
 
-    if (input.document.spec.kind === 'single_agent') {
-      const agentVersionId = await this.materializeAgent(
+    if (input.document.spec.kind === 'single_worker') {
+      const workerVersionId = await this.materializeWorker(
         input.document.spec,
         input.accessContext,
       );
       return Object.freeze({
-        kind: 'single_agent' as const,
-        agentVersionId,
+        kind: 'single_worker' as const,
+        workerVersionId,
         ...common,
       });
     }
 
-    const leadVersionId = await this.materializeAgent(
+    const leadVersionId = await this.materializeWorker(
       input.document.spec.lead,
       input.accessContext,
     );
@@ -273,7 +275,7 @@ export class ProductWorkDefinitionMaterializer {
     for (const member of input.document.spec.members) {
       members.push({
         name: member.name,
-        agentVersionId: await this.materializeAgent(
+        workerVersionId: await this.materializeWorker(
           member,
           input.accessContext,
         ),
@@ -289,7 +291,7 @@ export class ProductWorkDefinitionMaterializer {
       spec: {
         lead: {
           name: input.document.spec.lead.name,
-          agentVersionId: leadVersionId,
+          workerVersionId: leadVersionId,
         },
         roster: members,
         environmentVersionId,
@@ -302,27 +304,27 @@ export class ProductWorkDefinitionMaterializer {
     });
   }
 
-  private async materializeAgent(
-    binding: ProductWorkParticipantBinding | SingleAgentBinding,
+  private async materializeWorker(
+    binding: ProductWorkParticipantBinding | SingleWorkerBinding,
     accessContext: AccessContext,
   ): Promise<string> {
-    if (binding.agent_version_id) return binding.agent_version_id;
-    const source = binding.agent?.source;
-    if (!source || !this.options.agentRegistry)
+    if (binding.worker_version_id) return binding.worker_version_id;
+    const source = binding.worker?.source;
+    if (!source || !this.options.workerRegistry)
       throw new ProductWorkDefinitionReferenceError(
-        '$.spec.agent',
-        'Inline Agent materialization is unavailable.',
+        '$.spec.worker',
+        'Inline Worker materialization is unavailable.',
       );
     const digest = sha256Hex(source);
-    const imported = await importAgent(this.options.agentRegistry, {
+    const imported = await importWorker(this.options.workerRegistry, {
       accessContext,
-      idempotencyKey: `work-inline-agent-import:${digest}`,
+      idempotencyKey: `work-inline-worker-import:${digest}`,
       source,
     });
     if (imported.version.status === 'published') return imported.version.id;
-    const published = await publishAgentVersion(this.options.agentRegistry, {
+    const published = await publishWorkerVersion(this.options.workerRegistry, {
       accessContext,
-      idempotencyKey: `work-inline-agent-publish:${digest}`,
+      idempotencyKey: `work-inline-worker-publish:${digest}`,
       versionId: imported.version.id,
     });
     return published.id;
@@ -443,9 +445,9 @@ export function stableProductUuid(seed: string): string {
   return `${value.slice(0, 8)}-${value.slice(8, 12)}-${value.slice(12, 16)}-${value.slice(16, 20)}-${value.slice(20)}`;
 }
 
-type SingleAgentBinding = Extract<
+type SingleWorkerBinding = Extract<
   ProductWorkDefinitionDocument['spec'],
-  { readonly kind: 'single_agent' }
+  { readonly kind: 'single_worker' }
 >;
 type EnvironmentBinding = Pick<
   ProductWorkDefinitionDocument['spec'],

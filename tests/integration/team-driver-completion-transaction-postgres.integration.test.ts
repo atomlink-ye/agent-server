@@ -109,7 +109,7 @@ async function seedAtomicFailure(
   );
   await database.query(
     `INSERT INTO team_member_runs(
-      id,team_run_id,name,role,agent_version_id,status,tenant_id,workspace_id,
+      id,team_run_id,name,role,worker_version_id,status,tenant_id,workspace_id,
       principal_type,principal_id,created_at,updated_at
     ) VALUES
       ($1,$3,'atomic-lead','lead','00000000-0000-4000-8000-000000009315','active',$4,$5,$6,$7,$8,$8),
@@ -258,7 +258,7 @@ async function seed(database: PGlite): Promise<void> {
   );
   await database.query(
     `INSERT INTO team_member_runs(
-      id,team_run_id,name,role,agent_version_id,status,tenant_id,workspace_id,
+      id,team_run_id,name,role,worker_version_id,status,tenant_id,workspace_id,
       principal_type,principal_id,created_at,updated_at
     ) VALUES
       ($1,$3,'lead','lead',$4,'idle',$6,$7,$8,$9,$10,$10),

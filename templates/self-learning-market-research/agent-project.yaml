@@ -32,13 +32,13 @@ spec:
   environments:
     synthetic-paseo:
       file: environments/synthetic-paseo.yaml
-  agents:
+  workers:
     lead:
-      file: agents/lead.yaml
+      file: workers/lead.yaml
     opportunity-analyst:
-      file: agents/opportunity-analyst.yaml
+      file: workers/opportunity-analyst.yaml
     analog-risk-reviewer:
-      file: agents/analog-risk-reviewer.yaml
+      file: workers/analog-risk-reviewer.yaml
   teams:
     market-research:
       file: teams/market-research.yaml

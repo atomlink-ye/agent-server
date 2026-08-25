@@ -7,15 +7,15 @@ kind: WorkDefinition
 metadata:
   name: one-file-research
 spec:
-  kind: single_agent
-  agent:
+  kind: single_worker
+  worker:
     source: |
       apiVersion: agent-server/v1alpha1
-      kind: ManagedAgent
+      kind: Worker
       metadata:
         name: inline-researcher
       spec:
-        description: Inline Agent
+        description: Inline Worker
         instructions: "Answer the Product input."
         runtime:
           provider: paseo
@@ -63,25 +63,25 @@ spec:
 `;
 
 describe('Product Work Definition inline authoring contract', () => {
-  it('accepts one file containing Agent and Environment authoring sources', () => {
+  it('accepts one file containing Worker and Environment authoring sources', () => {
     const result = validateProductWorkDefinition(INLINE);
     expect(result.valid).toBe(true);
     if (!result.valid) throw new Error('expected valid inline Definition');
-    expect(result.document.spec.kind).toBe('single_agent');
-    if (result.document.spec.kind !== 'single_agent') return;
-    expect(result.document.spec.agent?.source).toContain('kind: ManagedAgent');
+    expect(result.document.spec.kind).toBe('single_worker');
+    if (result.document.spec.kind !== 'single_worker') return;
+    expect(result.document.spec.worker?.source).toContain('kind: Worker');
     expect(result.document.spec.environment?.source).toContain(
       'kind: ManagedEnvironment',
     );
-    expect(result.document.spec.agent_version_id).toBeUndefined();
+    expect(result.document.spec.worker_version_id).toBeUndefined();
     expect(result.document.spec.environment_version_id).toBeUndefined();
   });
 
   it('requires exactly one inline source or immutable version ref per resource', () => {
     const invalid = validateProductWorkDefinition(
       INLINE.replace(
-        '  agent:\n',
-        '  agent_version_id: 11111111-1111-4111-8111-111111111111\n  agent:\n',
+        '  worker:\n',
+        '  worker_version_id: 11111111-1111-4111-8111-111111111111\n  worker:\n',
       ),
     );
     expect(invalid.valid).toBe(false);
@@ -89,7 +89,7 @@ describe('Product Work Definition inline authoring contract', () => {
     expect(invalid.diagnostics).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          path: '$.spec.agent_version_id',
+          path: '$.spec.worker_version_id',
           severity: 'error',
         }),
       ]),

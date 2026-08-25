@@ -90,6 +90,7 @@ export async function createApplication(
     config,
     definitionReadApi: resourceModule.definitionReadApi,
     agentResolutionApi: resourceModule.agentResolutionApi,
+    workerResolutionApi: resourceModule.workerResolutionApi,
   });
   const {
     runRepository,

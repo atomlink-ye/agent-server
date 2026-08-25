@@ -82,12 +82,12 @@ export const TeamVersionResponseSchema = z
     spec: z
       .object({
         lead: z
-          .object({ name: z.string().trim().min(1), agentVersionId: uuid })
+          .object({ name: z.string().trim().min(1), workerVersionId: uuid })
           .strict(),
         roster: z
           .array(
             z
-              .object({ name: z.string().trim().min(1), agentVersionId: uuid })
+              .object({ name: z.string().trim().min(1), workerVersionId: uuid })
               .strict(),
           )
           .min(1),
@@ -153,7 +153,7 @@ export const TeamMemberResponseSchema = z
     team_run_id: uuid,
     name: z.string(),
     role: z.enum(['lead', 'member']),
-    agent_version_id: uuid,
+    worker_version_id: uuid,
     runtime_session_id: uuid.nullable(),
     status: z.enum(['starting', 'active', 'idle', 'stopped', 'failed']),
     current_work_item_id: uuid.nullable(),

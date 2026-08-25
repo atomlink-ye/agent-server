@@ -26,7 +26,7 @@ interface TaskFields {
   readonly logicalStepKey: string | null;
   readonly nodePath: string | null;
   readonly status: TaskStatus;
-  readonly invokableKind: 'agent' | 'team';
+  readonly invokableKind: 'agent' | 'worker' | 'team';
   readonly invokableVersionId: string;
   readonly inputSnapshotRef: string;
   readonly inputFingerprint: string;
@@ -63,7 +63,7 @@ interface CreateRootTaskFields {
   readonly principalType: string;
   readonly principalId: string;
   readonly policySnapshotVersion: string;
-  readonly invokableKind: 'agent' | 'team';
+  readonly invokableKind: 'agent' | 'worker' | 'team';
   readonly invokableVersionId: string;
   readonly inputSnapshotRef: string;
   readonly inputFingerprint: string;
@@ -89,7 +89,7 @@ export interface CreateChildTaskOptions {
   readonly rootTaskId: string;
   readonly parentTaskId: string;
   readonly parentRunId: string;
-  readonly invokableKind: 'agent' | 'team';
+  readonly invokableKind: 'agent' | 'worker' | 'team';
   readonly invokableVersionId: string;
   readonly inputSnapshotRef: string;
   readonly inputFingerprint: string;

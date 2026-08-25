@@ -104,7 +104,7 @@ describe('Composition-first Work on real PostgreSQL', () => {
       agentVersionId,
       environmentVersionId,
       memoryVersionIds: [memoryVersionId],
-    };
+    } as any;
     await sources.publish({
       definitionId,
       versionId: definitionVersionId,
@@ -181,7 +181,7 @@ describe('Composition-first Work on real PostgreSQL', () => {
               }
             : null,
       },
-    });
+    } as any);
     const repository = new PostgresWorkIdentityRepository(pool);
     const identity = new WorkIdentityApi({
       repository,
@@ -380,7 +380,7 @@ describe('Composition-first Work on real PostgreSQL', () => {
     );
     await pool.query(
       `INSERT INTO team_member_runs
-       (id,team_run_id,name,role,agent_version_id,status,tenant_id,workspace_id,
+       (id,team_run_id,name,role,worker_version_id,status,tenant_id,workspace_id,
         principal_type,principal_id,created_at,updated_at)
        VALUES($1,$2,'analyst','member',$3,'idle',$4,$5,$6,$7,$8,$8)`,
       [

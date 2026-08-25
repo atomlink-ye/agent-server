@@ -6,6 +6,7 @@ import { InvokeTask } from '../application/tasks/invoke-task.js';
 import { SubmitRun } from '../application/runs/submit-run.js';
 import { SubmitSessionTurn } from '../application/sessions/submit-session-turn.js';
 import type { AgentResolutionApi } from '../application/ports/agent-resolution-api.js';
+import type { WorkerResolutionApi } from '../application/ports/worker-registry.js';
 import type { DefinitionReadApi } from '../application/ports/definition-read-api.js';
 import { PostgresAdmissionRepository } from '../infrastructure/postgres/postgres-admission-repository.js';
 import { PostgresChatDispatchRepository } from '../infrastructure/postgres/postgres-chat-dispatch-repository.js';
@@ -46,6 +47,7 @@ export interface CreateKernelCapabilitiesOptions {
   readonly config: Pick<AppConfig, 'directChatPlane' | 'productWorkPlane'>;
   readonly definitionReadApi: DefinitionReadApi;
   readonly agentResolutionApi: AgentResolutionApi;
+  readonly workerResolutionApi: WorkerResolutionApi;
 }
 
 /** Creates the durable application kernel values consumed by the composition root. */
@@ -85,6 +87,7 @@ export function createKernelCapabilities(
     admissionRepository,
     options.definitionReadApi,
     options.agentResolutionApi,
+    options.workerResolutionApi,
   );
 
   return Object.freeze({

@@ -295,10 +295,10 @@ describe('Work Chat wake on real PostgreSQL', () => {
         workspaceId,
         principalId,
         JSON.stringify({
-          lead: { name: 'lead', agentVersionId },
+          lead: { name: 'lead', workerVersionId: agentVersionId },
           roster: [
-            { name: 'reviewer', agentVersionId },
-            { name: 'builder', agentVersionId: randomUUID() },
+            { name: 'reviewer', workerVersionId: agentVersionId },
+            { name: 'builder', workerVersionId: randomUUID() },
           ],
           environmentVersionId,
         }),
@@ -371,7 +371,7 @@ describe('Work Chat wake on real PostgreSQL', () => {
     );
     await pool.query(
       `INSERT INTO team_member_runs
-       (id,team_run_id,name,role,agent_version_id,status,tenant_id,workspace_id,
+       (id,team_run_id,name,role,worker_version_id,status,tenant_id,workspace_id,
         principal_type,principal_id,created_at,updated_at)
        VALUES($1,$2,'reviewer','member',$3,'active',$4,$5,'service_account',$6,$7,$7)`,
       [

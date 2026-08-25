@@ -94,7 +94,7 @@ export function registerProductWorkDefinitionRoutes(
               name: participant.name,
               role: participant.role,
               source: participant.source,
-              agent_version_id: participant.agentVersionId,
+              worker_version_id: participant.workerVersionId,
               skills: participant.skills,
               tools: participant.tools,
             })),
@@ -106,7 +106,7 @@ export function registerProductWorkDefinitionRoutes(
             required_runtime_capabilities: result.requiredRuntimeCapabilities,
             platform_capabilities: result.platformCapabilities,
             materialization: {
-              inline_agents: result.materialization.inlineAgents,
+              inline_workers: result.materialization.inlineWorkers,
               inline_environment: result.materialization.inlineEnvironment,
               internal_team: result.materialization.internalTeam,
             },

@@ -98,7 +98,7 @@ async function seedFixture(database: Pool): Promise<Fixture> {
   // Create lead member with 'active' status (as per team-driver.ts which activates lead at creation)
   await database.query(
     `INSERT INTO team_member_runs(
-      id,team_run_id,name,role,agent_version_id,runtime_session_id,status,
+      id,team_run_id,name,role,worker_version_id,runtime_session_id,status,
       tenant_id,workspace_id,principal_type,principal_id,created_at,updated_at
     ) VALUES ($1,$2,'Lead','lead',$3,NULL,'active',$4,$5,$6,$7,$8,$8)`,
     [
@@ -117,7 +117,7 @@ async function seedFixture(database: Pool): Promise<Fixture> {
   // This is the real production scenario that the previous fixture didn't test
   await database.query(
     `INSERT INTO team_member_runs(
-      id,team_run_id,name,role,agent_version_id,runtime_session_id,status,
+      id,team_run_id,name,role,worker_version_id,runtime_session_id,status,
       tenant_id,workspace_id,principal_type,principal_id,created_at,updated_at
     ) VALUES ($1,$2,'Member','member',$3,NULL,'starting',$4,$5,$6,$7,$8,$8)`,
     [

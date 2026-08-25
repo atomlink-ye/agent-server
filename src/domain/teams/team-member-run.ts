@@ -9,7 +9,7 @@ export interface TeamMemberRun {
   readonly teamRunId: string;
   readonly name: string;
   readonly role: TeamMemberRunRole;
-  readonly agentVersionId: string;
+  readonly workerVersionId: string;
   readonly runtimeSessionId: string | null;
   readonly status: TeamMemberRunStatus;
   readonly currentWorkItemId: string | null;
@@ -26,7 +26,7 @@ export interface CreateTeamMemberRunOptions {
   readonly teamRunId: string;
   readonly name: string;
   readonly role: 'lead' | 'member';
-  readonly agentVersionId: string;
+  readonly workerVersionId: string;
   readonly tenantId: string;
   readonly workspaceId: string;
   readonly principalType: string;
@@ -43,7 +43,7 @@ export function createTeamMemberRun(
     teamRunId: options.teamRunId,
     name: options.name,
     role: options.role,
-    agentVersionId: options.agentVersionId,
+    workerVersionId: options.workerVersionId,
     runtimeSessionId: null,
     status: 'starting' as const,
     currentWorkItemId: null,

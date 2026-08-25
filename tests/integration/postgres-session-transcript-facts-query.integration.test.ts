@@ -245,14 +245,14 @@ async function insertTeamMember(
     readonly teamRunId: string;
     readonly name: string;
     readonly role: 'lead' | 'member';
-    readonly agentVersionId: string;
+    readonly workerVersionId: string;
     readonly status: string;
     readonly owner: Owner;
   },
 ): Promise<void> {
   await database.query(
     `INSERT INTO team_member_runs(
-      id,team_run_id,name,role,agent_version_id,status,tenant_id,workspace_id,
+      id,team_run_id,name,role,worker_version_id,status,tenant_id,workspace_id,
       principal_type,principal_id,created_at,updated_at
     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$11)`,
     [
@@ -260,7 +260,7 @@ async function insertTeamMember(
       input.teamRunId,
       input.name,
       input.role,
-      input.agentVersionId,
+      input.workerVersionId,
       input.status,
       input.owner.tenantId,
       input.owner.workspaceId,
@@ -323,7 +323,7 @@ async function seedTeamFixture(database: PGlite): Promise<void> {
     teamRunId: ids.teamRun,
     name: 'lead',
     role: 'lead',
-    agentVersionId: ids.leadAgentVersion,
+    workerVersionId: ids.leadAgentVersion,
     status: 'active',
     owner: ownerA,
   });
@@ -343,7 +343,7 @@ async function seedTeamFixture(database: PGlite): Promise<void> {
     teamRunId: ids.teamRun,
     name: 'worker',
     role: 'member',
-    agentVersionId: ids.workerAgentVersion,
+    workerVersionId: ids.workerAgentVersion,
     status: 'idle',
     owner: ownerA,
   });
@@ -366,7 +366,7 @@ async function seedTeamFixture(database: PGlite): Promise<void> {
     teamRunId: ids.teamRun,
     name: 'starting-member',
     role: 'member',
-    agentVersionId: ids.workerAgentVersion,
+    workerVersionId: ids.workerAgentVersion,
     status: 'starting',
     owner: ownerA,
   });
@@ -398,7 +398,7 @@ async function seedForeignTenantLeakAttempt(database: PGlite): Promise<void> {
     teamRunId: ids.teamRun,
     name: 'foreign-leak-member',
     role: 'member',
-    agentVersionId: ids.workerAgentVersion,
+    workerVersionId: ids.workerAgentVersion,
     status: 'starting',
     owner: ownerB,
   });

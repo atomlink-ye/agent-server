@@ -419,7 +419,7 @@ function member(v: any) {
     team_run_id: v.teamRunId,
     name: v.name,
     role: v.role,
-    agent_version_id: v.agentVersionId,
+    worker_version_id: v.workerVersionId,
     runtime_session_id: v.runtimeSessionId,
     status: v.status,
     current_work_item_id: v.currentWorkItemId,

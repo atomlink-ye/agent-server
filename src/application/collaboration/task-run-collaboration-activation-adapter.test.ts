@@ -32,7 +32,7 @@ const member: TeamMemberRun = {
   teamRunId: team.id,
   name: 'Member',
   role: 'member',
-  agentVersionId: 'member-agent',
+  workerVersionId: 'member-worker',
   runtimeSessionId: null,
   status: 'idle',
   currentWorkItemId: null,

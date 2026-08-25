@@ -60,7 +60,7 @@ function leadTerminalTask(team: TeamRun): Task {
     logicalStepKey: 'lead-turn-decision',
     nodePath: 'lead-turn-decision',
     status: 'completed',
-    invokableKind: 'agent',
+    invokableKind: 'worker',
     teamMemberRunId: 'lead-member-decision',
     teamSequence: team.leadTurnCount,
     teamTaskKind: 'lead_turn',

@@ -69,7 +69,7 @@ export class RunTeamCoordinator {
       ) ||
       (task.teamTaskKind === 'lead_turn' && member.role !== 'lead') ||
       (task.teamTaskKind === 'work_attempt' && member.role !== 'member') ||
-      member.agentVersionId !== task.invokableVersionId
+      member.workerVersionId !== task.invokableVersionId
     )
       throw new Error('Team member task identity is invalid.');
     return { member, team, owner };

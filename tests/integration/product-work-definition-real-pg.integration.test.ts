@@ -134,7 +134,7 @@ describe('Product Work Definition API persistence on real PostgreSQL', () => {
       environments: environmentRead,
       authoredDefinitions: sources,
       memories: { findVersion: async () => null },
-    });
+    } as any);
     const product = new ProductWorkDefinitionApi({
       repository: sources,
       resolver,
@@ -148,7 +148,7 @@ describe('Product Work Definition API persistence on real PostgreSQL', () => {
       environments: environmentRead as any,
       memories: { findVersion: async () => null },
       now: () => new Date(at),
-    });
+    } as any);
 
     const created = await product.apply({
       source: SOURCE,

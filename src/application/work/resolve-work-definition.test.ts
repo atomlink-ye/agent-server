@@ -59,7 +59,7 @@ function singleResolver(input?: {
         findPublishedTeamVersionById: async () => null,
       },
       environments: { findVersion: async () => null } as any,
-    }),
+    } as any),
   };
 }
 
@@ -187,7 +187,7 @@ describe('ResolveWorkDefinition', () => {
             fingerprint: 'sha256:environment',
           }) as any,
       },
-    });
+    } as any);
 
     const resolved = await resolver.resolve({
       definitionId: definition.id,
@@ -249,7 +249,7 @@ describe('ResolveWorkDefinition', () => {
         findPublishedTeamVersionById: async () => null,
       },
       environments: { findVersion: async () => null } as any,
-    });
+    } as any);
 
     await expect(
       resolver.resolve({

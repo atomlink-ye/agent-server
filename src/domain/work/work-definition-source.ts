@@ -24,8 +24,8 @@ type WorkDefinitionSourceCommon = {
 
 export type WorkDefinitionCompositionSource =
   | (WorkDefinitionSourceCommon & {
-      readonly kind: 'single_agent';
-      readonly agentVersionId: string;
+      readonly kind: 'single_worker';
+      readonly workerVersionId: string;
     })
   | (WorkDefinitionSourceCommon & {
       readonly kind: 'collaboration';
@@ -77,8 +77,8 @@ export class InvalidWorkDefinitionSourceError extends Error {
 export function validateWorkDefinitionCompositionSource(
   source: WorkDefinitionCompositionSource,
 ): WorkDefinitionCompositionSource {
-  if (source.kind === 'single_agent') {
-    assertId(source.agentVersionId, '$.spec.agent_version_id');
+  if (source.kind === 'single_worker') {
+    assertId(source.workerVersionId, '$.spec.worker_version_id');
   } else if (source.kind === 'collaboration') {
     assertId(source.teamVersionId, '$.spec.team_version_id');
   } else {
@@ -136,10 +136,10 @@ export function validateWorkDefinitionCompositionSource(
       : { description: source.description }),
     ...(inputSchema ? { inputSchema } : {}),
   };
-  return source.kind === 'single_agent'
+  return source.kind === 'single_worker'
     ? Object.freeze({
-        kind: 'single_agent' as const,
-        agentVersionId: source.agentVersionId,
+        kind: 'single_worker' as const,
+        workerVersionId: source.workerVersionId,
         ...common,
       })
     : Object.freeze({

@@ -193,11 +193,11 @@ export function toWorkDefinitionResponse(input: {
     readonly spec: {
       readonly lead: {
         readonly name: string;
-        readonly agentVersionId: string;
+        readonly workerVersionId: string;
       };
       readonly roster: readonly {
         readonly name: string;
-        readonly agentVersionId: string;
+        readonly workerVersionId: string;
       }[];
       readonly environmentVersionId: string;
     };

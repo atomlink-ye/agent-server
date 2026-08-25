@@ -107,7 +107,7 @@ async function seedFixture(database: Pool): Promise<Fixture> {
   // Create lead member (mark as active so it won't be processed again)
   await database.query(
     `INSERT INTO team_member_runs(
-      id,team_run_id,name,role,agent_version_id,runtime_session_id,status,
+      id,team_run_id,name,role,worker_version_id,runtime_session_id,status,
       tenant_id,workspace_id,principal_type,principal_id,created_at,updated_at
     ) VALUES ($1,$2,'Lead','lead',$3,NULL,'active',$4,$5,$6,$7,$8,$8)`,
     [
@@ -125,7 +125,7 @@ async function seedFixture(database: Pool): Promise<Fixture> {
   // Create builder member (idle)
   await database.query(
     `INSERT INTO team_member_runs(
-      id,team_run_id,name,role,agent_version_id,runtime_session_id,status,
+      id,team_run_id,name,role,worker_version_id,runtime_session_id,status,
       tenant_id,workspace_id,principal_type,principal_id,created_at,updated_at
     ) VALUES ($1,$2,'Builder','member',$3,NULL,'idle',$4,$5,$6,$7,$8,$8)`,
     [
@@ -143,7 +143,7 @@ async function seedFixture(database: Pool): Promise<Fixture> {
   // Create analyst member (idle)
   await database.query(
     `INSERT INTO team_member_runs(
-      id,team_run_id,name,role,agent_version_id,runtime_session_id,status,
+      id,team_run_id,name,role,worker_version_id,runtime_session_id,status,
       tenant_id,workspace_id,principal_type,principal_id,created_at,updated_at
     ) VALUES ($1,$2,'Analyst','member',$3,NULL,'idle',$4,$5,$6,$7,$8,$8)`,
     [

@@ -14,24 +14,23 @@ const access: AccessContext = {
 
 const definitionId = '22222222-2222-4222-8222-222222222222';
 const definitionVersionId = '33333333-3333-4333-8333-333333333333';
-const agentVersionId = '44444444-4444-4444-8444-444444444444';
+const workerVersionId = '44444444-4444-4444-8444-444444444444';
 const environmentVersionId = '55555555-5555-4555-8555-555555555555';
 const memoryVersionId = '66666666-6666-4666-8666-666666666666';
 
 const source = {
-  kind: 'single_agent' as const,
-  agentVersionId,
+  kind: 'single_worker' as const,
+  workerVersionId,
   environmentVersionId,
   memoryVersionIds: [memoryVersionId],
 };
 
 describe('ResolveWorkDefinition authored source', () => {
-  it('resolves Agent + Environment + Memory into one immutable composition', async () => {
+  it('resolves Worker + Environment + Memory into one immutable composition', async () => {
     const resolver = new ResolveWorkDefinition({
-      agents: {
-        findDefinition: async () => null,
+      workers: {
         findVersion: async (_owner: unknown, id: string) =>
-          id === agentVersionId
+          id === workerVersionId
             ? ({
                 id,
                 status: 'published',
@@ -39,12 +38,14 @@ describe('ResolveWorkDefinition authored source', () => {
               } as any)
             : null,
       } as any,
-      agentResolution: {
+      workerResolution: {
         resolvePublished: async (id: string) =>
-          id === agentVersionId
+          id === workerVersionId
             ? ({
-                source: 'managed',
+                source: 'worker',
                 id,
+                definitionId,
+                workerOwner: {} as any,
                 instructions: 'research',
                 modelPolicyRef: 'free-only',
                 proposalLimit: 1,
@@ -78,7 +79,7 @@ describe('ResolveWorkDefinition authored source', () => {
           id: definitionId,
           owner: access,
           name: 'Research Work',
-          description: 'one Agent with explicit resources',
+          description: 'one Worker with explicit resources',
           createdAt: '2026-08-16T00:00:00.000Z',
         }),
         findPublishedVersion: async () => ({
@@ -113,10 +114,10 @@ describe('ResolveWorkDefinition authored source', () => {
       accessContext: access,
     });
 
-    expect(resolved.kind).toBe('single_agent');
+    expect(resolved.kind).toBe('single_worker');
     expect(resolved.executionPolicy.invokable).toEqual({
-      kind: 'agent',
-      versionId: agentVersionId,
+      kind: 'worker',
+      versionId: workerVersionId,
     });
     expect(resolved.environment).toEqual({
       versionId: environmentVersionId,
@@ -131,7 +132,7 @@ describe('ResolveWorkDefinition authored source', () => {
     ]);
     expect(resolved.participants[0]).toMatchObject({
       role: 'primary',
-      agentVersionId,
+      workerVersionId,
       toolRefs: ['memory://read'],
     });
     expect(resolved.executionPolicy.requiredRuntimeCapabilities).toEqual([

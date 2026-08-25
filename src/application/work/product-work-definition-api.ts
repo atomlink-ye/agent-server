@@ -1,5 +1,7 @@
-import type { AgentRegistry } from '../ports/agent-registry.js';
-import type { AgentResolutionApi } from '../ports/agent-resolution-api.js';
+import type {
+  WorkerRegistry,
+  WorkerResolutionApi,
+} from '../ports/worker-registry.js';
 import type { EnvironmentRegistry } from '../ports/environment-registry.js';
 import type { InvokableRepository } from '../ports/invokable-repository.js';
 import type { MemoryVersionReadApi } from '../ports/memory-version-read-api.js';
@@ -41,12 +43,12 @@ export interface ProductWorkDefinitionApplyResult {
 export interface ProductWorkDefinitionPlan {
   readonly fingerprint: string;
   readonly normalizedName: string;
-  readonly kind: 'single_agent' | 'collaboration';
+  readonly kind: 'single_worker' | 'collaboration';
   readonly participants: readonly {
     readonly name: string;
     readonly role: 'primary' | 'lead' | 'member';
     readonly source: PlanResourceSource;
-    readonly agentVersionId: string | null;
+    readonly workerVersionId: string | null;
     readonly skills: readonly string[];
     readonly tools: readonly string[];
   }[];
@@ -58,7 +60,7 @@ export interface ProductWorkDefinitionPlan {
   readonly requiredRuntimeCapabilities: readonly string[];
   readonly platformCapabilities: readonly string[];
   readonly materialization: {
-    readonly inlineAgents: number;
+    readonly inlineWorkers: number;
     readonly inlineEnvironment: boolean;
     readonly internalTeam: boolean;
   };
@@ -67,9 +69,9 @@ export interface ProductWorkDefinitionPlan {
 export interface ProductWorkDefinitionApiOptions {
   readonly repository: WorkDefinitionSourceRepository;
   readonly resolver: WorkDefinitionResolutionPort;
-  readonly agents: AgentResolutionApi;
-  /** Required only when a Product Definition embeds inline Agent packages. */
-  readonly agentRegistry?: AgentRegistry;
+  readonly workers: WorkerResolutionApi;
+  /** Required only when a Product Definition embeds inline Worker packages. */
+  readonly workerRegistry?: WorkerRegistry;
   readonly invokables: Pick<
     InvokableRepository,
     | 'saveTeamDefinition'
@@ -102,14 +104,14 @@ export class ProductWorkDefinitionApi {
   ) {
     this.now = options.now ?? (() => new Date());
     this.inspector = new ProductWorkDefinitionInspector({
-      agents: options.agents,
+      workers: options.workers,
       environments: options.environments,
       ...(options.memories ? { memories: options.memories } : {}),
     });
     this.materializer = new ProductWorkDefinitionMaterializer({
       invokables: options.invokables,
-      ...(options.agentRegistry
-        ? { agentRegistry: options.agentRegistry }
+      ...(options.workerRegistry
+        ? { workerRegistry: options.workerRegistry }
         : {}),
       ...(options.environmentRegistry
         ? { environmentRegistry: options.environmentRegistry }
@@ -153,7 +155,7 @@ export class ProductWorkDefinitionApi {
             ? ['platform_mcp']
             : [],
       materialization: {
-        inlineAgents: inspection.participants.filter(
+        inlineWorkers: inspection.participants.filter(
           (participant) => participant.source === 'inline',
         ).length,
         inlineEnvironment: inspection.environment.source === 'inline',
@@ -239,7 +241,7 @@ export class ProductWorkDefinitionApi {
     }
 
     // Keep validation/reference inspection side-effect free before materializing
-    // any inline Agent, Environment, or internal collaboration binding.
+    // any inline Worker, Environment, or internal collaboration binding.
     await this.inspector.inspect(parsed.document, owner);
     const composition = await this.materializer.materialize({
       document: parsed.document,

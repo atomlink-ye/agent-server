@@ -20,7 +20,7 @@ const access = {
   principalId: 'svc-1',
   policySnapshotVersion: 'policy-1',
 } as const;
-const agentVersionId = '22222222-2222-4222-8222-222222222222';
+const workerVersionId = '22222222-2222-4222-8222-222222222222';
 const environmentVersionId = '33333333-3333-4333-8333-333333333333';
 const now = '2026-08-16T00:00:00.000Z';
 
@@ -30,8 +30,8 @@ metadata:
   name: earnings-research
   description: First version
 spec:
-  kind: single_agent
-  agent_version_id: ${agentVersionId}
+  kind: single_worker
+  worker_version_id: ${workerVersionId}
   environment_version_id: ${environmentVersionId}
   input_schema:
     type: object
@@ -117,7 +117,7 @@ function createApi(repository: MemoryDefinitionRepository) {
         return {
           definitionId: input.definitionId,
           definitionVersionId: input.definitionVersionId,
-          kind: 'single_agent',
+          kind: 'single_worker',
           name: 'earnings-research',
           description: null,
           sourceFingerprint: `sha256:${'a'.repeat(64)}`,
@@ -127,23 +127,31 @@ function createApi(repository: MemoryDefinitionRepository) {
           memories: [],
           platformCapabilities: [],
           executionPolicy: {
-            invokable: { kind: 'agent', versionId: agentVersionId },
+            invokable: { kind: 'worker', versionId: workerVersionId },
             requiredRuntimeCapabilities: [],
           },
         };
       },
     },
-    agents: {
+    workers: {
       async resolvePublished(versionId) {
-        return versionId === agentVersionId
+        return versionId === workerVersionId
           ? {
-              source: 'managed',
-              id: agentVersionId,
+              source: 'worker',
+              id: workerVersionId,
+              definitionId: '11111111-1111-4111-8111-111111111111',
+              workerOwner: {
+                tenantId: access.tenantId,
+                workspaceId: access.workspaceId,
+                principalType: access.principalType,
+                principalId: access.principalId,
+              },
               instructions: 'research',
               modelPolicyRef: 'free-only',
+              proposalLimit: 0,
               skills: [],
               toolRefs: [],
-            }
+            } as any
           : null;
       },
     },

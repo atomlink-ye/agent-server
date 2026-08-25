@@ -124,9 +124,9 @@ const ProductWorkInputSchemaSchema = z
     });
   });
 
-const AgentBindingFields = {
-  agent_version_id: CanonicalUuidSchema.optional(),
-  agent: InlineSourceSchema.optional(),
+const WorkerBindingFields = {
+  worker_version_id: CanonicalUuidSchema.optional(),
+  worker: InlineSourceSchema.optional(),
 };
 const EnvironmentBindingFields = {
   environment_version_id: CanonicalUuidSchema.optional(),
@@ -160,34 +160,34 @@ const CommonSpecFields = {
 const ParticipantSchema = z
   .object({
     name: ParticipantNameSchema,
-    ...AgentBindingFields,
+    ...WorkerBindingFields,
   })
   .strict()
   .superRefine((value, context) =>
     exactlyOne(
-      value.agent_version_id,
-      value.agent,
+      value.worker_version_id,
+      value.worker,
       context,
-      'agent_version_id',
-      'agent',
+      'worker_version_id',
+      'worker',
     ),
   );
 
-const SingleAgentSpecSchema = z
+const SingleWorkerSpecSchema = z
   .object({
-    kind: z.literal('single_agent'),
-    ...AgentBindingFields,
+    kind: z.literal('single_worker'),
+    ...WorkerBindingFields,
     ...EnvironmentBindingFields,
     ...CommonSpecFields,
   })
   .strict()
   .superRefine((value, context) => {
     exactlyOne(
-      value.agent_version_id,
-      value.agent,
+      value.worker_version_id,
+      value.worker,
       context,
-      'agent_version_id',
-      'agent',
+      'worker_version_id',
+      'worker',
     );
     exactlyOne(
       value.environment_version_id,
@@ -237,7 +237,7 @@ const ProductWorkDefinitionDocumentSchema = z
         description: z.string().trim().max(2_000).optional(),
       })
       .strict(),
-    spec: z.union([SingleAgentSpecSchema, CollaborationSpecSchema]),
+  spec: z.union([SingleWorkerSpecSchema, CollaborationSpecSchema]),
   })
   .strict();
 

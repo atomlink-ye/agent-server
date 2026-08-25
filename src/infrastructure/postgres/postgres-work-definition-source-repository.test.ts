@@ -15,8 +15,8 @@ const environmentVersionId = '33333333-3333-4333-8333-333333333333';
 describe('PostgresWorkDefinitionSourceRepository', () => {
   it('accepts a jsonb key-order round trip when publishing a source', async () => {
     const source = {
-      kind: 'single_agent' as const,
-      agentVersionId,
+      kind: 'single_worker' as const,
+      workerVersionId: agentVersionId,
       environmentVersionId,
       memoryVersionIds: [],
     };
@@ -50,8 +50,8 @@ describe('PostgresWorkDefinitionSourceRepository', () => {
                 status: 'published',
                 // PostgreSQL jsonb returns keys in storage order, not author order.
                 source: {
-                  kind: 'single_agent',
-                  agentVersionId,
+                  kind: 'single_worker',
+                  workerVersionId: agentVersionId,
                   memoryVersionIds: [],
                   environmentVersionId,
                 },

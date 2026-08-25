@@ -57,7 +57,7 @@ type TeamRunRow = Omit<TeamRun, never> & {
 };
 type MemberRow = Omit<TeamMemberRun, never> & {
   team_run_id: string;
-  agent_version_id: string;
+  worker_version_id: string;
   runtime_session_id: string | null;
   current_work_item_id: string | null;
   tenant_id: string;
@@ -854,13 +854,13 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
   }
   public async createMemberRun(member: TeamMemberRun): Promise<void> {
     await this.database.query(
-      `INSERT INTO team_member_runs (id,team_run_id,name,role,agent_version_id,runtime_session_id,status,current_work_item_id,tenant_id,workspace_id,principal_type,principal_id,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+      `INSERT INTO team_member_runs (id,team_run_id,name,role,worker_version_id,runtime_session_id,status,current_work_item_id,tenant_id,workspace_id,principal_type,principal_id,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
       [
         member.id,
         member.teamRunId,
         member.name,
         member.role,
-        member.agentVersionId,
+        member.workerVersionId,
         member.runtimeSessionId,
         member.status,
         member.currentWorkItemId,
@@ -2361,7 +2361,7 @@ function mapMember(r: MemberRow): TeamMemberRun {
   return {
     ...r,
     teamRunId: r.team_run_id,
-    agentVersionId: r.agent_version_id,
+    workerVersionId: r.worker_version_id,
     runtimeSessionId: r.runtime_session_id,
     currentWorkItemId: r.current_work_item_id,
     tenantId: r.tenant_id,

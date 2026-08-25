@@ -11,10 +11,10 @@ import {
 } from './invokable.js';
 
 export interface TeamSpec {
-  readonly lead: { readonly name: string; readonly agentVersionId: string };
+  readonly lead: { readonly name: string; readonly workerVersionId: string };
   readonly roster: readonly {
     readonly name: string;
-    readonly agentVersionId: string;
+    readonly workerVersionId: string;
   }[];
   readonly environmentVersionId: string;
 }
@@ -99,8 +99,8 @@ export function rehydrateTeamVersion(snapshot: TeamVersion): TeamVersion {
       'Team version member names cannot contain outer whitespace',
     );
   assertNonEmptyString(
-    'lead.agentVersionId',
-    snapshot.spec.lead.agentVersionId,
+    'lead.workerVersionId',
+    snapshot.spec.lead.workerVersionId,
     'Team version',
   );
   if (snapshot.spec.roster.length < 1)
@@ -109,8 +109,8 @@ export function rehydrateTeamVersion(snapshot: TeamVersion): TeamVersion {
   for (const [index, member] of snapshot.spec.roster.entries()) {
     assertNonEmptyString(`roster[${index}].name`, member.name, 'Team version');
     assertNonEmptyString(
-      `roster[${index}].agentVersionId`,
-      member.agentVersionId,
+      `roster[${index}].workerVersionId`,
+      member.workerVersionId,
       'Team version',
     );
     if (member.name !== member.name.trim())

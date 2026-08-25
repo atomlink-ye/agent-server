@@ -4,7 +4,7 @@ import { canonicalizeProjectValue } from '../projects/project-canonicalization.j
 import type { ResolvedResourceManifestEntry } from './resolved-resource-manifest.js';
 import type { WorkInputSchema } from './work-input-schema.js';
 
-export type WorkCompositionKind = 'single_agent' | 'collaboration';
+export type WorkCompositionKind = 'single_worker' | 'collaboration';
 export type WorkParticipantRole = 'primary' | 'lead' | 'member';
 export type WorkPlatformCapability = 'collaboration' | 'platform_mcp';
 export type RequiredRuntimeCapability =
@@ -25,8 +25,8 @@ export interface ResolvedMemoryRef {
 export interface ResolvedWorkParticipant {
   readonly logicalName: string;
   readonly role: WorkParticipantRole;
-  readonly agentVersionId: string;
-  readonly agentFingerprint: string | null;
+  readonly workerVersionId: string;
+  readonly workerFingerprint: string | null;
   readonly toolRefs: readonly string[];
   readonly skills: readonly ResolvedSkillRef[];
 }
@@ -38,7 +38,7 @@ export interface ResolvedEnvironmentRef {
 
 export interface ResolvedWorkExecutionPolicy {
   readonly invokable: {
-    readonly kind: 'agent' | 'team';
+    readonly kind: 'worker' | 'team';
     readonly versionId: string;
   };
   readonly requiredRuntimeCapabilities: readonly RequiredRuntimeCapability[];
@@ -103,11 +103,11 @@ export function manifestEntriesForResolvedWorkDefinition(
   for (const participant of definition.participants) {
     const prefix = `participant:${participant.logicalName}`;
     entries.push({
-      slot: `${prefix}:agent`,
-      resourceKind: 'agent',
-      requestedRef: `agent_version:${participant.agentVersionId}`,
-      resolvedVersionId: participant.agentVersionId,
-      resolvedFingerprint: participant.agentFingerprint,
+      slot: `${prefix}:worker`,
+      resourceKind: 'worker',
+      requestedRef: `worker_version:${participant.workerVersionId}`,
+      resolvedVersionId: participant.workerVersionId,
+      resolvedFingerprint: participant.workerFingerprint,
       resolvedAt,
     });
     for (const skill of participant.skills) {

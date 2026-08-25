@@ -1,0 +1,23 @@
+src/application/runtime/synthetic-tool-receipt.ts
+  aa841554b33a269e 30-36
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2-bit.10+672fbf0",
+  "base_commit_sha": "016f9059d16aa9b81075cf6e93bf6dba17b52817",
+  "prompts": {
+    "aa841554b33a269e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2e0ac1a9-cdbd-49b5-9938-68e78819ae91",
+        "model": "claude-opus-5"
+      },
+      "human_author": "link.ye",
+      "messages": [],
+      "total_additions": 1271,
+      "total_deletions": 2,
+      "accepted_lines": 1271,
+      "overriden_lines": 0
+    }
+  }
+}

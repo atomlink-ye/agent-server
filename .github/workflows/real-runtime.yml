@@ -199,7 +199,10 @@ jobs:
   agent-team:
     runs-on: ubuntu-latest
     environment: test
-    timeout-minutes: 45
+    # The narrowed two-participant/one-Work smoke has a 5m provider gate. The
+    # previous three-agent/two-Work/rework flow needed 900s; 20m leaves room
+    # for checkout, install, and runtime startup without retaining that budget.
+    timeout-minutes: 20
     concurrency:
       group: real-provider-${{ github.repository }}-agent-team
       cancel-in-progress: false
@@ -311,7 +314,7 @@ jobs:
       - name: Real-provider agent-team main flow
         if: steps.credentials.outputs.available == 'true'
         env:
-          AGENT_TEAM_SMOKE_TIMEOUT_MS: '900000'
+          AGENT_TEAM_SMOKE_TIMEOUT_MS: '300000'
         run: pnpm smoke:agent-team
 
       - name: Enforce agent-team execution

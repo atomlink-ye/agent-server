@@ -55,54 +55,20 @@ export function evaluateCompletionFacts(value) {
   }
 
   const workItems = Array.isArray(value?.work_items) ? value.work_items : [];
-  if (workItems.length !== 2) {
+  if (workItems.length !== 1) {
     fail(
       'collaboration',
       'work_item_count',
-      'exactly two Work items',
+      'exactly one Work item',
       workItems.length,
     );
   }
-  const builderWork = workItems.find((item) => item.work_ref === 'work-1');
-  const work = workItems.find((item) => item.work_ref === 'work-2');
-  if (
-    !builderWork ||
-    builderWork.status !== 'accepted' ||
-    builderWork.assignee_name !== 'builder'
-  ) {
+  const work = workItems.find((item) => item.work_ref === 'work-1');
+  if (!work || work.status !== 'accepted' || work.assignee_name !== 'member') {
     fail(
       'collaboration',
       'work_1_accepted',
-      'W-1 accepted by builder',
-      builderWork
-        ? {
-            status: builderWork.status ?? null,
-            assignee_name: builderWork.assignee_name ?? null,
-          }
-        : null,
-    );
-  }
-  const builderAttempt = builderWork?.attempts?.find(
-    (attempt) => attempt.attempt_no === 1,
-  );
-  if (
-    builderWork?.attempts?.length !== 1 ||
-    !builderAttempt ||
-    builderAttempt.status !== 'completed' ||
-    !builderAttempt.result_summary?.includes('AGENT_TEAM_SMOKE_BUILDER_OK')
-  ) {
-    fail(
-      'collaboration',
-      'work_1_attempt',
-      'W-1 attempt 1 completed with AGENT_TEAM_SMOKE_BUILDER_OK',
-      builderAttempt ?? null,
-    );
-  }
-  if (!work || work.status !== 'accepted' || work.assignee_name !== 'analyst') {
-    fail(
-      'collaboration',
-      'work_2_accepted',
-      'W-2 accepted by analyst',
+      'W-1 accepted by member',
       work
         ? {
             status: work.status ?? null,
@@ -111,54 +77,48 @@ export function evaluateCompletionFacts(value) {
         : null,
     );
   }
-  const attempt1 = work?.attempts?.find((attempt) => attempt.attempt_no === 1);
-  const attempt2 = work?.attempts?.find((attempt) => attempt.attempt_no === 2);
+  const attempt = work?.attempts?.find((attempt) => attempt.attempt_no === 1);
   if (
-    work?.attempts?.length !== 2 ||
-    !attempt1 ||
-    attempt1.status !== 'completed' ||
-    !attempt1.result_summary?.includes('AGENT_TEAM_SMOKE_ATTEMPT_1')
+    work?.attempts?.length !== 1 ||
+    !attempt ||
+    attempt.status !== 'completed' ||
+    !attempt.result_summary?.includes('AGENT_TEAM_SMOKE_MEMBER_OK')
   ) {
     fail(
       'collaboration',
-      'work_2_attempt_1',
-      'W-2 attempt 1 completed with AGENT_TEAM_SMOKE_ATTEMPT_1',
-      attempt1 ?? null,
-    );
-  }
-  if (
-    !attempt2 ||
-    attempt2.status !== 'completed' ||
-    !attempt2.feedback_summary?.includes('AGENT_TEAM_SMOKE_REWORK_REQUIRED') ||
-    !attempt2.result_summary?.includes('AGENT_TEAM_SMOKE_MEMBER_OK')
-  ) {
-    fail(
-      'collaboration',
-      'work_2_attempt_2',
-      'W-2 attempt 2 completed after AGENT_TEAM_SMOKE_REWORK_REQUIRED with AGENT_TEAM_SMOKE_MEMBER_OK',
-      attempt2 ?? null,
+      'work_1_attempt',
+      'W-1 attempt 1 completed with AGENT_TEAM_SMOKE_MEMBER_OK',
+      attempt ?? null,
     );
   }
 
   const sessions = Array.isArray(value?.sessions) ? value.sessions : [];
-  const analystSession = sessions.find(
-    (session) => session.name === 'analyst' && session.role === 'member',
+  if (sessions.length !== 2) {
+    fail(
+      'collaboration',
+      'participant_count',
+      'exactly two Team participants (lead and member)',
+      sessions.length,
+    );
+  }
+  const memberSession = sessions.find(
+    (session) => session.name === 'member' && session.role === 'member',
   );
-  const analystAvailabilityTurn = analystSession?.turns?.find(
+  const memberAvailabilityTurn = memberSession?.turns?.find(
     (turn) =>
       turn.kind === 'direct_message' &&
       turn.activation?.materializer ===
         'task_run_collaboration_activation_adapter' &&
       turn.activation.causes?.some(
-        (cause) => cause.type === 'work_available' && cause.work_ref === 'W-2',
+        (cause) => cause.type === 'work_available' && cause.work_ref === 'W-1',
       ),
   );
-  if (!analystAvailabilityTurn) {
+  if (!memberAvailabilityTurn) {
     fail(
       'assertion',
       'work_available_activation',
-      'analyst direct_message materialized by work_available for W-2',
-      analystSession?.turns ?? [],
+      'member direct_message materialized by work_available for W-1',
+      memberSession?.turns ?? [],
     );
   }
   const leadSession = sessions.find(
@@ -183,12 +143,12 @@ export function evaluateCompletionFacts(value) {
   const messages = Array.isArray(value?.direct_messages)
     ? value.direct_messages
     : [];
-  if (!messages.length) {
+  if (messages.length !== 1) {
     fail(
       'collaboration',
-      'direct_message_missing',
-      'at least one direct message',
-      [],
+      'direct_message_count',
+      'exactly one direct message',
+      messages.length,
     );
   }
   const requiresAckMessages = messages.filter(
@@ -257,6 +217,59 @@ export function evaluateCompletionFacts(value) {
     }
   }
 
+  const message = messages[0];
+  if (
+    message &&
+    (message.sender_name !== 'member' ||
+      message.recipient_name !== 'lead' ||
+      message.summary !== 'AGENT_TEAM_SMOKE_DIRECT_REQUIRES_ACK')
+  ) {
+    fail(
+      'collaboration',
+      'direct_message_route',
+      'member sends AGENT_TEAM_SMOKE_DIRECT_REQUIRES_ACK to lead',
+      {
+        sender_name: message.sender_name ?? null,
+        recipient_name: message.recipient_name ?? null,
+        summary: message.summary ?? null,
+      },
+    );
+  }
+
+  return { ok: failures.length === 0, failures };
+}
+
+export function evaluateTraceFacts(value) {
+  const failures = [];
+  const activities = Array.isArray(value?.mcp_activities)
+    ? value.mcp_activities
+    : [];
+  const stockActivities = activities.filter(
+    (activity) => activity.tool_name === 'synthetic_stock_snapshot',
+  );
+  const stockActivityIds = new Set(
+    stockActivities.map(
+      (activity) =>
+        activity.activity_id ?? `sequence:${activity.sequence ?? 'unknown'}`,
+    ),
+  );
+  if (stockActivityIds.size !== 1) {
+    failures.push({
+      scope: 'assertion',
+      code: 'synthetic_stock_snapshot_activity_count',
+      expected: 'exactly one synthetic_stock_snapshot invocation',
+      actual: stockActivityIds.size,
+    });
+  }
+  if (!stockActivities.some((activity) => activity.status === 'completed')) {
+    failures.push({
+      scope: 'assertion',
+      code: 'synthetic_stock_snapshot_activity_status',
+      expected:
+        'synthetic_stock_snapshot mcp_activity includes status === "completed"',
+      actual: stockActivities.map((activity) => activity.status),
+    });
+  }
   return { ok: failures.length === 0, failures };
 }
 

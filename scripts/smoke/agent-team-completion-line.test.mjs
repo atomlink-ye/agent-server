@@ -4,6 +4,7 @@ import {
   acknowledgedMessagesWithoutActivation,
   classifySmokeOutcome,
   evaluateCompletionFacts,
+  evaluateTraceFacts,
   formatSmokeOutcome,
 } from './agent-team-completion-line.mjs';
 
@@ -20,29 +21,11 @@ function successfulProjection() {
       {
         work_ref: 'work-1',
         status: 'accepted',
-        assignee_name: 'builder',
+        assignee_name: 'member',
         attempts: [
           {
             attempt_no: 1,
             status: 'completed',
-            result_summary: 'AGENT_TEAM_SMOKE_BUILDER_OK',
-          },
-        ],
-      },
-      {
-        work_ref: 'work-2',
-        status: 'accepted',
-        assignee_name: 'analyst',
-        attempts: [
-          {
-            attempt_no: 1,
-            status: 'completed',
-            result_summary: 'AGENT_TEAM_SMOKE_ATTEMPT_1',
-          },
-          {
-            attempt_no: 2,
-            status: 'completed',
-            feedback_summary: 'AGENT_TEAM_SMOKE_REWORK_REQUIRED',
             result_summary: 'AGENT_TEAM_SMOKE_MEMBER_OK',
           },
         ],
@@ -51,31 +34,25 @@ function successfulProjection() {
     direct_messages: [
       {
         sequence: 3,
-        sender_name: 'analyst',
-        recipient_name: 'builder',
-        summary: 'agent collaboration update',
+        sender_name: 'member',
+        recipient_name: 'lead',
+        summary: 'AGENT_TEAM_SMOKE_DIRECT_REQUIRES_ACK',
         requires_ack: true,
         status: 'acknowledged',
       },
     ],
     sessions: [
       {
-        name: 'analyst',
+        name: 'member',
         role: 'member',
         turns: [
           {
             kind: 'direct_message',
             activation: {
               materializer: 'task_run_collaboration_activation_adapter',
-              causes: [{ type: 'work_available', work_ref: 'W-2' }],
+              causes: [{ type: 'work_available', work_ref: 'W-1' }],
             },
           },
-        ],
-      },
-      {
-        name: 'builder',
-        role: 'member',
-        turns: [
           {
             kind: 'direct_message',
             activation: {
@@ -124,7 +101,7 @@ describe('agent-team smoke completion line', () => {
 
   it('enforces the acknowledged-message activation invariant', () => {
     const projection = successfulProjection();
-    projection.sessions[1].turns = [];
+    projection.sessions[0].turns = [];
 
     expect(acknowledgedMessagesWithoutActivation(projection)).toEqual([
       expect.objectContaining({ sequence: 3 }),
@@ -135,7 +112,7 @@ describe('agent-team smoke completion line', () => {
   it('rejects a durable pending message that never materialized a participant turn', () => {
     const projection = successfulProjection();
     projection.direct_messages[0].status = 'pending';
-    projection.sessions[1].turns = [];
+    projection.sessions[0].turns = [];
 
     expect(codes(projection)).toContain('pending_message_activation');
     expect(codes(projection)).not.toContain('acknowledged_direct_message');
@@ -145,7 +122,7 @@ describe('agent-team smoke completion line', () => {
     const projection = successfulProjection();
     projection.direct_messages = [];
 
-    expect(codes(projection)).toContain('direct_message_missing');
+    expect(codes(projection)).toContain('direct_message_count');
   });
 
   it('rejects a direct message that does not require an acknowledgement', () => {
@@ -158,14 +135,14 @@ describe('agent-team smoke completion line', () => {
 
   it('rejects work that was not accepted', () => {
     const projection = successfulProjection();
-    projection.work_items[1].status = 'submitted';
+    projection.work_items[0].status = 'submitted';
 
-    expect(codes(projection)).toContain('work_2_accepted');
+    expect(codes(projection)).toContain('work_1_accepted');
   });
 
   it('classifies an assertion-only failure without any collaboration failure', () => {
     const projection = successfulProjection();
-    projection.sessions[2].turns = [];
+    projection.sessions[1].turns = [];
 
     const outcome = classifySmokeOutcome({
       taskStatus: 'completed',
@@ -242,7 +219,7 @@ describe('agent-team smoke completion line', () => {
     const collaborationProjection = successfulProjection();
     collaborationProjection.direct_messages[0].status = 'presented';
     const assertionProjection = successfulProjection();
-    assertionProjection.sessions[2].turns = [];
+    assertionProjection.sessions[1].turns = [];
 
     const diagnostics = [
       formatSmokeOutcome(
@@ -280,12 +257,12 @@ describe('agent-team smoke completion line', () => {
     noRequiresAck.direct_messages[0].requires_ack = false;
     noRequiresAck.direct_messages[0].status = 'presented';
     const noWake = successfulProjection();
-    noWake.sessions[1].turns = [];
+    noWake.sessions[0].turns = [];
     const pendingWithoutWake = successfulProjection();
     pendingWithoutWake.direct_messages[0].status = 'pending';
-    pendingWithoutWake.sessions[1].turns = [];
+    pendingWithoutWake.sessions[0].turns = [];
     const noAcceptedWork = successfulProjection();
-    noAcceptedWork.work_items[1].status = 'submitted';
+    noAcceptedWork.work_items[0].status = 'submitted';
 
     const diagnostics = [
       noAck,
@@ -304,6 +281,36 @@ describe('agent-team smoke completion line', () => {
     expect(diagnostics[1]).toContain('requires_ack_direct_message');
     expect(diagnostics[2]).toContain('acknowledged_message_activation');
     expect(diagnostics[3]).toContain('pending_message_activation');
-    expect(diagnostics[4]).toContain('work_2_accepted');
+    expect(diagnostics[4]).toContain('work_1_accepted');
+  });
+
+  it('requires one completed synthetic stock trace activity', () => {
+    expect(
+      evaluateTraceFacts({
+        mcp_activities: [
+          {
+            activity_id: 'stock-1',
+            tool_name: 'synthetic_stock_snapshot',
+            status: 'running',
+          },
+          {
+            activity_id: 'stock-1',
+            tool_name: 'synthetic_stock_snapshot',
+            status: 'completed',
+          },
+        ],
+      }),
+    ).toEqual({ ok: true, failures: [] });
+    expect(
+      evaluateTraceFacts({
+        mcp_activities: [
+          {
+            activity_id: 'stock-1',
+            tool_name: 'synthetic_stock_snapshot',
+            status: 'failed',
+          },
+        ],
+      }).failures.map((failure) => failure.code),
+    ).toEqual(['synthetic_stock_snapshot_activity_status']);
   });
 });

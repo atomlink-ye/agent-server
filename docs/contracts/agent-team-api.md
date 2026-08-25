@@ -1,15 +1,23 @@
 # Agent Teams v2 API contract
 
 Agent Teams v2 is the only current Team execution model. A published Team
-Version declares one Lead and a fixed roster. Task invocation activates the
-`TeamDriver`, which persists the Team's durable coordination state rather than
-compiling a graph or selecting an execution mode.
+Version declares one Lead and a fixed roster of formal `WorkerVersion`
+references. Task invocation activates the `TeamDriver`, which persists the
+Team's durable coordination state rather than compiling a graph or selecting
+an execution mode.
+
+The repository baseline still contains Agent-shaped Team compatibility fields
+and historical callers. Those fields are migration compatibility only; they do
+not authorize an AgentVersion fallback for new formal Work execution. See
+[Coworker Agent / Worker semantic split](../features/coworker-worker-semantic-split.md).
 
 ## Resource families
 
-- `AgentDefinition` and immutable `AgentVersion` records describe leaf agents.
+- `WorkerDefinition` and immutable `WorkerVersion` records describe formal
+  leaf execution roles. Coworker `AgentDefinition` / `AgentVersion` records
+  remain Chat-plane identity and are not Team roster authority.
 - `TeamDefinition` and immutable published `TeamVersion` records describe the
-  fixed Lead, roster, and EnvironmentVersion used by a Team.
+  fixed Lead, WorkerVersion roster, and EnvironmentVersion used by a Team.
 - `TeamRun` is one durable activation of that Team Version for a root Task/Run.
 - `MemberRun` is the Lead or one roster member within a TeamRun.
 - `Work` is a bounded unit created, assigned, submitted, reviewed, accepted, or
@@ -123,7 +131,8 @@ does not define Agents, tools, environments, skills, or roster membership.
 
 `POST /api/v1/tasks:invoke` accepts a published Team Version through the
 standard invokable reference. The root Task/Run is the public entry point.
-`TeamDriver` creates the TeamRun, its fixed MemberRuns, and the first Lead Run.
+`TeamDriver` resolves the TeamVersion's published Worker refs, then creates the
+TeamRun, its fixed MemberRuns, and the first Lead Run.
 It then advances only durable Team state:
 
 1. The Lead inspects Team state and creates or reviews Work.

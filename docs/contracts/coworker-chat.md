@@ -132,6 +132,13 @@ Migration `0051_agent_chat_runtime_epoch_scope.sql` backfills legacy valid `agen
 
 A Chat Agent may discuss, clarify, call platform Work tools, and emit a `ChatMessage.workRef`. A `workRef` points to the independent Work projection rendered as a Work Card.
 
+Formal Work composition is Worker-owned: it selects published
+`WorkerVersion` references and must not use the Conversation roster as an
+execution roster. Publishing a Worker never creates an `AgentChatRuntime`,
+Direct Conversation, or Coworker roster entry. The current Work compatibility
+path may still expose Agent-shaped fields during migration; those fields do not
+change this ownership rule.
+
 Chat RuntimeSession and Worker RuntimeSession are not required to be the same session:
 
 ```text

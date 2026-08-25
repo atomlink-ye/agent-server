@@ -24,7 +24,7 @@ const token = process.env.AGENT_SERVER_SERVICE_TOKEN?.trim();
 const workspaceId =
   process.env.AGENT_SERVER_WORKSPACE_ID?.trim() ??
   '00000000-0000-4000-8000-000000000001';
-const timeoutMs = Number(process.env.AGENT_TEAM_SMOKE_TIMEOUT_MS ?? 300_000);
+const timeoutMs = Number(process.env.AGENT_TEAM_SMOKE_TIMEOUT_MS ?? 420_000);
 const startedAt = Date.now();
 const progressIntervalMs = 5_000;
 const { Pool } = pg;

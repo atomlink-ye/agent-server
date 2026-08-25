@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { ApiEnvironment } from '../http-types.js';
 import type { AppConfig } from '../../../shared/config.js';
+import type { Logger } from '../../../shared/observability/logger.js';
 import { registerBrowserWebRoutes } from './browser-web.js';
 
 const SERVICE_TOKEN = 'browser-service-secret';
@@ -15,9 +16,15 @@ function testConfig(): AppConfig {
   } as unknown as AppConfig;
 }
 
-function appWithBrowserRoutes(): Hono<ApiEnvironment> {
+function fakeLogger(): Logger {
+  return { log: () => undefined };
+}
+
+function appWithBrowserRoutes(
+  logger: Logger = fakeLogger(),
+): Hono<ApiEnvironment> {
   const app = new Hono<ApiEnvironment>();
-  registerBrowserWebRoutes(app, testConfig());
+  registerBrowserWebRoutes(app, testConfig(), logger);
   return app;
 }
 
@@ -149,5 +156,64 @@ describe('browser-safe Vite facade', () => {
     expect(await response.json()).toMatchObject({
       error: { code: 'product_unavailable' },
     });
+  });
+
+  it('reports the real cause -- not invalid_response -- when the upstream declares a body over the BFF cap', async () => {
+    process.env.AGENT_SERVER_SERVICE_TOKEN = SERVICE_TOKEN;
+    const logger: Logger = { log: vi.fn() };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response('{}', {
+            status: 200,
+            headers: {
+              'content-type': 'application/json',
+              // Declares more than the 1 MiB the BFF will forward, so the
+              // gateway must reject on the header alone without buffering.
+              'content-length': String(1024 * 1024 + 1),
+            },
+          }),
+      ),
+    );
+
+    const response =
+      await appWithBrowserRoutes(logger).request('/api/conversations');
+
+    expect(response.status).toBe(502);
+    const body = await response.json();
+    expect(body).toMatchObject({
+      error: { code: 'upstream_response_too_large' },
+    });
+    expect(body.error.code).not.toBe('invalid_response');
+    expect(logger.log).toHaveBeenCalledWith(
+      'warn',
+      'browser_bff.upstream_response_too_large',
+      expect.objectContaining({
+        path: '/api/v1/conversations',
+        declared_bytes: 1024 * 1024 + 1,
+      }),
+    );
+  });
+
+  it('still returns invalid_response when the upstream body genuinely does not decode', async () => {
+    process.env.AGENT_SERVER_SERVICE_TOKEN = SERVICE_TOKEN;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response('not valid json', {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }),
+      ),
+    );
+
+    const response = await appWithBrowserRoutes().request('/api/conversations');
+
+    expect(response.status).toBe(502);
+    const body = await response.json();
+    expect(body).toMatchObject({ error: { code: 'invalid_response' } });
+    expect(body.error.code).not.toBe('upstream_response_too_large');
   });
 });

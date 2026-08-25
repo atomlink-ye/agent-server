@@ -28,7 +28,7 @@ if (
 }
 registerBrowserCoworkerRoutes(app, config);
 registerBrowserContextRoutes(app, config);
-registerBrowserWebRoutes(app, config);
+registerBrowserWebRoutes(app, config, logger);
 
 const server = serve(
   {

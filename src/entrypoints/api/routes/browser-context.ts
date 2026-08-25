@@ -4,6 +4,7 @@ import type { ApiEnvironment } from '../http-types.js';
 import type { AppConfig } from '../../../shared/config.js';
 import {
   fetchAuthenticated,
+  isUpstreamOversizeResponse,
   jsonResponse,
   readJson,
   safeStatus,
@@ -63,8 +64,14 @@ async function forward(
   }
 
   const parsed = await readJson(upstream, { emptyValue: {} });
+  // An oversize body is not decoded, so it must not fall through to `parsed`
+  // below (that would forward the internal marker object as if it were the
+  // Context payload). Context responses stay small in practice, so this
+  // path is defensive: it keeps this route correct rather than papering over
+  // it, without adopting the richer too-large reporting the Work Run
+  // session-transcripts route now has.
   const payload =
-    parsed === undefined
+    parsed === undefined || isUpstreamOversizeResponse(parsed)
       ? {
           error: {
             code: 'invalid_response',

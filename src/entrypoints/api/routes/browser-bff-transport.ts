@@ -7,6 +7,31 @@ const NO_STORE_HEADERS = {
 
 const MAX_UPSTREAM_JSON_BYTES = 1 * 1024 * 1024;
 
+/**
+ * Returned by `readJson` when the upstream body was rejected only because it
+ * was too large to safely buffer, never because it failed to parse. Callers
+ * that need to tell "too large" apart from "failed to decode" (rather than
+ * collapsing both into a generic decode failure) check for this shape
+ * instead of a bare `undefined`. `declaredBytes` is the upstream
+ * `content-length` when the cap was hit before any body was read, or the
+ * number of bytes actually streamed when it was hit mid-stream (e.g. a
+ * chunked response with no declared length).
+ */
+export interface UpstreamOversizeResponse {
+  readonly upstreamOversize: true;
+  readonly declaredBytes: number;
+}
+
+export function isUpstreamOversizeResponse(
+  value: unknown,
+): value is UpstreamOversizeResponse {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    (value as Record<string, unknown>).upstreamOversize === true
+  );
+}
+
 function upstreamUrl(config: AppConfig, path: string): string {
   const configured = process.env.AGENT_SERVER_BASE_URL?.trim();
   const base = configured || `http://127.0.0.1:${config.port}`;
@@ -48,7 +73,7 @@ export async function readJson(
   );
   if (Number.isFinite(declared) && declared > MAX_UPSTREAM_JSON_BYTES) {
     await response.body?.cancel().catch(() => undefined);
-    return undefined;
+    return { upstreamOversize: true, declaredBytes: declared };
   }
 
   const reader = response.body?.getReader();
@@ -82,7 +107,7 @@ export async function readJson(
       size += chunk.value.byteLength;
       if (size > MAX_UPSTREAM_JSON_BYTES) {
         await cancel();
-        return undefined;
+        return { upstreamOversize: true, declaredBytes: size };
       }
       chunks.push(chunk.value);
     }

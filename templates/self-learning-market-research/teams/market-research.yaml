@@ -6,11 +6,11 @@ spec:
   environmentVersionId: environment://synthetic-paseo
   lead:
     name: lead
-    agentVersionId: agent://lead
+    workerVersionId: worker://lead
   roster:
     - name: opportunity-analyst
-      agentVersionId: agent://opportunity-analyst
+      workerVersionId: worker://opportunity-analyst
     - name: analog-risk-reviewer
-      agentVersionId: agent://analog-risk-reviewer
+      workerVersionId: worker://analog-risk-reviewer
   coordination:
     taskAssignment: lead_or_self_claim

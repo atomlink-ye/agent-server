@@ -127,22 +127,22 @@ export class AgentProjectHttpControlPlane implements ProjectControlPlane {
       key,
     ).then(resourceVersion);
   }
-  public validateAgent(source: string) {
-    return this.request<unknown>('/api/v1/agent-packages:validate', 'POST', {
+  public validateWorker(source: string) {
+    return this.request<unknown>('/api/v1/worker-packages:validate', 'POST', {
       source,
     }).then(validation);
   }
-  public importAgent(source: string, key: string) {
+  public importWorker(source: string, key: string) {
     return this.request<unknown>(
-      '/api/v1/agents:import',
+      '/api/v1/workers:import',
       'POST',
       { source },
       key,
     ).then(resource);
   }
-  public publishAgent(versionId: string, key: string) {
+  public publishWorker(versionId: string, key: string) {
     return this.request<unknown>(
-      `/api/v1/agent-versions/${versionId}:publish`,
+      `/api/v1/worker-versions/${versionId}:publish`,
       'POST',
       {},
       key,
@@ -291,7 +291,7 @@ export class AgentProjectHttpError extends Error {
 }
 function resource(value: unknown): PublishedResource {
   const body = record(value);
-  const x = record(body.version ?? body.team ?? body.agent);
+  const x = record(body.version ?? body.team ?? body.worker ?? body.agent);
   return {
     definitionId: uuid(x.definition_id),
     versionId: uuid(x.id),

@@ -24,7 +24,7 @@ export interface AgentProjectLock {
     readonly requiredTools: readonly string[];
   }[];
   readonly environments: readonly ResourceLock[];
-  readonly agents: readonly ResourceLock[];
+  readonly workers: readonly ResourceLock[];
   readonly teams: readonly ResourceLock[];
   readonly memoryStores: readonly {
     readonly ref: string;

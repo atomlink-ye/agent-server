@@ -5,7 +5,7 @@ import type {
   ProjectPlanSection,
   ProjectPlanStep,
 } from '../../domain/projects/project-plan.js';
-import { renderProjectAgent } from './render-project-agent.js';
+import { renderProjectWorker } from './render-project-worker.js';
 import { renderProjectTeam } from './render-project-team.js';
 import type { Sha256Fingerprint } from '../../domain/projects/project-canonicalization.js';
 import { MAX_COLLECTION_SIZE } from '../../domain/agents/managed-agent-yaml.js';
@@ -59,17 +59,22 @@ export function planAgentProject(project: NormalizedAgentProject): ProjectPlan {
         .fingerprint as Sha256Fingerprint,
     }),
   );
-  addSorted(project.agents, 'Agents', 'import/publish-agent', (ref, value) => {
-    const rendered = renderProjectAgent({
-      project,
-      agent: ref as `agent://${string}`,
-    });
-    return {
-      dependencies: rendered.dependencies,
-      sourceFingerprint: rendered.sourceFingerprint,
-      validationFingerprint: rendered.nativeFingerprint,
-    };
-  });
+  addSorted(
+    project.workers,
+    'Workers',
+    'import/publish-worker',
+    (ref, value) => {
+      const rendered = renderProjectWorker({
+        project,
+        worker: ref as `worker://${string}`,
+      });
+      return {
+        dependencies: rendered.dependencies,
+        sourceFingerprint: rendered.sourceFingerprint,
+        validationFingerprint: rendered.nativeFingerprint,
+      };
+    },
+  );
   addSorted(project.teams, 'Teams', 'import/publish-team', (ref) => {
     const rendered = renderProjectTeam({
       project,

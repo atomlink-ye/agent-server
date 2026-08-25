@@ -3,14 +3,12 @@ import {
   MAX_SCALAR_LENGTH,
   parseManagedAgentYaml,
 } from '../../domain/agents/managed-agent-yaml.js';
-import {
-  parseManagedAgentPackage,
-  type ParsedManagedAgentPackage,
-} from '../../domain/agents/managed-agent-package.js';
+import type { ParsedWorkerPackage } from '../../domain/workers/worker-package.js';
+import { parseWorkerForImport } from '../workers/validate-worker-package.js';
 import type { NormalizedAgentProject } from '../../domain/projects/agent-project.js';
 import {
   parseLogicalRef,
-  type AgentRef,
+  type WorkerRef,
 } from '../../domain/projects/logical-ref.js';
 import { isSafeNativeRef } from '../../domain/projects/safe-ref.js';
 import {
@@ -21,39 +19,39 @@ import {
 import { SUPPORTED_MANAGED_AGENT_TOOL_REFS } from '../agents/built-in-skills.js';
 import type { Sha256Fingerprint } from '../../domain/projects/project-canonicalization.js';
 
-export class ProjectAgentRenderError extends Error {
+export class ProjectWorkerRenderError extends Error {
   public constructor(
     readonly code: string,
     readonly path = '$',
   ) {
     super(code);
-    this.name = 'ProjectAgentRenderError';
+    this.name = 'ProjectWorkerRenderError';
   }
 }
 
-export interface RenderedProjectAgent {
+export interface RenderedProjectWorker {
   readonly source: string;
   readonly sourceFingerprint: Sha256Fingerprint;
   readonly nativeFingerprint: Sha256Fingerprint;
   readonly expandedSkills: readonly string[];
   readonly expandedTools: readonly string[];
   readonly dependencies: readonly string[];
-  readonly nativeParserResult: ParsedManagedAgentPackage;
+  readonly nativeParserResult: ParsedWorkerPackage;
 }
 
-export interface RenderProjectAgentInput {
+export interface RenderProjectWorkerInput {
   readonly project: NormalizedAgentProject;
-  readonly agent: AgentRef;
+  readonly worker: WorkerRef;
   readonly source?: string;
 }
 
-export function renderProjectAgent(
-  input: RenderProjectAgentInput,
-): RenderedProjectAgent {
-  if (!isAgentRef(input.agent))
-    throw new ProjectAgentRenderError('invalid_agent_reference');
-  const record = input.project.agents.get(input.agent);
-  if (!record) throw new ProjectAgentRenderError('missing_agent_reference');
+export function renderProjectWorker(
+  input: RenderProjectWorkerInput,
+): RenderedProjectWorker {
+  if (!isWorkerRef(input.worker))
+    throw new ProjectWorkerRenderError('invalid_worker_reference');
+  const record = input.project.workers.get(input.worker);
+  if (!record) throw new ProjectWorkerRenderError('missing_worker_reference');
   const source = input.source ?? record.source;
   const raw = parseProjectYaml(source);
   const root = object(raw, '$');
@@ -74,14 +72,14 @@ export function renderProjectAgent(
     if (isLogicalKind(ref, 'skill')) {
       const skill = input.project.skills.get(ref as `skill://${string}`);
       if (!skill)
-        throw new ProjectAgentRenderError(
+        throw new ProjectWorkerRenderError(
           'missing_skill_reference',
           `$.spec.skills[${index}].ref`,
         );
       const name = ref.slice('skill://'.length);
       const rendered = `project/${input.project.manifest.metadata.name}/${name}`;
       if (seenSkills.has(rendered))
-        throw new ProjectAgentRenderError('duplicate_skill_reference');
+        throw new ProjectWorkerRenderError('duplicate_skill_reference');
       seenSkills.add(rendered);
       expandedSkills.push(rendered);
       dependencies.add(ref);
@@ -99,18 +97,18 @@ export function renderProjectAgent(
       return { ...item, ref: rendered };
     }
     if (ref.includes('://'))
-      throw new ProjectAgentRenderError(
+      throw new ProjectWorkerRenderError(
         'invalid_skill_reference',
         `$.spec.skills[${index}].ref`,
       );
     if (ref.length > MAX_SCALAR_LENGTH || !isSafeNativeRef(ref))
-      throw new ProjectAgentRenderError(
+      throw new ProjectWorkerRenderError(
         'invalid_skill_reference',
         `$.spec.skills[${index}].ref`,
       );
     rejectProjectScheme(ref, 'skill', `$.spec.skills[${index}].ref`);
     if (seenSkills.has(ref))
-      throw new ProjectAgentRenderError('duplicate_skill_reference');
+      throw new ProjectWorkerRenderError('duplicate_skill_reference');
     seenSkills.add(ref);
     expandedSkills.push(ref);
     return { ...item, ref };
@@ -131,7 +129,7 @@ export function renderProjectAgent(
         ref as `tool-profile://${string}`,
       );
       if (!profile)
-        throw new ProjectAgentRenderError(
+        throw new ProjectWorkerRenderError(
           'missing_tool_profile_reference',
           `$.spec.tools[${index}].ref`,
         );
@@ -145,7 +143,7 @@ export function renderProjectAgent(
     }
     rejectProjectScheme(ref, 'tool', `$.spec.tools[${index}].ref`);
     if (!isSafeNativeRef(ref))
-      throw new ProjectAgentRenderError(
+      throw new ProjectWorkerRenderError(
         'invalid_tool_reference',
         `$.spec.tools[${index}].ref`,
       );
@@ -156,16 +154,16 @@ export function renderProjectAgent(
     return [{ ...item, ref }];
   });
   if (renderedTools.length > MAX_COLLECTION_SIZE)
-    throw new ProjectAgentRenderError('collection_limit', '$.spec.tools');
+    throw new ProjectWorkerRenderError('collection_limit', '$.spec.tools');
 
   const rendered = canonicalizeYaml({
     ...root,
     spec: { ...spec, skills: renderedSkills, tools: renderedTools },
   });
-  const nativeParserResult = parseManagedAgentPackage(rendered);
+  const nativeParserResult = parseWorkerForImport(rendered);
   for (const required of requiredNativeTools) {
     if (!seenTools.has(required))
-      throw new ProjectAgentRenderError('required_tool_not_granted');
+      throw new ProjectWorkerRenderError('required_tool_not_granted');
   }
   return {
     source: rendered,
@@ -185,9 +183,9 @@ function addTool(
   path: string,
 ): void {
   if (seen.has(ref) && seen.get(ref) !== kind)
-    throw new ProjectAgentRenderError('conflicting_tool_reference', path);
+    throw new ProjectWorkerRenderError('conflicting_tool_reference', path);
   if (seen.has(ref))
-    throw new ProjectAgentRenderError('duplicate_tool_reference', path);
+    throw new ProjectWorkerRenderError('duplicate_tool_reference', path);
   seen.set(ref, kind);
 }
 function rejectProjectScheme(
@@ -196,13 +194,13 @@ function rejectProjectScheme(
   path: string,
 ): void {
   if (
-    /^(tool-profile|skill|environment|agent|team|memory|workspace):\/\//.test(
+    /^(tool-profile|skill|environment|worker|agent|team|memory|workspace):\/\//.test(
       value,
     )
   )
-    throw new ProjectAgentRenderError(`invalid_${allowed}_reference`, path);
+    throw new ProjectWorkerRenderError(`invalid_${allowed}_reference`, path);
   if (value.length > MAX_SCALAR_LENGTH)
-    throw new ProjectAgentRenderError('scalar_limit', path);
+    throw new ProjectWorkerRenderError('scalar_limit', path);
 }
 function isLogicalKind(value: string, kind: 'skill' | 'tool-profile'): boolean {
   try {
@@ -211,9 +209,9 @@ function isLogicalKind(value: string, kind: 'skill' | 'tool-profile'): boolean {
     return false;
   }
 }
-function isAgentRef(value: string): boolean {
+function isWorkerRef(value: string): boolean {
   try {
-    return parseLogicalRef(value).startsWith('agent://');
+    return parseLogicalRef(value).startsWith('worker://');
   } catch {
     return false;
   }
@@ -224,11 +222,11 @@ function exactKeys(
   path: string,
 ): void {
   if (Object.keys(value).some((key) => !allowed.includes(key)))
-    throw new ProjectAgentRenderError('invalid_reference', path);
+    throw new ProjectWorkerRenderError('invalid_reference', path);
 }
 function ensureSupportedTool(ref: string, path: string): void {
   if (!SUPPORTED_MANAGED_AGENT_TOOL_REFS.has(ref))
-    throw new ProjectAgentRenderError('unsupported_tool_reference', path);
+    throw new ProjectWorkerRenderError('unsupported_tool_reference', path);
 }
 function addRequiredTools(
   value: string,
@@ -241,7 +239,10 @@ function addRequiredTools(
   if (isLogicalKind(value, 'tool-profile')) {
     const profile = project.toolProfiles.get(value as any);
     if (!profile)
-      throw new ProjectAgentRenderError('missing_tool_profile_reference', path);
+      throw new ProjectWorkerRenderError(
+        'missing_tool_profile_reference',
+        path,
+      );
     dependencies.add(value);
     for (const tool of profile.profile.spec.tools) {
       ensureSupportedTool(tool.ref, path);
@@ -254,7 +255,7 @@ function addRequiredTools(
     value.length > MAX_SCALAR_LENGTH ||
     !isSafeNativeRef(value)
   )
-    throw new ProjectAgentRenderError('invalid_tool_reference', path);
+    throw new ProjectWorkerRenderError('invalid_tool_reference', path);
   ensureSupportedTool(value, path);
   addRequiredTool(value, path, skillRequiredTools, requiredNativeTools);
 }
@@ -265,7 +266,7 @@ function addRequiredTool(
   requiredNativeTools: Set<string>,
 ): void {
   if (skillRequiredTools.has(value))
-    throw new ProjectAgentRenderError(
+    throw new ProjectWorkerRenderError(
       'duplicate_required_tool_reference',
       path,
     );
@@ -275,27 +276,27 @@ function addRequiredTool(
     skillRequiredTools.size > MAX_COLLECTION_SIZE ||
     requiredNativeTools.size > MAX_COLLECTION_SIZE
   )
-    throw new ProjectAgentRenderError('collection_limit', path);
+    throw new ProjectWorkerRenderError('collection_limit', path);
 }
 function parseProjectYaml(source: string): unknown {
   try {
     return parseManagedAgentYaml(source);
   } catch (error) {
-    throw new ProjectAgentRenderError('invalid_yaml', '$');
+    throw new ProjectWorkerRenderError('invalid_yaml', '$');
   }
 }
 function object(value: unknown, path: string): Record<string, any> {
   if (!value || typeof value !== 'object' || Array.isArray(value))
-    throw new ProjectAgentRenderError('invalid_object', path);
+    throw new ProjectWorkerRenderError('invalid_object', path);
   return value as Record<string, any>;
 }
 function collection(value: unknown, path: string): Record<string, any>[] {
   if (!Array.isArray(value) || value.length > MAX_COLLECTION_SIZE)
-    throw new ProjectAgentRenderError('invalid_collection', path);
+    throw new ProjectWorkerRenderError('invalid_collection', path);
   return value as Record<string, any>[];
 }
 function requiredString(value: unknown, path: string): string {
   if (typeof value !== 'string' || !value)
-    throw new ProjectAgentRenderError('invalid_reference', path);
+    throw new ProjectWorkerRenderError('invalid_reference', path);
   return value;
 }

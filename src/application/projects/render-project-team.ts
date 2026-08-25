@@ -60,7 +60,7 @@ export function renderProjectTeam(
   const targets = input.targets;
   const resolve = (
     value: unknown,
-    kind: 'environment' | 'agent',
+    kind: 'environment' | 'worker',
     path: string,
   ): string => {
     if (typeof value !== 'string' || !isLogicalKind(value, kind))
@@ -69,7 +69,7 @@ export function renderProjectTeam(
     if (
       !(kind === 'environment'
         ? input.project.environments.has(ref as any)
-        : input.project.agents.has(ref as any))
+        : input.project.workers.has(ref as any))
     )
       throw new ProjectTeamRenderError('missing_project_reference', path);
     dependencies.add(ref);
@@ -95,20 +95,20 @@ export function renderProjectTeam(
     ),
     lead: {
       ...lead,
-      agentVersionId: resolve(
-        lead.agentVersionId,
-        'agent',
-        '$.spec.lead.agentVersionId',
+      workerVersionId: resolve(
+        lead.workerVersionId,
+        'worker',
+        '$.spec.lead.workerVersionId',
       ),
     },
     roster: roster.map((member, index) => {
       const item = object(member, `$.spec.roster[${index}]`);
       return {
         ...item,
-        agentVersionId: resolve(
-          item.agentVersionId,
-          'agent',
-          `$.spec.roster[${index}].agentVersionId`,
+        workerVersionId: resolve(
+          item.workerVersionId,
+          'worker',
+          `$.spec.roster[${index}].workerVersionId`,
         ),
       };
     }),
@@ -128,7 +128,7 @@ const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function isLogicalKind(
   value: string,
-  kind: 'environment' | 'agent' | 'team',
+  kind: 'environment' | 'worker' | 'team',
 ): boolean {
   try {
     return parseLogicalRef(value).startsWith(`${kind}://`);

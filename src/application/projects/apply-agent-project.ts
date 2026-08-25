@@ -8,7 +8,7 @@ import type {
   ProjectControlPlane,
   PublishedResource,
 } from './project-control-plane.js';
-import { renderProjectAgent } from './render-project-agent.js';
+import { renderProjectWorker } from './render-project-worker.js';
 import { renderProjectTeam } from './render-project-team.js';
 import type { ProjectSkillRegistrar } from '../ports/project-skill-registrar.js';
 import type { AgentProjectLockStore } from '../ports/agent-project-lock-store.js';
@@ -171,21 +171,21 @@ export async function applyAgentProject(
         fingerprint: validation.fingerprint,
       });
     }
-    const agents: ResourceLock[] = [];
-    for (const [ref, value] of [...project.agents.entries()].sort(([a], [b]) =>
+    const workers: ResourceLock[] = [];
+    for (const [ref, value] of [...project.workers.entries()].sort(([a], [b]) =>
       cmp(a, b),
     )) {
-      const rendered = renderProjectAgent({
+      const rendered = renderProjectWorker({
         project,
-        agent: ref as `agent://${string}`,
+        worker: ref as `worker://${string}`,
       });
-      const validation = await controlPlane.validateAgent(rendered.source);
+      const validation = await controlPlane.validateWorker(rendered.source);
       if (validation.fingerprint !== rendered.nativeFingerprint)
-        throw new Error('agent_fingerprint_mismatch');
-      const imported = await controlPlane.importAgent(
+        throw new Error('worker_fingerprint_mismatch');
+      const imported = await controlPlane.importWorker(
         rendered.source,
         key(
-          'import-agent',
+          'import-worker',
           project.manifest.metadata.name,
           ref,
           rendered.nativeFingerprint,
@@ -193,7 +193,7 @@ export async function applyAgentProject(
       );
       if (imported.status === 'draft' && imported.outcome === 'created')
         completed.push({
-          section: 'Agents',
+          section: 'Workers',
           ref,
           outcome: 'Create',
           id: imported.versionId,
@@ -201,22 +201,22 @@ export async function applyAgentProject(
       if (sameProjectFingerprint)
         assertPriorResource(
           priorLock,
-          'agents',
+          'workers',
           ref,
           value.sourceFingerprint,
           rendered.nativeFingerprint,
           imported,
         );
-      const published = await controlPlane.publishAgent(
+      const published = await controlPlane.publishWorker(
         imported.versionId,
         key(
-          'publish-agent',
+          'publish-worker',
           project.manifest.metadata.name,
           ref,
           rendered.nativeFingerprint,
         ),
       );
-      agents.push(
+      workers.push(
         resource(
           ref,
           value.sourceFingerprint,
@@ -225,7 +225,7 @@ export async function applyAgentProject(
         ),
       );
       completed.push({
-        section: 'Agents',
+        section: 'Workers',
         ref,
         outcome: imported.status === 'published' ? 'Reuse' : 'Publish',
         id: published.versionId,
@@ -233,7 +233,7 @@ export async function applyAgentProject(
       });
     }
     const envTargets = new Map(environments.map((x) => [x.ref, x.versionId]));
-    const agentTargets = new Map(agents.map((x) => [x.ref, x.versionId]));
+    const workerTargets = new Map(workers.map((x) => [x.ref, x.versionId]));
     const teams: ResourceLock[] = [];
     for (const [ref, value] of [...project.teams.entries()].sort(([a], [b]) =>
       cmp(a, b),
@@ -242,7 +242,7 @@ export async function applyAgentProject(
         project,
         team: ref as `team://${string}`,
         mode: 'apply',
-        targets: new Map([...envTargets, ...agentTargets]),
+        targets: new Map([...envTargets, ...workerTargets]),
       });
       const validation = await controlPlane.validateTeam(rendered.source);
       if (validation.fingerprint !== rendered.nativeFingerprint)
@@ -423,7 +423,7 @@ export async function applyAgentProject(
       })),
       skills: skillLocks.slice().sort((a, b) => cmp(a.ref, b.ref)),
       environments: environments.slice().sort((a, b) => cmp(a.ref, b.ref)),
-      agents: agents.slice().sort((a, b) => cmp(a.ref, b.ref)),
+      workers: workers.slice().sort((a, b) => cmp(a.ref, b.ref)),
       teams: teams.slice().sort((a, b) => cmp(a.ref, b.ref)),
       memoryStores: memoryStores.slice().sort((a, b) => cmp(a.ref, b.ref)),
       entrypoints,
@@ -468,7 +468,7 @@ function resource(
 }
 function assertPriorResource(
   lock: AgentProjectLock | null,
-  section: 'environments' | 'agents' | 'teams',
+  section: 'environments' | 'workers' | 'teams',
   ref: string,
   sourceFingerprint: string,
   appliedFingerprint: string,

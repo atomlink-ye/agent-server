@@ -1,5 +1,5 @@
 import type {
-  AgentRef,
+  WorkerRef,
   EnvironmentRef,
   MemoryRef,
   SkillRef,
@@ -30,7 +30,7 @@ export interface AgentProjectManifest {
       >
     >;
     readonly environments: Readonly<Record<string, AgentProjectSectionEntry>>;
-    readonly agents: Readonly<Record<string, AgentProjectSectionEntry>>;
+    readonly workers: Readonly<Record<string, AgentProjectSectionEntry>>;
     readonly teams: Readonly<Record<string, AgentProjectSectionEntry>>;
     readonly memoryStores: Readonly<
       Record<
@@ -84,8 +84,8 @@ export interface NormalizedAgentProject {
       readonly sourceFingerprint: Sha256Fingerprint;
     }
   >;
-  readonly agents: ReadonlyMap<
-    AgentRef,
+  readonly workers: ReadonlyMap<
+    WorkerRef,
     {
       readonly name: string;
       readonly path: string;

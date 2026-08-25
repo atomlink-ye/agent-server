@@ -5,7 +5,7 @@ import { Pool } from 'pg';
 import {
   managedAgentYaml,
   managedEnvironmentYaml,
-  mixedTeamAgentYaml,
+  mixedTeamWorkerYaml,
   mixedTeamYaml,
 } from './web-bootstrap-fixtures.mjs';
 
@@ -186,21 +186,48 @@ async function bootstrapPublishedAgent(source, key) {
   return versionId;
 }
 
+async function bootstrapPublishedWorker(source, key) {
+  await request(`${baseUrl}/api/v1/worker-packages:validate`, {
+    method: 'POST',
+    body: { source },
+  });
+  const imported = await request(`${baseUrl}/api/v1/workers:import`, {
+    method: 'POST',
+    idempotencyKey: `${key}-import-v1`,
+    body: { source },
+    expectedStatus: 201,
+  });
+  const versionId = imported.version?.id;
+  if (typeof versionId !== 'string')
+    fail(`Worker bootstrap returned no version for ${key}.`);
+  const published = await request(
+    `${baseUrl}/api/v1/worker-versions/${versionId}:publish`,
+    {
+      method: 'POST',
+      idempotencyKey: `${key}-publish-v1`,
+      body: {},
+    },
+  );
+  if (published.status !== 'published')
+    fail(`Worker publish did not complete for ${key}.`);
+  return versionId;
+}
+
 async function bootstrapMixedTeamVersion(environmentVersionId) {
-  const agents = {};
+  const workers = {};
   for (const name of ['lead', 'fixer', 'reviewer'])
-    agents[name] = await bootstrapPublishedAgent(
-      mixedTeamAgentYaml(name),
-      `web-chat-mixed-team-${name}`,
+    workers[name] = await bootstrapPublishedWorker(
+      mixedTeamWorkerYaml(name),
+      `web-chat-mixed-team-worker-${name}`,
     );
   const imported = await request(`${baseUrl}/api/v1/teams:import`, {
     method: 'POST',
-    idempotencyKey: 'web-chat-mixed-team-import-v1',
+    idempotencyKey: 'web-chat-mixed-team-worker-import-v1',
     body: {
       source: mixedTeamYaml(
-        agents.lead,
-        agents.fixer,
-        agents.reviewer,
+        workers.lead,
+        workers.fixer,
+        workers.reviewer,
         environmentVersionId,
       ),
     },
@@ -213,7 +240,7 @@ async function bootstrapMixedTeamVersion(environmentVersionId) {
     `${baseUrl}/api/v1/team-versions/${versionId}:publish`,
     {
       method: 'POST',
-      idempotencyKey: 'web-chat-mixed-team-publish-v1',
+      idempotencyKey: 'web-chat-mixed-team-worker-publish-v1',
       body: {},
     },
   );

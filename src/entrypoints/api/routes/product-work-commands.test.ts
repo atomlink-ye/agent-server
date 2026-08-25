@@ -317,8 +317,8 @@ const definitionBinding = {
     name: 'Team v1',
     description: null,
     spec: {
-      lead: { name: 'Lead', agentVersionId: runId },
-      roster: [{ name: 'Member', agentVersionId: work.id }],
+      lead: { name: 'Lead', workerVersionId: runId },
+      roster: [{ name: 'Member', workerVersionId: work.id }],
       environmentVersionId: work.workspaceId,
     },
     environmentVersionId: work.workspaceId,

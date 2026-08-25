@@ -13,7 +13,7 @@ ALTER TABLE tasks
 -- Formal Team execution now reads and writes only worker_version_id; keeping
 -- the Agent column would preserve a second active participant authority.
 ALTER TABLE team_member_runs
-  DROP COLUMN IF EXISTS agent_version_id;
+  DROP COLUMN IF EXISTS agent_version_id CASCADE;
 
 ALTER TABLE runtime_session_specs
   ADD COLUMN IF NOT EXISTS subject_kind text NOT NULL DEFAULT 'agent_chat'
@@ -32,7 +32,7 @@ ALTER TABLE runtime_session_specs
 
 CREATE TABLE agent_work_bindings (
   tenant_id text NOT NULL,
-  workspace_id uuid NOT NULL,
+  workspace_id text NOT NULL,
   agent_definition_id uuid NOT NULL,
   work_definition_id uuid NOT NULL REFERENCES work_definition_source_definitions(id),
   active_work_definition_version_id uuid NOT NULL REFERENCES work_definition_source_versions(id),

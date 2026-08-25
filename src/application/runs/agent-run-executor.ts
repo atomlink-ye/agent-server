@@ -147,7 +147,7 @@ export class AgentRunExecutor {
       assertPinnedParticipantResources(
         workManifest,
         member?.name ?? null,
-        resolved.agentVersionId,
+        resolved.workerVersionId ?? resolved.agentVersionId,
         resolved.skills,
         resolved.toolRefs,
       );
@@ -303,13 +303,14 @@ export class AgentRunExecutor {
     if (executionFailed) throw executionError;
     if (!execution) throw new Error('Runtime execution returned no result.');
 
-    await this.memoryWriter.write({
-      claim,
-      task,
-      agentVersionId: resolved.agentVersionId,
-      proposalLimit: resolved.proposalLimit,
-      execution,
-    });
+    if (task.invokableKind !== 'worker')
+      await this.memoryWriter.write({
+        claim,
+        task,
+        agentVersionId: resolved.agentVersionId,
+        proposalLimit: resolved.proposalLimit,
+        execution,
+      });
 
     return transitionRun(
       claim.run,
@@ -433,26 +434,26 @@ function manifestEnvironmentVersionId(
 function assertPinnedParticipantResources(
   manifest: WorkRunCompositionManifest,
   memberName: string | null,
-  agentVersionId: string,
+  executionVersionId: string,
   skills: readonly { readonly ref: string; readonly digest: string }[],
   toolRefs: readonly string[],
 ): void {
-  const agents = manifest.entries.filter(
+  const workers = manifest.entries.filter(
     (entry) =>
-      entry.resourceKind === 'agent' &&
-      entry.resolvedVersionId === agentVersionId &&
-      entry.slot.endsWith(':agent'),
+      entry.resourceKind === 'worker' &&
+      entry.resolvedVersionId === executionVersionId &&
+      entry.slot.endsWith(':worker'),
   );
-  const agent = memberName
-    ? agents.find((entry) => entry.slot === `participant:${memberName}:agent`)
-    : agents.length === 1
-      ? agents[0]
+  const worker = memberName
+    ? workers.find((entry) => entry.slot === `participant:${memberName}:worker`)
+    : workers.length === 1
+      ? workers[0]
       : undefined;
-  if (!agent)
+  if (!worker)
     throw new Error(
-      'Task Agent version is not authorized by the WorkRun manifest.',
+      'Task Worker version is not authorized by the WorkRun manifest.',
     );
-  const prefix = agent.slot.slice(0, -':agent'.length);
+  const prefix = worker.slot.slice(0, -':worker'.length);
   const pinnedSkills = manifest.entries
     .filter(
       (entry) =>

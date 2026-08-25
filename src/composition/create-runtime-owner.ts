@@ -86,6 +86,7 @@ export function createRuntimeOwner(input: {
     input.config.runtimeMcp?.listenHost,
     input.config.runtimeMcp?.advertisedHost,
     input.config.runtimeMcp?.port,
+    input.logger,
   );
   const runtimeMcpEndpoint = createRuntimeMcpEndpoint(runtimeMcpServer);
   const resolveRuntimeSpec = new ResolveRuntimeSessionSpecService(

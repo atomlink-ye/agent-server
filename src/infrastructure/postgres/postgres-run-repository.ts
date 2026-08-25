@@ -3,6 +3,7 @@ import type {
   ClaimQueuedRunByIdOptions,
   ClaimNextQueuedRunOptions,
   CompleteClaimedRunOptions,
+  ExpiredRunRecovery,
   FinalizeWaitingOptions,
   RunOwnerScope,
   RunRepository,
@@ -384,6 +385,46 @@ export class PostgresRunRepository implements RunRepository {
     const persisted = await this.findById(options.runId);
     if (!persisted) throw new Error('Finalized run could not be reloaded');
     return persisted;
+  }
+
+  public async recoverExpiredRuns(
+    now: string,
+  ): Promise<readonly ExpiredRunRecovery[]> {
+    // A single UPDATE...RETURNING is the only writer here, so there is no
+    // read-then-write gap to race. The WHERE clause requires the lease to
+    // already be expired (lease_expires_at <= now), so a run whose worker
+    // still holds a live lease is never matched and can never lose its own
+    // completion write. If a worker's completion (completeClaimed /
+    // releaseClaimedToWaiting) commits first, this UPDATE's `status =
+    // 'running'` predicate no longer matches that row; if this UPDATE
+    // commits first, the worker's own fencing-scoped UPDATE finds zero rows
+    // and raises RunCompletionConflictError. Either ordering is safe because
+    // Postgres serializes concurrent UPDATEs to the same row.
+    const result = await this.database.query<{
+      id: string;
+      task_id: string;
+    }>(
+      `
+        UPDATE runs
+        SET
+          status = 'timed_out',
+          lease_owner = NULL,
+          activation_id = NULL,
+          lease_expires_at = NULL,
+          result = NULL,
+          error = '{"code":"runtime_timed_out","message":"The lease expired before the worker reported completion."}'::jsonb,
+          updated_at = $1
+        WHERE status = 'running'
+          AND lease_expires_at <= $1::timestamptz
+        RETURNING id, task_id
+      `,
+      [now],
+    );
+
+    return (result.rows ?? []).map((row) => ({
+      runId: row.id,
+      taskId: row.task_id,
+    }));
   }
 
   private async insert(

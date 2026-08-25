@@ -68,6 +68,8 @@ export interface PaseoRuntimeProviderOptions {
   readonly wsUrl: string;
   readonly cwd: string;
   readonly provider: ManagedEnvironmentProvider;
+  /** Additional providers this same adapter instance also serves. */
+  readonly additionalProviders?: readonly ManagedEnvironmentProvider[];
   readonly workspaceTitle: string;
   readonly requestedModel?: string;
   readonly connectTimeoutMs: number;
@@ -90,6 +92,8 @@ export function createPaseoRuntimeProvider(
 export class PaseoRuntimeProvider implements RuntimeExecutionProvider {
   public readonly name = 'paseo';
   readonly #options: PaseoRuntimeProviderOptions;
+  /** The full set of providers this adapter instance serves; #options.provider is the default. */
+  readonly #servedProviders: ReadonlySet<ManagedEnvironmentProvider>;
   readonly #gateway: PaseoGateway;
   readonly #connections: PaseoConnectionManager;
   readonly #runner: PaseoTurnRunner;
@@ -104,6 +108,10 @@ export class PaseoRuntimeProvider implements RuntimeExecutionProvider {
     }),
   ) {
     this.#options = options;
+    this.#servedProviders = new Set([
+      options.provider,
+      ...(options.additionalProviders ?? []),
+    ]);
     this.#logger = logger;
     this.#gateway = new PaseoGateway(client);
     this.#connections = new PaseoConnectionManager(
@@ -403,14 +411,25 @@ export class PaseoRuntimeProvider implements RuntimeExecutionProvider {
   } {
     if (
       !isManagedEnvironmentProvider(desired.provider) ||
-      desired.provider !== this.#options.provider
+      !this.#servedProviders.has(desired.provider)
     )
+      // A mismatch here is a configuration fact (this adapter is wired to a
+      // fixed set of providers), not a provider outage, so the message must
+      // name which provider was asked for alongside which providers this
+      // adapter serves.
       throw new ProtocolViolationError(
-        'The requested runtime provider is unsupported by Paseo.',
+        `The requested runtime provider "${desired.provider}" is unsupported by Paseo, which is configured to serve "${[...this.#servedProviders].join('", "')}".`,
       );
+    // The connection manager only ever discovers a default model for
+    // #options.provider (see PaseoConnectionManager#initialize), so that
+    // cached fallback must never be attributed to a different served
+    // provider. Every non-default served provider must carry an explicit
+    // model (guaranteed by resolveRuntimeModelPolicy pairing provider+model).
     const model = desired.model
       ? normalizePaseoRequestedModel(desired.provider, desired.model)
-      : this.#connections.model?.id;
+      : desired.provider === this.#options.provider
+        ? this.#connections.model?.id
+        : undefined;
     if (!model)
       throw new ExecutionPlaneUnavailableError(
         'Paseo has no resolved model for session launch.',
@@ -458,7 +477,8 @@ export class PaseoRuntimeProvider implements RuntimeExecutionProvider {
           'The persisted provider session binding has no provider session id.',
       };
     if (
-      binding.generation.provider !== this.#options.provider ||
+      !isManagedEnvironmentProvider(binding.generation.provider) ||
+      !this.#servedProviders.has(binding.generation.provider) ||
       binding.applied.provider !== binding.generation.provider ||
       binding.generation.runtimeSessionId !==
         binding.applied.runtimeSessionId ||

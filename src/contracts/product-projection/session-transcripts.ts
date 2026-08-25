@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { ProductExecutionDetailEventSchema } from './execution-detail.js';
+import { ProductSourceRefsSchema } from '../product-source-refs.js';
 
 export const GetProductSessionTranscriptsRequestSchema = z
   .object({
@@ -12,8 +13,12 @@ export const GetProductSessionTranscriptsRequestSchema = z
 const ProductSessionTranscriptLabelSchema = z
   .object({
     name: z.string().min(1).max(256),
-    role: z.string().min(1).max(64),
+    // Team membership is optional extra structure, not a precondition for a
+    // stream to exist: a lone agent (no Team) has no role.
+    role: z.string().min(1).max(64).nullable(),
     status: z.string().min(1).max(64),
+    status_basis: z.enum(['team_member_run', 'agent_runs']),
+    source_refs: ProductSourceRefsSchema,
   })
   .strict();
 

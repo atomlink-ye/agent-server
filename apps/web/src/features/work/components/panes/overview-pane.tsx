@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 
 import {
   loadRunRoleSummaries,
-  type RoleSummary,
+  type AgentSummary,
   type WorkDetailData,
 } from '../../queries/load-work-detail';
 import { RunTrace } from '@/features/run-trace/run-trace-view';
@@ -74,7 +74,9 @@ function RunRoleCards({
   readonly runId: string;
   readonly originConversationId?: string | null;
 }) {
-  const [sessions, setSessions] = useState<readonly RoleSummary[] | null>(null);
+  const [sessions, setSessions] = useState<readonly AgentSummary[] | null>(
+    null,
+  );
 
   useEffect(() => {
     let active = true;
@@ -116,7 +118,12 @@ function RunRoleCards({
             type="button"
           >
             <strong>{session.label.name}</strong>
-            <span>{session.label.role}</span>
+            {/* Team membership is optional structure -- a lone agent has no
+                role, and inventing one ("lead") would assert a product fact
+                the domain does not hold. */}
+            {session.label.role !== null ? (
+              <span>{session.label.role}</span>
+            ) : null}
             <span>{session.summary.entry_count} entries</span>
           </button>
         );

@@ -6,7 +6,9 @@ import type {
   WorkListItem,
   WorkListResponse,
 } from '@atomlink-ye/agent-server/product-contract';
-import { WorkListPage } from '@/features/work/pages/WorkListPage';
+import { MemoryRouter } from 'react-router-dom';
+
+import { WorkPane } from '@/features/work/WorkPane';
 import parallelRecording from '@/test-support/fixtures/product-recordings/parallel-success.json';
 import { projectWorkList } from '@/test-support/product-recording-test-helpers';
 
@@ -58,6 +60,14 @@ function jsonResponse(body: unknown): Response {
   } as Response;
 }
 
+function renderPane() {
+  return (
+    <MemoryRouter initialEntries={['/work']}>
+      <WorkPane onCreateNew={() => undefined} />
+    </MemoryRouter>
+  );
+}
+
 async function settleNetworkTurn() {
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -76,12 +86,11 @@ it('renders Product Work state and latest Run summary with one list read', async
   const root = createRoot(host);
   try {
     await act(async () => {
-      root.render(<WorkListPage />);
+      root.render(renderPane());
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
 
-    expect(host.textContent).toContain('Does this need me?');
-    const cards = [...host.querySelectorAll<HTMLLIElement>('.work-list-card')];
+    const cards = [...host.querySelectorAll<HTMLLIElement>('.work-list li')];
     expect(cards).toHaveLength(stateCases.length);
     for (const [index, [, stateLabel]] of stateCases.entries()) {
       const card = cards[index]!;
@@ -93,7 +102,7 @@ it('renders Product Work state and latest Run summary with one list read', async
           ?.getAttribute('data-product-state'),
       ).toBe(stateCases[index]![0]);
       expect(card.querySelector('a')?.getAttribute('href')).toBe(
-        `/works/${populatedWorkList.works[index]!.id}`,
+        `/work/${populatedWorkList.works[index]!.id}`,
       );
     }
 
@@ -121,7 +130,7 @@ it('distinguishes loading, empty, and real network error without fabricating Wor
   const loadingRoot = createRoot(loadingHost);
   try {
     await act(async () => {
-      loadingRoot.render(<WorkListPage />);
+      loadingRoot.render(renderPane());
     });
     expect(
       loadingHost.querySelector('[data-testid="work-list-loading"]'),
@@ -136,7 +145,7 @@ it('distinguishes loading, empty, and real network error without fabricating Wor
     expect(
       loadingHost.querySelector('[data-testid="work-list-empty"]'),
     ).not.toBeNull();
-    expect(loadingHost.querySelector('a[href^="/works/"]')).toBeNull();
+    expect(loadingHost.querySelector('a[href^="/work/"]')).toBeNull();
   } finally {
     await act(async () => loadingRoot.unmount());
     loadingHost.remove();
@@ -152,7 +161,7 @@ it('distinguishes loading, empty, and real network error without fabricating Wor
   const errorRoot = createRoot(errorHost);
   try {
     await act(async () => {
-      errorRoot.render(<WorkListPage />);
+      errorRoot.render(renderPane());
     });
     await settleNetworkTurn();
     expect(

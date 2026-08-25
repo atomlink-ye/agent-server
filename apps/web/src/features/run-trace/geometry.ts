@@ -1,8 +1,21 @@
-import type { TraceAttempt, TraceWorkItem } from './normalized';
-
-export type TraceEntry = {
-  readonly workItem: TraceWorkItem;
-  readonly attempt: TraceAttempt;
+/**
+ * A TimelineSpan is a run's plotted activity window. Runs are what the
+ * server actually captures execution timing against; a Team Work Item
+ * Attempt is a label some (not all) runs carry. Plotting spans -- rather
+ * than attempts -- is what lets a single-agent Work (no attempts at all)
+ * show its activity, and lets a retried task render every run instead of
+ * being silently hidden behind one `not_captured` attempt.
+ */
+export type TimelineSpan = {
+  readonly key: string; // the run's own id
+  readonly laneKey: string; // actorId ?? taskId ?? key
+  readonly startedAt: string | null;
+  readonly endedAt: string | null;
+  readonly durationMs: number | null;
+  readonly timingCaptured: boolean;
+  readonly status: string;
+  readonly attemptId: string | null; // present for team shapes, null otherwise
+  readonly workItemId: string | null;
 };
 
 export type Geometry = {
@@ -16,50 +29,44 @@ export type CapturedRange = {
 };
 
 export function timelineGeometry(
-  attempts: readonly TraceEntry[],
+  spans: readonly TimelineSpan[],
 ): ReadonlyMap<string, Geometry> {
-  const captured = attempts.filter(
-    ({ attempt }) =>
-      attempt.timingCaptured &&
-      attempt.startedAt !== null &&
-      attempt.endedAt !== null &&
-      attempt.durationMs !== null,
+  const captured = spans.filter(
+    (span) =>
+      span.timingCaptured &&
+      span.startedAt !== null &&
+      span.endedAt !== null &&
+      span.durationMs !== null,
   );
   if (!captured.length) return new Map();
   const start = Math.min(
-    ...captured.map(({ attempt }) => Date.parse(attempt.startedAt!)),
+    ...captured.map((span) => Date.parse(span.startedAt!)),
   );
-  const end = Math.max(
-    ...captured.map(({ attempt }) => Date.parse(attempt.endedAt!)),
-  );
+  const end = Math.max(...captured.map((span) => Date.parse(span.endedAt!)));
   const range = end - start;
   return new Map(
-    captured.map(({ attempt }) => [
-      attempt.id,
+    captured.map((span) => [
+      span.key,
       {
-        left: range
-          ? ((Date.parse(attempt.startedAt!) - start) / range) * 100
-          : 0,
-        width: range ? (attempt.durationMs! / range) * 100 : 100,
+        left: range ? ((Date.parse(span.startedAt!) - start) / range) * 100 : 0,
+        width: range ? (span.durationMs! / range) * 100 : 100,
       },
     ]),
   );
 }
 
 export function capturedTimelineRange(
-  attempts: readonly TraceEntry[],
+  spans: readonly TimelineSpan[],
 ): CapturedRange | null {
-  const captured = attempts.filter(
-    ({ attempt }) =>
-      attempt.timingCaptured &&
-      attempt.startedAt !== null &&
-      attempt.endedAt !== null,
+  const captured = spans.filter(
+    (span) =>
+      span.timingCaptured && span.startedAt !== null && span.endedAt !== null,
   );
   if (!captured.length) return null;
   return {
-    startedAt: captured.map(({ attempt }) => attempt.startedAt!).sort()[0]!,
+    startedAt: captured.map((span) => span.startedAt!).sort()[0]!,
     endedAt: captured
-      .map(({ attempt }) => attempt.endedAt!)
+      .map((span) => span.endedAt!)
       .sort()
       .at(-1)!,
   };
@@ -83,20 +90,15 @@ export function relativeTicks(startedAt: string, endedAt: string) {
   });
 }
 
-export function durationLabel(attempt: TraceAttempt): string {
-  return attempt.durationMs === null
+export function durationLabel(span: TimelineSpan): string {
+  return span.durationMs === null
     ? 'Not captured'
-    : `${(attempt.durationMs / 1000).toFixed(1)} seconds`;
+    : `${(span.durationMs / 1000).toFixed(1)} seconds`;
 }
 
-export function formatActiveDuration(items: readonly TraceWorkItem[]): string {
-  const milliseconds = items.reduce(
-    (total, item) =>
-      total +
-      item.attempts.reduce(
-        (sum, attempt) => sum + (attempt.durationMs ?? 0),
-        0,
-      ),
+export function formatActiveDuration(spans: readonly TimelineSpan[]): string {
+  const milliseconds = spans.reduce(
+    (total, span) => total + (span.durationMs ?? 0),
     0,
   );
   if (!milliseconds) return 'active time not captured';

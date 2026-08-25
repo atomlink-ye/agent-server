@@ -12,6 +12,7 @@ import type { GetTaskTree } from '../../application/tasks/get-task-tree.js';
 import type { InvokeTask } from '../../application/tasks/invoke-task.js';
 import { HttpError, type ErrorResponse } from '../../contracts/http.js';
 import type { AppConfig } from '../../shared/config.js';
+import { errorDiagnostic } from '../../shared/observability/error-diagnostic.js';
 import type { Logger } from '../../shared/observability/logger.js';
 import type { ApiEnvironment } from './http-types.js';
 import { registerHealthRoutes } from './routes/health.js';
@@ -174,7 +175,7 @@ export function createHttpApp(
 
     dependencies.logger.log('error', 'http.request.failed', {
       request_id: requestId,
-      error_name: error.name,
+      ...errorDiagnostic(error),
     });
     return context.json(
       errorResponse(

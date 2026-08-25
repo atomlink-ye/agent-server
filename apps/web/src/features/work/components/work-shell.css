@@ -1,116 +1,46 @@
-.work-product-frame {
-  min-height: 100vh;
-  color: #292726;
-  background: #f5f3ef;
-  font-family:
-    Inter, 'Avenir Next', 'Trebuchet MS', ui-sans-serif, system-ui, sans-serif;
-}
-
-.work-product-nav {
-  display: flex;
-  flex-direction: column;
-  width: 224px;
-  min-height: 100vh;
-  padding: 28px 16px 24px;
-  border-right: 1px solid #d9d5ce;
-  background: #eeece7;
-}
-
-.work-product-brand {
-  display: flex;
-  gap: 7px;
-  align-items: center;
-  padding: 0 8px;
-  color: #292726;
-  font-size: 13px;
-  font-weight: 650;
-  letter-spacing: -0.01em;
-  text-transform: uppercase;
-}
-
-.work-product-brand span:first-child {
-  font-size: 12px;
-}
-
-.work-product-nav nav {
-  display: grid;
-  gap: 14px;
-  margin-top: 38px;
-}
-
-.work-product-nav__current {
-  display: block;
-  padding: 9px 15px;
-  border: 1px solid #d9d5ce;
-  border-radius: 7px;
-  background: #fcfbf8;
-  font-size: 14px;
-  font-weight: 650;
-}
-
-.work-product-nav__quiet {
-  display: block;
-  padding: 0 15px;
-  color: #706c74;
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.work-product-nav__foot {
-  margin: auto 8px 0;
-  padding-top: 20px;
-  border-top: 1px solid #d9d5ce;
-  color: #706c74;
-  font-size: 12px;
-}
-
 .work-shell {
   width: min(100% - 64px, 1120px);
   margin: 0 auto;
   padding: 48px 0 72px;
 }
 
-.work-shell :focus-visible {
-  outline: 2px solid #404a78;
-  outline-offset: 3px;
-}
-
 .work-shell-kicker {
-  margin: 0 0 8px;
-  color: #404a78;
-  font-size: 12px;
+  margin: 0 0 var(--space-2);
+  color: var(--sky-ink);
+  font-size: var(--text-sm);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .work-shell-breadcrumb {
-  margin: 0 0 18px;
-  color: #706c74;
-  font-size: 11px;
+  margin: 0 0 var(--space-5);
+  color: var(--ink-500);
+  font-size: var(--text-xs);
 }
 
 .work-detail-header {
   display: flex;
   align-items: end;
   justify-content: space-between;
-  gap: 20px;
-  padding-bottom: 17px;
-  border-bottom: 1px solid #d9d5ce;
+  gap: var(--space-5);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--ink-100);
 }
 
 .work-detail-header .work-shell-kicker {
-  margin-bottom: 7px;
+  margin-bottom: var(--space-2);
 }
 
+/* This was a viewport-scaled hero heading (up to 43px) from the days when Work
+   was its own full-page dashboard. Inside the shell it is a panel title, so it
+   matches the display step the rest of the app uses. */
 .work-shell h1 {
   margin: 0;
-  color: #292726;
-  font-family:
-    Inter, 'Avenir Next', 'Trebuchet MS', ui-sans-serif, system-ui, sans-serif;
-  font-size: clamp(2rem, 3.4vw, 2.7rem);
-  font-weight: 650;
-  letter-spacing: -0.045em;
+  color: var(--ink-900);
+  font-size: var(--text-display);
+  font-weight: 700;
+  letter-spacing: -0.035em;
   line-height: 1.05;
 }
 
@@ -120,9 +50,9 @@
 
 .work-list-header__summary {
   max-width: 560px;
-  margin: 13px 0 0;
-  color: #706c74;
-  font-size: 15px;
+  margin: var(--space-3) 0 0;
+  color: var(--ink-500);
+  font-size: var(--text-lg);
   line-height: 1.5;
 }
 
@@ -133,14 +63,14 @@
 .work-list-state {
   max-width: 720px;
   margin-top: 58px;
-  padding: 34px 38px;
-  border: 1px solid #d9d5ce;
-  border-radius: 10px;
-  background: #fcfbf8;
+  padding: var(--space-8);
+  border: 1px solid var(--ink-100);
+  border-radius: var(--radius-md);
+  background: var(--cloud);
 }
 
 .work-list-state--loading {
-  background: color-mix(in srgb, #fcfbf8 84%, #eeece7);
+  background: color-mix(in srgb, var(--cloud) 84%, var(--ink-100));
 }
 
 .work-list-state--empty {
@@ -148,14 +78,14 @@
 }
 
 .work-list-state--error {
-  border-color: #beb9b1;
-  border-left: 4px solid #706c74;
+  border-color: var(--ink-200);
+  border-left: 4px solid var(--ink-500);
 }
 
 .work-list-state__eyebrow {
-  margin: 0 0 8px;
-  color: #404a78;
-  font-size: 12px;
+  margin: 0 0 var(--space-2);
+  color: var(--sky-ink);
+  font-size: var(--text-sm);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -163,8 +93,8 @@
 
 .work-list-state h2 {
   margin: 0;
-  color: #292726;
-  font-size: 22px;
+  color: var(--ink-900);
+  font-size: var(--text-display);
   font-weight: 650;
   letter-spacing: -0.03em;
   line-height: 1.18;
@@ -172,23 +102,28 @@
 
 .work-list-state > p:not(.work-list-state__eyebrow) {
   max-width: 570px;
-  margin: 12px 0 0;
-  color: #706c74;
-  font-size: 14px;
+  margin: var(--space-3) 0 0;
+  color: var(--ink-500);
+  font-size: var(--text-lg);
   line-height: 1.55;
 }
 
 .work-list-skeleton {
   display: grid;
   gap: 10px;
-  margin-top: 28px;
+  margin-top: var(--space-7);
 }
 
 .work-list-skeleton span {
   display: block;
   height: 11px;
-  border-radius: 999px;
-  background: linear-gradient(90deg, #e8e5df, #f4f2ee, #e8e5df);
+  border-radius: var(--radius-pill);
+  background: linear-gradient(
+    90deg,
+    var(--ink-100),
+    var(--cloud),
+    var(--ink-100)
+  );
   background-size: 200% 100%;
   animation: work-list-loading 1.4s ease-in-out infinite;
 }
@@ -223,15 +158,15 @@
   display: flex;
   align-items: end;
   justify-content: space-between;
-  gap: 20px;
-  padding-bottom: 15px;
-  border-bottom: 1px solid #d9d5ce;
+  gap: var(--space-5);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--ink-100);
 }
 
 .work-list-region__eyebrow {
   margin: 0;
-  color: #404a78;
-  font-size: 12px;
+  color: var(--sky-ink);
+  font-size: var(--text-sm);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -239,16 +174,16 @@
 
 .work-list-region h2 {
   margin: 0;
-  color: #292726;
-  font-size: 15px;
+  color: var(--ink-900);
+  font-size: var(--text-lg);
   font-weight: 650;
   letter-spacing: -0.01em;
 }
 
-.work-list {
+.work-list-cards {
   display: grid;
-  gap: 14px;
-  margin: 18px 0 0;
+  gap: var(--space-4);
+  margin: var(--space-5) 0 0;
   padding: 0;
   list-style: none;
 }
@@ -256,76 +191,56 @@
 .work-list-card {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(250px, 0.55fr);
-  gap: 28px;
+  gap: var(--space-7);
   align-items: center;
   min-height: 104px;
-  padding: 24px 26px;
-  border: 1px solid #d9d5ce;
-  border-radius: 9px;
-  background: #fcfbf8;
-  box-shadow: 0 1px 1px rgb(41 39 38 / 0.02);
+  padding: var(--space-6);
+  border: 1px solid var(--ink-100);
+  border-radius: var(--radius-sm);
+  background: var(--cloud);
+  box-shadow: var(--shadow-soft);
 }
 
 .work-list-card__identity a {
-  color: #292726;
-  font-size: 17px;
+  color: var(--ink-900);
+  font-size: var(--text-title);
   font-weight: 650;
   letter-spacing: -0.015em;
   line-height: 1.25;
-  text-decoration-color: #beb9b1;
+  text-decoration-color: var(--ink-200);
   text-decoration-thickness: 1px;
   text-underline-offset: 4px;
 }
 
 .work-list-card__identity a:hover {
-  color: #404a78;
+  color: var(--sky-ink);
   text-decoration-color: currentcolor;
 }
 
 .work-list-card__identity p,
 .work-list-card__unavailable {
-  margin: 8px 0 0;
-  color: #706c74;
-  font-size: 13px;
+  margin: var(--space-2) 0 0;
+  color: var(--ink-500);
+  font-size: var(--text-md);
   line-height: 1.45;
 }
 
 .work-list-card__unavailable {
   display: flex;
-  gap: 9px;
+  gap: var(--space-2);
   align-items: flex-start;
   margin: 0;
 }
 
 .work-list-card__unavailable span {
-  color: #404a78;
+  color: var(--sky-ink);
   font-weight: 700;
 }
 
-@media (min-width: 720px) {
-  .work-product-frame {
-    display: grid;
-    grid-template-columns: 224px minmax(0, 1fr);
-  }
-}
-
-@media (max-width: 719px) {
-  .work-product-nav {
-    width: 100%;
-    min-height: auto;
-    padding: 18px 20px;
-    border-right: 0;
-    border-bottom: 1px solid #d9d5ce;
-  }
-
-  .work-product-nav nav,
-  .work-product-nav__foot {
-    display: none;
-  }
-
+@media (max-width: 700px) {
   .work-shell {
     width: min(100% - 40px, 1120px);
-    padding-top: 34px;
+    padding-top: var(--space-8);
   }
 
   .work-list-region {
@@ -334,53 +249,13 @@
 
   .work-list-state {
     margin-top: 40px;
-    padding: 27px 24px;
+    padding: var(--space-6);
   }
 
   .work-list-card {
     grid-template-columns: 1fr;
-    gap: 16px;
+    gap: var(--space-4);
     min-height: auto;
-    padding: 21px;
+    padding: var(--space-5);
   }
-}
-.work-product-brand {
-  text-decoration: none;
-}
-.work-product-nav nav a,
-.work-product-nav nav span {
-  box-sizing: border-box;
-}
-.work-product-nav__current {
-  color: #292726;
-  text-decoration: none;
-}
-.work-product-nav__disabled {
-  align-items: baseline;
-  color: #8a8580;
-  display: flex;
-  font-size: 13px;
-  gap: 10px;
-  justify-content: space-between;
-  padding: 7px 15px;
-}
-.work-product-nav__disabled small {
-  font-size: 9px;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-}
-.work-product-nav__foot {
-  display: grid;
-  gap: 4px;
-}
-.work-product-nav__foot a {
-  color: #514e50;
-  font-size: 12px;
-  font-weight: 650;
-  text-decoration-color: #beb9b1;
-  text-underline-offset: 3px;
-}
-.work-product-nav__foot span {
-  font-size: 10px;
 }

@@ -26,9 +26,11 @@ import {
 } from '../../../contracts/product-accepted-subset/index.js';
 import type { ApiEnvironment } from '../http-types.js';
 import type { AppConfig } from '../../../shared/config.js';
+import type { Logger } from '../../../shared/observability/logger.js';
 import { decodeProductResponse } from '../browser-product-decoder.js';
 import {
   fetchAuthenticated,
+  isUpstreamOversizeResponse,
   jsonResponse,
   readJson,
   safeStatus,
@@ -136,9 +138,15 @@ const startRunErrorSchema = z.object({
 export function registerBrowserWebRoutes(
   app: Hono<ApiEnvironment>,
   config: AppConfig,
+  logger: Logger,
 ): void {
   app.get('/api/conversations', async () =>
-    readBrowserJson(config, '/api/v1/conversations', conversationListSchema),
+    readBrowserJson(
+      config,
+      logger,
+      '/api/v1/conversations',
+      conversationListSchema,
+    ),
   );
   app.post('/api/conversations', async (c) => {
     const parsed = createConversationRequestSchema.safeParse(
@@ -147,6 +155,7 @@ export function registerBrowserWebRoutes(
     if (!parsed.success) return invalidRequest();
     return writeBrowserJson(
       config,
+      logger,
       '/api/v1/conversations',
       parsed.data,
       conversationReadSchema,
@@ -158,6 +167,7 @@ export function registerBrowserWebRoutes(
     if (!isId(id)) return invalidRequest();
     return readBrowserJson(
       config,
+      logger,
       `/api/v1/conversations/${encodeURIComponent(id)}`,
       conversationReadSchema,
     );
@@ -167,6 +177,7 @@ export function registerBrowserWebRoutes(
     if (!isId(id)) return invalidRequest();
     return readBrowserJson(
       config,
+      logger,
       `/api/v1/conversations/${encodeURIComponent(id)}/messages`,
       conversationMessagesSchema,
     );
@@ -180,6 +191,7 @@ export function registerBrowserWebRoutes(
     if (!parsed.success) return invalidRequest();
     return writeBrowserJson(
       config,
+      logger,
       `/api/v1/conversations/${encodeURIComponent(id)}/messages`,
       parsed.data,
       conversationPostSchema,
@@ -190,6 +202,7 @@ export function registerBrowserWebRoutes(
   app.get('/api/works', async () =>
     readProductJson(
       config,
+      logger,
       '/api/v1/works?limit=100&order=updated_desc',
       WorkListResponseSchema,
     ),
@@ -201,6 +214,7 @@ export function registerBrowserWebRoutes(
     if (!parsed.success) return invalidProductRequest();
     return writeProductJson(
       config,
+      logger,
       '/api/v1/works',
       parsed.data,
       CreateWorkResponseSchema,
@@ -211,6 +225,7 @@ export function registerBrowserWebRoutes(
     if (!isUuid(workId)) return invalidProductRequest();
     return readProductJson(
       config,
+      logger,
       `/api/v1/works/${encodeURIComponent(workId)}`,
       GetWorkResponseSchema,
     );
@@ -220,6 +235,7 @@ export function registerBrowserWebRoutes(
     if (!isUuid(workId)) return invalidRequest();
     return readBrowserJson(
       config,
+      logger,
       `/api/v1/works/${encodeURIComponent(workId)}/chat-card`,
       publicChatWorkCardSchema,
       { notFoundCode: 'work_not_found' },
@@ -230,6 +246,7 @@ export function registerBrowserWebRoutes(
     if (!isUuid(workId)) return invalidProductRequest();
     return readProductJson(
       config,
+      logger,
       `/api/v1/works/${encodeURIComponent(workId)}/definition`,
       WorkDefinitionResponseSchema,
     );
@@ -243,6 +260,7 @@ export function registerBrowserWebRoutes(
     if (!parsed.success) return invalidProductRequest();
     return writeProductJson(
       config,
+      logger,
       `/api/v1/works/${encodeURIComponent(workId)}/definition-version`,
       parsed.data,
       UpdateWorkDefinitionVersionResponseSchema,
@@ -253,6 +271,7 @@ export function registerBrowserWebRoutes(
     if (!isUuid(workId)) return invalidProductRequest();
     return readProductJson(
       config,
+      logger,
       `/api/v1/works/${encodeURIComponent(workId)}/runs?limit=100&order=created_desc`,
       WorkRunListResponseSchema,
     );
@@ -266,6 +285,7 @@ export function registerBrowserWebRoutes(
     if (!parsed.success) return invalidProductRequest();
     return writeProductJson(
       config,
+      logger,
       `/api/v1/works/${encodeURIComponent(workId)}/runs`,
       parsed.data,
       StartWorkRunResponseSchema,
@@ -277,6 +297,7 @@ export function registerBrowserWebRoutes(
     if (!workId || !workRunId) return invalidProductRequest();
     return readProductJson(
       config,
+      logger,
       `/api/v1/works/${encodeURIComponent(workId)}/runs/${encodeURIComponent(workRunId)}`,
       ProductWorkRunResponseSchema,
     );
@@ -286,6 +307,7 @@ export function registerBrowserWebRoutes(
     if (!workId || !workRunId) return invalidProductRequest();
     return readProductJson(
       config,
+      logger,
       `/api/v1/works/${encodeURIComponent(workId)}/runs/${encodeURIComponent(workRunId)}/trace`,
       ProductRunTraceResponseSchema,
     );
@@ -297,6 +319,7 @@ export function registerBrowserWebRoutes(
       return invalidProductRequest();
     return readProductJson(
       config,
+      logger,
       `/api/v1/works/${encodeURIComponent(workId)}/runs/${encodeURIComponent(workRunId)}/execution-detail?attempt_id=${encodeURIComponent(attemptId)}`,
       ProductExecutionDetailResponseSchema,
     );
@@ -308,6 +331,7 @@ export function registerBrowserWebRoutes(
       if (!workId || !workRunId) return invalidProductRequest();
       return readProductJson(
         config,
+        logger,
         `/api/v1/works/${encodeURIComponent(workId)}/runs/${encodeURIComponent(workRunId)}/session-transcripts`,
         ProductSessionTranscriptsResponseSchema,
       );
@@ -319,6 +343,7 @@ export function registerBrowserWebRoutes(
     if (!isUuid(versionId)) return invalidProductRequest();
     return readProductJson(
       config,
+      logger,
       `/api/v1/work-definition-versions/${encodeURIComponent(versionId)}`,
       GetProductWorkDefinitionVersionResponseSchema,
     );
@@ -326,13 +351,20 @@ export function registerBrowserWebRoutes(
   app.post('/api/work-definitions/validate', async (c) =>
     writeWorkDefinition(
       config,
+      logger,
       c,
       'validate',
       WorkDefinitionValidateSuccessSchema,
     ),
   );
   app.post('/api/work-definitions/plan', async (c) =>
-    writeWorkDefinition(config, c, 'plan', WorkDefinitionPlanResponseSchema),
+    writeWorkDefinition(
+      config,
+      logger,
+      c,
+      'plan',
+      WorkDefinitionPlanResponseSchema,
+    ),
   );
   app.post('/api/work-definitions/apply', async (c) => {
     const idempotencyKey = c.req.header('idempotency-key')?.trim() ?? '';
@@ -340,6 +372,7 @@ export function registerBrowserWebRoutes(
       return invalidProductRequest();
     return writeWorkDefinition(
       config,
+      logger,
       c,
       'apply',
       WorkDefinitionApplyResponseSchema,
@@ -350,6 +383,7 @@ export function registerBrowserWebRoutes(
 
 async function writeWorkDefinition(
   config: AppConfig,
+  logger: Logger,
   c: any,
   action: 'validate' | 'plan' | 'apply',
   schema: ZodType<unknown>,
@@ -361,6 +395,7 @@ async function writeWorkDefinition(
   if (!parsed.success) return invalidProductRequest();
   return writeProductJson(
     config,
+    logger,
     `/api/v1/work-definitions:${action}`,
     parsed.data,
     schema,
@@ -373,11 +408,13 @@ async function writeWorkDefinition(
 
 async function readProductJson(
   config: AppConfig,
+  logger: Logger,
   path: string,
   schema: ZodType<unknown>,
 ): Promise<Response> {
   return forwardDecoded(
     config,
+    logger,
     path,
     { method: 'GET' },
     schema,
@@ -387,6 +424,7 @@ async function readProductJson(
 
 async function writeProductJson(
   config: AppConfig,
+  logger: Logger,
   path: string,
   body: unknown,
   schema: ZodType<unknown>,
@@ -397,6 +435,7 @@ async function writeProductJson(
 ): Promise<Response> {
   return forwardDecoded(
     config,
+    logger,
     path,
     {
       method: 'POST',
@@ -415,12 +454,14 @@ async function writeProductJson(
 
 async function readBrowserJson(
   config: AppConfig,
+  logger: Logger,
   path: string,
   schema: ZodType<unknown>,
   options: { readonly notFoundCode?: string } = {},
 ): Promise<Response> {
   return forwardDecoded(
     config,
+    logger,
     path,
     { method: 'GET' },
     schema,
@@ -431,6 +472,7 @@ async function readBrowserJson(
 
 async function writeBrowserJson(
   config: AppConfig,
+  logger: Logger,
   path: string,
   body: unknown,
   schema: ZodType<unknown>,
@@ -438,6 +480,7 @@ async function writeBrowserJson(
 ): Promise<Response> {
   return forwardDecoded(
     config,
+    logger,
     path,
     {
       method: 'POST',
@@ -452,6 +495,7 @@ async function writeBrowserJson(
 
 async function forwardDecoded(
   config: AppConfig,
+  logger: Logger,
   path: string,
   init: RequestInit,
   successSchema: ZodType<unknown>,
@@ -468,6 +512,18 @@ async function forwardDecoded(
     return unavailable();
   }
   const body = await readJson(upstream);
+  if (isUpstreamOversizeResponse(body)) {
+    // The upstream response was valid but exceeded the size this gateway can
+    // safely buffer/forward -- a distinct, attributable failure from a body
+    // that failed to decode. Logging the declared size (never the body) is
+    // what lets an operator tell "the response was too big" apart from a
+    // bare, unexplained 502.
+    logger.log('warn', 'browser_bff.upstream_response_too_large', {
+      path,
+      declared_bytes: body.declaredBytes,
+    });
+    return upstreamTooLarge();
+  }
   if (upstream.ok) {
     const decoded = decodeProductResponse(body, successSchema);
     if (!decoded.success) return invalidUpstream();
@@ -557,6 +613,26 @@ function invalidUpstream(): Response {
       error: {
         code: 'invalid_response',
         message: 'The service returned an invalid response.',
+        request_id: 'web-product-bff',
+      },
+    },
+    502,
+  );
+}
+
+// 502 (not 413): the size problem is not the browser's request, it is this
+// gateway's own inability to relay what the authenticated upstream sent --
+// the same "bad gateway" class `invalidUpstream()` already uses for a
+// response this gateway cannot pass through, kept distinguishable via a
+// dedicated code/message so the real cause (too large, not malformed) is
+// visible to the caller instead of collapsed into invalid_response.
+function upstreamTooLarge(): Response {
+  return jsonResponse(
+    {
+      error: {
+        code: 'upstream_response_too_large',
+        message:
+          'The service response was too large for this gateway to forward.',
         request_id: 'web-product-bff',
       },
     },

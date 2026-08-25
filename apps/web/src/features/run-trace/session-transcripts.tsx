@@ -11,10 +11,12 @@ import {
   loadSessionTranscripts,
   RunTraceReadError,
   type SessionEntry,
+  type SessionLabel,
   type SessionSummary,
   type SessionTranscriptsResponse,
 } from './run-trace-gateway';
-import type { NormalizedTrace } from './normalized';
+import { selectAttemptEntries } from './selectors';
+import type { NormalizedTrace, TraceEdge } from './normalized';
 import './execution-transcript.css';
 import './transcript-stream.css';
 
@@ -40,12 +42,20 @@ export function SessionTranscripts({
   readonly initialSelectedIndex?: number;
 }) {
   const [state, setState] = useState<FetchState>({ status: 'idle' });
-  // Roles are NOT unique inside a Run: a team can run several 'member'
-  // sessions. Selection therefore addresses the session by its position in
-  // the response, which is the only identifier the contract guarantees.
-  const [selectedIndex, setSelectedIndex] = useState<number | null>(
-    initialSelectedIndex ?? null,
-  );
+  // Neither name nor role is unique inside a Run: a team can run several
+  // 'member' sessions with the same role. Selection addresses the session by
+  // its durable identity (source_refs.team_member_run_id, falling back to
+  // task_id for the non-Team shape) instead of array position -- a live
+  // 2500ms poll can insert a newly-started member ahead of the selected one,
+  // and position-based selection would silently jump the user to a
+  // different agent when that happens.
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  // The attempt/work-item filter is a per-agent affordance (R3): it must
+  // reset whenever the selected agent changes, or a stale filter from a
+  // previous agent would silently narrow the new agent's message context.
+  const [selectedWorkItemFilter, setSelectedWorkItemFilter] = useState<
+    string | null
+  >(null);
 
   // Extract sessions array for use in effects and render
   const sessions = state.status === 'ready' ? state.data.sessions : [];
@@ -58,11 +68,7 @@ export function SessionTranscripts({
     }
     void loadSessionTranscripts(trace.work.id, trace.workRun.id)
       .then((data) => {
-        if (!active) return;
-        setState({ status: 'ready', data });
-        if (data.sessions.length && selectedIndex === null) {
-          setSelectedIndex(0);
-        }
+        if (active) setState({ status: 'ready', data });
       })
       .catch((error: unknown) => {
         if (active) {
@@ -78,12 +84,24 @@ export function SessionTranscripts({
     };
   }, [trace.work.id, trace.workRun.id]);
 
-  // Auto-select first session when it becomes available
+  // Seeds the initial selection once sessions become available, resolving
+  // any deep-linked position (e.g. Overview's role cards) into a durable
+  // identity. This also covers a Run that starts with zero sessions and
+  // gains its first one on a later poll -- it only ever fires while nothing
+  // is selected, so it never overrides a user's later choice.
   useEffect(() => {
-    if (selectedIndex === null && sessions.length > 0) {
-      setSelectedIndex(0);
-    }
-  }, [sessions, selectedIndex]);
+    if (selectedKey !== null || !sessions.length) return;
+    const seeded =
+      (initialSelectedIndex !== undefined
+        ? sessions[initialSelectedIndex]
+        : undefined) ?? sessions[0];
+    if (seeded) setSelectedKey(sessionKey(seeded.label));
+  }, [sessions, selectedKey, initialSelectedIndex]);
+
+  // A filter chosen for one agent's Work Items is meaningless for another.
+  useEffect(() => {
+    setSelectedWorkItemFilter(null);
+  }, [selectedKey]);
 
   // Polling effect: when live=true, refetch every 2-3 seconds without resetting UI state
   useEffect(() => {
@@ -91,7 +109,7 @@ export function SessionTranscripts({
     const timer = setInterval(() => {
       void loadSessionTranscripts(trace.work.id, trace.workRun.id)
         .then((data) => {
-          // Update data without resetting selectedIndex or state
+          // Update data without resetting selectedKey or state
           setState({ status: 'ready', data });
         })
         .catch(() => {
@@ -110,7 +128,7 @@ export function SessionTranscripts({
         <div className="execution-transcript__heading">
           <div>
             <p className="work-shell-kicker">Session transcripts</p>
-            <h2>Loading per-role session transcripts…</h2>
+            <h2>Loading session transcripts…</h2>
           </div>
         </div>
       </section>
@@ -133,9 +151,7 @@ export function SessionTranscripts({
         <div className="execution-transcript__heading">
           <div>
             <p className="work-shell-kicker">Session transcripts</p>
-            <h2>
-              Per-role session transcripts are not available for this Run.
-            </h2>
+            <h2>Session transcripts are not available for this Run.</h2>
             <p>{message}</p>
           </div>
         </div>
@@ -145,7 +161,30 @@ export function SessionTranscripts({
 
   const { data } = state;
   const selected =
-    selectedIndex === null ? null : (data.sessions[selectedIndex] ?? null);
+    selectedKey === null
+      ? null
+      : (data.sessions.find(
+          (session) => sessionKey(session.label) === selectedKey,
+        ) ?? null);
+  // A Team member's own Work Items -- the join key is the identity a Run
+  // and a Work Item already share (see selectors.ts's run-attempt join):
+  // source_refs.team_member_run_id IS the actor_id used throughout the
+  // trace. A lone-agent session (source_refs.task_id only) never has one,
+  // and never has Work Items either, so the filter affordance is simply
+  // absent for it -- not an error state.
+  const selectedActorId =
+    selected?.label.source_refs.team_member_run_id ?? null;
+  const agentAttempts = selectedActorId
+    ? selectAttemptEntries(trace).filter(
+        (entry) => entry.workItem.actorId === selectedActorId,
+      )
+    : [];
+  const filteredWorkItemIds = selectedWorkItemFilter
+    ? [selectedWorkItemFilter]
+    : [...new Set(agentAttempts.map((entry) => entry.workItem.id))];
+  const messages = filteredWorkItemIds
+    .flatMap((workItemId) => collaborationMessages(trace, workItemId))
+    .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
 
   if (!data.sessions.length)
     return (
@@ -160,7 +199,7 @@ export function SessionTranscripts({
             <p>
               {live
                 ? 'Session data has not started streaming for this Run yet.'
-                : 'The Run completed but no per-role session data was recorded.'}
+                : 'The Run completed but no session data was recorded.'}
             </p>
           </div>
         </div>
@@ -180,7 +219,7 @@ export function SessionTranscripts({
           </p>
         </div>
         <span>
-          {data.sessions.length} role{data.sessions.length > 1 ? 's' : ''}
+          {data.sessions.length} agent{data.sessions.length > 1 ? 's' : ''}
         </span>
       </div>
       <div className="execution-transcript__body">
@@ -189,21 +228,29 @@ export function SessionTranscripts({
           aria-label="Sessions"
           data-testid="session-role-nav"
         >
-          {data.sessions.map((session, index) => (
-            <button
-              aria-pressed={index === selectedIndex}
-              key={`${index}:${session.label.name}`}
-              onClick={() => setSelectedIndex(index)}
-              type="button"
-            >
-              <strong>{session.label.name}</strong>
-              <span>{session.label.role}</span>
-              <small>
-                {humanize(session.label.status)} · {session.summary.entry_count}{' '}
-                entries
-              </small>
-            </button>
-          ))}
+          {data.sessions.map((session) => {
+            const key = sessionKey(session.label);
+            return (
+              <button
+                aria-pressed={key === selectedKey}
+                key={key}
+                onClick={() => setSelectedKey(key)}
+                type="button"
+              >
+                <strong>{session.label.name}</strong>
+                {/* Team membership is optional structure -- a lone agent has
+                    no role, and inventing one ("lead") would assert a
+                    product fact the domain does not hold. */}
+                {session.label.role !== null ? (
+                  <span>{session.label.role}</span>
+                ) : null}
+                <small>
+                  {humanize(session.label.status)} ·{' '}
+                  {session.summary.entry_count} entries
+                </small>
+              </button>
+            );
+          })}
         </nav>
         <div className="execution-transcript__detail" aria-live="polite">
           {selected ? (
@@ -212,12 +259,64 @@ export function SessionTranscripts({
                 <div>
                   <strong>{selected.label.name}</strong>
                   <span>
-                    Role: {selected.label.role} ·{' '}
+                    {selected.label.role !== null
+                      ? `Role: ${selected.label.role} · `
+                      : ''}
                     {humanize(selected.label.status)}
                   </span>
                 </div>
                 <span>{selected.summary.entry_count} entries</span>
               </header>
+              {agentAttempts.length ? (
+                <nav
+                  className="execution-transcript__work-item-filter"
+                  aria-label="Filter by work item"
+                  data-testid="session-work-item-filter"
+                >
+                  <button
+                    aria-pressed={selectedWorkItemFilter === null}
+                    onClick={() => setSelectedWorkItemFilter(null)}
+                    type="button"
+                  >
+                    All work
+                  </button>
+                  {agentAttempts.map((entry) => (
+                    <button
+                      aria-pressed={
+                        selectedWorkItemFilter === entry.workItem.id
+                      }
+                      key={entry.attempt.id}
+                      onClick={() =>
+                        setSelectedWorkItemFilter(entry.workItem.id)
+                      }
+                      type="button"
+                    >
+                      {entry.workItem.subject} · Attempt{' '}
+                      {entry.attempt.attemptNo}
+                    </button>
+                  ))}
+                </nav>
+              ) : null}
+              {messages.length ? (
+                <section
+                  className="execution-transcript__messages"
+                  data-testid="session-messages"
+                >
+                  <h3>Agent-to-Agent messages</h3>
+                  {messages.map((message) => (
+                    <article key={message.id}>
+                      <div>
+                        <strong>{message.sender}</strong>
+                        <span>→ {message.recipient}</span>
+                      </div>
+                      <p>{message.summary}</p>
+                      <time dateTime={message.createdAt}>
+                        {formatTimestamp(message.createdAt)}
+                      </time>
+                    </article>
+                  ))}
+                </section>
+              ) : null}
               <SessionSummaryBlock
                 summary={selected.summary}
                 platformToolCount={
@@ -494,4 +593,42 @@ function humanize(value: string) {
 }
 function formatTimestamp(value: string) {
   return `${value.replace('T', ' ').slice(0, 19)} UTC`;
+}
+
+/**
+ * A session's durable identity (R4): team_member_run_id for a Team member,
+ * task_id for the non-Team "agent_runs" shape. Both are stable across a
+ * live poll; array position is not. The name-only fallback only applies to
+ * a source_refs shape this contract does not currently produce, kept as a
+ * defensive last resort rather than a thrown error.
+ */
+function sessionKey(label: SessionLabel): string {
+  return (
+    label.source_refs.team_member_run_id ??
+    label.source_refs.task_id ??
+    label.name
+  );
+}
+
+/**
+ * Ported from the deleted execution-transcript.tsx rather than dropped: the
+ * unified session view still needs Agent-to-Agent message context for a
+ * Team member's Work Items, now scoped by the optional attempt/work-item
+ * filter instead of by a separate Attempt-nav tab.
+ */
+function collaborationMessages(trace: NormalizedTrace, workItemId: string) {
+  return trace.edges.flatMap((edge: TraceEdge) => {
+    if (edge.kind !== 'observed_message' || edge.workItemId !== workItemId)
+      return [];
+    const message = trace.messages.get(edge.messageId);
+    return [
+      {
+        id: edge.messageId,
+        sender: message?.senderName ?? 'Agent',
+        recipient: message?.recipientName ?? 'Agent',
+        summary: message?.summary ?? 'Message content was not captured.',
+        createdAt: edge.sourceCreatedAt,
+      },
+    ];
+  });
 }

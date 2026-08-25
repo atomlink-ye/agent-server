@@ -198,6 +198,33 @@ it('renders Work as a sibling tab inside the same Cumora-style shell', async () 
     loadMessages: async () => [],
     sendMessage: async () => message('conversation-a', 'message-a', 1, 'hello'),
   };
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    expect(input).toBe('/api/works');
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        works: [
+          {
+            id: workId,
+            tenant_id: 'tenant-a',
+            workspace_id: '22222222-2222-4222-8222-222222222222',
+            definition_id: '33333333-3333-4333-8333-333333333333',
+            definition_version_id: '44444444-4444-4444-8444-444444444444',
+            title: 'Competitor Research',
+            origin: 'created',
+            archived_at: null,
+            created_at: '2026-08-21T00:00:00.000Z',
+            updated_at: '2026-08-21T00:00:00.000Z',
+            product_state: 'needs_you',
+            latest_run_summary: null,
+          },
+        ],
+        next_cursor: null,
+      }),
+    } as Response;
+  });
+  vi.stubGlobal('fetch', fetchMock);
 
   const host = document.createElement('div');
   document.body.append(host);
@@ -211,12 +238,14 @@ it('renders Work as a sibling tab inside the same Cumora-style shell', async () 
       );
       await Promise.resolve();
       await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
 
     const rail = host.querySelector('.rail');
     expect(rail).not.toBeNull();
     expect(rail?.textContent).toContain('Conversations');
     expect(rail?.textContent).toContain('Work');
+    expect(host.querySelector('.sidebar.work-pane')).not.toBeNull();
     expect(host.querySelector('.work-main-content')).not.toBeNull();
     expect(host.querySelector('.work-main')).not.toBeNull();
     expect(host.textContent).toContain('Choose a Work item');
@@ -225,6 +254,7 @@ it('renders Work as a sibling tab inside the same Cumora-style shell', async () 
   } finally {
     await act(async () => root.unmount());
     host.remove();
+    vi.unstubAllGlobals();
   }
 });
 

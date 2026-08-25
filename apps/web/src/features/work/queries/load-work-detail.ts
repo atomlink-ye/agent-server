@@ -5,8 +5,8 @@ import type {
 } from '@atomlink-ye/agent-server/product-contract';
 
 import {
+  type AgentSummary,
   type AnchoredRun,
-  type RoleSummary,
   workRunClient,
 } from '../clients/work-run-client';
 import { workClient } from '../clients/work-client';
@@ -90,8 +90,8 @@ export async function loadWorkDetail(
 export async function loadRunRoleSummaries(
   workId: string,
   runId: string,
-): Promise<readonly RoleSummary[]> {
+): Promise<readonly AgentSummary[]> {
   return workRunClient.sessionTranscripts(workId, runId);
 }
 
-export { type AnchoredRun, type NormalizedTrace, type RoleSummary };
+export { type AnchoredRun, type NormalizedTrace, type AgentSummary };

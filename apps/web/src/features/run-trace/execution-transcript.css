@@ -1,5 +1,5 @@
 .execution-transcript {
-  border-top: 1px solid #d9d5ce;
+  border-top: 1px solid var(--trace-line);
   margin-top: 30px;
   padding-top: 26px;
 }
@@ -11,7 +11,7 @@
 }
 .execution-transcript__heading h2,
 .execution-transcript--empty h2 {
-  color: #292726;
+  color: var(--trace-ink);
   font-size: 18px;
   font-weight: 650;
   letter-spacing: -0.02em;
@@ -19,23 +19,23 @@
 }
 .execution-transcript__heading p,
 .execution-transcript--empty > p:last-child {
-  color: #706c74;
+  color: var(--trace-muted);
   font-size: 11px;
   line-height: 1.5;
   margin: 8px 0 0;
   max-width: 720px;
 }
 .execution-transcript__heading > span {
-  background: #f4f2ee;
-  border: 1px solid #d9d5ce;
+  background: var(--trace-wash);
+  border: 1px solid var(--trace-line);
   border-radius: 999px;
-  color: #706c74;
+  color: var(--trace-muted);
   font-size: 9px;
   padding: 4px 8px;
   white-space: nowrap;
 }
 .execution-transcript__body {
-  border: 1px solid #d9d5ce;
+  border: 1px solid var(--trace-line);
   border-radius: 8px;
   display: grid;
   grid-template-columns: 270px minmax(0, 1fr);
@@ -44,8 +44,8 @@
   overflow: hidden;
 }
 .execution-transcript__attempts {
-  background: #f4f2ee;
-  border-right: 1px solid #d9d5ce;
+  background: var(--trace-wash);
+  border-right: 1px solid var(--trace-line);
   display: grid;
   align-content: start;
   max-height: 620px;
@@ -56,7 +56,7 @@
   background: transparent;
   border: 1px solid transparent;
   border-radius: 6px;
-  color: #292726;
+  color: var(--trace-ink);
   cursor: pointer;
   display: grid;
   font: inherit;
@@ -68,15 +68,15 @@
   margin-top: 2px;
 }
 .execution-transcript__attempts button:hover {
-  background: #f9f8f5;
+  background: var(--sky-50);
 }
 .execution-transcript__attempts button[aria-pressed='true'] {
-  background: #fff;
-  border-color: #cfcac2;
-  box-shadow: 0 1px 3px rgba(41, 39, 38, 0.05);
+  background: var(--cloud);
+  border-color: var(--trace-line);
+  box-shadow: var(--shadow-soft);
 }
 .execution-transcript__attempts button span {
-  color: #706c74;
+  color: var(--trace-muted);
   font-size: 9px;
 }
 .execution-transcript__attempts button strong {
@@ -84,7 +84,7 @@
   line-height: 1.35;
 }
 .execution-transcript__attempts button small {
-  color: #8a8580;
+  color: var(--trace-muted);
   font-size: 9px;
 }
 .execution-transcript__detail {
@@ -95,7 +95,7 @@
 }
 .execution-transcript__detail > header {
   align-items: start;
-  border-bottom: 1px solid #e4e1db;
+  border-bottom: 1px solid var(--trace-soft-line);
   display: flex;
   justify-content: space-between;
   padding-bottom: 12px;
@@ -108,11 +108,11 @@
   font-size: 12px;
 }
 .execution-transcript__detail > header span {
-  color: #706c74;
+  color: var(--trace-muted);
   font-size: 9px;
 }
 .execution-transcript__notice {
-  color: #706c74;
+  color: var(--trace-muted);
   font-size: 10px;
   line-height: 1.5;
   margin: 18px 0 0;
@@ -123,7 +123,7 @@
   margin-top: 16px;
 }
 .execution-transcript__events h3 {
-  color: #706c74;
+  color: var(--trace-muted);
   font-size: 9px;
   letter-spacing: 0.04em;
   margin: 0 0 8px;
@@ -138,8 +138,8 @@
 .execution-transcript__messages article,
 .execution-transcript__answer article,
 .execution-transcript__event {
-  background: #fcfbf8;
-  border: 1px solid #e4e1db;
+  background: var(--trace-canvas);
+  border: 1px solid var(--trace-soft-line);
   border-radius: 6px;
   padding: 10px 11px;
 }
@@ -154,7 +154,7 @@
 .execution-transcript__messages span,
 .execution-transcript__messages time,
 .execution-transcript__answer time {
-  color: #706c74;
+  color: var(--trace-muted);
 }
 .execution-transcript__messages p {
   font-size: 10px;
@@ -166,7 +166,7 @@
   font-size: 9px;
 }
 .execution-transcript__answer article {
-  border-left: 3px solid #4a7366;
+  border-left: 3px solid var(--grass-deep);
   padding: 13px 14px;
 }
 .execution-transcript__answer article > div {
@@ -178,7 +178,7 @@
   margin-top: 8px;
 }
 .execution-transcript__event {
-  color: #292726;
+  color: var(--trace-ink);
 }
 .execution-transcript__event summary {
   align-items: baseline;
@@ -196,24 +196,24 @@
   font-weight: 600;
 }
 .execution-transcript__event summary > strong {
-  color: #514e50;
+  color: var(--trace-muted);
   font-size: 9px;
   font-weight: 600;
 }
 .execution-transcript__event time {
-  color: #8a8580;
+  color: var(--trace-muted);
   font-size: 9px;
 }
 .execution-transcript__event > p {
-  color: #706c74;
+  color: var(--trace-muted);
   font-size: 10px;
   line-height: 1.5;
   margin: 9px 0 0;
 }
 .execution-transcript__event pre {
-  background: #242321;
+  background: var(--ink-900);
   border-radius: 5px;
-  color: #ebe8e2;
+  color: var(--ink-100);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 9px;
   line-height: 1.5;
@@ -239,18 +239,18 @@
   grid-column: 1 / -1;
 }
 .execution-transcript--empty {
-  background: #fcfbf8;
-  border: 1px dashed #cfcac2;
+  background: var(--trace-canvas);
+  border: 1px dashed var(--trace-line);
   border-radius: 8px;
   margin-top: 30px;
   padding: 24px;
 }
-@media (max-width: 900px) {
+@media (max-width: 920px) {
   .execution-transcript__body {
     grid-template-columns: 1fr;
   }
   .execution-transcript__attempts {
-    border-bottom: 1px solid #d9d5ce;
+    border-bottom: 1px solid var(--trace-line);
     border-right: 0;
     grid-auto-columns: minmax(180px, 1fr);
     grid-auto-flow: column;
@@ -260,7 +260,7 @@
 
 /* Session transcript summary block */
 .execution-transcript__summary {
-  border: 1px solid #e4e1db;
+  border: 1px solid var(--trace-soft-line);
   border-radius: 6px;
   margin: 12px 0;
   padding: 12px;
@@ -272,7 +272,7 @@
   margin: 0;
 }
 .execution-transcript__summary dt {
-  color: #706c74;
+  color: var(--trace-muted);
   font-size: 9px;
 }
 .execution-transcript__summary dd {
@@ -281,13 +281,13 @@
   margin: 2px 0 0;
 }
 .execution-transcript__last-meaningful {
-  border-top: 1px solid #e4e1db;
+  border-top: 1px solid var(--trace-soft-line);
   font-size: 11px;
   margin-top: 8px;
   padding-top: 8px;
 }
 .execution-transcript__last-meaningful strong {
-  color: #9e7b4a;
+  color: var(--gold-deep);
   display: block;
   font-size: 9px;
   font-weight: 650;

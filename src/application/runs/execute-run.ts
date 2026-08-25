@@ -4,6 +4,7 @@ import {
   type RunFailure,
 } from '../../domain/runs/run.js';
 import { transitionTask, type Task } from '../../domain/tasks/task.js';
+import { errorDiagnostic } from '../../shared/observability/error-diagnostic.js';
 import type { Logger } from '../../shared/observability/logger.js';
 import type { AgentResolutionApi } from '../ports/agent-resolution-api.js';
 import type { DefinitionReadApi } from '../ports/definition-read-api.js';
@@ -300,7 +301,7 @@ export class ExecuteRun {
           error.code === 'runtime_turn_timed_out');
       this.logger.log('error', 'run.execution_failed', {
         run_id: claim.run.id,
-        error_name: error instanceof Error ? error.name : 'UnknownError',
+        ...errorDiagnostic(error),
         ...(error instanceof RuntimeTurnExecutionError
           ? { runtime_failure_code: error.code }
           : {}),

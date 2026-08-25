@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import type { ConversationId, ChatMessage } from './contracts';
 import type { ConversationMessagesState } from '../stores/messages';
 import { WorkCard } from '../../work/components/WorkCard';
+import { AssistantMarkdown } from './assistant-markdown';
 
 export interface ChatTranscriptProps {
   readonly conversationId: ConversationId | null;
@@ -29,9 +30,19 @@ function Message({
   readonly message: ChatMessage;
   readonly onOpenWork: (workId: string, conversationId: ConversationId) => void;
 }) {
+  // A Coworker writes markdown, so rendering its reply as plain text showed the
+  // syntax instead of the structure. A principal's own text is left alone: if
+  // they typed asterisks they meant asterisks, and reinterpreting what someone
+  // wrote back at them is a different thing from formatting an Agent's answer.
+  // The renderer is the same one the Work transcripts use, which already refuses
+  // raw HTML and images and forces links safe.
   return (
     <article className="chat-message" data-author-type={message.authorType}>
-      <p>{message.body}</p>
+      {message.authorType === 'principal' ? (
+        <p>{message.body}</p>
+      ) : (
+        <AssistantMarkdown text={message.body} />
+      )}
       <WorkCard
         workRef={message.workRef}
         onOpen={(workId) => onOpenWork(workId, message.conversationId)}
@@ -76,6 +87,17 @@ export function ChatTranscript({
     return <StateMessage>No messages in this conversation yet.</StateMessage>;
   }
 
+  // A Coworker turn runs against a real provider and its execution budget is
+  // minutes, not seconds. The transcript polls, so the reply does arrive, but
+  // until it does the user was looking at their own message with no feedback.
+  //
+  // Deliberately worded as waiting, not as "the Agent is running": the message
+  // projection carries no dispatch state, so the browser genuinely does not
+  // know whether a Run is active, queued behind an earlier turn, or already
+  // failed. Claiming otherwise would be the frontend inventing product state.
+  const lastMessage = state.messages[state.messages.length - 1];
+  const awaitingReply = lastMessage?.authorType === 'principal';
+
   return (
     <div
       className="chat-transcript"
@@ -89,6 +111,16 @@ export function ChatTranscript({
           onOpenWork={onOpenWork}
         />
       ))}
+      {awaitingReply ? (
+        <p className="chat-awaiting-reply" role="status">
+          <span aria-hidden="true" className="chat-awaiting-dots">
+            <span />
+            <span />
+            <span />
+          </span>
+          Waiting for a reply
+        </p>
+      ) : null}
     </div>
   );
 }

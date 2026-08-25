@@ -1,4 +1,4 @@
-import { useMemo, useState, useSyncExternalStore } from 'react';
+import { useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { ChatCommands, Conversation, ConversationId } from './contracts';
 import type { Coworker } from '../agents/contracts';
 import { ConversationsList } from './components/ConversationsList';
@@ -22,6 +22,12 @@ export function ConversationsPane({
   onSelectConversation,
 }: ConversationsPaneProps) {
   const [createOpen, setCreateOpen] = useState(false);
+  // The picker's open/closed intent is read back by toggleCreate in the same
+  // React batch that a close can be dispatched in, and batched state is not
+  // visible to a handler that runs later in the same batch. Mirroring the
+  // intent in a ref keeps "close then reopen" a real reopen instead of a
+  // second close that silently skips the roster reload.
+  const createOpenRef = useRef(false);
   const [coworkers, setCoworkers] = useState<readonly Coworker[]>([]);
   const [coworkerStatus, setCoworkerStatus] =
     useState<CoworkerLoadStatus>('idle');
@@ -85,7 +91,7 @@ export function ConversationsPane({
         conversation,
       ]);
       select(conversation.id);
-      setCreateOpen(false);
+      closeCreate();
     } catch (error) {
       setCreateError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -100,15 +106,21 @@ export function ConversationsPane({
     );
     if (existing) {
       select(existing.id);
-      setCreateOpen(false);
-      setCreateError(null);
+      closeCreate();
       return;
     }
     void create(coworker.id);
   };
 
+  const closeCreate = (): void => {
+    createOpenRef.current = false;
+    setCreateOpen(false);
+    setCreateError(null);
+  };
+
   const toggleCreate = (): void => {
-    const next = !createOpen;
+    const next = !createOpenRef.current;
+    createOpenRef.current = next;
     setCreateOpen(next);
     setCreateError(null);
     if (next) void loadCoworkers();
@@ -195,10 +207,7 @@ export function ConversationsPane({
             <button
               type="button"
               disabled={createStatus === 'pending'}
-              onClick={() => {
-                setCreateOpen(false);
-                setCreateError(null);
-              }}
+              onClick={closeCreate}
             >
               Cancel
             </button>

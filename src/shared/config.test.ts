@@ -145,6 +145,19 @@ describe('loadConfig', () => {
     });
   });
 
+  it('parses additional Paseo providers from a deduplicated comma-separated list', () => {
+    expect(
+      loadConfig({ PASEO_ADDITIONAL_PROVIDERS: 'codex, claude,codex' }).paseo
+        .additionalProviders,
+    ).toEqual(['codex', 'claude']);
+  });
+
+  it('rejects an unknown Paseo additional provider before startup', () => {
+    expect(() =>
+      loadConfig({ PASEO_ADDITIONAL_PROVIDERS: 'not-a-provider' }),
+    ).toThrow(ConfigurationError);
+  });
+
   it('loads static service-account bindings with tenant workspace and policy metadata', () => {
     expect(
       loadConfig(

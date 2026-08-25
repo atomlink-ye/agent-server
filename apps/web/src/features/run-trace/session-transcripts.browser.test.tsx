@@ -19,7 +19,15 @@ const MOCK_RESPONSE: ProductSessionTranscriptsResponse = {
   capture_scope: 'safe_run_events',
   sessions: [
     {
-      label: { name: 'Lead Agent', role: 'lead', status: 'completed' },
+      label: {
+        name: 'Lead Agent',
+        role: 'lead',
+        status: 'completed',
+        status_basis: 'team_member_run',
+        source_refs: {
+          team_member_run_id: '10000000-0000-4000-8000-000000000001',
+        },
+      },
       summary: {
         status: 'completed',
         entry_count: 3,
@@ -72,7 +80,18 @@ const MOCK_RESPONSE: ProductSessionTranscriptsResponse = {
       ],
     },
     {
-      label: { name: 'Worker Agent', role: 'member', status: 'completed' },
+      // The real projection-worker actor from rework-once.json: this lets
+      // the assertions below exercise the Agent-to-Agent message join
+      // (R3) against real recorded edges, not a fixture invented for it.
+      label: {
+        name: 'Worker Agent',
+        role: 'member',
+        status: 'completed',
+        status_basis: 'team_member_run',
+        source_refs: {
+          team_member_run_id: '8c6f3cfd-6a94-4ff7-88ec-c27ac9b1618f',
+        },
+      },
       summary: {
         status: 'completed',
         entry_count: 2,
@@ -104,7 +123,15 @@ const MOCK_RESPONSE: ProductSessionTranscriptsResponse = {
       ],
     },
     {
-      label: { name: 'Risk Agent', role: 'member', status: 'idle' },
+      label: {
+        name: 'Risk Agent',
+        role: 'member',
+        status: 'idle',
+        status_basis: 'team_member_run',
+        source_refs: {
+          team_member_run_id: '10000000-0000-4000-8000-000000000003',
+        },
+      },
       summary: {
         status: 'idle',
         entry_count: 1,
@@ -186,6 +213,29 @@ it('renders per-session transcripts with switching between sessions that share a
       host.querySelector('.execution-transcript__detail header')!.textContent,
     ).toContain('Worker Agent');
 
+    // R3: the Worker Agent's source_refs.team_member_run_id joins to the
+    // real projection-worker actor in rework-once.json, so its reworked
+    // Work Item (2 Attempts) surfaces an attempt/work-item filter and the
+    // Team messages addressed to it -- resolved through trace.edges, not
+    // invented for the session view.
+    const workItemFilter = host.querySelector(
+      '[data-testid="session-work-item-filter"]',
+    );
+    expect(workItemFilter).not.toBeNull();
+    const filterButtons = [
+      ...workItemFilter!.querySelectorAll<HTMLButtonElement>('button'),
+    ];
+    expect(filterButtons).toHaveLength(3); // "All work" + 2 Attempts
+    expect(filterButtons[1]!.textContent).toContain('Attempt 1');
+    expect(filterButtons[2]!.textContent).toContain('Attempt 2');
+    const messagesSection = host.querySelector(
+      '[data-testid="session-messages"]',
+    );
+    expect(messagesSection).not.toBeNull();
+    expect(messagesSection!.textContent).toContain('projection-lead');
+    expect(messagesSection!.textContent).toContain('projection-worker');
+    expect(messagesSection!.querySelectorAll('article')).toHaveLength(2);
+
     // 2. Truncated=true shows warning
     const truncatedWarning = host.querySelector(
       '[data-testid="session-truncated-warning"]',
@@ -203,6 +253,13 @@ it('renders per-session transcripts with switching between sessions that share a
     expect(
       host.querySelector('[data-testid="session-platform-tool-count"]'),
     ).toBeNull();
+    // Risk Agent's placeholder team_member_run_id joins to no real Work
+    // Item, so the filter/message affordance is simply absent -- not an
+    // error state (R3).
+    expect(
+      host.querySelector('[data-testid="session-work-item-filter"]'),
+    ).toBeNull();
+    expect(host.querySelector('[data-testid="session-messages"]')).toBeNull();
 
     // 3. Permission with null decision and non-resolved status shows "Not captured / not triggered"
     const riskEntries = host.querySelector('[data-testid="session-entries"]');
@@ -270,6 +327,87 @@ it('renders per-session transcripts with switching between sessions that share a
     expect(host.querySelectorAll('.transcript__item')).toHaveLength(
       withPlatformCount,
     );
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
+it('renders a single-agent session with no role element shown', async () => {
+  // A lone agent (no Team) has no role -- printing "null", or fabricating
+  // "lead" to fill the gap, would both assert a product fact the domain
+  // does not hold (role === 'lead' gates real lead behavior server-side).
+  const trace = parseRecordedTrace(reworkRecording);
+  const response: ProductSessionTranscriptsResponse = {
+    work_id: trace.work.id,
+    work_run_id: trace.workRun.id,
+    capture_scope: 'safe_run_events',
+    sessions: [
+      {
+        label: {
+          name: 'Solo Agent',
+          role: null,
+          status: 'completed',
+          status_basis: 'agent_runs',
+          source_refs: { task_id: '20000000-0000-4000-8000-000000000001' },
+        },
+        summary: {
+          status: 'completed',
+          entry_count: 1,
+          last_timestamp: '2026-08-17T10:00:00.000Z',
+          last_meaningful: null,
+          work_refs: [],
+          truncated: false,
+        },
+        entries: [
+          {
+            ordinal: 1,
+            kind: 'lifecycle',
+            sequence: 1,
+            created_at: '2026-08-17T09:58:00.000Z',
+            status: 'started',
+          },
+        ],
+      },
+    ],
+  };
+  const fetchMock = vi.fn().mockResolvedValue({
+    ok: true,
+    json: async () => response,
+  });
+  vi.stubGlobal('fetch', fetchMock);
+
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(<SessionTranscripts trace={trace} />);
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+
+    const roleNav = host.querySelector('[data-testid="session-role-nav"]');
+    expect(roleNav).not.toBeNull();
+    const soloButton = roleNav!.querySelector('button');
+    expect(soloButton?.textContent).toContain('Solo Agent');
+    // No role element at all -- not a "null" string, not an invented "lead".
+    expect(soloButton?.querySelector('span')).toBeNull();
+
+    const header = host.querySelector('.execution-transcript__detail header');
+    expect(header?.textContent).toContain('Solo Agent');
+    expect(header?.textContent).not.toContain('Role:');
+    expect(header?.textContent).not.toContain('null');
+    expect(header?.textContent).not.toContain('lead');
+
+    // No Work Items are joinable via a task_id-only source_ref, so the
+    // filter/message affordance is absent rather than erroring.
+    expect(
+      host.querySelector('[data-testid="session-work-item-filter"]'),
+    ).toBeNull();
+    expect(host.querySelector('[data-testid="session-messages"]')).toBeNull();
   } finally {
     await act(async () => root.unmount());
     host.remove();

@@ -67,7 +67,10 @@ export function Inspector({
         </>
       ) : (
         <p className="run-trace__unavailable">
-          Select an Attempt to inspect recorded facts.
+          {/* The Timeline plots Runs, and only a Team Work has Attempts, so
+              naming Attempts here told a single-Agent user to click something
+              their Work does not have. */}
+          Select a Run in the Timeline to inspect recorded facts.
         </p>
       )}
     </aside>

@@ -202,7 +202,7 @@ export const PRODUCT_ACCEPTED_SUBSET_READ_ENDPOINTS = [
       { status: 404, code: 'work_run_not_found' },
       { status: 503, code: 'projection_unavailable' },
     ],
-    capabilities: ['member_session_transcripts', 'safe_provider_output'],
+    capabilities: ['agent_session_transcripts', 'safe_provider_output'],
   }),
 ] as const;
 

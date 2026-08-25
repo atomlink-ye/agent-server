@@ -45,7 +45,7 @@ describe.skipIf(baseUrl === undefined)(
         const paths = captureSameOriginPaths(page, browserOrigin);
 
         progress('goto_start', { workId: seeded.workId });
-        await page.goto(`/works/${seeded.workId}`, {
+        await page.goto(`/work/${seeded.workId}`, {
           waitUntil: 'domcontentloaded',
           timeout: 60_000,
         });
@@ -82,7 +82,7 @@ describe.skipIf(baseUrl === undefined)(
         progress('wait_run_start', { workRunId: started.work_run.id });
         await waitForCompleteWorkRun(page, seeded.workId, started.work_run.id);
         progress('wait_run_done');
-        await page.goto(`/works/${seeded.workId}?run=${started.work_run.id}`, {
+        await page.goto(`/work/${seeded.workId}?run=${started.work_run.id}`, {
           waitUntil: 'domcontentloaded',
           timeout: 30_000,
         });

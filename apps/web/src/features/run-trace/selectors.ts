@@ -3,7 +3,7 @@ import {
   timelineGeometry,
   type CapturedRange,
   type Geometry,
-  type TraceEntry,
+  type TimelineSpan,
 } from './geometry';
 import type {
   NormalizedTrace,
@@ -15,14 +15,28 @@ import type {
   TraceWorkItem,
 } from './normalized';
 
+export type TraceEntry = {
+  readonly workItem: TraceWorkItem;
+  readonly attempt: TraceAttempt;
+};
+
+/** One grouped row of spans inside a lane -- a team Work Item's attempts,
+ * or (when there is no captured Work Item) the runs sharing a lane key. */
+export type TimelineLaneRow = {
+  readonly key: string;
+  readonly subject: string | null;
+  readonly workItemId: string | null;
+  readonly spans: readonly TimelineSpan[];
+};
+
 export type ActorRow = {
   readonly key: string;
   readonly name: string;
-  readonly items: readonly TraceWorkItem[];
+  readonly rows: readonly TimelineLaneRow[];
 };
 
 export type TimelineModel = {
-  readonly attempts: readonly TraceEntry[];
+  readonly spans: readonly TimelineSpan[];
   readonly actorRows: readonly ActorRow[];
   readonly geometry: ReadonlyMap<string, Geometry>;
   readonly range: CapturedRange | null;
@@ -82,13 +96,56 @@ export function attemptsFrom(trace: NormalizedTrace): readonly TraceEntry[] {
   return selectAttemptEntries(trace);
 }
 
+/**
+ * Builds one TimelineSpan per run, joining attemptId via taskId -- the
+ * same column the server already joins runs.task_id against
+ * team_work_item_attempts.execution_task_id on. This is why a
+ * single-agent Work (no attempts) still gets spans: they come from runs,
+ * not from the attempt join.
+ */
+export function selectTimelineSpans(
+  trace: NormalizedTrace,
+): readonly TimelineSpan[] {
+  const attemptsByTaskId = new Map<string, TraceAttempt>();
+  for (const attempt of trace.attempts.values())
+    if (attempt.taskId) attemptsByTaskId.set(attempt.taskId, attempt);
+  const lastEventAtByRunId = new Map<string, string>();
+  for (const event of trace.events) {
+    const current = lastEventAtByRunId.get(event.runId);
+    if (!current || event.createdAt.localeCompare(current) > 0)
+      lastEventAtByRunId.set(event.runId, event.createdAt);
+  }
+  return trace.runs.map((run) => {
+    // A still-running run has no ended_at yet. Fall back to the last
+    // event this specific run is known to have emitted -- never
+    // Date.now(), which would draw activity beyond what was captured.
+    const endedAt = run.endedAt ?? lastEventAtByRunId.get(run.id) ?? null;
+    const durationMs =
+      run.startedAt !== null && endedAt !== null
+        ? Math.max(0, Date.parse(endedAt) - Date.parse(run.startedAt))
+        : null;
+    const attempt = run.taskId ? attemptsByTaskId.get(run.taskId) : undefined;
+    return {
+      key: run.id,
+      laneKey: run.actorId ?? run.taskId ?? run.id,
+      startedAt: run.startedAt,
+      endedAt,
+      durationMs,
+      timingCaptured: run.startedAt !== null && endedAt !== null,
+      status: run.status,
+      attemptId: attempt?.id ?? null,
+      workItemId: run.workItemId,
+    };
+  });
+}
+
 export function selectTimelineModel(trace: NormalizedTrace): TimelineModel {
-  const attempts = selectAttemptEntries(trace);
+  const spans = selectTimelineSpans(trace);
   return {
-    attempts,
+    spans,
     actorRows: selectActorRows(trace),
-    geometry: timelineGeometry(attempts),
-    range: capturedTimelineRange(attempts),
+    geometry: timelineGeometry(spans),
+    range: capturedTimelineRange(spans),
     feedbackAttemptIds: new Set(
       trace.edges.flatMap((edge) =>
         edge.kind === 'feedback' ? [edge.attemptId] : [],
@@ -168,27 +225,86 @@ export function selectInspectorModel(
   };
 }
 
+/**
+ * Lanes for the Timeline. Team traces keep one lane per captured actor
+ * (plus an honest "Name not captured" catch-all for runs an actor cannot
+ * be resolved for, e.g. the root run that bootstraps the whole WorkRun).
+ * A single-agent Work has no captured actors at all -- trace.actors is
+ * empty -- so it falls back to one lane per distinct task, named
+ * neutrally. It is not labeled "lead": role === 'lead' gates real lead
+ * behavior in the domain, and a lone agent does not hold that role. It is
+ * not labeled "Name not captured" either: the name is not missing from
+ * capture, it is simply not part of this response shape.
+ */
 export function selectActorRows(trace: NormalizedTrace): readonly ActorRow[] {
+  const spans = selectTimelineSpans(trace);
+  if (trace.actors.size === 0) return selectSingleAgentLanes(spans);
+  const spansByActorId = new Map<string, TimelineSpan[]>();
+  const uncapturedSpans: TimelineSpan[] = [];
+  for (const span of spans) {
+    if (trace.actors.has(span.laneKey)) {
+      const bucket = spansByActorId.get(span.laneKey) ?? [];
+      bucket.push(span);
+      spansByActorId.set(span.laneKey, bucket);
+    } else {
+      uncapturedSpans.push(span);
+    }
+  }
   const rows = [...trace.actors.values()].map((actor) => ({
     key: actor.id,
     name: actor.name ?? 'Name not captured',
-    items: [...trace.workItems.values()].filter(
-      (workItem) => workItem.actorId === actor.id,
-    ),
+    rows: groupSpansIntoLaneRows(trace, spansByActorId.get(actor.id) ?? []),
   }));
-  const unassignedItems = [...trace.workItems.values()].filter(
-    (workItem) => !workItem.actorId || !trace.actors.has(workItem.actorId),
-  );
-  return unassignedItems.length
+  return uncapturedSpans.length
     ? [
         ...rows,
         {
           key: 'uncaptured-actor',
           name: 'Name not captured',
-          items: unassignedItems,
+          rows: groupSpansIntoLaneRows(trace, uncapturedSpans),
         },
       ]
     : rows;
+}
+
+function selectSingleAgentLanes(
+  spans: readonly TimelineSpan[],
+): readonly ActorRow[] {
+  const spansByLaneKey = new Map<string, TimelineSpan[]>();
+  for (const span of spans) {
+    const bucket = spansByLaneKey.get(span.laneKey) ?? [];
+    bucket.push(span);
+    spansByLaneKey.set(span.laneKey, bucket);
+  }
+  return [...spansByLaneKey.entries()].map(([key, laneSpans]) => ({
+    key,
+    name: 'Agent',
+    rows: groupSpansIntoLaneRows(null, laneSpans),
+  }));
+}
+
+function groupSpansIntoLaneRows(
+  trace: NormalizedTrace | null,
+  spans: readonly TimelineSpan[],
+): readonly TimelineLaneRow[] {
+  const grouped = new Map<string, TimelineSpan[]>();
+  for (const span of spans) {
+    const key = span.workItemId ?? span.laneKey;
+    const bucket = grouped.get(key) ?? [];
+    bucket.push(span);
+    grouped.set(key, bucket);
+  }
+  return [...grouped.entries()].map(([key, groupedSpans]) => {
+    const workItemId = groupedSpans[0]!.workItemId;
+    return {
+      key,
+      subject: workItemId
+        ? (trace?.workItems.get(workItemId)?.subject ?? null)
+        : null,
+      workItemId,
+      spans: groupedSpans,
+    };
+  });
 }
 
 export function interactionsForWorkItem(
@@ -206,11 +322,15 @@ export function interactionsForWorkItem(
   };
 }
 
+/** Longest captured run. Runs (not attempts) are the source, so a rework
+ * task with more than one run is no longer silently reported as
+ * uncaptured just because the attempt-level timing join required exactly
+ * one run per task. */
 export function longestAttemptMs(trace: NormalizedTrace): number | null {
-  return [...trace.attempts.values()].reduce<number | null>(
-    (max, attempt) =>
-      attempt.durationMs !== null && (max === null || attempt.durationMs > max)
-        ? attempt.durationMs
+  return selectTimelineSpans(trace).reduce<number | null>(
+    (max, span) =>
+      span.durationMs !== null && (max === null || span.durationMs > max)
+        ? span.durationMs
         : max,
     null,
   );

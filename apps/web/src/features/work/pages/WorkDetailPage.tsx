@@ -5,7 +5,6 @@ import { RunsPane } from '../components/panes/runs-pane';
 import { TranscriptPane } from '../components/panes/transcript-pane';
 import { RunTrigger } from '../components/run-trigger';
 import { WorkDetailHeader } from '../components/work-header';
-import { WorkProductFrame } from '../components/work-product-frame';
 import { WorkTabs } from '../components/work-tabs';
 import { normalizeWorkTab } from '../components/work-presentation';
 import { useWorkDetail } from '../queries/use-work-detail';
@@ -77,7 +76,7 @@ export function WorkDetailPage({
     : null;
 
   return (
-    <WorkProductFrame testId="work-detail-shell">
+    <div className="work-shell" data-testid="work-detail-shell">
       {query.status === 'loading' ? (
         <p className="work-detail-loading" aria-live="polite">
           Loading Work…
@@ -95,6 +94,7 @@ export function WorkDetailPage({
             work={detail.work}
             run={detail.run}
             latestRunId={latestRunId}
+            originConversationId={originConversationId}
           />
           <RunTrigger
             workId={detail.work.id}
@@ -110,7 +110,7 @@ export function WorkDetailPage({
           {pane}
         </>
       ) : null}
-    </WorkProductFrame>
+    </div>
   );
 }
 

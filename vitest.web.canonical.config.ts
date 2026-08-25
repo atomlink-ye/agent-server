@@ -20,14 +20,13 @@ export default defineConfig({
   test: {
     testTimeout: 30_000,
     include: [
-      'src/desktop/ChatShell.browser.test.tsx',
-      'src/components/work/work-list.browser.test.tsx',
-      'src/components/work/work-detail.browser.test.tsx',
-      'src/components/work/definition-authoring.browser.test.tsx',
+      'src/features/conversations/ConversationsPage.browser.test.tsx',
+      'src/features/work/components/work-list.browser.test.tsx',
+      'src/features/work/components/work-detail.browser.test.tsx',
+      'src/features/work/components/definition-authoring.browser.test.tsx',
       'src/features/run-trace/run-trace.browser.test.tsx',
       'src/features/run-trace/events.browser.test.tsx',
       'src/features/run-trace/map.browser.test.tsx',
-      'src/features/run-trace/execution-transcript.browser.test.tsx',
       'src/features/run-trace/session-transcripts.browser.test.tsx',
     ],
     browser: {

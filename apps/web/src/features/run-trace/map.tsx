@@ -16,6 +16,28 @@ export function MapView({
   readonly onSelect: (id: string) => void;
   readonly onSelectMessage: (messageId: string) => void;
 }) {
+  // The Map draws a dependency DAG over Work Item Attempts, a Team concept.
+  // A single-agent Work has none -- rendering an empty board with a
+  // "0 Attempt node(s)" counter would look like a capture failure rather
+  // than the honest fact that there is no collaboration graph to draw. A
+  // Team Run that has not assigned an Attempt yet is the same empty shape,
+  // but is not a single Agent, so the copy does not claim that for it.
+  if (!model.entries.length)
+    return (
+      <section
+        className="run-trace__map run-trace__map--empty"
+        data-testid="trace-map"
+        aria-label="Run causal map"
+      >
+        <p className="work-shell-kicker">Causal map</p>
+        <h3>No collaboration graph was recorded for this Work.</h3>
+        <p>
+          {trace.actors.size === 0
+            ? 'The Map plots Work Item Attempts and their relations, a Team concept. This Work ran as a single Agent, so there is no Attempt or dependency graph to show here.'
+            : 'The Map plots Work Item Attempts and their relations. No Attempt has been captured yet for this Run.'}
+        </p>
+      </section>
+    );
   return (
     <section
       className="run-trace__map"

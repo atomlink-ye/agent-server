@@ -1,0 +1,39 @@
+src/adapters/mcp/runtime-mcp-http-handler.ts
+  aa841554b33a269e 5,7,20,44-70,72-85,89,98-103,108-114,147-156,201-212
+src/application/runtime/authorize-runtime-tool.ts
+  aa841554b33a269e 1-4,9,39-47,101-103,111-212
+src/application/runtime/grant-policy.test.ts
+  aa841554b33a269e 1-231
+src/composition/create-runtime-owner.ts
+  aa841554b33a269e 89
+src/infrastructure/extensions/runtime-mcp-server.ts
+  aa841554b33a269e 6,25,47
+src/application/runtime/authorize-runtime-tool.test.ts
+  aa841554b33a269e 1-323
+src/application/runtime/grant-policy.ts
+  aa841554b33a269e 62-98
+src/adapters/mcp/runtime-mcp-http-handler.test.ts
+  aa841554b33a269e 1-367
+src/application/runtime/ensure-runtime-session.ts
+  aa841554b33a269e 120
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2-bit.10+672fbf0",
+  "base_commit_sha": "f89575d762f4b02164ccfec6245e907886c5e7bb",
+  "prompts": {
+    "aa841554b33a269e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2e0ac1a9-cdbd-49b5-9938-68e78819ae91",
+        "model": "claude-opus-5"
+      },
+      "human_author": "link.ye",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 2463,
+      "overriden_lines": 0
+    }
+  }
+}

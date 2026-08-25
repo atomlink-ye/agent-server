@@ -110,7 +110,7 @@ describe('ProductProjection single-Agent Work', () => {
                   activityKind: 'tool_status' as const,
                   activityCategory: 'other',
                   activityStatus: 'completed',
-                  toolName: 'board_create',
+                  toolName: 'synthetic_stock_snapshot',
                   provenance: mcpProvenance,
                   toolIdentityCaptureStatus: 'present' as const,
                   responseObserved: false,
@@ -167,6 +167,9 @@ describe('ProductProjection single-Agent Work', () => {
     expect(authorized.mcp_activities).toHaveLength(1);
     expect(authorized.mcp_activities[0]?.provenance).toBe(
       SERVER_AUTHORIZED_TEAM_MCP_CATALOG,
+    );
+    expect(authorized.mcp_activities[0]?.tool_name).toBe(
+      'synthetic_stock_snapshot',
     );
 
     mcpProvenance = `${SERVER_AUTHORIZED_TEAM_MCP_CATALOG}x`;

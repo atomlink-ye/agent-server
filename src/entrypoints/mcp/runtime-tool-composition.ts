@@ -6,6 +6,8 @@ import {
 import type { CollaborationKernel } from '../../application/collaboration/collaboration-kernel.js';
 import type { TeamToolContextResolver } from '../../application/teams/team-tool-context.js';
 import type { Logger } from '../../shared/observability/logger.js';
+import type { RunEventRepository } from '../../application/ports/run-events.js';
+import { createSyntheticToolReceipt } from '../../application/runtime/synthetic-tool-receipt.js';
 import {
   AGENT_SERVER_DESCRIBE_WORKFLOW_TOOL_REF,
   AGENT_SERVER_LEARNING_PROPOSAL_CREATE_TOOL_REF,
@@ -30,8 +32,10 @@ export function createRuntimeToolCatalog(input: {
     readonly kernel: CollaborationKernel;
   };
   readonly logger: Logger;
+  readonly events?: Pick<RunEventRepository, 'append'>;
   readonly work?: RuntimeToolContributor;
 }): RuntimeToolCatalog {
+  const syntheticToolReceipt = createSyntheticToolReceipt();
   return createCatalog([
     {
       ref: 'memory',
@@ -44,7 +48,10 @@ export function createRuntimeToolCatalog(input: {
     {
       ref: 'collaboration',
       toolRefs: AGENT_SERVER_PLATFORM_COLLABORATION_TOOL_REFS,
-      contribute: createCollaborationRuntimeContributor(input.collaboration),
+      contribute: createCollaborationRuntimeContributor({
+        ...input.collaboration,
+        syntheticToolReceipt,
+      }),
     },
     {
       ref: 'synthetic',
@@ -55,6 +62,8 @@ export function createRuntimeToolCatalog(input: {
       ],
       contribute: createSyntheticRuntimeToolsContributor({
         logger: input.logger,
+        syntheticToolReceipt,
+        ...(input.events ? { events: input.events } : {}),
       }),
     },
     ...(input.work

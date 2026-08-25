@@ -8,7 +8,10 @@ import {
   collaborationErrorCode,
   type CollaborationKernel,
 } from '../../application/collaboration/collaboration-kernel.js';
+import { TeamContextError } from '../../application/teams/team-tool-context.js';
 import type { AuthorizedRuntimeToolContext } from '../../application/runtime/authorize-runtime-tool.js';
+import type { SyntheticToolReceipt } from '../../application/runtime/synthetic-tool-receipt.js';
+import { AGENT_SERVER_SYNTHETIC_STOCK_SNAPSHOT_TOOL_REF } from '../../application/agents/built-in-skills.js';
 import type { TeamToolContextResolver } from '../../application/teams/team-tool-context.js';
 import {
   AGENT_SERVER_COLLABORATION_MCP_NAMES,
@@ -25,6 +28,7 @@ export interface CollaborationMcpContext {
     toolRef: string,
   ) => Promise<AuthorizedRuntimeToolContext | null>;
   readonly kernel: CollaborationKernel;
+  readonly syntheticToolReceipt?: SyntheticToolReceipt;
 }
 
 const WORK_REF = z.string().regex(/^W-\d+$/);
@@ -167,8 +171,19 @@ export function registerCollaborationMcpTools(
       evidence_refs: z.array(LOGICAL_REF).max(16).optional(),
       artifact_refs: z.array(LOGICAL_REF).max(16).optional(),
     },
-    (input, ctx) =>
-      context.kernel.submitWork(ctx, {
+    (input, ctx) => {
+      if (
+        ctx.task.teamTaskKind === 'work_attempt' &&
+        ctx.domainTools.includes(
+          AGENT_SERVER_SYNTHETIC_STOCK_SNAPSHOT_TOOL_REF,
+        ) &&
+        !context.syntheticToolReceipt?.hasExactlyOne({
+          grant: ctx.grant,
+          toolRef: AGENT_SERVER_SYNTHETIC_STOCK_SNAPSHOT_TOOL_REF,
+        })
+      )
+        throw new TeamContextError('not_allowed');
+      return context.kernel.submitWork(ctx, {
         summary: input.summary,
         ...(input.evidence_refs === undefined
           ? {}
@@ -176,7 +191,8 @@ export function registerCollaborationMcpTools(
         ...(input.artifact_refs === undefined
           ? {}
           : { artifactRefs: input.artifact_refs }),
-      }),
+      });
+    },
   );
   tool(
     AGENT_SERVER_COLLABORATION_TOOL_REFS.boardAccept,

@@ -113,6 +113,22 @@ export function createRunExecutionComposition(input: {
     concurrency: input.concurrency,
     onIdleMaintenance: async () => {
       try {
+        const recovered =
+          (await input.kernel.runRepository.recoverExpiredRuns?.(
+            new Date().toISOString(),
+          )) ?? [];
+        for (const item of recovered) {
+          input.logger.log('warn', 'run.recovery.fail_closed', {
+            run_id: item.runId,
+            task_id: item.taskId,
+          });
+        }
+      } catch (error) {
+        input.logger.log('error', 'run.recovery.fail_closed_failed', {
+          error_name: error instanceof Error ? error.name : 'UnknownError',
+        });
+      }
+      try {
         const recovered = await input.team.executions.recoverExpiredTeamRuns(
           new Date().toISOString(),
         );

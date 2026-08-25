@@ -51,6 +51,11 @@ export interface CancellationRequestResult {
   readonly outcome: CancellationOutcome;
 }
 
+export interface ExpiredRunRecovery {
+  readonly runId: string;
+  readonly taskId: string;
+}
+
 export type RunOwnerScope = OwnerScope;
 
 export interface RunRepository {
@@ -76,6 +81,12 @@ export interface RunRepository {
   completeClaimed(options: CompleteClaimedRunOptions): Promise<Run>;
   releaseClaimedToWaiting?(claim: ClaimedRun): Promise<Run>;
   finalizeWaiting?(options: FinalizeWaitingOptions): Promise<Run>;
+  /**
+   * Fails closed any plain run still `running` whose lease has expired
+   * (crashed/abandoned worker). Never touches a run whose lease is still
+   * valid, so a live worker's own completion write can never be stolen.
+   */
+  recoverExpiredRuns?(now: string): Promise<readonly ExpiredRunRecovery[]>;
 }
 
 export class RunCompletionConflictError extends Error {

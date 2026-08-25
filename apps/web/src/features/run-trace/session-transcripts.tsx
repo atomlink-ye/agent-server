@@ -146,6 +146,11 @@ export function SessionTranscripts({
   const { data } = state;
   const selected =
     selectedIndex === null ? null : (data.sessions[selectedIndex] ?? null);
+  // A per-role session belongs to a Team member. A Work that executed with no
+  // Work Items ran as a single Agent, so having no sessions is the shape of the
+  // Work rather than data that failed to arrive — worth saying outright, because
+  // the generic empty state reads as a capture failure.
+  const singleAgentRun = !trace.workItems.size && trace.runs.length > 0;
 
   if (!data.sessions.length)
     return (
@@ -156,11 +161,17 @@ export function SessionTranscripts({
         <div className="execution-transcript__heading">
           <div>
             <p className="work-shell-kicker">Session transcripts</p>
-            <h2>No sessions were captured for this Run.</h2>
+            <h2>
+              {singleAgentRun
+                ? 'This Work ran as a single Agent.'
+                : 'No sessions were captured for this Run.'}
+            </h2>
             <p>
-              {live
-                ? 'Session data has not started streaming for this Run yet.'
-                : 'The Run completed but no per-role session data was recorded.'}
+              {singleAgentRun
+                ? 'A per-role session exists for each Team member, so a single-Agent Run has none to show. This is the shape of the Work, not missing data.'
+                : live
+                  ? 'Session data has not started streaming for this Run yet.'
+                  : 'The Run completed but no per-role session data was recorded.'}
             </p>
           </div>
         </div>

@@ -733,6 +733,72 @@ textarea {
   margin: 0;
 }
 
+/* A bubble is a narrow, fixed-width container, so rendered markdown has to be
+   held inside it: the first and last blocks lose their outer margin so the
+   bubble keeps its own padding, and anything long — code, a URL, a table — is
+   allowed to scroll rather than widen the bubble past its max-width. */
+.chat-message .assistant-markdown > :first-child {
+  margin-top: 0;
+}
+
+.chat-message .assistant-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.chat-message .assistant-markdown p,
+.chat-message .assistant-markdown ul,
+.chat-message .assistant-markdown ol,
+.chat-message .assistant-markdown pre {
+  margin: 0 0 var(--space-2);
+}
+
+.chat-message .assistant-markdown ul,
+.chat-message .assistant-markdown ol {
+  padding-left: var(--space-5);
+}
+
+.chat-message .assistant-markdown li + li {
+  margin-top: var(--space-1);
+}
+
+.chat-message .assistant-markdown code {
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+  padding: 1px 5px;
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.chat-message .assistant-markdown pre {
+  border: 1px solid var(--ink-100);
+  border-radius: var(--radius-md);
+  background: var(--paper);
+  padding: var(--space-3);
+  overflow-x: auto;
+}
+
+.chat-message .assistant-markdown pre code {
+  background: none;
+  padding: 0;
+}
+
+.chat-message .assistant-markdown a {
+  overflow-wrap: anywhere;
+}
+
+.chat-message .assistant-markdown table {
+  display: block;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+
+.chat-message .assistant-markdown th,
+.chat-message .assistant-markdown td {
+  border: 1px solid var(--ink-100);
+  padding: var(--space-1) var(--space-2);
+  text-align: left;
+}
+
 .empty-chat {
   display: flex;
   max-width: 460px;

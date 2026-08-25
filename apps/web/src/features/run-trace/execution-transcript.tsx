@@ -112,17 +112,38 @@ export function ExecutionTranscript({
     detailState.status,
   ]);
 
-  if (!attempts.length)
+  if (!attempts.length) {
+    // The old copy hedged across two different situations with "may not", which
+    // left the reader unable to tell a product limit from a capture failure. The
+    // trace already distinguishes them: a Work that executed with no Work Items
+    // ran as a single Agent, and per-Attempt detail is a Team concept, so there
+    // is nothing missing to go looking for.
+    const ranWithoutWorkItems = !trace.workItems.size && trace.runs.length > 0;
     return (
       <section className="execution-transcript execution-transcript--empty">
         <p className="work-shell-kicker">Agent execution</p>
-        <h2>No participant Attempt is available for transcript detail.</h2>
-        <p>
-          Single-Agent or uncaptured collaboration identity may not expose Work
-          Item Attempts yet.
-        </p>
+        {ranWithoutWorkItems ? (
+          <>
+            <h2>This Work ran as a single Agent.</h2>
+            <p>
+              Per-Attempt execution detail is recorded for Team Work, where each
+              participant claims a Work Item. A single-Agent Run has no Work
+              Items, so there is no Attempt to show here — the Run itself is on
+              the Runs tab.
+            </p>
+          </>
+        ) : (
+          <>
+            <h2>No participant Attempt is available for transcript detail.</h2>
+            <p>
+              This Run recorded no Work Item Attempts, so collaboration identity
+              was either never captured or has not been captured yet.
+            </p>
+          </>
+        )}
       </section>
     );
+  }
 
   return (
     <section

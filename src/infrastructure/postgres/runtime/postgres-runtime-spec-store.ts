@@ -36,7 +36,9 @@ interface RuntimeSpecRow extends Record<string, unknown> {
   readonly runtime_session_id: string;
   readonly revision: number | string;
   readonly workspace_id: string;
-  readonly agent_version_id: string;
+  readonly subject_kind: 'agent_chat' | 'worker' | 'legacy_agent_task';
+  readonly agent_version_id: string | null;
+  readonly worker_version_id: string | null;
   readonly environment_version_id: string | null;
   readonly resolved_skills: unknown;
   readonly tool_refs: unknown;
@@ -52,7 +54,7 @@ interface RuntimeSpecRow extends Record<string, unknown> {
   readonly created_at: string | Date;
 }
 
-const SPEC_COLUMNS = `runtime_session_id,revision,workspace_id,agent_version_id,
+const SPEC_COLUMNS = `runtime_session_id,revision,workspace_id,subject_kind,agent_version_id,worker_version_id,
   environment_version_id,resolved_skills,tool_refs,provider,model,cwd,
   system_prompt_digest,skill_set_digest,tool_catalog_digest,extension_set_digest,
   context_epoch,bootstrap_digest,created_at`;
@@ -115,12 +117,14 @@ export class PostgresRuntimeSpecStore implements RuntimeSpecStore {
       await database.query(
         `INSERT INTO runtime_session_specs
          (${SPEC_COLUMNS})
-         VALUES($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+         VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
         [
           persisted.runtimeSessionId,
           persisted.revision,
           persisted.workspaceId,
+          persisted.subjectKind,
           persisted.agentVersionId,
+          persisted.workerVersionId,
           persisted.environmentVersionId,
           JSON.stringify(persisted.resolvedSkills),
           JSON.stringify(persisted.toolRefs),
@@ -177,7 +181,9 @@ function mapSpec(row: RuntimeSpecRow): RuntimeSessionSpec {
     runtimeSessionId: row.runtime_session_id as RuntimeSessionId,
     revision: Number(row.revision) as RuntimeSpecRevision,
     workspaceId: row.workspace_id,
+    subjectKind: row.subject_kind,
     agentVersionId: row.agent_version_id,
+    workerVersionId: row.worker_version_id,
     environmentVersionId: row.environment_version_id,
     resolvedSkills: Object.freeze(
       jsonArray<RuntimeResolvedSkill>(row.resolved_skills, 'resolved_skills'),

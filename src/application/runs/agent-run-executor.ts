@@ -224,7 +224,10 @@ export class AgentRunExecutor {
       const ensured = await this.ensureDesiredRuntimeSpec.execute({
         owner,
         scope,
-        agentVersionId: resolved.agentVersionId,
+        subject:
+          task.invokableKind === 'worker'
+            ? { kind: 'worker', workerVersionId: resolved.workerVersionId ?? invokableVersionId }
+            : { kind: 'legacy_agent_task', agentVersionId: resolved.agentVersionId },
         environmentVersionId,
         resolvedSkills: resolved.skills,
         toolRefs: runtimeToolRefs,

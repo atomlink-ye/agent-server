@@ -31,7 +31,10 @@ export interface ResolveRuntimeSessionSpecInput {
         readonly revision: RuntimeSpecRevision;
       }>;
   readonly owner: RuntimeSessionOwner;
-  readonly agentVersionId: string;
+  readonly subject?:
+    | Readonly<{ readonly kind: 'agent_chat' | 'legacy_agent_task'; readonly agentVersionId: string }>
+    | Readonly<{ readonly kind: 'worker'; readonly workerVersionId: string }>;
+  readonly agentVersionId?: string;
   readonly environmentVersionId: string | null;
   readonly resolvedSkills: readonly RuntimeResolvedSkill[];
   readonly toolRefs: readonly string[];

@@ -15,4 +15,19 @@ ALTER TABLE tasks
 ALTER TABLE team_member_runs
   DROP COLUMN IF EXISTS agent_version_id;
 
+ALTER TABLE runtime_session_specs
+  ADD COLUMN IF NOT EXISTS subject_kind text NOT NULL DEFAULT 'agent_chat'
+    CHECK (subject_kind IN ('agent_chat', 'worker', 'legacy_agent_task')),
+  ADD COLUMN IF NOT EXISTS worker_version_id uuid NULL;
+
+ALTER TABLE runtime_session_specs
+  ALTER COLUMN agent_version_id DROP NOT NULL;
+
+ALTER TABLE runtime_session_specs
+  ADD CONSTRAINT runtime_session_specs_subject_shape_check
+  CHECK (
+    (subject_kind = 'worker' AND worker_version_id IS NOT NULL AND agent_version_id IS NULL)
+    OR (subject_kind IN ('agent_chat', 'legacy_agent_task') AND agent_version_id IS NOT NULL AND worker_version_id IS NULL)
+  );
+
 COMMIT;

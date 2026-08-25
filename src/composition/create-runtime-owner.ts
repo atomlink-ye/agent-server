@@ -92,9 +92,9 @@ export function createRuntimeOwner(input: {
   const resolveRuntimeSpec = new ResolveRuntimeSessionSpecService(
     input.toolCatalog,
     {
-      digest: ({ agentVersionId, toolRefs }) =>
+      digest: ({ subjectVersionId, toolRefs }) =>
         `sha256:${createHash('sha256')
-          .update(JSON.stringify({ agentVersionId, toolRefs }), 'utf8')
+          .update(JSON.stringify({ subjectVersionId, toolRefs }), 'utf8')
           .digest('hex')}`,
     },
   );

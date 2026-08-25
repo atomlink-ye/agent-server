@@ -20,7 +20,7 @@ import { assertDesiredRuntimeSystemPrompt } from '../../domain/runtime/desired-r
 /** The extension owner supplies its opaque desired-state component. */
 export interface RuntimeExtensionSetDigest {
   digest(input: {
-    readonly agentVersionId: string;
+    readonly subjectVersionId: string;
     readonly toolRefs: readonly string[];
   }): string;
 }
@@ -49,6 +49,7 @@ export class ResolveRuntimeSessionSpecService implements ResolveRuntimeSessionSp
 
   public execute(input: ResolveRuntimeSessionSpecInput): RuntimeSessionSpec {
     const configuration = requireConfiguration(input.configuration);
+    const runtimeSubject = subject(input);
     assertDesiredRuntimeSystemPrompt(configuration.desiredSystemPrompt);
     assertIdentity(input);
     assertConfiguration(configuration);
@@ -66,7 +67,7 @@ export class ResolveRuntimeSessionSpecService implements ResolveRuntimeSessionSp
     );
     const extensionSetDigest = requireText(
       this.extensionSet.digest({
-        agentVersionId: input.agentVersionId,
+        subjectVersionId: subjectVersionId(runtimeSubject),
         toolRefs,
       }),
       'extensionSetDigest',
@@ -75,7 +76,11 @@ export class ResolveRuntimeSessionSpecService implements ResolveRuntimeSessionSp
     return createRuntimeSessionSpec({
       ...resolveTarget(input.target),
       workspaceId: input.owner.workspaceId,
-      agentVersionId: input.agentVersionId,
+      subjectKind: runtimeSubject.kind,
+      agentVersionId:
+        runtimeSubject.kind === 'worker' ? null : runtimeSubject.agentVersionId,
+      workerVersionId:
+        runtimeSubject.kind === 'worker' ? runtimeSubject.workerVersionId : null,
       environmentVersionId: input.environmentVersionId,
       resolvedSkills,
       toolRefs,
@@ -117,13 +122,26 @@ function assertIdentity(input: ResolveRuntimeSessionSpecInput): void {
   requireText(input.owner?.workspaceId, 'owner.workspaceId');
   requireText(input.owner?.principalType, 'owner.principalType');
   requireText(input.owner?.principalId, 'owner.principalId');
-  requireText(input.agentVersionId, 'agentVersionId');
+  const runtimeSubject = subject(input);
+  if (runtimeSubject.kind === 'worker')
+    requireText(runtimeSubject.workerVersionId, 'workerVersionId');
+  else requireText(runtimeSubject.agentVersionId, 'agentVersionId');
   if (input.environmentVersionId !== null)
     requireText(input.environmentVersionId, 'environmentVersionId');
   if (!Array.isArray(input.resolvedSkills))
     throw new RuntimeSessionSpecResolutionError('resolvedSkills');
   if (!Array.isArray(input.toolRefs))
     throw new RuntimeSessionSpecResolutionError('toolRefs');
+}
+
+function subjectVersionId(
+  input: NonNullable<ResolveRuntimeSessionSpecInput['subject']>,
+): string {
+  return input.kind === 'worker' ? input.workerVersionId : input.agentVersionId;
+}
+
+function subject(input: ResolveRuntimeSessionSpecInput): NonNullable<ResolveRuntimeSessionSpecInput['subject']> {
+  return input.subject ?? { kind: 'agent_chat', agentVersionId: input.agentVersionId ?? '' };
 }
 
 function requireConfiguration(

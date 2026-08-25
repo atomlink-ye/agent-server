@@ -75,7 +75,11 @@ export class EnsureDesiredRuntimeSpecService implements EnsureDesiredRuntimeSpec
     return this.resolveSpec.execute({
       target,
       owner: input.owner,
-      agentVersionId: input.agentVersionId,
+      subject:
+        input.subject ?? {
+          kind: 'agent_chat' as const,
+          agentVersionId: input.agentVersionId ?? '',
+        },
       environmentVersionId: input.environmentVersionId,
       resolvedSkills: input.resolvedSkills,
       toolRefs: input.toolRefs,

@@ -16,6 +16,7 @@ import {
 import { createApplicationEnvironment } from './with-paseo-environment.mjs';
 const paseoEnvironmentNames = [
   'PASEO_PROVIDER',
+  'PASEO_ADDITIONAL_PROVIDERS',
   'PASEO_MODEL',
   'PASEO_CONNECT_TIMEOUT_MS',
   'PASEO_EXECUTION_TIMEOUT_MS',

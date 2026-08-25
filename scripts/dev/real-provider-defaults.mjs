@@ -10,6 +10,7 @@ export const REAL_PROVIDER_DEFAULTS_PATH = resolve(
 
 const EXPECTED = [
   'PASEO_PROVIDER',
+  'PASEO_ADDITIONAL_PROVIDERS',
   'PASEO_MODEL',
   'PASEO_EXECUTION_TIMEOUT_MS',
   'PASEO_SESSION_RPC_TIMEOUT_MS',
@@ -20,6 +21,13 @@ const EXPECTED = [
   'PASEO_PROVIDER_REFRESH_TIMEOUT_MS',
   'PASEO_DAEMON_STARTUP_TIMEOUT_MS',
 ];
+
+/** Every other expected key is a millisecond duration. */
+const NON_NUMERIC = new Set([
+  'PASEO_PROVIDER',
+  'PASEO_ADDITIONAL_PROVIDERS',
+  'PASEO_MODEL',
+]);
 
 function parse(content) {
   const values = {};
@@ -37,7 +45,10 @@ function parse(content) {
   const missing = EXPECTED.filter((name) => !values[name]);
   if (missing.length)
     throw new Error(`missing real-provider defaults: ${missing.join(', ')}`);
-  for (const name of EXPECTED.slice(2)) {
+  // Named rather than positional. This used to be EXPECTED.slice(2), which
+  // silently assumed the two non-numeric keys sorted first; adding a third
+  // reclassified PASEO_MODEL as a duration and failed with a nonsense message.
+  for (const name of EXPECTED.filter((key) => !NON_NUMERIC.has(key))) {
     if (
       !/^\d+$/u.test(values[name]) ||
       Number(values[name]) <= 0 ||

@@ -9,6 +9,9 @@ export function mapPaseoConfig(
   return {
     wsUrl: config.paseo.wsUrl,
     provider: config.paseo.provider,
+    ...(config.paseo.additionalProviders
+      ? { additionalProviders: config.paseo.additionalProviders }
+      : {}),
     cwd: config.paseo.agentCwd,
     workspaceTitle: config.paseo.workspaceTitle,
     ...(config.paseo.model

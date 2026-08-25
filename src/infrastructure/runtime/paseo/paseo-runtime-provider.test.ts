@@ -5,7 +5,10 @@ import type {
   PaseoTimelinePage,
 } from '../../../adapters/paseo/paseo-client-port.js';
 import { PaseoClientProjectionError } from '../../../adapters/paseo/paseo-client-port.js';
-import { UnsupportedCapabilityError } from '../../../application/ports/runtime-execution-session.js';
+import {
+  ProtocolViolationError,
+  UnsupportedCapabilityError,
+} from '../../../application/ports/runtime-execution-session.js';
 import type { ProviderSessionBinding } from '../../../application/ports/runtime-execution-provider.js';
 import type { Logger } from '../../../shared/observability/logger.js';
 import type {
@@ -15,7 +18,10 @@ import type {
 import { runtimeSpecRevision } from '../../../domain/runtime/runtime-session.js';
 import { mapPaseoConfig } from './paseo-config-mapper.js';
 import { normalizePaseoRequestedModel } from './paseo-model-normalizer.js';
-import { PaseoRuntimeProvider } from './paseo-runtime-provider.js';
+import {
+  PaseoRuntimeProvider,
+  type PaseoRuntimeProviderOptions,
+} from './paseo-runtime-provider.js';
 
 const logger: Logger = { log: () => undefined };
 const runtimeSessionId = 'runtime-1' as RuntimeSessionId;
@@ -97,6 +103,9 @@ function binding(
 function provider(
   client: PaseoClientPort = new FakeClient(),
   providerLogger: Logger = logger,
+  overrides: Partial<
+    Pick<PaseoRuntimeProviderOptions, 'provider' | 'additionalProviders'>
+  > = {},
 ): PaseoRuntimeProvider {
   return new PaseoRuntimeProvider(
     {
@@ -106,6 +115,7 @@ function provider(
       workspaceTitle: 'Provider Test',
       connectTimeoutMs: 1,
       executionTimeoutMs: 1_000,
+      ...overrides,
     },
     providerLogger,
     client,
@@ -241,6 +251,40 @@ describe('PaseoRuntimeProvider', () => {
       model: 'claude/actual-model',
       providerSessionId: 'agent-1',
     });
+  });
+
+  it('launches sessions for a configured additional provider', async () => {
+    const client = new FakeClient();
+    client.actualProvider = 'codex';
+    client.actualModel = 'codex/actual-model';
+    const created = await provider(client, logger, {
+      additionalProviders: ['codex'],
+    }).create({
+      runtimeSessionId,
+      provider: 'codex',
+      model: 'codex/requested-model',
+      cwd: '/tmp/paseo-provider-test',
+      systemPrompt: 'system',
+    });
+    expect(created).toMatchObject({
+      provider: 'codex',
+      model: 'codex/actual-model',
+      providerSessionId: 'agent-1',
+    });
+  });
+
+  it('rejects a runtime provider outside the configured set, naming both sides', async () => {
+    const rejected = provider().create({
+      runtimeSessionId,
+      provider: 'codex',
+      model: 'codex/model',
+      cwd: '/tmp/paseo-provider-test',
+      systemPrompt: 'system',
+    });
+    await expect(rejected).rejects.toBeInstanceOf(ProtocolViolationError);
+    await expect(rejected).rejects.toThrow(
+      'The requested runtime provider "codex" is unsupported by Paseo, which is configured to serve "opencode".',
+    );
   });
 
   it('uses provider-global readiness and health before global close', async () => {

@@ -11,6 +11,7 @@ import {
 
 const forwardedEnvironmentNames = [
   'PASEO_PROVIDER',
+  'PASEO_ADDITIONAL_PROVIDERS',
   'PASEO_MODEL',
   'PASEO_CONNECT_TIMEOUT_MS',
   'PASEO_EXECUTION_TIMEOUT_MS',

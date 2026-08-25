@@ -47,6 +47,18 @@ const BooleanEnvironment = z.preprocess((value) => {
   return value;
 }, z.boolean());
 
+/** A comma-separated list of Managed Environment providers, e.g. "claude,codex". */
+const ManagedEnvironmentProviderList = z.preprocess(
+  (value) =>
+    typeof value === 'string' && value.trim() !== ''
+      ? value
+          .split(',')
+          .map((entry) => entry.trim())
+          .filter((entry) => entry.length > 0)
+      : [],
+  z.array(z.enum(MANAGED_ENVIRONMENT_PROVIDERS)),
+);
+
 const ServiceAccountSchema = z.object({
   serviceAccountId: z.string().trim().min(1),
   token: z.string().trim().min(1),
@@ -137,6 +149,8 @@ const ConfigSchema = z
     RUNTIME_MCP_PORT: OptionalPort,
     PASEO_WS_URL: z.url().default('ws://127.0.0.1:6767/ws'),
     PASEO_PROVIDER: z.enum(MANAGED_ENVIRONMENT_PROVIDERS).default('opencode'),
+    /** Extra providers the same Paseo adapter also serves, beyond PASEO_PROVIDER. */
+    PASEO_ADDITIONAL_PROVIDERS: ManagedEnvironmentProviderList,
     PASEO_AGENT_CWD: z.string().min(1).default('.local/agent-workspace'),
     PASEO_RUNTIME_CELL_ROOT: z.string().min(1).default('.local/runtime-cells'),
     AGENT_SERVER_SKILL_REGISTRY_ROOT: z
@@ -289,6 +303,8 @@ export type AppConfig = Readonly<{
   paseo: {
     wsUrl: string;
     provider: ManagedEnvironmentProvider;
+    /** Additional providers the same Paseo connection also serves. */
+    additionalProviders?: readonly ManagedEnvironmentProvider[];
     agentCwd: string;
     runtimeCellRoot?: string;
     workspaceTitle: string;
@@ -391,6 +407,13 @@ export function loadConfig(
     paseo: {
       wsUrl: parsed.data.PASEO_WS_URL,
       provider: parsed.data.PASEO_PROVIDER,
+      ...(parsed.data.PASEO_ADDITIONAL_PROVIDERS.length > 0
+        ? {
+            additionalProviders: Object.freeze([
+              ...new Set(parsed.data.PASEO_ADDITIONAL_PROVIDERS),
+            ]),
+          }
+        : {}),
       agentCwd: resolve(workingDirectory, parsed.data.PASEO_AGENT_CWD),
       runtimeCellRoot: resolve(
         workingDirectory,

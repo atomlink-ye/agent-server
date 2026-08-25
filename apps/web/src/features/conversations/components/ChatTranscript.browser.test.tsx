@@ -102,3 +102,40 @@ it('refuses raw HTML in an Agent reply', async () => {
   expect(host.textContent).toContain('before');
   expect(host.textContent).toContain('after');
 });
+
+it('renders one Work Card for a Work every follow-up message references', async () => {
+  const workRef = '33333333-3333-4333-8333-333333333333';
+  const host = await render([
+    message({
+      id: '44444444-4444-4444-8444-444444444444',
+      sequence: 2,
+      authorType: 'agent_definition',
+      body: 'Started the Work.',
+      workRef,
+    }),
+    message({
+      id: '55555555-5555-4555-8555-555555555555',
+      sequence: 3,
+      authorType: 'agent_definition',
+      body: 'The Work reported progress.',
+      workRef,
+    }),
+    message({
+      id: '66666666-6666-4666-8666-666666666666',
+      sequence: 4,
+      authorType: 'agent_definition',
+      body: 'Here is the report.',
+      workRef,
+    }),
+  ]);
+
+  // One Work, one live card — anchored at the message that first referenced it.
+  expect(host.querySelectorAll('aside.work-card')).toHaveLength(1);
+  const [firstMessage] = host.querySelectorAll('article.chat-message');
+  expect(
+    firstMessage?.nextElementSibling?.classList.contains('work-card'),
+  ).toBe(true);
+  // The card is a sibling of the bubble, not a section inside it.
+  expect(firstMessage?.querySelector('.work-card')).toBeNull();
+  expect(host.textContent).toContain('Here is the report.');
+});

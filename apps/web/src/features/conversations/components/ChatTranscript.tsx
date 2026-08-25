@@ -25,9 +25,11 @@ function StateMessage({ children }: { readonly children: ReactNode }) {
 
 function Message({
   message,
+  showWorkCard,
   onOpenWork,
 }: {
   readonly message: ChatMessage;
+  readonly showWorkCard: boolean;
   readonly onOpenWork: (workId: string, conversationId: ConversationId) => void;
 }) {
   // A Coworker writes markdown, so rendering its reply as plain text showed the
@@ -36,18 +38,26 @@ function Message({
   // wrote back at them is a different thing from formatting an Agent's answer.
   // The renderer is the same one the Work transcripts use, which already refuses
   // raw HTML and images and forces links safe.
+  //
+  // The Work Card is a sibling of the bubble, not part of it: what the Agent
+  // said and what a Work is doing are two different objects, and nesting the
+  // card inside the message made them read as one.
   return (
-    <article className="chat-message" data-author-type={message.authorType}>
-      {message.authorType === 'principal' ? (
-        <p>{message.body}</p>
-      ) : (
-        <AssistantMarkdown text={message.body} />
-      )}
-      <WorkCard
-        workRef={message.workRef}
-        onOpen={(workId) => onOpenWork(workId, message.conversationId)}
-      />
-    </article>
+    <>
+      <article className="chat-message" data-author-type={message.authorType}>
+        {message.authorType === 'principal' ? (
+          <p>{message.body}</p>
+        ) : (
+          <AssistantMarkdown text={message.body} />
+        )}
+      </article>
+      {showWorkCard ? (
+        <WorkCard
+          workRef={message.workRef}
+          onOpen={(workId) => onOpenWork(workId, message.conversationId)}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -98,6 +108,19 @@ export function ChatTranscript({
   const lastMessage = state.messages[state.messages.length - 1];
   const awaitingReply = lastMessage?.authorType === 'principal';
 
+  // One Work is one card. Every message the Coworker sends while a Work runs
+  // carries the same workRef — the opening reply and each work_wake follow-up —
+  // so a card per message meant three cards for one Work, each polling the same
+  // projection and each claiming to be the current state. The card is anchored
+  // at the message that first referenced the Work, which is where the Work
+  // entered the conversation: it keeps its position while its content refreshes
+  // in place, and every later message stays what it is, a message.
+  const cardAnchorByWork = new Map<string, number>();
+  for (const message of state.messages) {
+    if (message.workRef && !cardAnchorByWork.has(message.workRef))
+      cardAnchorByWork.set(message.workRef, message.sequence);
+  }
+
   return (
     <div
       className="chat-transcript"
@@ -108,6 +131,10 @@ export function ChatTranscript({
         <Message
           key={`${message.sequence}:${message.id}`}
           message={message}
+          showWorkCard={
+            message.workRef !== null &&
+            cardAnchorByWork.get(message.workRef) === message.sequence
+          }
           onOpenWork={onOpenWork}
         />
       ))}

@@ -54,9 +54,7 @@ export class InvokeTask {
         ? undefined
         : workerResolutionOrNow;
     this.now =
-      typeof workerResolutionOrNow === 'function'
-        ? workerResolutionOrNow
-        : now;
+      typeof workerResolutionOrNow === 'function' ? workerResolutionOrNow : now;
   }
 
   private readonly workerResolution: WorkerResolutionApi | undefined;
@@ -198,7 +196,10 @@ export class InvokeTask {
     const owner = toInvokableOwnerScope(request.accessContext);
     const version =
       request.invokable.kind === 'agent'
-        ? await this.resolver.resolvePublished(request.invokable.versionId, owner)
+        ? await this.resolver.resolvePublished(
+            request.invokable.versionId,
+            owner,
+          )
         : request.invokable.kind === 'worker'
           ? await this.workerResolution?.resolvePublished(
               request.invokable.versionId,

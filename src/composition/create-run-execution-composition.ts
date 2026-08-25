@@ -29,7 +29,10 @@ export function createRunExecutionComposition(input: {
   readonly executeTeamTask: ExecuteTeamTask;
   readonly resources: Pick<
     ResourceModule,
-    'definitionReadApi' | 'agentResolutionApi' | 'workerResolutionApi' | 'environmentReadApi'
+    | 'definitionReadApi'
+    | 'agentResolutionApi'
+    | 'workerResolutionApi'
+    | 'environmentReadApi'
   >;
   readonly runtime: Pick<
     RuntimeOwner,

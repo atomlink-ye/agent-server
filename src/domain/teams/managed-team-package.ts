@@ -245,7 +245,10 @@ export function validateAndCanonicalizeTeamPackage(source: string): {
       );
     }
     names.add(memberName);
-    rosterMembers.push({ name: memberName, workerVersionId: m.workerVersionId });
+    rosterMembers.push({
+      name: memberName,
+      workerVersionId: m.workerVersionId,
+    });
   }
 
   const coordination = spec.coordination as Record<string, unknown> | undefined;

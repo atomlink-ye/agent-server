@@ -16,7 +16,10 @@ export interface ImportWorkerInput {
   readonly idFactory?: () => string;
 }
 
-export async function importWorker(registry: WorkerRegistry, input: ImportWorkerInput) {
+export async function importWorker(
+  registry: WorkerRegistry,
+  input: ImportWorkerInput,
+) {
   assertWorkerKey(input.idempotencyKey);
   const parsed = parseWorkerForImport(input.source);
   const owner = workerOwnerFromContext(input.accessContext);

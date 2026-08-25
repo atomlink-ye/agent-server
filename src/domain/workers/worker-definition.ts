@@ -12,7 +12,10 @@ export interface WorkerDefinition extends WorkerOwner {
 }
 
 export function createWorkerDefinition(
-  options: Omit<WorkerDefinition, 'id' | 'createdAt' | 'updatedAt' | 'description'> & {
+  options: Omit<
+    WorkerDefinition,
+    'id' | 'createdAt' | 'updatedAt' | 'description'
+  > & {
     readonly id?: string;
     readonly now?: () => Date;
     readonly description?: string | null;

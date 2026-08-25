@@ -136,7 +136,7 @@ function createApi(repository: MemoryDefinitionRepository) {
     workers: {
       async resolvePublished(versionId) {
         return versionId === workerVersionId
-          ? {
+          ? ({
               source: 'worker',
               id: workerVersionId,
               definitionId: '11111111-1111-4111-8111-111111111111',
@@ -151,7 +151,7 @@ function createApi(repository: MemoryDefinitionRepository) {
               proposalLimit: 0,
               skills: [],
               toolRefs: [],
-            } as any
+            } as any)
           : null;
       },
     },

@@ -237,7 +237,7 @@ const ProductWorkDefinitionDocumentSchema = z
         description: z.string().trim().max(2_000).optional(),
       })
       .strict(),
-  spec: z.union([SingleWorkerSpecSchema, CollaborationSpecSchema]),
+    spec: z.union([SingleWorkerSpecSchema, CollaborationSpecSchema]),
   })
   .strict();
 

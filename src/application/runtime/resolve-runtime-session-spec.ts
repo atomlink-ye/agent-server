@@ -80,7 +80,9 @@ export class ResolveRuntimeSessionSpecService implements ResolveRuntimeSessionSp
       agentVersionId:
         runtimeSubject.kind === 'worker' ? null : runtimeSubject.agentVersionId,
       workerVersionId:
-        runtimeSubject.kind === 'worker' ? runtimeSubject.workerVersionId : null,
+        runtimeSubject.kind === 'worker'
+          ? runtimeSubject.workerVersionId
+          : null,
       environmentVersionId: input.environmentVersionId,
       resolvedSkills,
       toolRefs,
@@ -140,8 +142,15 @@ function subjectVersionId(
   return input.kind === 'worker' ? input.workerVersionId : input.agentVersionId;
 }
 
-function subject(input: ResolveRuntimeSessionSpecInput): NonNullable<ResolveRuntimeSessionSpecInput['subject']> {
-  return input.subject ?? { kind: 'agent_chat', agentVersionId: input.agentVersionId ?? '' };
+function subject(
+  input: ResolveRuntimeSessionSpecInput,
+): NonNullable<ResolveRuntimeSessionSpecInput['subject']> {
+  return (
+    input.subject ?? {
+      kind: 'agent_chat',
+      agentVersionId: input.agentVersionId ?? '',
+    }
+  );
 }
 
 function requireConfiguration(

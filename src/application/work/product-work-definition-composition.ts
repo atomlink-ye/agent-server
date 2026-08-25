@@ -8,7 +8,10 @@ import {
   publishEnvironmentVersion,
   validateEnvironmentPackage,
 } from '../environments/environment-use-cases.js';
-import type { WorkerRegistry, WorkerResolutionApi } from '../ports/worker-registry.js';
+import type {
+  WorkerRegistry,
+  WorkerResolutionApi,
+} from '../ports/worker-registry.js';
 import type { EnvironmentRegistry } from '../ports/environment-registry.js';
 import type { InvokableRepository } from '../ports/invokable-repository.js';
 import type { MemoryVersionReadApi } from '../ports/memory-version-read-api.js';

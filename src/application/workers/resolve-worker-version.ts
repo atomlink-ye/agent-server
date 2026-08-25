@@ -1,7 +1,10 @@
 import { isModelPolicyRef } from '../../domain/agents/managed-agent-package.js';
 import { resourceOwner } from '../../domain/tenancy/product-context.js';
 import { SUPPORTED_MANAGED_AGENT_TOOL_REFS } from '../agents/built-in-skills.js';
-import type { ResolvedSkillPackage, SkillCatalogPort } from '../extensions/skill-catalog.js';
+import type {
+  ResolvedSkillPackage,
+  SkillCatalogPort,
+} from '../extensions/skill-catalog.js';
 import type {
   ResolvedWorkerVersion,
   WorkerRegistry,
@@ -54,7 +57,8 @@ export class ResolveWorkerVersion implements WorkerResolutionApi {
         throw new Error('The Worker references a Skill more than once.');
       seenSkills.add(skill.ref);
       const resolved = await this.skillCatalog.resolve(skill.ref);
-      if (!resolved) throw new Error('The Worker references an unsupported Skill.');
+      if (!resolved)
+        throw new Error('The Worker references an unsupported Skill.');
       skills.push(resolved);
     }
     for (const skill of skills)
@@ -73,7 +77,8 @@ export class ResolveWorkerVersion implements WorkerResolutionApi {
 function validateWorkerToolRefs(refs: readonly string[]): void {
   const seen = new Set<string>();
   for (const ref of refs) {
-    if (seen.has(ref)) throw new Error('The Worker references a Tool more than once.');
+    if (seen.has(ref))
+      throw new Error('The Worker references a Tool more than once.');
     if (!SUPPORTED_MANAGED_AGENT_TOOL_REFS.has(ref))
       throw new Error('The Worker references an unsupported Tool.');
     seen.add(ref);

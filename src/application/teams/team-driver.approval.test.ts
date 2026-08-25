@@ -180,7 +180,7 @@ describe('TeamDriver completion approval', () => {
       rootTaskId: team.rootTaskId,
       parentTaskId: team.rootTaskId,
       parentRunId: team.rootRunId,
-    invokableKind: 'worker',
+      invokableKind: 'worker',
       invokableVersionId: 'agent-version-1',
       inputSnapshotRef: 'snapshot',
       inputFingerprint: 'fingerprint',

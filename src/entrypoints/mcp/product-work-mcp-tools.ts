@@ -670,7 +670,10 @@ export function registerProductWorkMcpTools(input: {
             };
           }
           if (!input.definitions.listAgentWorkBindings)
-            return { isError: true, content: [{ type: 'text', text: 'not_found' }] };
+            return {
+              isError: true,
+              content: [{ type: 'text', text: 'not_found' }],
+            };
           const bindings = await input.definitions.listAgentWorkBindings({
             tenantId: current.tenantId,
             workspaceId: current.workspaceId,
@@ -682,7 +685,10 @@ export function registerProductWorkMcpTools(input: {
             description: definition.description,
             work_definition_version_id: version.id,
             input_schema: version.source.inputSchema ?? {
-              type: 'object', properties: {}, required: [], additional_properties: false,
+              type: 'object',
+              properties: {},
+              required: [],
+              additional_properties: false,
             },
           }));
           return {

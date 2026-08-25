@@ -226,8 +226,14 @@ export class AgentRunExecutor {
         scope,
         subject:
           task.invokableKind === 'worker'
-            ? { kind: 'worker', workerVersionId: resolved.workerVersionId ?? invokableVersionId }
-            : { kind: 'legacy_agent_task', agentVersionId: resolved.agentVersionId },
+            ? {
+                kind: 'worker',
+                workerVersionId: resolved.workerVersionId ?? invokableVersionId,
+              }
+            : {
+                kind: 'legacy_agent_task',
+                agentVersionId: resolved.agentVersionId,
+              },
         environmentVersionId,
         resolvedSkills: resolved.skills,
         toolRefs: runtimeToolRefs,

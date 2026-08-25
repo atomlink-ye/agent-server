@@ -1,4 +1,7 @@
-import type { WorkerRegistry, WorkerResolutionApi } from '../ports/worker-registry.js';
+import type {
+  WorkerRegistry,
+  WorkerResolutionApi,
+} from '../ports/worker-registry.js';
 import type { DefinitionReadApi } from '../ports/definition-read-api.js';
 import type { EnvironmentReadApi } from '../ports/environment-read-api.js';
 import type { MemoryVersionReadApi } from '../ports/memory-version-read-api.js';

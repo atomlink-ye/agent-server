@@ -91,6 +91,7 @@ export const durableKernelMigrationFileNames = [
   '0057_drop_runtime_session_bindings.sql',
   '0058_coworker_worker_semantic_split.sql',
   '0059_team_worker_invokable.sql',
+  '0060_coworker_identity_classification.sql',
 ] as const;
 const durableKernelMigrationRegistryTable = 'durable_kernel_schema_migrations';
 const durableKernelMigrationAdvisoryLock = [

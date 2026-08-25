@@ -83,6 +83,25 @@ describe('Cumora-style Coworker lifecycle provisioning', () => {
         now().toISOString(),
       ],
     );
+    await database.query(
+      `INSERT INTO agent_chat_runtimes
+       (tenant_id,agent_definition_id,active_agent_version_id,epoch,status,created_at,updated_at)
+       VALUES($1,$2,$3,1,'available',$4,$4)`,
+      [
+        tenantId,
+        legacyDefinitionId,
+        legacyVersionId,
+        now().toISOString(),
+      ],
+    );
+    await database.query(
+      `INSERT INTO agent_identity_classes
+       (tenant_id,agent_definition_id,identity_class,created_at,updated_at)
+       VALUES($1,$2,'legacy_work_internal',$3,$3)
+       ON CONFLICT (tenant_id,agent_definition_id) DO UPDATE
+         SET identity_class='legacy_work_internal',updated_at=EXCLUDED.updated_at`,
+      [tenantId, legacyDefinitionId, now().toISOString()],
+    );
     const registry = new PostgresAgentRegistry(database);
     const roster = await registry.listManagedDefinitionsByTenant({
       tenantId,

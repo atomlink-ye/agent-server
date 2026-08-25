@@ -162,8 +162,16 @@ if (command.length === 0) {
     );
     process.exit(1);
   }
-  const runtimeRoot = join(repositoryRoot, '.local', 'dev-runtime');
-  const agentWorkspace = join(repositoryRoot, '.local', 'agent-workspace');
+  const configuredRuntimeRoot = process.env.PASEO_RUNTIME_ROOT?.trim();
+  const configuredAgentWorkspace = process.env.PASEO_AGENT_CWD?.trim();
+  const runtimeRoot = resolve(
+    repositoryRoot,
+    configuredRuntimeRoot || join('.local', 'dev-runtime'),
+  );
+  const agentWorkspace = resolve(
+    repositoryRoot,
+    configuredAgentWorkspace || join('.local', 'agent-workspace'),
+  );
   await Promise.all([
     mkdir(runtimeRoot, { recursive: true }),
     mkdir(agentWorkspace, { recursive: true }),

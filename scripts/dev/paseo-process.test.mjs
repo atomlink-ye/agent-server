@@ -19,6 +19,7 @@ describe('createApplicationEnvironment', () => {
       paseoEnvironment: { PASEO_RELAY_ENABLED: 'false' },
       environment: {
         PASEO_SESSION_RPC_TIMEOUT_MS: '120000',
+        PASEO_RUNTIME_ROOT: '/workspace/.local/runtime-browser/runtime',
       },
       paseoWsUrl: 'ws://127.0.0.1:6767/ws',
       agentWorkspace: '/workspace/.local/agent-workspace',
@@ -26,6 +27,7 @@ describe('createApplicationEnvironment', () => {
 
     expect(environment).toMatchObject({
       PASEO_SESSION_RPC_TIMEOUT_MS: '120000',
+      PASEO_RUNTIME_ROOT: '/workspace/.local/runtime-browser/runtime',
       PASEO_WS_URL: 'ws://127.0.0.1:6767/ws',
       PASEO_AGENT_CWD: '/workspace/.local/agent-workspace',
     });

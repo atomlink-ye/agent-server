@@ -44,7 +44,7 @@ describe('RunTeamCoordinator', () => {
         id: 'member-1',
         teamRunId: 'team-1',
         role: 'member',
-        agentVersionId: 'agent-version-1',
+        workerVersionId: 'worker-version-1',
       })),
       findTeamRunByRootTaskId: vi.fn(async () => ({
         id: 'team-1',
@@ -63,7 +63,7 @@ describe('RunTeamCoordinator', () => {
       principalType: 'service_account',
       principalId: 'principal-1',
       rootTaskId: 'root-task-1',
-      invokableVersionId: 'agent-version-1',
+      invokableVersionId: 'worker-version-1',
     } as Task;
 
     await expect(coordinator.resolve(invalidLeadTask)).rejects.toThrow(
@@ -77,7 +77,7 @@ describe('RunTeamCoordinator', () => {
         id: 'lead-1',
         teamRunId: 'team-1',
         role: 'lead',
-        agentVersionId: 'lead-version-1',
+        workerVersionId: 'lead-version-1',
       })),
       findTeamRunByRootTaskId: vi.fn(async () => ({
         id: 'team-1',

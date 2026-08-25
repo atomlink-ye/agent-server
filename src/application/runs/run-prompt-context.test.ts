@@ -38,6 +38,7 @@ describe('RunPromptContext', () => {
     const context = new RunPromptContext(
       resolver,
       {} as never,
+      undefined,
       fileStore as never,
     );
     const task = {

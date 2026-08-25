@@ -206,11 +206,11 @@ async function pollWorkRun(workId, workRunId) {
 }
 
 const leadSource = `apiVersion: agent-server/v1alpha1
-kind: ManagedAgent
+kind: Worker
 metadata:
   name: smoke-lead
 spec:
-  description: Canonical Agent Team smoke role
+  description: Canonical formal Worker Team smoke role
   instructions: 'Act as Team Lead using only canonical Team tools. Use board_list to read the board first. If no Work exists, use board_create to create exactly one Work assigned to analyst with subject "Return smoke marker" and description "Submit exactly AGENT_TEAM_SMOKE_MEMBER_OK", then stop. If the analyst Work is completed, use board_accept to accept it. When every Work is accepted and no active attempt remains, call collaboration_finish exactly once. Never create duplicate Work and never substitute prose for a required Team mutation.'
   runtime:
     provider: paseo
@@ -240,11 +240,11 @@ spec:
 `;
 
 const analystSource = `apiVersion: agent-server/v1alpha1
-kind: ManagedAgent
+kind: Worker
 metadata:
   name: smoke-analyst
 spec:
-  description: Canonical Agent Team smoke role
+  description: Canonical formal Worker Team smoke role
   instructions: 'Act as the assigned Team member using canonical Team tools. Use board_list to read the board, locate your active Work, and use board_submit to submit it exactly once with result summary AGENT_TEAM_SMOKE_MEMBER_OK. Do not create Work, accept Work, finish the Team, use provider subagents, or emit unrelated prose.'
   runtime:
     provider: paseo
@@ -282,19 +282,20 @@ async function main() {
   progress('started', {
     provider: defaults.PASEO_PROVIDER,
     model: defaults.PASEO_MODEL,
-    product_path: 'teams:import -> publish -> works -> runs -> trace',
+    product_path:
+      'formal Workers:import -> publish -> Team -> Product Work -> WorkRun -> trace',
     transcript_path: transcriptPath,
   });
 
   const lead = await importAndPublish(
     leadSource,
-    '/api/v1/agents:import',
-    (id) => `/api/v1/agent-versions/${id}:publish`,
+    '/api/v1/workers:import',
+    (id) => `/api/v1/worker-versions/${id}:publish`,
   );
   const analyst = await importAndPublish(
     analystSource,
-    '/api/v1/agents:import',
-    (id) => `/api/v1/agent-versions/${id}:publish`,
+    '/api/v1/workers:import',
+    (id) => `/api/v1/worker-versions/${id}:publish`,
   );
   const environment = await importAndPublish(
     `apiVersion: agent-server/v1alpha1
@@ -322,10 +323,10 @@ spec:
   environmentVersionId: ${environment.published.id}
   lead:
     name: lead
-    agentVersionId: ${lead.published.id}
+    workerVersionId: ${lead.published.id}
   roster:
     - name: analyst
-      agentVersionId: ${analyst.published.id}
+      workerVersionId: ${analyst.published.id}
   coordination:
     taskAssignment: lead_or_self_claim
 `,
@@ -373,6 +374,33 @@ spec:
     version_id: publishedTeam.id,
   });
 
+  const publishedTeamVersion = await request(
+    `/api/v1/team-versions/${draftVersionId}`,
+    { expectedStatus: 200 },
+  );
+  if (
+    publishedTeamVersion.id !== draftVersionId ||
+    publishedTeamVersion.definition_id !== teamId ||
+    publishedTeamVersion.status !== 'published' ||
+    publishedTeamVersion.spec?.lead?.workerVersionId !== lead.published.id ||
+    JSON.stringify(publishedTeamVersion.spec?.roster) !==
+      JSON.stringify([
+        { name: 'analyst', workerVersionId: analyst.published.id },
+      ])
+  ) {
+    throw new Error(
+      `published Team version does not preserve formal Worker bindings: ${JSON.stringify(publishedTeamVersion)}`,
+    );
+  }
+  progress('formal_worker_team_bindings_asserted', {
+    team_id: teamId,
+    team_version_id: publishedTeamVersion.id,
+    lead_worker_version_id: publishedTeamVersion.spec.lead.workerVersionId,
+    roster_worker_version_ids: publishedTeamVersion.spec.roster.map(
+      (member) => member.workerVersionId,
+    ),
+  });
+
   const createdWork = await request('/api/v1/works', {
     method: 'POST',
     body: {
@@ -382,6 +410,14 @@ spec:
     },
     expectedStatus: 201,
   });
+  if (
+    createdWork.work?.definition_id !== teamId ||
+    createdWork.work?.definition_version_id !== publishedTeam.id
+  ) {
+    throw new Error(
+      `Product Work did not pin the published Team definition/version: ${JSON.stringify(createdWork.work)}`,
+    );
+  }
   const workId = createdWork.work?.id;
   if (typeof workId !== 'string')
     throw new Error('Work response did not contain id');
@@ -402,6 +438,14 @@ spec:
   const workRunId = startedWorkRun.work_run?.id;
   if (typeof workRunId !== 'string')
     throw new Error('WorkRun response did not contain id');
+  if (
+    startedWorkRun.work_run?.work_id !== workId ||
+    startedWorkRun.work_run?.definition_version_id !== publishedTeam.id
+  ) {
+    throw new Error(
+      `WorkRun did not preserve the immutable Product Work definition version: ${JSON.stringify(startedWorkRun.work_run)}`,
+    );
+  }
   progress('work_run_started', {
     work_id: workId,
     work_run_id: workRunId,
@@ -409,6 +453,16 @@ spec:
   });
 
   const projection = await pollWorkRun(workId, workRunId);
+  if (
+    projection.work?.definition_id !== teamId ||
+    projection.work?.definition_version_id !== publishedTeam.id ||
+    projection.work_run?.work_id !== workId ||
+    projection.work_run?.definition_version_id !== publishedTeam.id
+  ) {
+    throw new Error(
+      `Product Work projection did not preserve the immutable Team definition/version binding: ${JSON.stringify({ work: projection.work, work_run: projection.work_run })}`,
+    );
+  }
   if (projection.work_run?.product_state !== 'complete') {
     throw new Error(
       `WorkRun did not complete: ${JSON.stringify(projection.work_run)}`,
@@ -419,6 +473,16 @@ spec:
     `/api/v1/works/${workId}/runs/${workRunId}/trace`,
     { expectedStatus: 200 },
   );
+  if (
+    trace.work?.definition_id !== teamId ||
+    trace.work?.definition_version_id !== publishedTeam.id ||
+    trace.work_run?.work_id !== workId ||
+    trace.work_run?.definition_version_id !== publishedTeam.id
+  ) {
+    throw new Error(
+      `formal Worker Product Work trace did not preserve the immutable Team definition/version binding: ${JSON.stringify({ work: trace.work, work_run: trace.work_run })}`,
+    );
+  }
   const traceRuns = Array.isArray(trace.runs) ? trace.runs : [];
   const providerRunIds = traceRuns
     .filter((record) => record.provider !== null && record.model !== null)
@@ -469,6 +533,7 @@ spec:
     null_usage_records_skipped: nullUsageRecordsSkipped,
     runtime_models: [...runtimeModels],
     usage,
+    formal_worker_execution: true,
   });
   process.stdout.write(
     `${JSON.stringify({
@@ -476,6 +541,7 @@ spec:
       work_id: workId,
       work_run_id: workRunId,
       product_state: projection.work_run.product_state,
+      formal_worker_execution: true,
       trace_run_count: traceRuns.length,
       orchestration_records_skipped: orchestrationRecordsSkipped,
       null_usage_records_skipped: nullUsageRecordsSkipped,

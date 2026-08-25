@@ -19,7 +19,10 @@ export interface WorkerRegistryQueryable {
   query<Row = Record<string, unknown>>(
     sql: string,
     values?: readonly unknown[],
-  ): Promise<{ readonly rows?: readonly Row[]; readonly rowCount?: number | null }>;
+  ): Promise<{
+    readonly rows?: readonly Row[];
+    readonly rowCount?: number | null;
+  }>;
 }
 
 export interface WorkerRegistryConnectable extends WorkerRegistryQueryable {
@@ -73,7 +76,8 @@ export class PostgresWorkerRegistry implements WorkerRegistry {
   private queryOnlyTail: Promise<void> = Promise.resolve();
 
   public constructor(
-    private readonly database: WorkerRegistryQueryable | WorkerRegistryConnectable,
+    private readonly database:
+      WorkerRegistryQueryable | WorkerRegistryConnectable,
   ) {}
 
   public importWorker(command: ImportWorkerAtomicCommand) {
@@ -131,7 +135,8 @@ export class PostgresWorkerRegistry implements WorkerRegistry {
             ],
           )
         ).rows?.[0];
-      if (!definition) throw new Error('Worker definition could not be persisted.');
+      if (!definition)
+        throw new Error('Worker definition could not be persisted.');
 
       const versionInsert = await db.query<VersionRow>(
         `INSERT INTO worker_versions
@@ -186,7 +191,8 @@ export class PostgresWorkerRegistry implements WorkerRegistry {
       );
       return {
         kind:
-          definition.id === command.definition.id && version.id === command.version.id
+          definition.id === command.definition.id &&
+          version.id === command.version.id
             ? ('created' as const)
             : ('converged' as const),
         definition: mapDefinition(definition),
@@ -209,7 +215,12 @@ export class PostgresWorkerRegistry implements WorkerRegistry {
       if (claim.request_fingerprint !== command.requestFingerprint)
         throw new IdempotencyConflictError();
       if (claim.version_id) {
-        const row = await loadVersion(db, command.owner, claim.version_id, false);
+        const row = await loadVersion(
+          db,
+          command.owner,
+          claim.version_id,
+          false,
+        );
         if (!row) throw new AgentNotFoundError();
         return mapVersion(row);
       }
@@ -229,7 +240,7 @@ export class PostgresWorkerRegistry implements WorkerRegistry {
       if (!row) throw new AgentNotFoundError();
       const published =
         row.status === 'draft'
-          ? (
+          ? ((
               await db.query<VersionRow>(
                 `UPDATE worker_versions
                     SET status='published',published_at=GREATEST(created_at,now()),
@@ -237,7 +248,7 @@ export class PostgresWorkerRegistry implements WorkerRegistry {
                   WHERE id=$1 RETURNING *`,
                 [row.id],
               )
-            ).rows?.[0] ?? row
+            ).rows?.[0] ?? row)
           : row;
       await db.query(
         `UPDATE worker_registry_idempotency SET definition_id=$6,version_id=$7,updated_at=now()
@@ -261,7 +272,13 @@ export class PostgresWorkerRegistry implements WorkerRegistry {
     const result = await this.database.query<DefinitionRow>(
       `SELECT * FROM worker_definitions WHERE id=$1 AND tenant_id=$2 AND workspace_id=$3
        AND principal_type=$4 AND principal_id=$5`,
-      [definitionId, owner.tenantId, owner.workspaceId, owner.principalType, owner.principalId],
+      [
+        definitionId,
+        owner.tenantId,
+        owner.workspaceId,
+        owner.principalType,
+        owner.principalId,
+      ],
     );
     return result.rows?.[0] ? mapDefinition(result.rows[0]) : null;
   }
@@ -270,12 +287,21 @@ export class PostgresWorkerRegistry implements WorkerRegistry {
     const result = await this.database.query<VersionRow>(
       `SELECT * FROM worker_versions WHERE id=$1 AND tenant_id=$2 AND workspace_id=$3
        AND principal_type=$4 AND principal_id=$5`,
-      [versionId, owner.tenantId, owner.workspaceId, owner.principalType, owner.principalId],
+      [
+        versionId,
+        owner.tenantId,
+        owner.workspaceId,
+        owner.principalType,
+        owner.principalId,
+      ],
     );
     return result.rows?.[0] ? mapVersion(result.rows[0]) : null;
   }
 
-  public async findVersionByTenant(input: { tenantId: string; versionId: string }) {
+  public async findVersionByTenant(input: {
+    tenantId: string;
+    versionId: string;
+  }) {
     const result = await this.database.query<VersionRow>(
       `SELECT * FROM worker_versions WHERE id=$1 AND tenant_id=$2`,
       [input.versionId, input.tenantId],
@@ -283,8 +309,13 @@ export class PostgresWorkerRegistry implements WorkerRegistry {
     return result.rows?.[0] ? mapVersion(result.rows[0]) : null;
   }
 
-  private async transaction<T>(work: (db: WorkerRegistryQueryable) => Promise<T>): Promise<T> {
-    if ('connect' in this.database && typeof this.database.connect === 'function') {
+  private async transaction<T>(
+    work: (db: WorkerRegistryQueryable) => Promise<T>,
+  ): Promise<T> {
+    if (
+      'connect' in this.database &&
+      typeof this.database.connect === 'function'
+    ) {
       const client = await this.database.connect();
       try {
         return await runTransaction(client, work);
@@ -308,7 +339,10 @@ export class PostgresWorkerRegistry implements WorkerRegistry {
   }
 }
 
-async function runTransaction<T>(db: WorkerRegistryQueryable, work: (db: WorkerRegistryQueryable) => Promise<T>): Promise<T> {
+async function runTransaction<T>(
+  db: WorkerRegistryQueryable,
+  work: (db: WorkerRegistryQueryable) => Promise<T>,
+): Promise<T> {
   await db.query('BEGIN');
   try {
     const result = await work(db);
@@ -331,7 +365,14 @@ async function claimIdempotency(
     `INSERT INTO worker_registry_idempotency
       (operation,tenant_id,principal_type,principal_id,idempotency_key,request_fingerprint,created_at,updated_at)
      VALUES ($1,$2,$3,$4,$5,$6,now(),now()) ON CONFLICT DO NOTHING`,
-    [operation, owner.tenantId, owner.principalType, owner.principalId, key, fingerprint],
+    [
+      operation,
+      owner.tenantId,
+      owner.principalType,
+      owner.principalId,
+      key,
+      fingerprint,
+    ],
   );
   const result = await db.query<IdempotencyRow>(
     `SELECT request_fingerprint,definition_id,version_id FROM worker_registry_idempotency
@@ -339,23 +380,62 @@ async function claimIdempotency(
         AND idempotency_key=$5 FOR UPDATE`,
     [operation, owner.tenantId, owner.principalType, owner.principalId, key],
   );
-  if (!result.rows?.[0]) throw new Error('Worker idempotency claim could not be persisted.');
+  if (!result.rows?.[0])
+    throw new Error('Worker idempotency claim could not be persisted.');
   return result.rows[0];
 }
 
-async function loadResult(db: WorkerRegistryQueryable, owner: WorkerOwner, definitionId: string, versionId: string) {
+async function loadResult(
+  db: WorkerRegistryQueryable,
+  owner: WorkerOwner,
+  definitionId: string,
+  versionId: string,
+) {
   const [definition, version] = await Promise.all([
-    db.query<DefinitionRow>(`SELECT * FROM worker_definitions WHERE id=$1 AND tenant_id=$2 AND workspace_id=$3 AND principal_type=$4 AND principal_id=$5`, [definitionId, owner.tenantId, owner.workspaceId, owner.principalType, owner.principalId]),
-    db.query<VersionRow>(`SELECT * FROM worker_versions WHERE id=$1 AND tenant_id=$2 AND workspace_id=$3 AND principal_type=$4 AND principal_id=$5`, [versionId, owner.tenantId, owner.workspaceId, owner.principalType, owner.principalId]),
+    db.query<DefinitionRow>(
+      `SELECT * FROM worker_definitions WHERE id=$1 AND tenant_id=$2 AND workspace_id=$3 AND principal_type=$4 AND principal_id=$5`,
+      [
+        definitionId,
+        owner.tenantId,
+        owner.workspaceId,
+        owner.principalType,
+        owner.principalId,
+      ],
+    ),
+    db.query<VersionRow>(
+      `SELECT * FROM worker_versions WHERE id=$1 AND tenant_id=$2 AND workspace_id=$3 AND principal_type=$4 AND principal_id=$5`,
+      [
+        versionId,
+        owner.tenantId,
+        owner.workspaceId,
+        owner.principalType,
+        owner.principalId,
+      ],
+    ),
   ]);
-  if (!definition.rows?.[0] || !version.rows?.[0]) throw new AgentNotFoundError();
-  return { definition: mapDefinition(definition.rows[0]), version: mapVersion(version.rows[0]) };
+  if (!definition.rows?.[0] || !version.rows?.[0])
+    throw new AgentNotFoundError();
+  return {
+    definition: mapDefinition(definition.rows[0]),
+    version: mapVersion(version.rows[0]),
+  };
 }
 
-async function loadVersion(db: WorkerRegistryQueryable, owner: WorkerOwner, id: string, lock: boolean) {
+async function loadVersion(
+  db: WorkerRegistryQueryable,
+  owner: WorkerOwner,
+  id: string,
+  lock: boolean,
+) {
   const result = await db.query<VersionRow>(
     `SELECT * FROM worker_versions WHERE id=$1 AND tenant_id=$2 AND workspace_id=$3 AND principal_type=$4 AND principal_id=$5${lock ? ' FOR UPDATE' : ''}`,
-    [id, owner.tenantId, owner.workspaceId, owner.principalType, owner.principalId],
+    [
+      id,
+      owner.tenantId,
+      owner.workspaceId,
+      owner.principalType,
+      owner.principalId,
+    ],
   );
   return result.rows?.[0] ?? null;
 }
@@ -389,7 +469,9 @@ function mapVersion(row: VersionRow): WorkerVersion {
     description: row.description,
     package: pkg,
     canonicalJson: JSON.stringify(pkg),
-    fingerprint: row.fingerprint.startsWith('sha256:') ? row.fingerprint : `sha256:${row.fingerprint}`,
+    fingerprint: row.fingerprint.startsWith('sha256:')
+      ? row.fingerprint
+      : `sha256:${row.fingerprint}`,
     compiler: row.compiler_metadata as WorkerVersion['compiler'],
     createdAt: iso(row.created_at),
     updatedAt: iso(row.updated_at),

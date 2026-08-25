@@ -50,7 +50,9 @@ export async function seedPublishedTeamVersion(
       name,
       JSON.stringify({
         lead: { name: 'lead', workerVersionId: options.workerVersionId },
-        roster: [{ name: 'reviewer', workerVersionId: options.workerVersionId }],
+        roster: [
+          { name: 'reviewer', workerVersionId: options.workerVersionId },
+        ],
         environmentVersionId: options.environmentVersionId,
       }),
       options.environmentVersionId,

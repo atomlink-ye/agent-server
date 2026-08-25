@@ -30,7 +30,7 @@ ALTER TABLE runtime_session_specs
     OR (subject_kind IN ('agent_chat', 'legacy_agent_task') AND agent_version_id IS NOT NULL AND worker_version_id IS NULL)
   );
 
-CREATE TABLE agent_work_bindings (
+CREATE TABLE IF NOT EXISTS agent_work_bindings (
   tenant_id text NOT NULL,
   workspace_id text NOT NULL,
   agent_definition_id uuid NOT NULL,
@@ -41,5 +41,19 @@ CREATE TABLE agent_work_bindings (
   updated_at timestamptz NOT NULL,
   PRIMARY KEY (tenant_id,workspace_id,agent_definition_id,work_definition_id)
 );
+
+INSERT INTO agent_work_bindings
+  (tenant_id,workspace_id,agent_definition_id,work_definition_id,active_work_definition_version_id,status,created_at,updated_at)
+SELECT a.tenant_id,a.workspace_id,a.agent_definition_id::uuid,a.work_definition_id,v.id,'enabled',a.created_at,a.created_at
+FROM agent_workflow_associations a
+JOIN LATERAL (
+  SELECT id FROM work_definition_source_versions
+  WHERE definition_id=a.work_definition_id AND status='published'
+  ORDER BY published_at DESC,id DESC LIMIT 1
+) v ON true
+WHERE a.agent_definition_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+ON CONFLICT (tenant_id,workspace_id,agent_definition_id,work_definition_id) DO NOTHING;
+
+DROP TABLE IF EXISTS agent_workflow_associations;
 
 COMMIT;

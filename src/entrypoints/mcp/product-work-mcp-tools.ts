@@ -3,7 +3,6 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { WorkIdentityApi } from '../../application/work/work-identity-api.js';
 import type { StartWorkRun } from '../../application/work/start-work-run.js';
 import type { AuthorizedRuntimeToolContext } from '../../application/runtime/authorize-runtime-tool.js';
-import { ListAgentWorkflows } from '../../application/work/list-agent-workflows.js';
 import { DescribeWorkflow } from '../../application/work/describe-workflow.js';
 import type { WorkDefinitionSourceRepository } from '../../application/ports/work-definition-source-repository.js';
 import type { ConversationRepository } from '../../application/ports/conversation-repository.js';
@@ -670,53 +669,22 @@ export function registerProductWorkMcpTools(input: {
               content: [{ type: 'text', text: 'not_found' }],
             };
           }
-          const listWorkflows = new ListAgentWorkflows(input.definitions);
-          const result = await listWorkflows.execute({
+          if (!input.definitions.listAgentWorkBindings)
+            return { isError: true, content: [{ type: 'text', text: 'not_found' }] };
+          const bindings = await input.definitions.listAgentWorkBindings({
+            tenantId: current.tenantId,
+            workspaceId: current.workspaceId,
             agentDefinitionId: args.agent_definition_id,
-            accessContext: {
-              tenantId: current.tenantId,
-              workspaceId: current.workspaceId,
-              principalType: 'service_account',
-              principalId: current.principalId,
-              policySnapshotVersion: 'runtime-mcp',
-            },
           });
-          const startable = (
-            await Promise.all(
-              result.definitions.map(async (definition) => {
-                const versions = input.definitions?.listProductVersions
-                  ? await input.definitions.listProductVersions({
-                      definitionId: definition.id,
-                      owner: {
-                        tenantId: current.tenantId,
-                        workspaceId: current.workspaceId,
-                        principalType: 'service_account',
-                        principalId: current.principalId,
-                      },
-                      limit: 1,
-                      cursor: null,
-                    })
-                  : null;
-                const version = versions?.items[0];
-                if (!version) return null;
-                return {
-                  id: definition.id,
-                  name: definition.name,
-                  description: definition.description,
-                  work_definition_version_id: version.version.id,
-                  input_schema: version.version.source.inputSchema ?? {
-                    type: 'object',
-                    properties: {},
-                    required: [],
-                    additional_properties: false,
-                  },
-                };
-              }),
-            )
-          ).filter(
-            (definition): definition is NonNullable<typeof definition> =>
-              definition !== null,
-          );
+          const startable = bindings.map(({ definition, version }) => ({
+            id: definition.id,
+            name: definition.name,
+            description: definition.description,
+            work_definition_version_id: version.id,
+            input_schema: version.source.inputSchema ?? {
+              type: 'object', properties: {}, required: [], additional_properties: false,
+            },
+          }));
           return {
             content: [
               {

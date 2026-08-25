@@ -108,4 +108,12 @@ export interface WorkDefinitionSourceRepository {
     readonly workspaceId: string;
     readonly agentDefinitionId: string;
   }): Promise<readonly WorkDefinitionSourceDefinition[]>;
+  listAgentWorkBindings?(input: {
+    readonly tenantId: string;
+    readonly workspaceId: string;
+    readonly agentDefinitionId: string;
+  }): Promise<readonly {
+    readonly definition: WorkDefinitionSourceDefinition;
+    readonly version: WorkDefinitionSourceVersion;
+  }[]>;
 }

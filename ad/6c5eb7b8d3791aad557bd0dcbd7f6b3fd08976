@@ -1,0 +1,27 @@
+src/application/agents/list-agent.test.ts
+  07c060d72e7274b6 2-5,17-25,33-35,39,45,53-54,60,67,77-78,81
+src/entrypoints/api/routes/agents.ts
+  07c060d72e7274b6 46-52
+src/application/agents/read-agent.ts
+  07c060d72e7274b6 2-5,10-16,20-23,28-34,38-41,46-52,58-61
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2-bit.10+672fbf0",
+  "base_commit_sha": "ad6c5eb7b8d3791aad557bd0dcbd7f6b3fd08976",
+  "prompts": {
+    "07c060d72e7274b6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "44ecf229-89fa-4690-bc08-8fd94e3dbc6b",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "link.ye",
+      "messages": [],
+      "total_additions": 80,
+      "total_deletions": 32,
+      "accepted_lines": 69,
+      "overriden_lines": 0
+    }
+  }
+}

@@ -77,6 +77,16 @@ describe('CapabilityDraft canonical compilation', () => {
     if (document.spec.kind !== 'single_worker') return;
     expect(document.spec.worker_version_id).toBeUndefined();
     expect(document.spec.worker?.source).toContain('kind: Worker');
+    expect(document.spec.worker?.source).toContain(specialist.instructions);
+    expect(document.spec.worker?.source).toContain(
+      'When the Work is complete, stop using tools and return the final result directly.',
+    );
+    expect(document.spec.worker?.source).toContain(
+      'If data or permissions are unavailable, state the limitation and return the best bounded result available.',
+    );
+    expect(document.spec.worker?.source).toContain(
+      'Do not wait or retry indefinitely.',
+    );
     expect(document.spec.environment?.source).toContain(
       'kind: ManagedEnvironment',
     );
@@ -126,6 +136,10 @@ describe('CapabilityDraft canonical compilation', () => {
     expect(document.spec.lead.worker?.source).toContain('kind: Worker');
     expect(document.spec.members).toHaveLength(1);
     expect(document.spec.members[0]?.worker?.source).toContain('kind: Worker');
+    expect(document.spec.lead.worker?.source).toContain('Completion guidance:');
+    expect(document.spec.members[0]?.worker?.source).toContain(
+      'Completion guidance:',
+    );
     parseWorkerForImport(document.spec.lead.worker!.source);
     parseWorkerForImport(document.spec.members[0]!.worker!.source);
     validateEnvironmentPackage(document.spec.environment!.source);

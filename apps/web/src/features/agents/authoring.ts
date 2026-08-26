@@ -33,6 +33,9 @@ export interface CompiledCapabilityDraft {
   readonly inputKeys: readonly string[];
 }
 
+const CAPABILITY_COMPLETION_GUIDANCE =
+  'When the Work is complete, stop using tools and return the final result directly. If data or permissions are unavailable, state the limitation and return the best bounded result available. Do not wait or retry indefinitely.';
+
 /**
  * Friendly Capability drafts compile deterministically to the canonical
  * WorkDefinition author document. The generated source still goes through the
@@ -234,7 +237,7 @@ function workerSource(
     `  name: ${scalar(`${capabilityName}-${participant.name.trim()}`)}`,
     'spec:',
     `  description: ${scalar(`${participant.role.trim()} for ${outcome.trim()}`)}`,
-    `  instructions: ${scalar(participant.instructions.trim())}`,
+    `  instructions: ${scalar(`${participant.instructions.trim()}\n\nCompletion guidance:\n${CAPABILITY_COMPLETION_GUIDANCE}`)}`,
     '  runtime:',
     '    provider: paseo',
     '    modelPolicyRef: free-only',

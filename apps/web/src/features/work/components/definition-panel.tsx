@@ -90,9 +90,8 @@ export function DefinitionPanel({
     setDiagnostics([]);
     setPlan(null);
     setStatusMessage(null);
-    let validation;
     try {
-      validation = await workDefinitionClient.validate(source);
+      await workDefinitionClient.validate(source);
     } catch (error) {
       const nextDiagnostics = diagnosticsFrom(
         error instanceof ApiTransportError ? error.payload : undefined,
@@ -356,7 +355,7 @@ function DefinitionPlanPreview({
       source: participant.versionId
         ? ('referenced' as const)
         : ('inline' as const),
-      agent_version_id: participant.versionId,
+      workerVersionId: participant.versionId,
       skills: [] as readonly string[],
       tools: [] as readonly string[],
     }));
@@ -372,7 +371,7 @@ function DefinitionPlanPreview({
           ? 'Server-resolved preview. This projection never writes back to source.'
           : 'Validate to resolve exact resource references and runtime capabilities.'}
       </p>
-      <h4>Agents</h4>
+      <h4>Workers</h4>
       <ul>
         {previewParticipants.map((participant) => (
           <li key={`${participant.role}:${participant.name}`}>
@@ -380,8 +379,8 @@ function DefinitionPlanPreview({
             <span>
               {humanize(participant.role)} · {participant.source}
             </span>
-            {participant.agent_version_id ? (
-              <code>{participant.agent_version_id}</code>
+            {participant.workerVersionId ? (
+              <code>{participant.workerVersionId}</code>
             ) : null}
           </li>
         ))}
@@ -390,23 +389,23 @@ function DefinitionPlanPreview({
         <>
           <h4>Environment</h4>
           <p>
-            {plan.resolved.environment.environment_version_id ??
+            {plan.resolved.environment.environmentVersionId ??
               `${plan.resolved.environment.source} environment`}
           </p>
           <h4>Runtime</h4>
           <p>
-            {plan.resolved.required_runtime_capabilities.length
-              ? plan.resolved.required_runtime_capabilities.join(' · ')
+            {plan.resolved.requiredRuntimeCapabilities.length
+              ? plan.resolved.requiredRuntimeCapabilities.join(' · ')
               : 'No additional runtime capabilities required'}
           </p>
           <h4>Platform</h4>
           <p>
-            {plan.resolved.platform_capabilities.length
-              ? plan.resolved.platform_capabilities.join(' · ')
+            {plan.resolved.platformCapabilities.length
+              ? plan.resolved.platformCapabilities.join(' · ')
               : 'No platform capability declared'}
           </p>
           <h4>Memory</h4>
-          <p>{plan.resolved.memory_version_ids.length} immutable binding(s)</p>
+          <p>{plan.resolved.memoryVersionIds.length} immutable binding(s)</p>
         </>
       ) : null}
     </aside>
@@ -428,7 +427,7 @@ function ParticipantList({
           {participant.versionId ? (
             <code>{participant.versionId}</code>
           ) : (
-            <span>Inline Agent materialized at apply</span>
+            <span>Inline Worker materialized at apply</span>
           )}
         </li>
       ))}
@@ -466,12 +465,12 @@ function participantsFromSource(
   spec: Readonly<Record<string, unknown>> | null,
 ): readonly ParticipantView[] {
   if (!spec) return [];
-  if (kind === 'single_agent')
+  if (kind === 'single_worker')
     return [
       {
-        name: 'Primary Agent',
+        name: 'Primary Worker',
         role: 'primary',
-        versionId: stringValue(spec.agent_version_id),
+        versionId: stringValue(spec.worker_version_id),
       },
     ];
   if (kind !== 'collaboration') return [];
@@ -483,7 +482,7 @@ function participantsFromSource(
     result.push({
       name: stringValue(lead.name) ?? 'Lead',
       role: 'lead',
-      versionId: stringValue(lead.agent_version_id),
+      versionId: stringValue(lead.worker_version_id),
     });
   for (const item of members) {
     const member = asRecord(item);
@@ -491,7 +490,7 @@ function participantsFromSource(
     result.push({
       name: stringValue(member.name) ?? 'Member',
       role: 'member',
-      versionId: stringValue(member.agent_version_id),
+      versionId: stringValue(member.worker_version_id),
     });
   }
   return result;

@@ -275,24 +275,48 @@ if (command.length === 0) {
     ]);
     return stopping;
   };
-  for (const signal of ['SIGINT', 'SIGTERM']) {
-    process.once(signal, () => {
-      void stop().finally(() => {
-        process.exitCode = signal === 'SIGINT' ? 130 : 143;
-        process.exit();
-      });
-    });
+  let requestedSignal;
+  let resolveSignal;
+  const signal = new Promise((resolveSignalValue) => {
+    resolveSignal = resolveSignalValue;
+  });
+  const signalHandlers = new Map();
+  for (const signalName of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+    const handler = () => {
+      if (requestedSignal) return;
+      requestedSignal = signalName;
+      resolveSignal(signalName);
+      void stop();
+    };
+    signalHandlers.set(signalName, handler);
+    process.on(signalName, handler);
   }
 
-  const exitCode = await new Promise((resolveExit) => {
-    child.once('exit', (code, signal) => {
-      resolveExit(code ?? (signal ? 1 : 0));
-    });
-    child.once('error', (error) => {
-      process.stderr.write(`${error.message}\n`);
-      resolveExit(1);
-    });
-  });
-  await stopProcessTree(paseo.child);
-  process.exitCode = exitCode;
+  const exitCode = await Promise.race([
+    new Promise((resolveExit) => {
+      child.once('exit', (code, childSignal) => {
+        resolveExit(code ?? (childSignal ? 1 : 0));
+      });
+      child.once('error', (error) => {
+        process.stderr.write(`${error.message}\n`);
+        resolveExit(1);
+      });
+    }),
+    signal.then((signalName) => {
+      process.exitCode =
+        signalName === 'SIGINT' ? 130 : signalName === 'SIGTERM' ? 143 : 129;
+      return process.exitCode;
+    }),
+  ]);
+  await stop();
+  for (const [signalName, handler] of signalHandlers) {
+    process.removeListener(signalName, handler);
+  }
+  process.exitCode = requestedSignal
+    ? requestedSignal === 'SIGINT'
+      ? 130
+      : requestedSignal === 'SIGTERM'
+        ? 143
+        : 129
+    : exitCode;
 }

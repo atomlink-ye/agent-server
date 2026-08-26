@@ -16,6 +16,7 @@ const BOARDS_ACTION_ERROR =
   'That Board change could not be saved. Please try again.';
 
 type RecoverableError = {
+  readonly source: 'list' | 'snapshot' | 'action';
   readonly message: string;
   readonly retry?: () => void;
 };
@@ -35,17 +36,21 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
 
   const loadBoards = useCallback(async () => {
     setLoading(true);
-    setError(null);
     try {
       const next = await workOrganizationClient.listBoards();
       setBoards(next);
+      setError((current) => (current?.source === 'list' ? null : current));
       if (!selectedBoardId && next[0]) {
         navigate(`/boards/${encodeURIComponent(next[0].id)}`, {
           replace: true,
         });
       }
     } catch {
-      setError({ message: BOARDS_LOAD_ERROR, retry: () => void loadBoards() });
+      setError({
+        source: 'list',
+        message: BOARDS_LOAD_ERROR,
+        retry: () => void loadBoards(),
+      });
     } finally {
       setLoading(false);
     }
@@ -58,8 +63,10 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
     }
     try {
       setSnapshot(await workOrganizationClient.getBoard(selectedBoardId));
+      setError((current) => (current?.source === 'snapshot' ? null : current));
     } catch {
       setError({
+        source: 'snapshot',
         message: BOARDS_LOAD_ERROR,
         retry: () => void loadSnapshot(),
       });
@@ -86,7 +93,7 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
       setCreatingBoard(false);
       navigate(`/boards/${encodeURIComponent(board.id)}`);
     } catch {
-      setError({ message: BOARDS_ACTION_ERROR });
+      setError({ source: 'action', message: BOARDS_ACTION_ERROR });
     }
   }
 
@@ -209,7 +216,7 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
                 await loadBoards();
                 navigate('/boards');
               }}
-              onError={(message) => setError({ message })}
+              onError={(message) => setError({ source: 'action', message })}
             />
           ) : (
             <div className="work-main-empty">

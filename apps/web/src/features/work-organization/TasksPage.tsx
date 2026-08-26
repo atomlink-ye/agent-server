@@ -24,6 +24,7 @@ const TASKS_ACTION_ERROR =
   'That Task change could not be saved. Please try again.';
 
 type RecoverableError = {
+  readonly source: 'list' | 'comments' | 'action';
   readonly message: string;
   readonly retry?: () => void;
 };
@@ -47,7 +48,6 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
 
   const load = useCallback(async () => {
     setLoading(true);
-    setError(null);
     try {
       const [nextItems, nextAgents] = await Promise.all([
         workOrganizationClient.listWorkItems(),
@@ -55,6 +55,7 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
       ]);
       setItems(nextItems);
       setAgents(nextAgents);
+      setError((current) => (current?.source === 'list' ? null : current));
       if (selectedWorkItemId) {
         const detail = nextItems.find(
           (entry) => entry.work_item.id === selectedWorkItemId,
@@ -66,7 +67,11 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
         }
       }
     } catch {
-      setError({ message: TASKS_LOAD_ERROR, retry: () => void load() });
+      setError({
+        source: 'list',
+        message: TASKS_LOAD_ERROR,
+        retry: () => void load(),
+      });
     } finally {
       setLoading(false);
     }
@@ -85,8 +90,10 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
       setComments(
         await workOrganizationClient.listComments(selectedWorkItemId),
       );
+      setError((current) => (current?.source === 'comments' ? null : current));
     } catch {
       setError({
+        source: 'comments',
         message:
           'Comments for this Task could not be loaded. Please try again.',
         retry: () => void loadComments(),
@@ -260,7 +267,15 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
                   replace: true,
                 });
               }}
-              onError={(message) => setError(message ? { message } : null)}
+              onError={(message) =>
+                setError((current) =>
+                  message
+                    ? { source: 'action', message }
+                    : current?.source === 'action'
+                      ? null
+                      : current,
+                )
+              }
             />
           ) : selected ? (
             <TaskDetail
@@ -269,7 +284,15 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
               comments={comments}
               onChanged={replaceItem}
               onCommentsChanged={setComments}
-              onError={(message) => setError(message ? { message } : null)}
+              onError={(message) =>
+                setError((current) =>
+                  message
+                    ? { source: 'action', message }
+                    : current?.source === 'action'
+                      ? null
+                      : current,
+                )
+              }
             />
           ) : (
             <div className="work-main-empty">

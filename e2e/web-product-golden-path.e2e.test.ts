@@ -321,7 +321,7 @@ describe('web Product Golden Path', () => {
         timeout: 60_000,
       });
       await page
-        .getByRole('heading', { name: capabilityName })
+        .getByRole('heading', { name: capabilityName, level: 1 })
         .waitFor({ state: 'visible', timeout: 60_000 });
       await page
         .getByTestId('outcome-product-state')

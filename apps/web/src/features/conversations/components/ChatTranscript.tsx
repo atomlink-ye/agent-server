@@ -1,7 +1,9 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { ConversationId, ChatMessage } from './contracts';
 import type { ConversationMessagesState } from '../stores/messages';
 import { WorkCard } from '../../work/components/WorkCard';
+import { workOrganizationClient } from '../../work-organization/client';
 import { AssistantMarkdown } from './assistant-markdown';
 
 export interface ChatTranscriptProps {
@@ -32,25 +34,86 @@ function Message({
   readonly showWorkCard: boolean;
   readonly onOpenWork: (workId: string, conversationId: ConversationId) => void;
 }) {
-  // A Coworker writes markdown, so rendering its reply as plain text showed the
-  // syntax instead of the structure. A principal's own text is left alone: if
-  // they typed asterisks they meant asterisks, and reinterpreting what someone
-  // wrote back at them is a different thing from formatting an Agent's answer.
-  // The renderer is the same one the Work transcripts use, which already refuses
-  // raw HTML and images and forces links safe.
-  //
-  // The Work Card is a sibling of the bubble, not part of it: what the Agent
-  // said and what a Work is doing are two different objects, and nesting the
-  // card inside the message made them read as one.
+  const navigate = useNavigate();
+  const [creatingTask, setCreatingTask] = useState(false);
+  const [taskTitle, setTaskTitle] = useState(message.body.slice(0, 120));
+  const [taskDescription, setTaskDescription] = useState(message.body);
+  const [savingTask, setSavingTask] = useState(false);
+  const [taskError, setTaskError] = useState<string | null>(null);
+
+  async function createTask(): Promise<void> {
+    if (!taskTitle.trim() || savingTask) return;
+    setSavingTask(true);
+    setTaskError(null);
+    try {
+      const detail = await workOrganizationClient.createWorkItem({
+        title: taskTitle.trim(),
+        description: taskDescription.trim() || null,
+        sourceConversationId: message.conversationId,
+        sourceMessageId: message.id,
+      });
+      navigate(`/tasks/${encodeURIComponent(detail.work_item.id)}`);
+    } catch (reason) {
+      setTaskError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setSavingTask(false);
+    }
+  }
+
   return (
     <>
-      <article className="chat-message" data-author-type={message.authorType}>
-        {message.authorType === 'principal' ? (
-          <p>{message.body}</p>
-        ) : (
-          <AssistantMarkdown text={message.body} />
-        )}
-      </article>
+      <div className="chat-message-with-actions">
+        <article className="chat-message" data-author-type={message.authorType}>
+          {message.authorType === 'principal' ? (
+            <p>{message.body}</p>
+          ) : (
+            <AssistantMarkdown text={message.body} />
+          )}
+        </article>
+        <button
+          type="button"
+          className="chat-message-task-action"
+          aria-label="Create Task from this message"
+          onClick={() => setCreatingTask((value) => !value)}
+        >
+          ☑ Create task
+        </button>
+      </div>
+      {creatingTask ? (
+        <form
+          className="chat-task-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void createTask();
+          }}
+        >
+          <strong>Create Task from message</strong>
+          <label>
+            Title
+            <input
+              autoFocus
+              value={taskTitle}
+              maxLength={200}
+              onChange={(event) => setTaskTitle(event.target.value)}
+            />
+          </label>
+          <label>
+            Description
+            <textarea
+              rows={3}
+              value={taskDescription}
+              onChange={(event) => setTaskDescription(event.target.value)}
+            />
+          </label>
+          {taskError ? <p className="chat-task-error" role="alert">{taskError}</p> : null}
+          <div>
+            <button type="button" onClick={() => setCreatingTask(false)}>Cancel</button>
+            <button type="submit" disabled={savingTask || !taskTitle.trim()}>
+              {savingTask ? 'Creating…' : 'Create Task'}
+            </button>
+          </div>
+        </form>
+      ) : null}
       {showWorkCard ? (
         <WorkCard
           workRef={message.workRef}
@@ -97,24 +160,8 @@ export function ChatTranscript({
     return <StateMessage>No messages in this conversation yet.</StateMessage>;
   }
 
-  // A Coworker turn runs against a real provider and its execution budget is
-  // minutes, not seconds. The transcript polls, so the reply does arrive, but
-  // until it does the user was looking at their own message with no feedback.
-  //
-  // Deliberately worded as waiting, not as "the Agent is running": the message
-  // projection carries no dispatch state, so the browser genuinely does not
-  // know whether a Run is active, queued behind an earlier turn, or already
-  // failed. Claiming otherwise would be the frontend inventing product state.
   const lastMessage = state.messages[state.messages.length - 1];
   const awaitingReply = lastMessage?.authorType === 'principal';
-
-  // One Work is one card. Every message the Coworker sends while a Work runs
-  // carries the same workRef — the opening reply and each work_wake follow-up —
-  // so a card per message meant three cards for one Work, each polling the same
-  // projection and each claiming to be the current state. The card is anchored
-  // at the message that first referenced the Work, which is where the Work
-  // entered the conversation: it keeps its position while its content refreshes
-  // in place, and every later message stays what it is, a message.
   const cardAnchorByWork = new Map<string, number>();
   for (const message of state.messages) {
     if (message.workRef && !cardAnchorByWork.has(message.workRef))

@@ -164,7 +164,7 @@ pnpm canary:golden-path
 
 A runtime canary validates current external compatibility: provider credentials, Paseo startup, model normalization, tool visibility, and one real turn.
 
-A product canary validates a representative host-native API/Web/runtime journey. It may fail for external reasons even when deterministic product scenarios are green; that distinction is intentional and diagnostic.
+A product canary validates a representative host-native API/Web/runtime journey. The Golden Path canary keeps one runtime lifecycle and runs two ordered browser phases: empty-product Coworker/Capability/Work authoring, then normal bootstrap followed by the retained ProductSession live/replay check. It may fail for external reasons even when deterministic product scenarios are green; that distinction is intentional and diagnostic.
 
 ## Acceptance
 

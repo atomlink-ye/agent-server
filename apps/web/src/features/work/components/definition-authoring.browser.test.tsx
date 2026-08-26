@@ -55,9 +55,7 @@ const definitionVersion = ProductWorkDefinitionVersionSchema.parse({
     spec: {
       kind: 'collaboration',
       lead: { name: 'Lead', worker_version_id: leadVersionId },
-      members: [
-        { name: 'Researcher', worker_version_id: researcherVersionId },
-      ],
+      members: [{ name: 'Researcher', worker_version_id: researcherVersionId }],
       environment_version_id: environmentVersionId,
       memory_version_ids: [],
       input_schema: {

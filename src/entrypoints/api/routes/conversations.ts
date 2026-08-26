@@ -16,25 +16,13 @@ import { readBoundedJson } from '../read-bounded-json.js';
 import type { ApiEnvironment } from '../http-types.js';
 import type { AppConfig } from '../../../shared/config.js';
 import { HttpError } from '../../../contracts/http.js';
+import {
+  CreateConversationRequestSchema,
+  PostConversationMessageRequestSchema,
+} from '../../../contracts/conversations.js';
 
 const BASE = '/api/v1/conversations';
 const MAX_REQUEST_BYTES = 64 * 1024;
-
-const createConversationSchema = z
-  .object({
-    agent_definition_id: z.string().trim().min(1).max(256),
-  })
-  .strict();
-
-const messageSchema = z
-  .object({
-    body: z
-      .string()
-      .trim()
-      .min(1)
-      .max(64 * 1024),
-  })
-  .strict();
 
 const readSchema = z
   .object({
@@ -83,7 +71,7 @@ export function registerConversationRoutes(
   });
 
   app.post(BASE, async (c) => {
-    const parsed = createConversationSchema.safeParse(
+    const parsed = CreateConversationRequestSchema.safeParse(
       await readBoundedJson(c.req.raw, MAX_REQUEST_BYTES),
     );
     if (!parsed.success) throw invalidRequest();
@@ -137,7 +125,7 @@ export function registerConversationRoutes(
 
   app.post(`${BASE}/:conversationId/messages`, async (c) => {
     const conversation = await requireConversation(c, dependencies);
-    const parsed = messageSchema.safeParse(
+    const parsed = PostConversationMessageRequestSchema.safeParse(
       await readBoundedJson(c.req.raw, MAX_REQUEST_BYTES),
     );
     if (!parsed.success) throw invalidRequest();

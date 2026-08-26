@@ -25,6 +25,15 @@ import {
   WorkListResponseSchema,
   WorkRunListResponseSchema,
 } from '../../../contracts/product-accepted-subset/index.js';
+import {
+  ChatWorkCardSchema,
+  ConversationListResponseSchema,
+  ConversationMessagesResponseSchema,
+  ConversationPostResponseSchema,
+  ConversationReadResponseSchema,
+  CreateConversationRequestSchema,
+  PostConversationMessageRequestSchema,
+} from '../../../contracts/conversations.js';
 import type { ApiEnvironment } from '../http-types.js';
 import type { AppConfig } from '../../../shared/config.js';
 import type { Logger } from '../../../shared/observability/logger.js';
@@ -39,81 +48,6 @@ import {
 
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const publicConversationSchema = z.object({
-  conversation_id: z.string().min(1),
-  kind: z.enum(['direct', 'group']),
-  title: z.string().nullable(),
-  direct_agent: z
-    .object({
-      agent_definition_id: z.string().min(1),
-      display_name: z.string().nullable(),
-    })
-    .nullable(),
-  topic: z.string().nullable(),
-  created_at: z.string().min(1),
-  updated_at: z.string().min(1),
-});
-const publicConversationMessageSchema = z.object({
-  message_id: z.string().min(1),
-  conversation_id: z.string().min(1),
-  sequence: z.number().int().positive(),
-  author_type: z.enum(['principal', 'agent_definition']),
-  author_id: z.string().min(1),
-  body: z.string().min(1),
-  agent_definition_id: z.string().nullable(),
-  agent_version_id: z.string().nullable(),
-  runtime_epoch: z.number().int().nullable(),
-  work_ref: z.string().nullable(),
-  created_at: z.string().min(1),
-});
-const publicChatWorkCardSchema = z.object({
-  workId: z.string().min(1),
-  workRef: z.string().min(1),
-  title: z.string().min(1),
-  productState: z.enum([
-    'running',
-    'needs_you',
-    'complete',
-    'problem',
-    'not_captured',
-  ]),
-  problemKind: z.enum(['failed', 'cancelled', 'not_captured']).nullable(),
-  attentionReason: z
-    .enum(['completion_approval_pending', 'not_captured'])
-    .nullable(),
-  resultSummary: z.string().nullable(),
-  resultCaptureStatus: z.enum([
-    'present',
-    'not_present',
-    'redacted',
-    'not_captured',
-  ]),
-});
-const conversationListSchema = z.object({
-  conversations: z.array(publicConversationSchema),
-});
-const conversationReadSchema = z.object({
-  conversation: publicConversationSchema,
-});
-const conversationMessagesSchema = z.object({
-  messages: z.array(publicConversationMessageSchema),
-});
-const conversationPostSchema = z.object({
-  message: publicConversationMessageSchema,
-  dispatch_enqueued: z.boolean(),
-});
-const createConversationRequestSchema = z
-  .object({ agent_definition_id: z.string().trim().min(1).max(256) })
-  .strict();
-const postConversationRequestSchema = z
-  .object({
-    body: z
-      .string()
-      .trim()
-      .min(1)
-      .max(64 * 1024),
-  })
-  .strict();
 const workDefinitionAuthoringErrorSchema = z.union([
   WorkDefinitionValidateFailureSchema,
   ErrorResponseSchema,
@@ -161,11 +95,11 @@ export function registerBrowserWebRoutes(
       config,
       logger,
       '/api/v1/conversations',
-      conversationListSchema,
+      ConversationListResponseSchema,
     ),
   );
   app.post('/api/conversations', async (c) => {
-    const parsed = createConversationRequestSchema.safeParse(
+    const parsed = CreateConversationRequestSchema.safeParse(
       await c.req.json().catch(() => undefined),
     );
     if (!parsed.success) return invalidRequest();
@@ -174,7 +108,7 @@ export function registerBrowserWebRoutes(
       logger,
       '/api/v1/conversations',
       parsed.data,
-      conversationReadSchema,
+      ConversationReadResponseSchema,
       { successStatus: 201 },
     );
   });
@@ -185,7 +119,7 @@ export function registerBrowserWebRoutes(
       config,
       logger,
       `/api/v1/conversations/${encodeURIComponent(id)}`,
-      conversationReadSchema,
+      ConversationReadResponseSchema,
     );
   });
   app.get('/api/conversations/:conversationId/messages', async (c) => {
@@ -195,13 +129,13 @@ export function registerBrowserWebRoutes(
       config,
       logger,
       `/api/v1/conversations/${encodeURIComponent(id)}/messages`,
-      conversationMessagesSchema,
+      ConversationMessagesResponseSchema,
     );
   });
   app.post('/api/conversations/:conversationId/messages', async (c) => {
     const id = c.req.param('conversationId');
     if (!isId(id)) return invalidRequest();
-    const parsed = postConversationRequestSchema.safeParse(
+    const parsed = PostConversationMessageRequestSchema.safeParse(
       await c.req.json().catch(() => undefined),
     );
     if (!parsed.success) return invalidRequest();
@@ -210,7 +144,7 @@ export function registerBrowserWebRoutes(
       logger,
       `/api/v1/conversations/${encodeURIComponent(id)}/messages`,
       parsed.data,
-      conversationPostSchema,
+      ConversationPostResponseSchema,
       { successStatus: 202 },
     );
   });
@@ -253,7 +187,7 @@ export function registerBrowserWebRoutes(
       config,
       logger,
       `/api/v1/works/${encodeURIComponent(workId)}/chat-card`,
-      publicChatWorkCardSchema,
+      ChatWorkCardSchema,
       { notFoundCode: 'work_not_found' },
     );
   });

@@ -4,6 +4,7 @@ export class ProductReadError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    readonly code: string | null = null,
   ) {
     super(message);
     this.name = 'ProductReadError';
@@ -28,7 +29,7 @@ export async function readProductJson(
     return await apiTransport.request(path, init);
   } catch (error) {
     if (error instanceof ApiTransportError) {
-      throw new ProductReadError(error.message, error.status);
+      throw new ProductReadError(error.message, error.status, error.code);
     }
     throw error;
   }

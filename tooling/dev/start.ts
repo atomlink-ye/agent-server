@@ -54,6 +54,14 @@ async function readGeneratedWebEnv(): Promise<NodeJS.ProcessEnv> {
   }
 }
 
+function describeRuntimeBanner(environment: NodeJS.ProcessEnv): string {
+  const adapter = environment.RUNTIME_ADAPTER ?? 'none';
+  const directChatPlane = environment.AGENT_SERVER_DIRECT_CHAT_PLANE ?? 'mock';
+  const productWorkPlane =
+    environment.AGENT_SERVER_PRODUCT_WORK_PLANE ?? 'absent';
+  return `runtime=${adapter} (direct-chat=${directChatPlane}, product-work=${productWorkPlane})`;
+}
+
 function exitOf(
   child: ChildProcess,
 ): Promise<{ code: number; signal: string | null }> {
@@ -149,9 +157,7 @@ export async function startHostDevelopment(
         `host-native dev ready: mode=${mode}`,
         `api=${apiBaseUrl}`,
         'web=http://127.0.0.1:3001',
-        mode === 'runtime'
-          ? 'runtime=paseo (host-native helper)'
-          : 'runtime=disabled (direct chat uses deterministic mock; Product Work execution is absent)',
+        describeRuntimeBanner(applicationEnvironment),
         'bootstrap=agent/environment/team/workspace ready',
         '',
       ].join('\n'),

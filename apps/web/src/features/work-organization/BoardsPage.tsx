@@ -7,19 +7,27 @@ import type {
 } from '@atomlink-ye/agent-server/product-contract';
 
 import TitleBar from '../../app/shell/TitleBar';
+import { isFeatureUnavailable } from '../../api/feature-availability';
 import { workOrganizationClient } from './client';
 import './work-organization.css';
 
 const BOARDS_LOAD_ERROR =
   'Boards could not be loaded. Check your connection and try again.';
+const BOARDS_UNAVAILABLE =
+  "This workspace doesn't currently offer Board organization.";
 const BOARDS_ACTION_ERROR =
   'That Board change could not be saved. Please try again.';
 
 type RecoverableError = {
-  readonly source: 'list' | 'snapshot' | 'action';
+  readonly source: 'snapshot' | 'action';
   readonly message: string;
   readonly retry?: () => void;
 };
+
+// The left pane's "No Boards yet." claim is a factual statement about the
+// user's data. It must only be reachable from a successful load, never from
+// "we could not ask" (error) or "this capability is off" (unavailable).
+type ListStatus = 'loading' | 'ready' | 'unavailable' | 'error';
 
 export interface BoardsPageProps {
   readonly selectedBoardId?: string | null;
@@ -29,30 +37,24 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
   const navigate = useNavigate();
   const [boards, setBoards] = useState<readonly WorkBoardDto[]>([]);
   const [snapshot, setSnapshot] = useState<WorkBoardSnapshotDto | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [listStatus, setListStatus] = useState<ListStatus>('loading');
   const [error, setError] = useState<RecoverableError | null>(null);
   const [creatingBoard, setCreatingBoard] = useState(false);
   const [newBoardTitle, setNewBoardTitle] = useState('');
 
   const loadBoards = useCallback(async () => {
-    setLoading(true);
+    setListStatus('loading');
     try {
       const next = await workOrganizationClient.listBoards();
       setBoards(next);
-      setError((current) => (current?.source === 'list' ? null : current));
+      setListStatus('ready');
       if (!selectedBoardId && next[0]) {
         navigate(`/boards/${encodeURIComponent(next[0].id)}`, {
           replace: true,
         });
       }
-    } catch {
-      setError({
-        source: 'list',
-        message: BOARDS_LOAD_ERROR,
-        retry: () => void loadBoards(),
-      });
-    } finally {
-      setLoading(false);
+    } catch (reason) {
+      setListStatus(isFeatureUnavailable(reason) ? 'unavailable' : 'error');
     }
   }, [navigate, selectedBoardId]);
 
@@ -108,6 +110,7 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
           <button
             type="button"
             className="work-org-primary"
+            disabled={listStatus === 'unavailable' || listStatus === 'error'}
             onClick={() => setCreatingBoard(true)}
           >
             + Board
@@ -132,26 +135,43 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
           </form>
         ) : null}
         <div className="work-org-list">
-          {loading && boards.length === 0 ? (
+          {listStatus === 'loading' && boards.length === 0 ? (
             <p className="pane-placeholder">Loading Boards…</p>
           ) : null}
-          {!loading && boards.length === 0 ? (
+          {listStatus === 'unavailable' ? (
+            <div className="pane-placeholder" role="status">
+              <p>{BOARDS_UNAVAILABLE}</p>
+            </div>
+          ) : null}
+          {listStatus === 'error' ? (
+            <div className="pane-placeholder" role="alert">
+              <p>{BOARDS_LOAD_ERROR}</p>
+              <button type="button" onClick={() => void loadBoards()}>
+                Retry
+              </button>
+            </div>
+          ) : null}
+          {listStatus === 'ready' && boards.length === 0 ? (
             <p className="pane-placeholder">No Boards yet.</p>
           ) : null}
-          {boards.map((board) => (
-            <button
-              type="button"
-              className="work-org-list-item"
-              data-active={selectedBoardId === board.id ? 'true' : 'false'}
-              key={board.id}
-              onClick={() =>
-                navigate(`/boards/${encodeURIComponent(board.id)}`)
-              }
-            >
-              <strong>{board.title}</strong>
-              <small>{board.description ?? 'Shared human + Agent board'}</small>
-            </button>
-          ))}
+          {listStatus === 'ready'
+            ? boards.map((board) => (
+                <button
+                  type="button"
+                  className="work-org-list-item"
+                  data-active={selectedBoardId === board.id ? 'true' : 'false'}
+                  key={board.id}
+                  onClick={() =>
+                    navigate(`/boards/${encodeURIComponent(board.id)}`)
+                  }
+                >
+                  <strong>{board.title}</strong>
+                  <small>
+                    {board.description ?? 'Shared human + Agent board'}
+                  </small>
+                </button>
+              ))
+            : null}
         </div>
       </aside>
 
@@ -183,6 +203,7 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
             <button
               type="button"
               className="work-org-primary"
+              disabled={listStatus === 'unavailable' || listStatus === 'error'}
               onClick={() => setCreatingBoard(true)}
             >
               + Board
@@ -198,7 +219,26 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
               ) : null}
             </div>
           ) : null}
-          {creatingBoard ? (
+          {listStatus === 'unavailable' ? (
+            <div className="work-main-empty" data-testid="boards-unavailable">
+              <span className="work-main-icon" aria-hidden="true">
+                ▦
+              </span>
+              <h1>Boards aren&apos;t available</h1>
+              <p>{BOARDS_UNAVAILABLE}</p>
+            </div>
+          ) : listStatus === 'error' ? (
+            <div className="work-main-empty" data-testid="boards-error">
+              <span className="work-main-icon" aria-hidden="true">
+                ▦
+              </span>
+              <h1>Boards could not be loaded</h1>
+              <p>{BOARDS_LOAD_ERROR}</p>
+              <button type="button" onClick={() => void loadBoards()}>
+                Retry
+              </button>
+            </div>
+          ) : creatingBoard ? (
             <BoardCreationForm
               className="work-org-board-create--mobile"
               title={newBoardTitle}
@@ -206,8 +246,7 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
               onChange={setNewBoardTitle}
               onSubmit={createBoard}
             />
-          ) : null}
-          {snapshot ? (
+          ) : snapshot ? (
             <BoardCanvas
               snapshot={snapshot}
               onSnapshot={setSnapshot}

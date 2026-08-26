@@ -8,6 +8,7 @@ import type {
 import TitleBar from '../../app/shell/TitleBar';
 import { loadCoworkers } from '../agents/agents-gateway';
 import type { Coworker } from '../agents/contracts';
+import { isFeatureUnavailable } from '../../api/feature-availability';
 import { workOrganizationClient } from './client';
 import type { PublishedWorkDefinition } from './client';
 import './work-organization.css';
@@ -21,14 +22,22 @@ const STATUS_LABELS: Record<WorkItemStatus, string> = {
 
 const TASKS_LOAD_ERROR =
   'Tasks could not be loaded. Check your connection and try again.';
+const TASKS_UNAVAILABLE =
+  "This workspace doesn't currently offer Task tracking.";
 const TASKS_ACTION_ERROR =
   'That Task change could not be saved. Please try again.';
 
 type RecoverableError = {
-  readonly source: 'list' | 'comments' | 'action';
+  readonly source: 'comments' | 'action';
   readonly message: string;
   readonly retry?: () => void;
 };
+
+// The left pane's "No Tasks in this view." claim is a factual statement
+// about the user's data. It must only be reachable from a successful load,
+// never from "we could not ask" (error) or "this capability is off"
+// (unavailable) — those get their own honest, mutually exclusive states.
+type ListStatus = 'loading' | 'ready' | 'unavailable' | 'error';
 
 export interface TasksPageProps {
   readonly selectedWorkItemId?: string | null;
@@ -42,13 +51,13 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
   const [comments, setComments] = useState<
     Awaited<ReturnType<typeof workOrganizationClient.listComments>>
   >([]);
-  const [loading, setLoading] = useState(true);
+  const [listStatus, setListStatus] = useState<ListStatus>('loading');
   const [error, setError] = useState<RecoverableError | null>(null);
   const [creating, setCreating] = useState(false);
   const [filter, setFilter] = useState<WorkItemStatus | 'all'>('all');
 
   const load = useCallback(async () => {
-    setLoading(true);
+    setListStatus('loading');
     try {
       const [nextItems, nextAgents] = await Promise.all([
         workOrganizationClient.listWorkItems(),
@@ -56,7 +65,7 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
       ]);
       setItems(nextItems);
       setAgents(nextAgents);
-      setError((current) => (current?.source === 'list' ? null : current));
+      setListStatus('ready');
       if (selectedWorkItemId) {
         const detail = nextItems.find(
           (entry) => entry.work_item.id === selectedWorkItemId,
@@ -67,14 +76,8 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
           setItems((current) => [fetched, ...current]);
         }
       }
-    } catch {
-      setError({
-        source: 'list',
-        message: TASKS_LOAD_ERROR,
-        retry: () => void load(),
-      });
-    } finally {
-      setLoading(false);
+    } catch (reason) {
+      setListStatus(isFeatureUnavailable(reason) ? 'unavailable' : 'error');
     }
   }, [selectedWorkItemId]);
 
@@ -152,6 +155,7 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
           <button
             type="button"
             className="work-org-primary"
+            disabled={listStatus === 'unavailable' || listStatus === 'error'}
             onClick={() => setCreating(true)}
           >
             + Task
@@ -172,10 +176,23 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
           )}
         </div>
         <div className="work-org-list">
-          {loading && items.length === 0 ? (
+          {listStatus === 'loading' && items.length === 0 ? (
             <p className="pane-placeholder">Loading Tasks…</p>
           ) : null}
-          {!loading && visibleItems.length === 0 ? (
+          {listStatus === 'unavailable' ? (
+            <div className="pane-placeholder" role="status">
+              <p>{TASKS_UNAVAILABLE}</p>
+            </div>
+          ) : null}
+          {listStatus === 'error' ? (
+            <div className="pane-placeholder" role="alert">
+              <p>{TASKS_LOAD_ERROR}</p>
+              <button type="button" onClick={() => void load()}>
+                Retry
+              </button>
+            </div>
+          ) : null}
+          {listStatus === 'ready' && visibleItems.length === 0 ? (
             <div className="pane-placeholder">
               <p>No Tasks in this view.</p>
               {filter !== 'all' ? (
@@ -185,31 +202,33 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
               ) : null}
             </div>
           ) : null}
-          {visibleItems.map((entry) => (
-            <button
-              type="button"
-              key={entry.work_item.id}
-              className="work-org-list-item"
-              data-active={
-                selectedWorkItemId === entry.work_item.id ? 'true' : 'false'
-              }
-              onClick={() =>
-                navigate(`/tasks/${encodeURIComponent(entry.work_item.id)}`)
-              }
-            >
-              <span
-                className={`work-org-status work-org-status--${entry.work_item.status}`}
-              >
-                {STATUS_LABELS[entry.work_item.status]}
-              </span>
-              <strong>{entry.work_item.title}</strong>
-              <small>
-                {entry.work_item.assignee_id
-                  ? `Assigned · ${entry.work_item.assignee_id}`
-                  : 'Unassigned'}
-              </small>
-            </button>
-          ))}
+          {listStatus === 'ready'
+            ? visibleItems.map((entry) => (
+                <button
+                  type="button"
+                  key={entry.work_item.id}
+                  className="work-org-list-item"
+                  data-active={
+                    selectedWorkItemId === entry.work_item.id ? 'true' : 'false'
+                  }
+                  onClick={() =>
+                    navigate(`/tasks/${encodeURIComponent(entry.work_item.id)}`)
+                  }
+                >
+                  <span
+                    className={`work-org-status work-org-status--${entry.work_item.status}`}
+                  >
+                    {STATUS_LABELS[entry.work_item.status]}
+                  </span>
+                  <strong>{entry.work_item.title}</strong>
+                  <small>
+                    {entry.work_item.assignee_id
+                      ? `Assigned · ${entry.work_item.assignee_id}`
+                      : 'Unassigned'}
+                  </small>
+                </button>
+              ))
+            : null}
         </div>
       </aside>
 
@@ -241,6 +260,7 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
             <button
               type="button"
               className="work-org-primary"
+              disabled={listStatus === 'unavailable' || listStatus === 'error'}
               onClick={() => setCreating(true)}
             >
               + Task
@@ -256,7 +276,26 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
               ) : null}
             </div>
           ) : null}
-          {creating ? (
+          {listStatus === 'unavailable' ? (
+            <div className="work-main-empty" data-testid="tasks-unavailable">
+              <span className="work-main-icon" aria-hidden="true">
+                ☑
+              </span>
+              <h1>Tasks aren&apos;t available</h1>
+              <p>{TASKS_UNAVAILABLE}</p>
+            </div>
+          ) : listStatus === 'error' ? (
+            <div className="work-main-empty" data-testid="tasks-error">
+              <span className="work-main-icon" aria-hidden="true">
+                ☑
+              </span>
+              <h1>Tasks could not be loaded</h1>
+              <p>{TASKS_LOAD_ERROR}</p>
+              <button type="button" onClick={() => void load()}>
+                Retry
+              </button>
+            </div>
+          ) : creating ? (
             <CreateTaskForm
               agents={agents}
               source={location.state}

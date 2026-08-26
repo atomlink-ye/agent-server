@@ -393,7 +393,7 @@ describe('managed agent HTTP contracts', () => {
   // create-resource-capabilities.ts
   // imports/registers it in installHttp; this fixes an incomplete test-only
   // graph rather than expanding the contract.
-  it('exposes exactly the eight approved managed Agent routes', async () => {
+  it('exposes exactly the nine approved managed Agent routes', async () => {
     const app = await createTestApp(new FakeAgentRuntime(), {
       startDispatcher: false,
     });
@@ -413,6 +413,7 @@ describe('managed agent HTTP contracts', () => {
         'GET /api/v1/agents/:agentId/profile',
         'POST /api/v1/agent-packages:validate',
         'POST /api/v1/agent-versions/:versionId:publish',
+        'POST /api/v1/agents/:agentId/capabilities',
         'POST /api/v1/agents:import',
       ].sort(),
     );

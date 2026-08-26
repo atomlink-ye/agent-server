@@ -21,6 +21,8 @@ export class ListAgentWorkflows {
     const definitions = await this.repository.listDefinitionsForAgent({
       tenantId: input.accessContext.tenantId,
       workspaceId: input.accessContext.workspaceId,
+      principalType: input.accessContext.principalType,
+      principalId: input.accessContext.principalId,
       agentDefinitionId: input.agentDefinitionId,
     });
     return { definitions };

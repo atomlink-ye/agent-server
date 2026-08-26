@@ -511,7 +511,9 @@ export function registerProductWorkMcpTools(input: {
           if (
             !definition ||
             definition.owner.tenantId !== current.tenantId ||
-            definition.owner.workspaceId !== current.workspaceId
+            definition.owner.workspaceId !== current.workspaceId ||
+            definition.owner.principalType !== 'service_account' ||
+            definition.owner.principalId !== current.principalId
           )
             return {
               isError: true,
@@ -520,6 +522,8 @@ export function registerProductWorkMcpTools(input: {
           await definitions.associateAgentWorkflow({
             tenantId: current.tenantId,
             workspaceId: current.workspaceId,
+            principalType: 'service_account',
+            principalId: current.principalId,
             agentDefinitionId: args.agent_definition_id,
             definitionId: args.definition_id,
             definitionVersionId: args.definition_version_id,
@@ -677,6 +681,8 @@ export function registerProductWorkMcpTools(input: {
           const bindings = await input.definitions.listAgentWorkBindings({
             tenantId: current.tenantId,
             workspaceId: current.workspaceId,
+            principalType: 'service_account',
+            principalId: current.principalId,
             agentDefinitionId: args.agent_definition_id,
           });
           const startable = bindings.map(({ definition, version }) => ({

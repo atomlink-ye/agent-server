@@ -116,6 +116,24 @@
   background: var(--paper);
   font-size: 13px;
 }
+.new-work-form__link {
+  display: block;
+  margin-top: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink-900);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+}
+.new-work-form__recovery {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
 .new-work-form__actions {
   display: flex;
   justify-content: flex-end;

@@ -158,7 +158,7 @@ describe('web Product Golden Path', () => {
       const savedBinding = await bindingResponse;
       if (!savedBinding.ok()) {
         throw new Error(
-          `Capability binding failed (${savedBinding.status()}): ${await boundedErrorBody(savedBinding)}`,
+          `Capability binding failed (${savedBinding.status()}): ${await boundedErrorBody(savedBinding)} request=${sanitizedBindingRequest(savedBinding)}`,
         );
       }
       expect(savedBinding.status()).toBe(200);
@@ -305,4 +305,24 @@ async function boundedErrorBody(
   } catch {
     return 'The service returned an invalid error response.';
   }
+}
+
+function sanitizedBindingRequest(
+  response: import('playwright').Response,
+): string {
+  const raw = response.request().postData();
+  if (!raw) return '{}';
+  try {
+    const value = JSON.parse(raw) as Record<string, unknown>;
+    return JSON.stringify({
+      definition_id: boundedRequestValue(value.definition_id),
+      definition_version_id: boundedRequestValue(value.definition_version_id),
+    });
+  } catch {
+    return '{}';
+  }
+}
+
+function boundedRequestValue(value: unknown): string | null {
+  return typeof value === 'string' ? value.slice(0, 128) : null;
 }

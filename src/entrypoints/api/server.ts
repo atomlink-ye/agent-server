@@ -6,6 +6,7 @@ import { createLogger } from '../../shared/observability/logger.js';
 import { registerBrowserContextRoutes } from './routes/browser-context.js';
 import { registerBrowserCoworkerRoutes } from './routes/browser-coworkers.js';
 import { registerBrowserWebRoutes } from './routes/browser-web.js';
+import { registerBrowserWorkOrganizationRoutes } from './routes/browser-work-organization.js';
 import { shutdownService } from './shutdown.js';
 
 const config = loadConfig();
@@ -29,6 +30,7 @@ if (
 registerBrowserCoworkerRoutes(app, config);
 registerBrowserContextRoutes(app, config);
 registerBrowserWebRoutes(app, config, logger);
+registerBrowserWorkOrganizationRoutes(app, config);
 
 const server = serve(
   {

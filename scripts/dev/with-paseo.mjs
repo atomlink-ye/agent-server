@@ -241,58 +241,106 @@ if (command.length === 0) {
     ].join('\n'),
     { mode: 0o600 },
   );
-  const paseo = await startPaseo({
-    repositoryRoot,
-    runtimeRoot,
-    port: paseoPort,
-    listenHost: paseoListenHost,
-    environmentVariableNames: paseoEnvironmentNames,
-  });
-  process.stderr.write(
-    `with-paseo phase=paseo-start elapsed_ms=${Date.now() - startedAt}\n`,
-  );
-
-  const child = spawn(command[0], command.slice(1), {
-    cwd: repositoryRoot,
-    env: createApplicationEnvironment({
-      paseoEnvironment: paseo.environment,
-      environment: process.env,
-      paseoWsUrl: paseo.wsUrl,
-      agentWorkspace,
-    }),
-    detached: process.platform !== 'win32',
-    stdio: 'inherit',
-  });
-  process.stderr.write(
-    `with-paseo phase=api-spawn elapsed_ms=${Date.now() - startedAt}\n`,
-  );
-
+  let paseo;
+  let child;
+  let cleanupStarted = false;
   let stopping;
+  const ownedChildren = new Set();
   const stop = () => {
-    stopping ??= Promise.allSettled([
-      stopProcessTree(child),
-      stopProcessTree(paseo.child),
-    ]);
+    cleanupStarted = true;
+    stopping ??= Promise.allSettled(
+      [...ownedChildren].map((ownedChild) => stopProcessTree(ownedChild)),
+    );
     return stopping;
   };
-  for (const signal of ['SIGINT', 'SIGTERM']) {
-    process.once(signal, () => {
-      void stop().finally(() => {
-        process.exitCode = signal === 'SIGINT' ? 130 : 143;
-        process.exit();
-      });
-    });
+  const register = (ownedChild) => {
+    ownedChildren.add(ownedChild);
+    if (cleanupStarted) {
+      const childCleanup = stopProcessTree(ownedChild);
+      stopping = stopping
+        ? Promise.all([stopping, childCleanup]).then(() => undefined)
+        : childCleanup;
+    }
+  };
+  const signalExitCodes = { SIGINT: 130, SIGTERM: 143, SIGHUP: 129 };
+  let requestedSignal;
+  let resolveSignal;
+  const signal = new Promise((resolveSignalValue) => {
+    resolveSignal = resolveSignalValue;
+  });
+  const signalHandlers = new Map();
+  for (const signalName of Object.keys(signalExitCodes)) {
+    const handler = () => {
+      if (requestedSignal) return;
+      requestedSignal = signalName;
+      process.exitCode = signalExitCodes[signalName];
+      resolveSignal(signalName);
+      void stop();
+    };
+    signalHandlers.set(signalName, handler);
+    process.on(signalName, handler);
   }
 
-  const exitCode = await new Promise((resolveExit) => {
-    child.once('exit', (code, signal) => {
-      resolveExit(code ?? (signal ? 1 : 0));
+  let startupError;
+  try {
+    paseo = await startPaseo({
+      repositoryRoot,
+      runtimeRoot,
+      port: paseoPort,
+      listenHost: paseoListenHost,
+      environmentVariableNames: paseoEnvironmentNames,
+      onChild: register,
     });
-    child.once('error', (error) => {
-      process.stderr.write(`${error.message}\n`);
-      resolveExit(1);
+  } catch (error) {
+    startupError = error;
+  }
+  if (startupError && !requestedSignal) throw startupError;
+  if (startupError || requestedSignal) {
+    await stop();
+    for (const [signalName, handler] of signalHandlers) {
+      process.removeListener(signalName, handler);
+    }
+    process.exitCode = signalExitCodes[requestedSignal];
+  } else {
+    process.stderr.write(
+      `with-paseo phase=paseo-start elapsed_ms=${Date.now() - startedAt}\n`,
+    );
+    child = spawn(command[0], command.slice(1), {
+      cwd: repositoryRoot,
+      env: createApplicationEnvironment({
+        paseoEnvironment: paseo.environment,
+        environment: process.env,
+        paseoWsUrl: paseo.wsUrl,
+        agentWorkspace,
+      }),
+      detached: process.platform !== 'win32',
+      stdio: 'inherit',
     });
-  });
-  await stopProcessTree(paseo.child);
-  process.exitCode = exitCode;
+    register(child);
+    process.stderr.write(
+      `with-paseo phase=api-spawn elapsed_ms=${Date.now() - startedAt}\n`,
+    );
+
+    const exitCode = await Promise.race([
+      new Promise((resolveExit) => {
+        child.once('exit', (code, childSignal) => {
+          resolveExit(code ?? (childSignal ? 1 : 0));
+        });
+        child.once('error', (error) => {
+          process.stderr.write(`${error.message}\n`);
+          resolveExit(1);
+        });
+      }),
+      signal.then((signalName) => {
+        return signalExitCodes[signalName];
+      }),
+    ]);
+    await stop();
+    for (const [signalName, handler] of signalHandlers) {
+      process.removeListener(signalName, handler);
+    }
+    process.exitCode = requestedSignal
+      ? signalExitCodes[requestedSignal]
+      : exitCode;
+  }
 }

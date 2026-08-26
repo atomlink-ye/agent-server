@@ -8,6 +8,7 @@ import { registerBrowserWebRoutes } from './browser-web.js';
 
 const SERVICE_TOKEN = 'browser-service-secret';
 const WORK_ID = '11111111-1111-4111-8111-111111111111';
+const VERSION_ID = '22222222-2222-4222-8222-222222222222';
 
 function testConfig(): AppConfig {
   return {
@@ -132,6 +133,51 @@ describe('browser-safe Vite facade', () => {
       resultCaptureStatus: 'not_present',
     });
     expect(JSON.stringify(body)).not.toMatch(/taskId|runId|provider_session/u);
+  });
+
+  it('maps the authenticated Work Definition list to the browser selector contract', async () => {
+    process.env.AGENT_SERVER_SERVICE_TOKEN = SERVICE_TOKEN;
+    const upstream = vi.fn(
+      async (input: string | URL | Request, init?: RequestInit) => {
+        expect(String(input)).toContain('/api/v1/work-definitions?limit=100');
+        expect(new Headers(init?.headers).get('authorization')).toBe(
+          `Bearer ${SERVICE_TOKEN}`,
+        );
+        return new Response(
+          JSON.stringify({
+            items: [
+              {
+                definition_id: WORK_ID,
+                display_name: 'Research workflow',
+                current_published_version_id: VERSION_ID,
+              },
+            ],
+            next_cursor: null,
+            source_yaml: 'must-not-reach-browser',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      },
+    );
+    vi.stubGlobal('fetch', upstream);
+
+    const response = await appWithBrowserRoutes().request(
+      '/api/work-definitions',
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    const body = await response.json();
+    expect(body).toEqual({
+      items: [
+        {
+          definitionId: WORK_ID,
+          displayName: 'Research workflow',
+          currentPublishedVersionId: VERSION_ID,
+        },
+      ],
+    });
+    expect(JSON.stringify(body)).not.toContain('source_yaml');
+    expect(JSON.stringify(body)).not.toContain('next_cursor');
   });
 
   it('rejects malformed Work identifiers without contacting the authenticated upstream', async () => {

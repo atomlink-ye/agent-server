@@ -72,6 +72,7 @@ export interface WorkModuleHttpOptions {
 }
 
 export interface WorkModule {
+  readonly identity: Pick<WorkIdentityApi, 'createWork' | 'findWorkById'>;
   readonly projection: ProductProjectionApi;
   readonly execution: WorkExecutionService;
   readonly contextFiles: LogicalFileStore;
@@ -254,6 +255,7 @@ export function createWorkModule(options: CreateWorkModuleOptions): WorkModule {
   );
 
   return {
+    identity: workIdentity,
     projection,
     execution,
     contextFiles,

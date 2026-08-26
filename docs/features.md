@@ -7,17 +7,18 @@ This is the authoritative capability ledger. Status values are `implemented`, `b
 - **Identity and Access — Baseline.** Service-account bearer auth and server-derived owner scope. V1 destination: tenant, canonical user, OIDC/Lark, ACL, and richer service accounts.
 - **Agents and Teams — Baseline.** Cumora-style Coworker Agent identity is separated from formal Worker execution. Active Product Work uses `WorkerDefinition` / `WorkerVersion`, `single_worker`, Worker-only Team composition, exact owner scope, and a frozen WorkRun resource manifest. Agent Work Catalog bindings expose exact published WorkDefinition versions without making the Coworker an execution authority. V1 destination: dynamic rosters, nested Teams, and generalized graphs.
 - **Workspace and Memory — Baseline.** Authenticated PostgreSQL Memory Store → stable Memory → immutable Version API with SHA-256 CAS, no-op/revert semantics, exact owner scope, plus retained proposal/snapshot/Lark compatibility paths. V1 destination: retrieval, context assembly, memory policy, and broader Memory lifecycle.
+- **Coworker Work Organization — Baseline.** Workspace-scoped durable WorkItems (UI: Tasks), comments and Boards/columns/placements; persisted Conversation message → WorkItem; assignment; idempotent WorkItem → formal Work promotion; canonical Work completion → backend `in_review` projection; human `done`. V1 destination: notifications, richer review policy, Calendar/trigger integration, and multi-board projections when justified.
 - **Sessions, Tasks and Runs — Baseline.** Product `Definition → Work → WorkRun` lifecycle with typed WorkRun input, immutable resolved manifest, Product state/Trace projection, runtime binding, durable lifecycle events, final assistant Message, replayable SSE, owner-scoped cancellation, and the retained technical Task/Run execution tree. V1 destination: Runtime Session V2 create/resume/status, incremental deltas, retry, receipts, and recovery.
 - **Runtime, Tools and Credentials — Baseline.** Paseo/OpenCode Execution Plane with native Bootstrap/per-turn separation, reusable/fresh RuntimeSession policies, external Workspace binding, platform MCP capability admission, same-Agent continuation, zero-key model selection, sanitized runtime projections, and typed Tool activity. V1 destination: production isolation, placement, tool gateway, credential broker, approvals, and Agent Memory HTTP client.
 - **Artifacts and Evidence — Planned.** Result text only; Work-first Web deliberately renders Artifacts as unavailable rather than inferring deliverables. V1 destination: immutable Artifact versions, evidence, source lineage, and child lineage.
-- **Channels, API and Console — Baseline.** Product WorkDefinition `validate/plan/apply`, DefinitionVersion reads, Work/WorkRun Product APIs, Run Trace, fixed Lark compatibility, Developer CLI/client, and the single Vite Work/Coworker shell with server-side BFF routes. V1 destination: Web console, canonical identities, and broader Lark adapter.
+- **Channels, API and Console — Baseline.** Product WorkDefinition `validate/plan/apply`, DefinitionVersion reads, Work/WorkRun and WorkItem/Board Product APIs, Run Trace, fixed Lark compatibility, Developer CLI/client, and the single Vite Work/Coworker shell with server-side BFF routes. V1 destination: Web console, canonical identities, and broader Lark adapter.
 - **Schedules, Triggers and Delivery — Planned.** No current Product surface. V1 destination: idempotent admission, controlled schedules/events, and durable delivery.
 
 ## Identity and Access
 
 **Outcome:** one internal user and tenant authorization model across Web, API, Lark, OIDC, and service accounts.
 
-**Baseline:** Product Work, Work Definition, Task, Run, and Memory APIs require a configured service-account bearer token. The server resolves tenant/workspace/principal scope from that binding, persists scope/snapshot facts where admission requires them, scopes idempotency by owner, and hides foreign resources with owner-safe not-found behavior. This is still service-account MVE identity, not production user/membership authorization.
+**Baseline:** Product Work, Work Definition, WorkItem/Board, Task, Run, and Memory APIs require a configured service-account bearer token. The server resolves tenant/workspace/principal scope from that binding, persists scope/snapshot facts where admission requires them, scopes idempotency by owner, and hides foreign resources with owner-safe not-found behavior. This is still service-account MVE identity, not production user/membership authorization.
 
 **V1 acceptance:** external identities map to canonical users; membership and Workspace authorization are checked at admission and use; tenant storage isolation is tested; deprovisioning revokes future access; no caller may supply an effective principal. SAML/SCIM contracts may be reserved without claiming production support.
 
@@ -29,7 +30,7 @@ This is the authoritative capability ledger. Status values are `implemented`, `b
 
 **Worker baseline:** formal execution has an independent `WorkerDefinition`/`WorkerVersion` registry. Worker import/publish is idempotent and immutable, uses exact tenant/workspace/principal owner scope, and has no Chat publication side effect. The current Worker package grammar reuses hardened executable parsing introduced for managed Agents; this is parser reuse only and does not merge product identity or lifecycle.
 
-**Agent Teams v2 baseline:** a bounded Team has one Lead and a non-empty declared roster of WorkerVersion pins. `TeamDriver`, Workboard/Mailbox collaboration, participant activation, revision-fenced commands, bounded attempts, completion decisions, and addressed continuations live in the control plane. Platform Collaboration MCP is mounted as a platform capability and authorized at call time; it is not represented as a user/domain tool ref. Team coordination remains independent of a shared Paseo session.
+**Agent Teams v2 baseline:** a bounded Team has one Lead and a non-empty declared roster of WorkerVersion pins. `TeamDriver`, Workboard/Mailbox collaboration, participant activation, revision-fenced commands, bounded attempts, completion decisions, and addressed continuations live in the control plane. Platform Collaboration MCP is mounted as a platform capability and authorized at call time; it is not represented as a user/domain tool ref. Team coordination remains independent of a shared Paseo session. The execution-time Workboard is separate from the product Coworker Board that organizes WorkItems.
 
 **Composition-first Product baseline:** Product `WorkDefinition` authoring is canonically `single_worker` / `worker_version_id` or bounded collaboration over Worker versions. `validate` and `plan` are side-effect free; `apply` publishes an immutable Product DefinitionVersion, resolves exact Worker/Environment/Memory/Skill/Tool identities, and records a stable resolved fingerprint. Collaboration authors declare Lead/members rather than a Team ID; the internal Team binding remains an execution detail. Active Work materialization does not import or publish Agents.
 
@@ -51,11 +52,39 @@ Phase G adds a deterministic default-off memory policy with `disabled`, `proposa
 
 Phase H minimum release evidence is approved: the managed single-agent transcript, fault lane, recovery inspection, and operations packet are recorded. Production hardening and rollout readiness remain deferred.
 
-**V1 acceptance:** Product Workspace owns members, source snapshots, context, files, artifacts, accepted memory, retrieval policy, and memory proposals. Leaf runs write only to their scoped scratch/candidate paths. Memory changes are proposals with source and authority, not silent prompt mutation.
+**V1 acceptance:** Product Workspace owns members, source snapshots, context, files, artifacts, accepted memory, retrieval policy, memory proposals, Conversations, and product coordination surfaces. Leaf runs write only to their scoped scratch/candidate paths. Memory changes are proposals with source and authority, not silent prompt mutation.
+
+## Coworker Work Organization
+
+**Outcome:** work can become durable and assignable before it is formal enough to become a Work, while preserving the existing execution vocabulary.
+
+The implemented object boundary is:
+
+```text
+WorkItem = coordination commitment (UI label: Task)
+Work     = durable product objective
+Task     = technical execution-node invocation
+Run      = one Task attempt
+Board    = Workspace-scoped projection over WorkItems
+```
+
+**WorkItem baseline:** authenticated owner-scoped CRUD stores title, description, closed coordination status, assignee, creator, optional source Conversation/message, optional linked Work, and timestamps. Source IDs must be supplied together. When they are present, creation verifies that the requester can read the Conversation and that the Message is already durable. Comments persist as a separate ordered record. Assignment uses the current participant/Agent identity string surface and does not introduce a second identity registry.
+
+**Board baseline:** Boards have ordered columns and one explicit placement per WorkItem in the MVE. A WorkItem may exist without a Board. Board/column deletion removes the projection while retaining the WorkItem. Browser cards move through the canonical placement API; the Board does not create technical Tasks/Runs.
+
+**Conversation and Work bridge:** every persisted Conversation message exposes an editable `Create task` action. The resulting WorkItem retains source references and can navigate back to the Conversation. `New Work` remains the Work Definition authoring path. WorkItem promotion explicitly selects an existing published canonical Definition and its current published version, then calls `WorkIdentityApi` rather than writing Work rows directly. Promotion is idempotent for the WorkItem and persists exactly one linked Work identity.
+
+**Review projection:** a linked Work's canonical Product projection is the authority. Owner-scoped WorkItem reads/lists project a successful formal Work to `in_review` unless the WorkItem is already in review/done. The browser does not infer completion from transcript/runtime output. Human action is required for `done`.
+
+**Web baseline:** the single Coworker Workspace Rail exposes Tasks and Boards alongside Conversations, Agents, Work, and Files. `/tasks/:workItemId` and `/boards/:boardId` are deep-link selections in the same Vite shell. Work opened from a Task can navigate back using route context, while durable linkage remains backend state.
+
+The MVE deliberately does not implement Calendar/cadence/proactive wake, Whisper/Convene, email identity, a general workflow DAG, a new runtime, or a second Workspace/Task state machine.
 
 ## Sessions, Tasks and Runs
 
 **Product Work baseline:** the canonical MVE product journey is `WorkDefinition -> Work -> WorkRun -> Product state / Run Trace`. Work creation pins an immutable DefinitionVersion. Starting a Product-authored WorkRun validates the bounded input contract before provider admission, durably records the input fingerprint/snapshot, resolves runtime capability requirements, freezes the exact resource manifest, and only then admits the technical root Task. Single-Worker and bounded-collaboration Work share this admission pipeline while retaining their appropriate execution policies.
+
+A Coworker `WorkItem` is not part of the execution-node identity tree. It may promote to one Work, but `Task` remains the only node invocation identity at the execution boundary.
 
 Work and WorkRun list APIs preserve their original compatibility ordering when no order is supplied and expose bounded latest-first product ordering for Work-first consumers (`updated_desc` for Work, `created_desc` for WorkRun). Cursor traversal is seek-based rather than offset-based.
 
@@ -81,6 +110,8 @@ Local development is host-native: Agent Server, Web, and optional Paseo runtime 
 
 **Current status:** planned. Result text and Trace exist, but there is no formal immutable delivered Artifact object yet. The Work-first UI intentionally leaves its Artifacts tab unavailable rather than promoting arbitrary assistant text/files/tool output into a deliverable.
 
+WorkItem `in_review` in the coworker MVE means the linked formal Work has reached canonical Product completion and is ready for human coordination review. It is not a formal Artifact/Evidence approval object and does not upgrade this feature area's status.
+
 **V1 acceptance:** candidate, partial, and final outputs are immutable Artifact versions. Finalization creates a version rather than mutating a manifest. Evidence identifies source capture time and data-as-of. Root Team output retains child lineage across retries.
 
 ## Channels, API and Console
@@ -91,7 +122,9 @@ Local development is host-native: Agent Server, Web, and optional Paseo runtime 
 
 Chat and Work are linked through durable Work references/cards rather than by sharing Agent and Worker identity. A Coworker Chat can list/describe its bound WorkDefinitions, start formal Work, receive completion wakes, and continue a Work from feedback.
 
-The Agent Teams v2 project view remains a fixed local/single-operator compatibility observation surface. Its same-origin strict BFF projects safe Team execution state and replay without exposing RuntimeSession prompts/raw provider events. Product Work-first UI is the canonical product entry rather than this compatibility Team project identity.
+Native EventSource consumes BFF SSE for Conversations/runtime activity and the runtime projects complete `assistant_text` snapshots plus sanitized reasoning disclosures, typed Tool previews, direct-child activity, usage, and permission projections. Provider payloads, credentials, provider IDs, unsafe paths, and unbounded detail remain excluded.
+
+The Agent Teams v2 project view remains a fixed local/single-operator compatibility observation surface. Its same-origin strict BFF projects safe Team execution state and replay without exposing RuntimeSession prompts/raw provider events. Product/Coworker UI is canonical rather than this compatibility Team project identity.
 
 The fixed Lark compatibility baseline adds one explicitly enabled `agent-test` App, one configured group, one allowlisted external user, and one service-account Tenant/Workspace/AgentVersion tuple. Verified bot-mention replies in one thread resolve its root binding and Product Session; unrelated roots retain separate Sessions. Successive Agent Runs in one Product Session reuse one bound provider Agent when continuation is available. Every Card-eligible Memory proposal immediately creates a Bot-owned editable Doc before `card_with_doc` publication. New Cards render only Open Doc, Accept, and Reject; legacy edit/Preview actions remain inbound-only. It does not create canonical Users or Memberships or claim production identity. Provider delivery is retryable and bounded; it is not physical exactly-once or production readiness.
 
@@ -109,5 +142,5 @@ The following remain deferred and must not be inferred from the current MVE:
 - broader Work console behavior such as pagination controls, cancel/retry/approval UX, old-session restart recovery, multi-user production Web identity/security hardening, and large-scale browsing/performance work;
 - transaction-concurrency hardening beyond proven invariants, crash recovery, legacy nullable Session cleanup, grant renewal/header persistence, Host placement/GC, a second adapter, and production isolation;
 - retrieval injection or broader automatic memory behavior; no production rollout is claimed;
-- formal Artifact/Evidence delivery, Inbox/Review product flows, schedules/triggers, generalized DAG/nested Teams/dynamic rosters, billing/quotas, and multi-region operation;
+- formal Artifact/Evidence delivery and its dedicated approval inbox, schedules/triggers, Calendar/cadence/proactive wake, Whisper/Convene, email identity, generalized DAG/nested Teams/dynamic rosters, billing/quotas, and multi-region operation;
 - Multi-App or multi-user channel administration, preview successor lease fences, post-canonical retry/fencing, manual rebuild races, rolling allocator races, generalized synthesis retry/audit, crash recovery, multi-node leadership, extra redrive/fault injection, performance hardening, and production identity/rollout.

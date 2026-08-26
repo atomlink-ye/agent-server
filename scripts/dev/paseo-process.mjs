@@ -237,6 +237,7 @@ export async function startPaseo({
   port,
   listenHost = '127.0.0.1',
   environmentVariableNames = [],
+  onChild,
 }) {
   const startupTimeoutMs = parsePositiveSafeIntegerEnvironmentVariable(
     'PASEO_DAEMON_STARTUP_TIMEOUT_MS',
@@ -353,6 +354,7 @@ export async function startPaseo({
   } finally {
     closeSync(log);
   }
+  onChild?.(child);
 
   try {
     await waitForHttp(

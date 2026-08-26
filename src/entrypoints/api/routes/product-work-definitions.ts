@@ -15,6 +15,7 @@ import type { WorkDefinitionSourceDefinition } from '../../../domain/work/work-d
 import {
   GetProductWorkDefinitionResponseSchema,
   GetProductWorkDefinitionVersionResponseSchema,
+  ListProductWorkDefinitionsResponseSchema,
   ListProductWorkDefinitionVersionsResponseSchema,
   ProductWorkDefinitionSchema,
   ProductWorkDefinitionVersionSchema,
@@ -47,6 +48,7 @@ export function registerProductWorkDefinitionRoutes(
     dependencies.config.serviceAccounts ?? [],
   );
   for (const path of [
+    '/api/v1/work-definitions',
     '/api/v1/work-definitions:validate',
     '/api/v1/work-definitions:plan',
     '/api/v1/work-definitions:apply',
@@ -54,6 +56,27 @@ export function registerProductWorkDefinitionRoutes(
     '/api/v1/work-definition-versions/*',
   ])
     app.use(path, requireServiceAccountAccess(authenticator));
+
+  app.get('/api/v1/work-definitions', async (context) => {
+    const limit = Number(context.req.query('limit') ?? 100);
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100)
+      throw invalidRequest('limit must be between 1 and 100.');
+    try {
+      const definitions = await dependencies.definitions.listDefinitions({
+        accessContext: getAuthenticatedAccessContext(context),
+        limit,
+      });
+      return context.json(
+        ListProductWorkDefinitionsResponseSchema.parse({
+          items: definitions.map(selectorResponse),
+          next_cursor: null,
+        }),
+        200,
+      );
+    } catch (error) {
+      return mapReadError(error);
+    }
+  });
 
   app.post('/api/v1/work-definitions:validate', async (context) => {
     const request = WorkDefinitionSourceRequestSchema.safeParse(
@@ -284,6 +307,18 @@ function productVersionSummaryResponse(
       definition: `/api/v1/work-definitions/${record.version.definitionId}`,
     },
   });
+}
+
+function selectorResponse(input: {
+  readonly displayName: string;
+  readonly currentPublishedVersionId: string;
+  readonly definition: WorkDefinitionSourceDefinition;
+}) {
+  return {
+    definition_id: input.definition.id,
+    display_name: input.displayName,
+    current_published_version_id: input.currentPublishedVersionId,
+  };
 }
 
 function sourceMetadata(source: Readonly<Record<string, unknown>>): {

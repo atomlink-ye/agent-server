@@ -34,6 +34,12 @@ export interface WorkDefinitionVersionListPage {
   readonly nextCursor: string | null;
 }
 
+export interface ProductWorkDefinitionSelectorRecord {
+  readonly definition: WorkDefinitionSourceDefinition;
+  readonly displayName: string;
+  readonly currentPublishedVersionId: string;
+}
+
 export interface WorkDefinitionApplyRequestRecord {
   readonly idempotencyKey: string;
   readonly requestFingerprint: string;
@@ -84,6 +90,10 @@ export interface WorkDefinitionSourceRepository {
     readonly limit: number;
     readonly cursor: string | null;
   }): Promise<WorkDefinitionVersionListPage>;
+  listProductDefinitions?(input: {
+    readonly owner: WorkDefinitionSourceOwner;
+    readonly limit: number;
+  }): Promise<readonly ProductWorkDefinitionSelectorRecord[]>;
   recordResolvedFingerprint?(input: {
     readonly versionId: string;
     readonly owner: WorkDefinitionSourceOwner;

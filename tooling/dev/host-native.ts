@@ -42,6 +42,8 @@ const HOST_RUNTIME_LOG_DIRECTORY = resolve(
 const MAX_LOG_TAIL_LINES = 80;
 const MAX_LOG_TAIL_CHARACTERS = 16_384;
 const MAX_LOG_TAIL_BYTES = 64 * 1024;
+const PGLITE_STATE_READ_ATTEMPTS = 5;
+const PGLITE_STATE_READ_RETRY_MS = 25;
 
 type ChildLifecycle = Readonly<{
   readonly promise: Promise<ChildLifecycleOutcome>;
@@ -503,41 +505,59 @@ function processIsAlive(pid: number): boolean {
   }
 }
 
-async function clearPGliteState(): Promise<void> {
-  await unlink(PGLITE_STATE_PATH).catch((error: unknown) => {
+async function clearPGliteState(statePath = PGLITE_STATE_PATH): Promise<void> {
+  await unlink(statePath).catch((error: unknown) => {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   });
 }
 
-async function readPGliteState(): Promise<PGliteState | null> {
+export async function readPGliteState(
+  statePath = PGLITE_STATE_PATH,
+): Promise<PGliteState | null> {
   let contents: string;
   try {
-    contents = await readFile(PGLITE_STATE_PATH, 'utf8');
+    contents = await readFile(statePath, 'utf8');
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
     throw error;
   }
-  try {
-    const parsed = JSON.parse(contents) as Partial<PGliteState>;
-    if (
-      parsed.kind !== 'agent-server-pglite' ||
-      !Number.isInteger(parsed.pid) ||
-      typeof parsed.host !== 'string' ||
-      !Number.isInteger(parsed.port) ||
-      typeof parsed.database !== 'string' ||
-      typeof parsed.url !== 'string' ||
-      typeof parsed.dataPath !== 'string'
-    ) {
-      throw new Error('invalid shape');
+
+  let parseError: unknown;
+  for (let attempt = 0; attempt < PGLITE_STATE_READ_ATTEMPTS; attempt += 1) {
+    try {
+      const parsed = JSON.parse(contents) as Partial<PGliteState>;
+      if (
+        parsed.kind !== 'agent-server-pglite' ||
+        !Number.isInteger(parsed.pid) ||
+        typeof parsed.host !== 'string' ||
+        !Number.isInteger(parsed.port) ||
+        typeof parsed.database !== 'string' ||
+        typeof parsed.url !== 'string' ||
+        typeof parsed.dataPath !== 'string'
+      ) {
+        throw new Error('invalid shape');
+      }
+      return parsed as PGliteState;
+    } catch (error) {
+      parseError = error;
     }
-    return parsed as PGliteState;
-  } catch (error) {
-    await clearPGliteState();
-    throw new Error(
-      `Ignoring malformed PGlite state at ${PGLITE_STATE_PATH}; rerun setup.`,
-      { cause: error },
-    );
+    if (attempt + 1 < PGLITE_STATE_READ_ATTEMPTS) {
+      await new Promise((resolveDelay) =>
+        setTimeout(resolveDelay, PGLITE_STATE_READ_RETRY_MS),
+      );
+      try {
+        contents = await readFile(statePath, 'utf8');
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+        throw error;
+      }
+    }
   }
+  await clearPGliteState(statePath);
+  throw new Error(
+    `Ignoring malformed PGlite state at ${statePath}; rerun setup.`,
+    { cause: parseError },
+  );
 }
 
 export async function identifyDatabaseBackend(

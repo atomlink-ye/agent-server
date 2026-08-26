@@ -1,5 +1,6 @@
 import type {
   AgentWorkBindingScope,
+  ProductWorkDefinitionSelectorRecord,
   ProductWorkDefinitionVersionRecord,
   PublishWorkDefinitionSourceInput,
   WorkDefinitionApplyRequestRecord,
@@ -53,6 +54,11 @@ type ProductVersionRow = VersionRow & {
   product_resolved_fingerprint: string | null;
 };
 
+type ProductDefinitionSelectorRow = DefinitionRow & {
+  display_name: string;
+  current_published_version_id: string;
+};
+
 type ApplyRequestRow = {
   idempotency_key: string;
   request_fingerprint: string;
@@ -82,6 +88,48 @@ export class PostgresWorkDefinitionSourceRepository implements WorkDefinitionSou
       ownerValues(id, owner),
     );
     return result.rows?.[0] ? mapDefinition(result.rows[0]) : null;
+  }
+
+  public async listProductDefinitions(input: {
+    readonly owner: WorkDefinitionSourceOwner;
+    readonly limit: number;
+  }): Promise<readonly ProductWorkDefinitionSelectorRecord[]> {
+    const result = await this.db.query<ProductDefinitionSelectorRow>(
+      `SELECT d.${definitionColumns.split(',').join(',d.')},
+              v.id AS current_published_version_id,
+              COALESCE(v.author_source->'metadata'->>'name', d.name) AS display_name
+         FROM work_definition_source_definitions d
+         JOIN LATERAL (
+           SELECT id, author_source
+             FROM work_definition_source_versions
+            WHERE definition_id=d.id
+              AND tenant_id=d.tenant_id
+              AND workspace_id=d.workspace_id
+              AND principal_type=d.principal_type
+              AND principal_id=d.principal_id
+              AND status='published'
+              AND author_source IS NOT NULL
+              AND author_fingerprint IS NOT NULL
+            ORDER BY created_at DESC,id DESC
+            LIMIT 1
+         ) v ON TRUE
+        WHERE d.tenant_id=$1 AND d.workspace_id=$2
+          AND d.principal_type=$3 AND d.principal_id=$4
+        ORDER BY d.name ASC,d.id ASC
+        LIMIT $5`,
+      [
+        input.owner.tenantId,
+        input.owner.workspaceId,
+        input.owner.principalType,
+        input.owner.principalId,
+        input.limit,
+      ],
+    );
+    return (result.rows ?? []).map((row) => ({
+      definition: mapDefinition(row),
+      displayName: row.display_name,
+      currentPublishedVersionId: row.current_published_version_id,
+    }));
   }
 
   public async findPublishedVersion(

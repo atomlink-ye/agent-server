@@ -57,6 +57,18 @@ export class ProductWorkDefinitionQuery {
     });
   }
 
+  public async listDefinitions(input: {
+    readonly accessContext: AccessContext;
+    readonly limit: number;
+  }) {
+    if (!this.repository.listProductDefinitions)
+      throw new Error('Product Work Definition repository is unavailable.');
+    return this.repository.listProductDefinitions({
+      owner: ownerFromAccessContext(input.accessContext),
+      limit: input.limit,
+    });
+  }
+
   public async getVersion(input: {
     readonly versionId: string;
     readonly accessContext: AccessContext;

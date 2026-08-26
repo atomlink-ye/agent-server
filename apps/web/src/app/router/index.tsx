@@ -18,6 +18,10 @@ export function AppRouter() {
         path="/conversations/:conversationId"
         element={<WorkspaceRoute />}
       />
+      <Route path="/tasks" element={<WorkspaceRoute />} />
+      <Route path="/tasks/:workItemId" element={<WorkspaceRoute />} />
+      <Route path="/boards" element={<WorkspaceRoute />} />
+      <Route path="/boards/:boardId" element={<WorkspaceRoute />} />
       <Route path="/work" element={<WorkspaceRoute />} />
       <Route path="/work/:workId" element={<WorkspaceRoute />} />
       <Route path="/agents" element={<WorkspaceRoute />} />
@@ -31,8 +35,10 @@ export function AppRouter() {
 function WorkspaceRoute() {
   const runtime = useAppRuntime();
   const location = useLocation();
-  const { conversationId, workId } = useParams<{
+  const { conversationId, workItemId, boardId, workId } = useParams<{
     conversationId?: string;
+    workItemId?: string;
+    boardId?: string;
     workId?: string;
   }>();
   const query = new URLSearchParams(location.search);
@@ -49,6 +55,9 @@ function WorkspaceRoute() {
       {...runtime}
       routeConversationId={conversationId ?? null}
       returnConversationId={returnConversationId}
+      selectedWorkItemId={workItemId ?? null}
+      selectedBoardId={boardId ?? null}
+      returnWorkItemId={query.get('from_task')}
       selectedRunId={query.get('run')}
       selectedSessionIndex={parseSessionIndex(query.get('session'))}
       selectedWorkId={workId ?? null}

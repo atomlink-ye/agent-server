@@ -303,6 +303,12 @@ export class ProductWorkDefinitionApi {
     return this.query.listVersions(input);
   }
 
+  public listDefinitions(
+    input: Parameters<ProductWorkDefinitionQuery['listDefinitions']>[0],
+  ) {
+    return this.query.listDefinitions(input);
+  }
+
   public getVersion(
     input: Parameters<ProductWorkDefinitionQuery['getVersion']>[0],
   ) {

@@ -248,7 +248,7 @@ it('renders Work as a sibling tab inside the same Cumora-style shell', async () 
     expect(host.querySelector('.sidebar.work-pane')).not.toBeNull();
     expect(host.querySelector('.work-main-content')).not.toBeNull();
     expect(host.querySelector('.work-main')).not.toBeNull();
-    expect(host.textContent).toContain('Choose a Work item');
+    expect(host.textContent).toContain('Choose Work');
     expect(host.textContent).toContain('Competitor Research');
     expect(host.querySelector('.work-product-nav')).toBeNull();
   } finally {

@@ -41,6 +41,15 @@ export function productMutationError(error: unknown): never {
   throw error;
 }
 
+/**
+ * Run failures can contain provider or transport detail that is useful to an
+ * operator but inappropriate for a browser surface. Keep the recovery path
+ * actionable without reflecting an unbounded error message into the UI.
+ */
+export function workRunFailureMessage(): string {
+  return 'We couldn’t start this Run. Check that Work is ready, then try again.';
+}
+
 export function parseProduct<T>(
   schema: { parse(value: unknown): T },
   value: unknown,

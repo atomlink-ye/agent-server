@@ -11,6 +11,7 @@ import type { KernelCapabilities } from './create-kernel-capabilities.js';
 import type { MemoryModule } from './create-memory-capabilities.js';
 import type { ResourceModule } from './create-resource-capabilities.js';
 import type { WorkModule } from './create-work-capabilities.js';
+import type { WorkOrganizationModule } from './create-work-organization-capabilities.js';
 import type { ChannelComposition } from './create-channel-composition.js';
 import type { TeamCapabilities } from './create-team-capabilities.js';
 import { createApplicationLifecycle } from './create-application-lifecycle.js';
@@ -30,6 +31,7 @@ export interface HostCompositionInput {
   readonly memory: MemoryModule;
   readonly resources: ResourceModule;
   readonly workModule?: Pick<WorkModule, 'installHttp'>;
+  readonly workOrganizationModule?: Pick<WorkOrganizationModule, 'installHttp'>;
   readonly channels: Pick<ChannelComposition, 'workers'>;
   readonly chatWorker?: WorkerSet['chatWorker'];
   readonly workChatWorker?: WorkerSet['workChatWorker'];
@@ -78,6 +80,9 @@ export async function createHostComposition(input: HostCompositionInput) {
     events: input.kernel.events,
     cancelTask: input.taskConsumers.cancelTask,
     ...(input.workModule ? { workModule: input.workModule } : {}),
+    ...(input.workOrganizationModule
+      ? { workOrganizationModule: input.workOrganizationModule }
+      : {}),
     memoryModule: input.memory,
     resourceModule: input.resources,
   });

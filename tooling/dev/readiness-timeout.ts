@@ -16,7 +16,10 @@ export function runtimeReadinessTimeout(
 export function canaryReadinessTimeout(environment: NodeJS.ProcessEnv): number {
   const canary = positiveSafeTimeout(environment, CANARY_TIMEOUT_ENV);
   const paseo = positiveSafeTimeout(environment, PASEO_TIMEOUT_ENV);
-  return canary ?? paseo ?? CANARY_READINESS_TIMEOUT_MS;
+  const selected = canary ?? paseo;
+  return selected === undefined
+    ? CANARY_READINESS_TIMEOUT_MS
+    : Math.max(selected, CANARY_READINESS_TIMEOUT_MS);
 }
 
 function positiveSafeTimeout(
@@ -26,6 +29,7 @@ function positiveSafeTimeout(
   const raw = environment[name];
   if (raw === undefined) return undefined;
   const value = raw.trim();
+  if (!value) return undefined;
   if (!/^[1-9][0-9]*$/u.test(value))
     throw new Error(`${name} must be a positive safe integer in milliseconds.`);
   const parsed = Number(value);

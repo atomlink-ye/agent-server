@@ -31,18 +31,16 @@ WorkDefinition and immutable WorkerVersion snapshot own formal execution.
 
 ## Object ownership and lifecycle
 
-| Object | Product meaning | Lifecycle owner | Versioning rule | Conversation roster? |
-| --- | --- | --- | --- | --- |
-| `AgentDefinition` | Long-lived Coworker identity | Coworker / Chat plane | Stable identity | Yes |
-| `AgentVersion` | Immutable Coworker behavior/configuration | Coworker / Chat plane | Draft publishes once; published immutable | Indirectly via AgentDefinition |
-| `WorkerDefinition` | Reusable formal execution role | Work / execution plane | Stable execution identity | No |
-| `WorkerVersion` | Immutable executable Worker snapshot | Work / execution plane | Draft publishes once; published immutable | No |
-| `WorkDefinition` | Formal job/workflow contract | Product Work plane | Published versions immutable | No |
-| `TeamDefinition` / `TeamVersion` | Formal collaboration composition | Work / execution plane | TeamVersion pins WorkerVersion refs | No |
-| `Work` | Durable user order | Product Work plane | Stable Work identity | No |
-| `WorkRun` | One execution occurrence | Product Work plane | Pins input + exact resource snapshot | No |
-| `Task` / `Run` / `Attempt` | Technical execution facts | Orchestration kernel | Retry/history append-only | No |
-| `RuntimeSession` | Replaceable provider/runtime binding | Runtime boundary | Never product identity | No |
+- **`AgentDefinition`:** long-lived Coworker identity owned by the Coworker / Chat plane. It is stable and may appear in the Conversation roster.
+- **`AgentVersion`:** immutable Coworker behavior/configuration snapshot. A draft publishes once; a published version is immutable. It appears in Chat indirectly through its AgentDefinition.
+- **`WorkerDefinition`:** stable reusable formal execution role owned by the Work / execution plane. It never appears in a Conversation roster.
+- **`WorkerVersion`:** immutable executable Worker snapshot. A draft publishes once; a published version is immutable. It never appears in a Conversation roster.
+- **`WorkDefinition`:** formal job/workflow contract owned by the Product Work plane. Published versions are immutable.
+- **`TeamDefinition` / `TeamVersion`:** formal collaboration composition owned by the Work / execution plane. TeamVersion pins WorkerVersion refs and is not a Conversation roster.
+- **`Work`:** durable user order with stable Product identity.
+- **`WorkRun`:** one execution occurrence that pins input and the exact resource snapshot.
+- **`Task` / `Run` / `Attempt`:** technical execution facts owned by the orchestration kernel. Retry/history is append-only.
+- **`RuntimeSession`:** replaceable provider/runtime binding owned by the Runtime boundary. It is never product identity.
 
 The Worker v1 package grammar may reuse hardened executable parsing that was
 first introduced for managed Agents. Shared parsing is implementation reuse,
@@ -178,15 +176,13 @@ surfaces from reintroducing obsolete Agent-shaped Work composition vocabulary.
 
 ## Current baseline and next product work
 
-| Area | Current state | Next Feature work |
-| --- | --- | --- |
-| Worker identity | Active cutover complete; exact owner scope | Product Worker authoring UX only when needed |
-| Work composition | `single_worker` and bounded collaboration are canonical | Generalized composition only from real demand |
-| Team roster | WorkerVersion-only active authority | Dynamic/nested Teams deferred |
-| Work snapshot | Worker/input/resources pinned before Task admission | Richer retry/recovery receipts later |
-| Coworker Chat | Agent-owned, isolated from Worker publication | Work Catalog / Coworker capability UX |
-| Context/VFS | Separate Chat and Work views | Broader production isolation later |
-| Deliverables | Result text/trace exist | Artifact & Evidence MVE |
+- **Worker identity:** active cutover complete with exact owner scope. Product Worker authoring UX is only added when a real feature requires it.
+- **Work composition:** `single_worker` and bounded collaboration are canonical. Generalized composition waits for real demand.
+- **Team roster:** WorkerVersion is the only active execution authority. Dynamic/nested Teams remain deferred.
+- **Work snapshot:** Worker/input/resources are pinned before Task admission. Richer retry/recovery receipts may follow later.
+- **Coworker Chat:** Agent-owned and isolated from Worker publication. The next recommended feature is Work Catalog / Coworker capability UX.
+- **Context/VFS:** Chat and Work use separate views. Broader production isolation remains later work.
+- **Deliverables:** result text and trace exist; Artifact & Evidence is the next formal deliverable feature.
 
 The semantic foundation is considered closed for MVE Feature development. New
 structural Agent/Worker refactors require a concrete product need rather than a

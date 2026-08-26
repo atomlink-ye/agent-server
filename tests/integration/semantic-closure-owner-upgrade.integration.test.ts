@@ -6,6 +6,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { fingerprintWorkDefinitionSource } from '../../src/domain/work/work-definition-source.js';
+import { PostgresWorkDefinitionSourceRepository } from '../../src/infrastructure/postgres/postgres-work-definition-source-repository.js';
 
 const migrations = join(
   fileURLToPath(
@@ -108,6 +109,50 @@ describe('0061 semantic owner upgrade', () => {
         work_definition_id: definitionB,
       },
     ]);
+
+    const repository = new PostgresWorkDefinitionSourceRepository(db as never);
+    await expect(
+      repository.associateAgentWorkflow({
+        tenantId: 'tenant-a',
+        workspaceId: workspaceB,
+        principalType: 'service_account',
+        principalId: 'service-a',
+        agentDefinitionId: agentId,
+        definitionId: definitionB,
+        definitionVersionId: definitionVersionB,
+        now: new Date().toISOString(),
+      }),
+    ).resolves.toBeUndefined();
+    await expect(
+      repository.listAgentWorkBindings({
+        tenantId: 'tenant-a',
+        workspaceId: workspaceB,
+        principalType: 'service_account',
+        principalId: 'service-a',
+        agentDefinitionId: agentId,
+      }),
+    ).resolves.toHaveLength(1);
+    await expect(
+      repository.associateAgentWorkflow({
+        tenantId: 'tenant-a',
+        workspaceId: workspaceB,
+        principalType: 'service_account',
+        principalId: 'service-b',
+        agentDefinitionId: agentId,
+        definitionId: definitionB,
+        definitionVersionId: definitionVersionB,
+        now: new Date().toISOString(),
+      }),
+    ).rejects.toThrow('agent_work_binding_not_found');
+    await expect(
+      repository.listAgentWorkBindings({
+        tenantId: 'tenant-a',
+        workspaceId: workspaceB,
+        principalType: 'service_account',
+        principalId: 'service-b',
+        agentDefinitionId: agentId,
+      }),
+    ).resolves.toHaveLength(0);
   });
 
   it('backfills completed Worker claims and allows the same idempotency key in another workspace', async () => {

@@ -171,6 +171,8 @@ describe('0061 semantic closure migration', () => {
       repository.associateAgentWorkflow({
         tenantId: 'tenant-a',
         workspaceId: workspaceA,
+        principalType: 'service_account',
+        principalId: 'service-a',
         agentDefinitionId: agentA,
         definitionId: definitionA,
         definitionVersionId: definitionVersionB,
@@ -182,6 +184,8 @@ describe('0061 semantic closure migration', () => {
       repository.associateAgentWorkflow({
         tenantId: 'tenant-a',
         workspaceId: workspaceA,
+        principalType: 'service_account',
+        principalId: 'service-a',
         agentDefinitionId: agentA,
         definitionId: definitionA,
         definitionVersionId: definitionVersionA,

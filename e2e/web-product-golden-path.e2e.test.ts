@@ -262,20 +262,32 @@ describe('web Product Golden Path', () => {
         input: { company: 'Acme' },
       });
       expect(startedRunResponse.status()).toBe(202);
-      await page.waitForURL(/\/work\/[0-9a-f-]+\?run=[0-9a-f-]+/iu, {
-        timeout: 60_000,
-      });
+      await page.waitForURL(
+        (url) =>
+          url.origin === browserOrigin &&
+          url.pathname === `/work/${createdWorkId}` &&
+          url.searchParams.get('from_conversation') === conversationId &&
+          canonicalUuid.test(url.searchParams.get('run') ?? ''),
+        { timeout: 60_000 },
+      );
       await page.getByText(/Product Work\/Run reads/u).waitFor({
         state: 'visible',
         timeout: 60_000,
       });
 
-      const runMatch = page
-        .url()
-        .match(/\/work\/([0-9a-f-]+)\?run=([0-9a-f-]+)/iu);
-      if (!runMatch)
-        throw new Error('The started Work URL did not include a Run.');
-      await waitForObservableResult(page, runMatch[1]!, runMatch[2]!);
+      const startedUrl = new URL(page.url());
+      const workMatch = startedUrl.pathname.match(/^\/work\/([^/]+)$/u);
+      const runId = startedUrl.searchParams.get('run');
+      if (
+        !workMatch ||
+        workMatch[1] !== createdWorkId ||
+        !runId ||
+        !canonicalUuid.test(runId)
+      )
+        throw new Error(
+          'The started Work URL did not include the expected Run.',
+        );
+      await waitForObservableResult(page, createdWorkId, runId);
       await page.reload({ waitUntil: 'domcontentloaded', timeout: 60_000 });
       await page
         .getByTestId('outcome-product-state')

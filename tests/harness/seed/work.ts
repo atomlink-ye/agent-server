@@ -92,8 +92,6 @@ ${inputSchemaYaml}
     await repository.associateAgentWorkflow({
       tenantId: owner.tenantId,
       workspaceId: owner.workspaceId,
-      principalType: owner.principalType,
-      principalId: owner.principalId,
       agentDefinitionId: options.agentDefinitionId,
       definitionId,
       definitionVersionId: versionId,

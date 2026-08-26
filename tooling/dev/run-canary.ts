@@ -277,6 +277,7 @@ export async function runHostCanary(
     const devEnvironment: NodeJS.ProcessEnv = {
       ...loaded,
       HOST_NATIVE_WATCH: '0',
+      WEB_BOOTSTRAP_EMPTY_PRODUCT: '1',
     };
     const dev = spawnOwned(
       'node',
@@ -328,7 +329,7 @@ export async function runHostCanary(
         'run',
         '--config',
         'vitest.e2e.config.ts',
-        'e2e/web-product-session.e2e.test.ts',
+        'e2e/web-product-golden-path.e2e.test.ts',
       ],
       {
         environment: commandEnvironment,

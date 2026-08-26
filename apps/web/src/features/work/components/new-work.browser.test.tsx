@@ -111,7 +111,27 @@ it('blocks Work creation for an unselected required boolean and accepts explicit
         return response(profile());
       if (String(input) === '/api/works')
         return response(
-          { error: { code: 'stop_after_create', message: 'stop' } },
+          {
+            work: {
+              id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+              tenant_id: 'tenant',
+              workspace_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+              definition_id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+              definition_version_id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+              title: 'Competitor Research',
+              origin: 'created',
+              archived_at: null,
+              created_at: '2026-08-26T00:00:00.000Z',
+              updated_at: '2026-08-26T00:00:00.000Z',
+            },
+          },
+          201,
+        );
+      if (
+        String(input) === '/api/works/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/runs'
+      )
+        return response(
+          { error: { code: 'stop_after_run_request', message: 'stop' } },
           500,
         );
       throw new Error(`unexpected request: ${String(input)}`);
@@ -164,6 +184,16 @@ it('blocks Work creation for an unselected required boolean and accepts explicit
     expect(createRequest).toBeDefined();
     expect(JSON.parse(String(createRequest?.init?.body))).toMatchObject({
       definition_version_id: 'capability-a',
+    });
+    const runRequest = requests.find((request) =>
+      request.input.endsWith(
+        '/api/works/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/runs',
+      ),
+    );
+    expect(runRequest).toBeDefined();
+    expect(JSON.parse(String(runRequest?.init?.body))).toMatchObject({
+      trigger_kind: 'manual',
+      input: { include_private: false },
     });
   } finally {
     await act(async () => root.unmount());

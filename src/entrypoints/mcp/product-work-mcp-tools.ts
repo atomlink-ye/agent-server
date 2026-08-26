@@ -511,9 +511,7 @@ export function registerProductWorkMcpTools(input: {
           if (
             !definition ||
             definition.owner.tenantId !== current.tenantId ||
-            definition.owner.workspaceId !== current.workspaceId ||
-            definition.owner.principalType !== 'service_account' ||
-            definition.owner.principalId !== current.principalId
+            definition.owner.workspaceId !== current.workspaceId
           )
             return {
               isError: true,

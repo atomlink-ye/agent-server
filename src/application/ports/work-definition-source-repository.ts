@@ -49,14 +49,6 @@ export interface WorkDefinitionApplyRequestRecord {
   readonly createdAt: string;
 }
 
-export interface AgentWorkBindingScope {
-  readonly tenantId: string;
-  readonly workspaceId: string;
-  readonly principalType: string;
-  readonly principalId: string;
-  readonly agentDefinitionId: string;
-}
-
 /**
  * Internal immutable source registry behind the Composition compiler plus the
  * minimal Product metadata needed by the Developer API facade.
@@ -113,17 +105,24 @@ export interface WorkDefinitionSourceRepository {
     readonly resolvedFingerprint: string;
     readonly now: string;
   }): Promise<WorkDefinitionApplyRequestRecord>;
-  associateAgentWorkflow?(
-    input: AgentWorkBindingScope & {
-      readonly definitionId: string;
-      readonly definitionVersionId: string;
-      readonly now: string;
-    },
-  ): Promise<void>;
-  listDefinitionsForAgent?(
-    input: AgentWorkBindingScope,
-  ): Promise<readonly WorkDefinitionSourceDefinition[]>;
-  listAgentWorkBindings?(input: AgentWorkBindingScope): Promise<
+  associateAgentWorkflow?(input: {
+    readonly tenantId: string;
+    readonly workspaceId: string;
+    readonly agentDefinitionId: string;
+    readonly definitionId: string;
+    readonly definitionVersionId: string;
+    readonly now: string;
+  }): Promise<void>;
+  listDefinitionsForAgent?(input: {
+    readonly tenantId: string;
+    readonly workspaceId: string;
+    readonly agentDefinitionId: string;
+  }): Promise<readonly WorkDefinitionSourceDefinition[]>;
+  listAgentWorkBindings?(input: {
+    readonly tenantId: string;
+    readonly workspaceId: string;
+    readonly agentDefinitionId: string;
+  }): Promise<
     readonly {
       readonly definition: WorkDefinitionSourceDefinition;
       readonly version: WorkDefinitionSourceVersion;

@@ -69,7 +69,7 @@ export function NewWork({
             ? initialAgentId!
             : ''
           : (items[0]?.id ?? '');
-        setAgentId((current) => current || selected);
+        setAgentId((current) => (hasDeepLink ? selected : current || selected));
         if (hasDeepLink && !requestedAgentAvailable) {
           setSelectionNotice(
             'That Coworker is no longer available. Choose a Coworker to continue, or create a new one.',

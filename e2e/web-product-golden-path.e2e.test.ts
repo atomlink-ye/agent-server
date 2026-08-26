@@ -1,0 +1,138 @@
+import { randomUUID } from 'node:crypto';
+
+import { chromium, type Browser, type Page } from 'playwright';
+import { afterEach, describe, expect, it } from 'vitest';
+
+const baseUrl = process.env.WEB_E2E_BASE_URL?.replace(/\/$/u, '');
+const testTimeout = 8 * 60 * 1000;
+let browser: Browser | undefined;
+
+describe.skipIf(baseUrl === undefined)('web Product Golden Path', () => {
+  afterEach(async () => {
+    await browser?.close();
+    browser = undefined;
+  });
+
+  it(
+    'creates a Coworker, teaches a Capability, and starts Work through the UI',
+    async () => {
+      const suffix = randomUUID().slice(0, 8);
+      const coworkerName = `Golden Path ${suffix}`;
+      const capabilityName = `Competitor Brief ${suffix}`;
+      browser = await chromium.launch({ headless: true });
+      const page = await (
+        await browser.newContext({ baseURL: baseUrl! })
+      ).newPage();
+
+      await page.goto('/agents', {
+        waitUntil: 'domcontentloaded',
+        timeout: 60_000,
+      });
+      await page
+        .getByText('No Coworkers yet.', { exact: true })
+        .waitFor({ state: 'visible', timeout: 60_000 });
+      await page
+        .getByRole('button', { name: 'Create your first Coworker' })
+        .click();
+      await page.getByPlaceholder('Maya').fill(coworkerName);
+      await page.getByPlaceholder('Research Analyst').fill('Research Analyst');
+      await page
+        .getByPlaceholder(/Research competitors, track market changes/u)
+        .fill('Research competitors and summarize evidence.');
+      await page
+        .getByPlaceholder(/Be thorough, concise/u)
+        .fill('Be concise and cite evidence.');
+      const createResponse = page.waitForResponse(
+        (response) =>
+          response.request().method() === 'POST' &&
+          new URL(response.url()).pathname === '/api/agents',
+      );
+      await page.getByRole('button', { name: 'Create & Chat' }).click();
+      expect((await createResponse).status()).toBe(201);
+      await page.waitForURL(/\/conversations\/[^/]+$/u, { timeout: 60_000 });
+      await page.locator('.chat-header h1').waitFor({ state: 'visible' });
+      expect((await page.locator('.chat-header h1').innerText()).trim()).toBe(
+        coworkerName,
+      );
+
+      await page.getByRole('button', { name: 'Agents' }).click();
+      await page
+        .getByRole('heading', { name: coworkerName })
+        .waitFor({ state: 'visible', timeout: 60_000 });
+      await page.getByRole('button', { name: '+ Add capability' }).click();
+      await page.getByPlaceholder('Competitor Research').fill(capabilityName);
+      await page
+        .getByPlaceholder(/Research a company’s major competitors/u)
+        .fill('Compare a company with its major competitors.');
+      await page.getByRole('button', { name: 'Preview plan' }).click();
+      await page.getByText(/Ready to save/u).waitFor({
+        state: 'visible',
+        timeout: 60_000,
+      });
+      await page.getByRole('button', { name: 'Save capability' }).click();
+      await page
+        .getByText('Capability saved to this Coworker’s Work Catalog.')
+        .waitFor({ state: 'visible', timeout: 60_000 });
+      await page.getByRole('button', { name: 'Cancel' }).click();
+      await page
+        .getByRole('heading', { name: capabilityName })
+        .waitFor({ state: 'visible', timeout: 60_000 });
+
+      await page
+        .getByRole('article')
+        .filter({
+          has: page.getByRole('heading', { name: capabilityName }),
+        })
+        .getByRole('button', { name: 'Start Work' })
+        .click();
+      await page.waitForURL(/\/work\?new=1&agent=[^&]+&capability=[^&]+/u, {
+        timeout: 60_000,
+      });
+      await page.getByRole('button', { name: 'Start Work' }).click();
+      await page.waitForURL(/\/work\/[0-9a-f-]+\?run=[0-9a-f-]+/iu, {
+        timeout: 60_000,
+      });
+      await page.getByText(/Product Work\/Run reads/u).waitFor({
+        state: 'visible',
+        timeout: 60_000,
+      });
+
+      const runMatch = page
+        .url()
+        .match(/\/work\/([0-9a-f-]+)\?run=([0-9a-f-]+)/iu);
+      if (!runMatch)
+        throw new Error('The started Work URL did not include a Run.');
+      await waitForObservableResult(page, runMatch[1]!, runMatch[2]!);
+    },
+    testTimeout,
+  );
+});
+
+async function waitForObservableResult(
+  page: Page,
+  workId: string,
+  runId: string,
+): Promise<void> {
+  const deadline = Date.now() + 5 * 60 * 1000;
+  while (Date.now() < deadline) {
+    const response = await page.request.get(
+      `/api/works/${workId}/runs/${runId}`,
+      { headers: { accept: 'application/json' } },
+    );
+    if (!response.ok())
+      throw new Error(`Run read failed with ${response.status()}.`);
+    const value = (await response.json()) as {
+      projection_status?: unknown;
+      work_run?: { product_state?: unknown };
+    };
+    if (
+      value.projection_status === 'internally_anchored' &&
+      value.work_run?.product_state !== 'running'
+    ) {
+      expect(value.work_run?.product_state).toBe('complete');
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+  }
+  throw new Error('Timed out waiting for the UI-started Work Run result.');
+}

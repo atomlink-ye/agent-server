@@ -1,5 +1,6 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, expect, it, vi } from 'vitest';
 
 import { ChatTranscript } from './ChatTranscript';
@@ -32,19 +33,21 @@ async function render(messages: readonly ChatMessage[]): Promise<HTMLElement> {
   const root = createRoot(host);
   await act(async () => {
     root.render(
-      <ChatTranscript
-        conversationId={conversationId}
-        hasConversations
-        state={
-          {
-            status: 'ready',
-            messages,
-            error: null,
-          } as unknown as ConversationMessagesState
-        }
-        onRetry={() => undefined}
-        onOpenWork={() => undefined}
-      />,
+      <MemoryRouter>
+        <ChatTranscript
+          conversationId={conversationId}
+          hasConversations
+          state={
+            {
+              status: 'ready',
+              messages,
+              error: null,
+            } as unknown as ConversationMessagesState
+          }
+          onRetry={() => undefined}
+          onOpenWork={() => undefined}
+        />
+      </MemoryRouter>,
     );
   });
   return host;
@@ -132,10 +135,11 @@ it('renders one Work Card for a Work every follow-up message references', async 
   // One Work, one live card — anchored at the message that first referenced it.
   expect(host.querySelectorAll('aside.work-card')).toHaveLength(1);
   const [firstMessage] = host.querySelectorAll('article.chat-message');
+  const firstMessageGroup = firstMessage?.closest('.chat-message-with-actions');
   expect(
-    firstMessage?.nextElementSibling?.classList.contains('work-card'),
+    firstMessageGroup?.nextElementSibling?.classList.contains('work-card'),
   ).toBe(true);
-  // The card is a sibling of the bubble, not a section inside it.
+  // The card is outside the message/action group, not a section inside the bubble.
   expect(firstMessage?.querySelector('.work-card')).toBeNull();
   expect(host.textContent).toContain('Here is the report.');
 });

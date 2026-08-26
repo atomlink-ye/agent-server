@@ -19,6 +19,7 @@ describe.skipIf(baseUrl === undefined)('web Product Golden Path', () => {
       const suffix = randomUUID().slice(0, 8);
       const coworkerName = `Golden Path ${suffix}`;
       const capabilityName = `Competitor Brief ${suffix}`;
+      let conversationId: string;
       browser = await chromium.launch({ headless: true });
       const page = await (
         await browser.newContext({ baseURL: baseUrl! })
@@ -50,6 +51,12 @@ describe.skipIf(baseUrl === undefined)('web Product Golden Path', () => {
       await page.getByRole('button', { name: 'Create & Chat' }).click();
       expect((await createResponse).status()).toBe(201);
       await page.waitForURL(/\/conversations\/[^/]+$/u, { timeout: 60_000 });
+      conversationId =
+        page.url().match(/\/conversations\/([^/]+)$/u)?.[1] ?? '';
+      if (!conversationId)
+        throw new Error(
+          'Conversation id was not returned after Coworker creation.',
+        );
       await page.locator('.chat-header h1').waitFor({ state: 'visible' });
       expect((await page.locator('.chat-header h1').innerText()).trim()).toBe(
         coworkerName,
@@ -64,6 +71,10 @@ describe.skipIf(baseUrl === undefined)('web Product Golden Path', () => {
       await page
         .getByPlaceholder(/Research a company’s major competitors/u)
         .fill('Compare a company with its major competitors.');
+      await page.getByRole('button', { name: '+ Add input' }).click();
+      const inputRow = page.locator('.agents-input-row').last();
+      await inputRow.getByLabel('Input label').fill('Company');
+      await inputRow.getByLabel('Input key').fill('company');
       await page.getByRole('button', { name: 'Preview plan' }).click();
       await page.getByText(/Ready to save/u).waitFor({
         state: 'visible',
@@ -78,17 +89,50 @@ describe.skipIf(baseUrl === undefined)('web Product Golden Path', () => {
         .getByRole('heading', { name: capabilityName })
         .waitFor({ state: 'visible', timeout: 60_000 });
 
-      await page
-        .getByRole('article')
-        .filter({
-          has: page.getByRole('heading', { name: capabilityName }),
-        })
-        .getByRole('button', { name: 'Start Work' })
-        .click();
-      await page.waitForURL(/\/work\?new=1&agent=[^&]+&capability=[^&]+/u, {
+      await page.goto(`/conversations/${conversationId}`, {
+        waitUntil: 'domcontentloaded',
         timeout: 60_000,
       });
+      await page.locator('.chat-header h1').waitFor({ state: 'visible' });
+      await page.getByRole('button', { name: 'Work' }).click();
+      await page.waitForURL(
+        new RegExp(`/work\\?from_conversation=${conversationId}`, 'u'),
+        { timeout: 60_000 },
+      );
+      await page.getByTestId('new-work-cta').click();
+      await page.locator('#work-coworker').waitFor({ state: 'visible' });
+      await page.locator('#work-capability').waitFor({ state: 'visible' });
+      const company = page.locator('#work-input-company');
+      await company.waitFor({ state: 'visible', timeout: 60_000 });
+      await company.fill('Acme');
+      const workCreateResponse = page.waitForResponse(
+        (response) =>
+          response.request().method() === 'POST' &&
+          new URL(response.url()).pathname === '/api/works',
+      );
+      const runRequest = page.waitForRequest(
+        (request) =>
+          request.method() === 'POST' &&
+          /\/api\/works\/[0-9a-f-]+\/runs$/iu.test(
+            new URL(request.url()).pathname,
+          ),
+      );
+      const runResponse = page.waitForResponse(
+        (response) =>
+          response.request().method() === 'POST' &&
+          /\/api\/works\/[0-9a-f-]+\/runs$/iu.test(
+            new URL(response.url()).pathname,
+          ),
+      );
       await page.getByRole('button', { name: 'Start Work' }).click();
+      const createdWorkResponse = await workCreateResponse;
+      expect(createdWorkResponse.status()).toBe(201);
+      const submittedRunRequest = await runRequest;
+      expect(JSON.parse(submittedRunRequest.postData() ?? '{}')).toMatchObject({
+        trigger_kind: 'manual',
+        input: { company: 'Acme' },
+      });
+      expect((await runResponse).status()).toBe(202);
       await page.waitForURL(/\/work\/[0-9a-f-]+\?run=[0-9a-f-]+/iu, {
         timeout: 60_000,
       });
@@ -103,6 +147,29 @@ describe.skipIf(baseUrl === undefined)('web Product Golden Path', () => {
       if (!runMatch)
         throw new Error('The started Work URL did not include a Run.');
       await waitForObservableResult(page, runMatch[1]!, runMatch[2]!);
+      await page.reload({ waitUntil: 'domcontentloaded', timeout: 60_000 });
+      await page
+        .getByTestId('outcome-product-state')
+        .waitFor({ state: 'visible', timeout: 60_000 });
+      expect(
+        await page.getByTestId('outcome-product-state').innerText(),
+      ).toMatch(/Complete/u);
+      await page.locator('.work-overview__outcome').waitFor({
+        state: 'visible',
+        timeout: 60_000,
+      });
+      await page.getByRole('tab', { name: 'MCP Activity' }).click();
+      await page.getByTestId('trace-events').waitFor({
+        state: 'visible',
+        timeout: 60_000,
+      });
+      await page
+        .getByRole('button', { name: 'Respond in conversation' })
+        .click();
+      await page.waitForURL(`/conversations/${conversationId}`, {
+        timeout: 60_000,
+      });
+      await page.locator('.chat-header h1').waitFor({ state: 'visible' });
     },
     testTimeout,
   );

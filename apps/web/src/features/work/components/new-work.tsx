@@ -37,7 +37,9 @@ export function NewWork({
     window.location.assign(path);
   };
   const [coworkers, setCoworkers] = useState<readonly Coworker[]>([]);
-  const [agentId, setAgentId] = useState(initialAgentId ?? '');
+  // Wait for the roster read before requesting a profile. This prevents a
+  // stale deep-link id from causing an unnecessary profile request.
+  const [agentId, setAgentId] = useState('');
   const [profile, setProfile] = useState<CoworkerProfile | null>(null);
   const [capabilityVersionId, setCapabilityVersionId] = useState(
     initialCapabilityVersionId ?? '',

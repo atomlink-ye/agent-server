@@ -54,8 +54,10 @@ const definitionVersion = ProductWorkDefinitionVersionSchema.parse({
     },
     spec: {
       kind: 'collaboration',
-      lead: { name: 'Lead', agent_version_id: leadVersionId },
-      members: [{ name: 'Researcher', agent_version_id: researcherVersionId }],
+      lead: { name: 'Lead', worker_version_id: leadVersionId },
+      members: [
+        { name: 'Researcher', worker_version_id: researcherVersionId },
+      ],
       environment_version_id: environmentVersionId,
       memory_version_ids: [],
       input_schema: {
@@ -92,7 +94,7 @@ function jsonResponse(body: unknown, status = 200): Response {
   } as Response;
 }
 
-it('validates current Definition source and renders the server-resolved one-way preview', async () => {
+it('validates current Definition source against the canonical Worker plan contract', async () => {
   const fetchMock = vi
     .fn()
     .mockImplementation(async (path: string, init?: RequestInit) => {
@@ -101,12 +103,14 @@ it('validates current Definition source and renders the server-resolved one-way 
         return jsonResponse({
           valid: true,
           fingerprint: `sha256:${'c'.repeat(64)}`,
+          metadata: { normalized_name: 'supplier-risk-review' },
           diagnostics: [],
         });
       if (method === 'POST' && path === '/api/work-definitions/plan')
         return jsonResponse({
           valid: true,
           fingerprint: `sha256:${'c'.repeat(64)}`,
+          metadata: { normalized_name: 'supplier-risk-review' },
           resolved: {
             kind: 'collaboration',
             participants: [
@@ -114,7 +118,7 @@ it('validates current Definition source and renders the server-resolved one-way 
                 name: 'Lead',
                 role: 'lead',
                 source: 'referenced',
-                agent_version_id: leadVersionId,
+                worker_version_id: leadVersionId,
                 skills: [],
                 tools: [],
               },
@@ -122,7 +126,7 @@ it('validates current Definition source and renders the server-resolved one-way 
                 name: 'Researcher',
                 role: 'member',
                 source: 'referenced',
-                agent_version_id: researcherVersionId,
+                worker_version_id: researcherVersionId,
                 skills: [],
                 tools: [],
               },
@@ -134,9 +138,13 @@ it('validates current Definition source and renders the server-resolved one-way 
             memory_version_ids: [],
             required_runtime_capabilities: ['reusable_session'],
             platform_capabilities: ['collaboration', 'platform_mcp'],
+            materialization: {
+              inline_workers: 0,
+              inline_environment: false,
+              internal_team: false,
+            },
           },
           diagnostics: [],
-          operations: [],
         });
 
       const responses = new Map<string, unknown>([
@@ -172,6 +180,7 @@ it('validates current Definition source and renders the server-resolved one-way 
     );
     expect(editor).not.toBeNull();
     expect(editor?.value).toContain('kind: collaboration');
+    expect(editor?.value).toContain('worker_version_id');
     expect(host.textContent).toContain('Current Work version');
 
     const validate = [
@@ -188,6 +197,7 @@ it('validates current Definition source and renders the server-resolved one-way 
       'Definition is valid and its resource plan resolved.',
     );
     expect(host.textContent).toContain('Server-resolved preview');
+    expect(host.textContent).toContain('Workers');
     expect(host.textContent).toContain('reusable_session');
     expect(host.textContent).toContain('platform_mcp');
     expect(
@@ -230,11 +240,11 @@ it('applies and creates Work in order after Definition validation and planning',
           participants: [],
           environment: {
             source: 'referenced',
-            environment_version_id: environmentVersionId,
+            environmentVersionId,
           },
-          memory_version_ids: [],
-          required_runtime_capabilities: [],
-          platform_capabilities: [],
+          memoryVersionIds: [],
+          requiredRuntimeCapabilities: [],
+          platformCapabilities: [],
         },
       };
     });
@@ -329,11 +339,11 @@ it('applies and pins an authored Definition before returning to Work', async () 
           participants: [],
           environment: {
             source: 'referenced',
-            environment_version_id: environmentVersionId,
+            environmentVersionId,
           },
-          memory_version_ids: [],
-          required_runtime_capabilities: [],
-          platform_capabilities: [],
+          memoryVersionIds: [],
+          requiredRuntimeCapabilities: [],
+          platformCapabilities: [],
         },
       };
     });

@@ -1,0 +1,25 @@
+e2e/web-product-golden-path.e2e.test.ts
+  735a6e0109e0dc1d 332,336-338
+apps/web/src/features/work/components/panes/overview-pane.tsx
+  735a6e0109e0dc1d 47
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2-bit.10+672fbf0",
+  "base_commit_sha": "efc5b118d8c292a19d3477faab4a19c5f9b04c91",
+  "prompts": {
+    "735a6e0109e0dc1d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "dbac94a4-0915-4ab4-92a7-15a03118f108",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "link.ye",
+      "messages": [],
+      "total_additions": 5,
+      "total_deletions": 5,
+      "accepted_lines": 5,
+      "overriden_lines": 0
+    }
+  }
+}

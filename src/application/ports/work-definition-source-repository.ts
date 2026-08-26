@@ -103,11 +103,13 @@ export interface WorkDefinitionSourceRepository {
     readonly resolvedFingerprint: string;
     readonly now: string;
   }): Promise<WorkDefinitionApplyRequestRecord>;
-  associateAgentWorkflow?(input: AgentWorkBindingScope & {
-    readonly definitionId: string;
-    readonly definitionVersionId: string;
-    readonly now: string;
-  }): Promise<void>;
+  associateAgentWorkflow?(
+    input: AgentWorkBindingScope & {
+      readonly definitionId: string;
+      readonly definitionVersionId: string;
+      readonly now: string;
+    },
+  ): Promise<void>;
   listDefinitionsForAgent?(
     input: AgentWorkBindingScope,
   ): Promise<readonly WorkDefinitionSourceDefinition[]>;

@@ -301,17 +301,6 @@ export class PostgresWorkerRegistry implements WorkerRegistry {
     return result.rows?.[0] ? mapVersion(result.rows[0]) : null;
   }
 
-  public async findVersionByTenant(input: {
-    tenantId: string;
-    versionId: string;
-  }) {
-    const result = await this.database.query<VersionRow>(
-      `SELECT * FROM worker_versions WHERE id=$1 AND tenant_id=$2`,
-      [input.versionId, input.tenantId],
-    );
-    return result.rows?.[0] ? mapVersion(result.rows[0]) : null;
-  }
-
   private async transaction<T>(
     work: (db: WorkerRegistryQueryable) => Promise<T>,
   ): Promise<T> {

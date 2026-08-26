@@ -129,6 +129,12 @@ describe('web Product Golden Path', () => {
       );
 
       await page.getByRole('button', { name: 'Agents' }).click();
+      await page.waitForURL(
+        (url) =>
+          url.origin === browserOrigin &&
+          /^\/agents\/[0-9a-f-]+$/iu.test(url.pathname),
+        { timeout: 60_000 },
+      );
       await page
         .getByRole('heading', { name: coworkerName })
         .waitFor({ state: 'visible', timeout: 60_000 });

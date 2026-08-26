@@ -23,6 +23,11 @@ const TASKS_LOAD_ERROR =
 const TASKS_ACTION_ERROR =
   'That Task change could not be saved. Please try again.';
 
+type RecoverableError = {
+  readonly message: string;
+  readonly retry?: () => void;
+};
+
 export interface TasksPageProps {
   readonly selectedWorkItemId?: string | null;
 }
@@ -36,7 +41,7 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
     Awaited<ReturnType<typeof workOrganizationClient.listComments>>
   >([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<RecoverableError | null>(null);
   const [creating, setCreating] = useState(false);
   const [filter, setFilter] = useState<WorkItemStatus | 'all'>('all');
 
@@ -61,7 +66,7 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
         }
       }
     } catch {
-      setError(TASKS_LOAD_ERROR);
+      setError({ message: TASKS_LOAD_ERROR, retry: () => void load() });
     } finally {
       setLoading(false);
     }
@@ -71,17 +76,27 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
     void load();
   }, [load]);
 
-  useEffect(() => {
+  const loadComments = useCallback(async () => {
     if (!selectedWorkItemId) {
       setComments([]);
       return;
     }
-    void workOrganizationClient
-      .listComments(selectedWorkItemId)
-      .then(setComments, () => {
-        setError(TASKS_LOAD_ERROR);
+    try {
+      setComments(
+        await workOrganizationClient.listComments(selectedWorkItemId),
+      );
+    } catch {
+      setError({
+        message:
+          'Comments for this Task could not be loaded. Please try again.',
+        retry: () => void loadComments(),
       });
+    }
   }, [selectedWorkItemId]);
+
+  useEffect(() => {
+    void loadComments();
+  }, [loadComments]);
 
   useEffect(() => {
     const state = location.state as {
@@ -225,10 +240,12 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
           </div>
           {error ? (
             <div className="work-org-error" role="alert">
-              <p>{error}</p>
-              <button type="button" onClick={() => void load()}>
-                Retry
-              </button>
+              <p>{error.message}</p>
+              {error.retry ? (
+                <button type="button" onClick={error.retry}>
+                  Retry
+                </button>
+              ) : null}
             </div>
           ) : null}
           {creating ? (
@@ -243,7 +260,7 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
                   replace: true,
                 });
               }}
-              onError={setError}
+              onError={(message) => setError(message ? { message } : null)}
             />
           ) : selected ? (
             <TaskDetail
@@ -252,7 +269,7 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
               comments={comments}
               onChanged={replaceItem}
               onCommentsChanged={setComments}
-              onError={setError}
+              onError={(message) => setError(message ? { message } : null)}
             />
           ) : (
             <div className="work-main-empty">

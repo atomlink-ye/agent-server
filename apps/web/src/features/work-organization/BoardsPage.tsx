@@ -15,6 +15,11 @@ const BOARDS_LOAD_ERROR =
 const BOARDS_ACTION_ERROR =
   'That Board change could not be saved. Please try again.';
 
+type RecoverableError = {
+  readonly message: string;
+  readonly retry?: () => void;
+};
+
 export interface BoardsPageProps {
   readonly selectedBoardId?: string | null;
 }
@@ -24,7 +29,7 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
   const [boards, setBoards] = useState<readonly WorkBoardDto[]>([]);
   const [snapshot, setSnapshot] = useState<WorkBoardSnapshotDto | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<RecoverableError | null>(null);
   const [creatingBoard, setCreatingBoard] = useState(false);
   const [newBoardTitle, setNewBoardTitle] = useState('');
 
@@ -40,7 +45,7 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
         });
       }
     } catch {
-      setError(BOARDS_LOAD_ERROR);
+      setError({ message: BOARDS_LOAD_ERROR, retry: () => void loadBoards() });
     } finally {
       setLoading(false);
     }
@@ -54,7 +59,10 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
     try {
       setSnapshot(await workOrganizationClient.getBoard(selectedBoardId));
     } catch {
-      setError(BOARDS_LOAD_ERROR);
+      setError({
+        message: BOARDS_LOAD_ERROR,
+        retry: () => void loadSnapshot(),
+      });
       setSnapshot(null);
     }
   }, [selectedBoardId]);
@@ -78,7 +86,7 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
       setCreatingBoard(false);
       navigate(`/boards/${encodeURIComponent(board.id)}`);
     } catch {
-      setError(BOARDS_ACTION_ERROR);
+      setError({ message: BOARDS_ACTION_ERROR });
     }
   }
 
@@ -175,11 +183,22 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
           </div>
           {error ? (
             <div className="work-org-error" role="alert">
-              <p>{error}</p>
-              <button type="button" onClick={() => void loadBoards()}>
-                Retry
-              </button>
+              <p>{error.message}</p>
+              {error.retry ? (
+                <button type="button" onClick={error.retry}>
+                  Retry
+                </button>
+              ) : null}
             </div>
+          ) : null}
+          {creatingBoard ? (
+            <BoardCreationForm
+              className="work-org-board-create--mobile"
+              title={newBoardTitle}
+              onCancel={() => setCreatingBoard(false)}
+              onChange={setNewBoardTitle}
+              onSubmit={createBoard}
+            />
           ) : null}
           {snapshot ? (
             <BoardCanvas
@@ -190,7 +209,7 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
                 await loadBoards();
                 navigate('/boards');
               }}
-              onError={setError}
+              onError={(message) => setError({ message })}
             />
           ) : (
             <div className="work-main-empty">
@@ -213,6 +232,51 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
   );
 }
 
+function BoardCreationForm({
+  className,
+  title,
+  onCancel,
+  onChange,
+  onSubmit,
+}: {
+  readonly className: string;
+  readonly title: string;
+  readonly onCancel: () => void;
+  readonly onChange: (title: string) => void;
+  readonly onSubmit: (event: React.FormEvent) => Promise<void>;
+}) {
+  return (
+    <form
+      className={`work-org-card work-org-board-create ${className}`}
+      onSubmit={(event) => void onSubmit(event)}
+    >
+      <span className="eyebrow">New Board</span>
+      <h2>Name this Board</h2>
+      <label>
+        Board title
+        <input
+          autoFocus
+          value={title}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder="Board title"
+        />
+      </label>
+      <div className="work-org-actions">
+        <button
+          type="submit"
+          className="work-org-primary"
+          disabled={!title.trim()}
+        >
+          Create Board
+        </button>
+        <button type="button" onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+}
+
 function BoardCanvas({
   snapshot,
   onSnapshot,
@@ -222,7 +286,7 @@ function BoardCanvas({
   readonly snapshot: WorkBoardSnapshotDto;
   readonly onSnapshot: (snapshot: WorkBoardSnapshotDto) => void;
   readonly onBoardDeleted: () => Promise<void>;
-  readonly onError: (message: string | null) => void;
+  readonly onError: (message: string) => void;
 }) {
   const navigate = useNavigate();
   const [newColumnTitle, setNewColumnTitle] = useState('');
@@ -464,6 +528,34 @@ function BoardCanvas({
                     >
                       Open Task
                     </button>
+                    {snapshot.columns.length > 1 ? (
+                      <label className="work-board-card-move">
+                        <span>Move to</span>
+                        <select
+                          aria-label={`Move ${item.title} to another column`}
+                          defaultValue=""
+                          onChange={(event) => {
+                            const columnId = event.currentTarget.value;
+                            event.currentTarget.value = '';
+                            if (!columnId) return;
+                            void moveCard(
+                              item.id,
+                              columnId,
+                              (placementsByColumn.get(columnId) ?? []).length,
+                            );
+                          }}
+                        >
+                          <option value="">Choose column…</option>
+                          {snapshot.columns
+                            .filter((target) => target.id !== column.id)
+                            .map((target) => (
+                              <option key={target.id} value={target.id}>
+                                {target.title}
+                              </option>
+                            ))}
+                        </select>
+                      </label>
+                    ) : null}
                   </article>
                 ))}
               </div>

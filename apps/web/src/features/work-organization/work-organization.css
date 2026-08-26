@@ -125,6 +125,11 @@
   display: none;
 }
 
+.work-org-board-create--mobile,
+.work-board-card-move {
+  display: none;
+}
+
 .work-org-card {
   border: 1px solid var(--line, #d8dee8);
   border-radius: 16px;
@@ -415,6 +420,29 @@
   .work-org-mobile-picker .work-org-primary {
     flex: 0 0 auto;
     padding: 9px 10px;
+  }
+
+  .work-org-board-create--mobile {
+    display: grid;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .work-board-card-move {
+    display: grid;
+    gap: 4px;
+    color: var(--ink-500);
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .work-board-card-move select {
+    width: 100%;
+    border: 1px solid var(--ink-200);
+    border-radius: 8px;
+    background: var(--cloud);
+    color: var(--ink-900);
+    padding: 7px 8px;
   }
 
   .work-board-toolbar {

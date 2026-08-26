@@ -163,7 +163,7 @@ pnpm canary:golden-path
 ```
 
 - `canary:runtime` starts the host-native runtime topology and runs the bounded real-provider runtime smoke.
-- `canary:golden-path` starts host-native API/Web/runtime and runs the representative browser product path.
+- `canary:golden-path` starts one host-native API/Web/runtime lifecycle, runs the empty-product Coworker/Capability/Work browser path, then normal bootstrapping and the retained ProductSession live/replay browser check.
 
 Provider availability, prompt/tool choice, and external runtime behavior are canary concerns; deterministic product wiring belongs in `test:scenario`.
 

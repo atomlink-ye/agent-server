@@ -257,6 +257,47 @@ export async function runHostCanary(
         },
       },
     );
+    // Keep the same runtime alive while switching from the empty authoring
+    // surface to the normal seeded ProductSession fixture world.
+    await runCommand('node', ['scripts/dev/web-bootstrap.mjs'], {
+      environment: {
+        ...devEnvironment,
+        AGENT_SERVER_BASE_URL: apiBaseUrl,
+        WEB_BOOTSTRAP_EMPTY_PRODUCT: '0',
+        WEB_BOOTSTRAP_SKIP_WORK: '0',
+      },
+      cwd: repositoryRoot,
+      abortOn: {
+        child: dev,
+        environment: devEnvironment,
+        label: 'golden-path dev',
+        healthUrl: `${apiBaseUrl}/health/ready`,
+      },
+    });
+    await runCommand(
+      'pnpm',
+      [
+        'exec',
+        'vitest',
+        'run',
+        '--config',
+        'vitest.e2e.config.ts',
+        'e2e/web-product-session.e2e.test.ts',
+      ],
+      {
+        environment: {
+          ...commandEnvironment,
+          WEB_BOOTSTRAP_EMPTY_PRODUCT: '0',
+        },
+        cwd: repositoryRoot,
+        abortOn: {
+          child: dev,
+          environment: devEnvironment,
+          label: 'golden-path dev',
+          healthUrl: `${apiBaseUrl}/health/ready`,
+        },
+      },
+    );
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     const logPath = primaryChild && ownedChildLogPath(primaryChild);

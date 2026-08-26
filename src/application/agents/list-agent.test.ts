@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type {
-  AgentRegistry,
-  ManagedAgentDefinitionRead,
-} from '../ports/agent-registry.js';
+import type { AgentRegistry } from '../ports/agent-registry.js';
 import { listAgentVersions } from './read-agent.js';
 import { AgentNotFoundError } from './errors.js';
 
@@ -21,25 +18,19 @@ describe('ListAgentVersions', () => {
       items: [version('z', '2026-01-02'), version('a', '2026-01-01')],
       nextCursor: 'next',
     };
-    const registry = {
-      listVersionsByTenant: async (input: unknown) => {
-        calls.push(input);
+    const registry: Partial<AgentRegistry> = {
+      listVersionsForOwner: async (owner, command) => {
+        calls.push({ owner, command });
         return page;
       },
-    } as unknown as AgentRegistry &
-      Pick<
-        ManagedAgentDefinitionRead,
-        | 'findManagedDefinitionByTenant'
-        | 'findVersionByTenant'
-        | 'listVersionsByTenant'
-      >;
-    const result = await listAgentVersions(registry, context, {
+    };
+    const result = await listAgentVersions(registry as AgentRegistry, context, {
       definitionId: 'definition',
       cursor: 'cursor',
       limit: 2,
     });
     expect(calls[0]).toEqual({
-      tenantId: 'tenant',
+      owner: context,
       command: { definitionId: 'definition', cursor: 'cursor', limit: 2 },
     });
     expect(result).toEqual(page);
@@ -47,27 +38,21 @@ describe('ListAgentVersions', () => {
 
   it('rejects invalid bounded limits', async () => {
     let calls = 0;
-    const registry = {
-      listVersionsByTenant: async () => {
+    const registry: Partial<AgentRegistry> = {
+      listVersionsForOwner: async () => {
         calls += 1;
         throw new Error('must not call');
       },
-    } as unknown as AgentRegistry &
-      Pick<
-        ManagedAgentDefinitionRead,
-        | 'findManagedDefinitionByTenant'
-        | 'findVersionByTenant'
-        | 'listVersionsByTenant'
-      >;
+    };
     await expect(
-      listAgentVersions(registry, context, {
+      listAgentVersions(registry as AgentRegistry, context, {
         definitionId: 'd',
         cursor: null,
         limit: 0,
       }),
     ).rejects.toMatchObject({ code: 'invalid_limit' });
     await expect(
-      listAgentVersions(registry, context, {
+      listAgentVersions(registry as AgentRegistry, context, {
         definitionId: 'd',
         cursor: null,
         limit: 101,
@@ -77,17 +62,11 @@ describe('ListAgentVersions', () => {
   });
 
   it('maps a missing tenant-visible definition to not-found', async () => {
-    const registry = {
-      listVersionsByTenant: async () => null,
-    } as unknown as AgentRegistry &
-      Pick<
-        ManagedAgentDefinitionRead,
-        | 'findManagedDefinitionByTenant'
-        | 'findVersionByTenant'
-        | 'listVersionsByTenant'
-      >;
+    const registry: Partial<AgentRegistry> = {
+      listVersionsForOwner: async () => null,
+    };
     await expect(
-      listAgentVersions(registry, context, {
+      listAgentVersions(registry as AgentRegistry, context, {
         definitionId: 'missing',
         cursor: null,
         limit: 10,

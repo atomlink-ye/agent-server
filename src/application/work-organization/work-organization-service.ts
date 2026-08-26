@@ -1,9 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import type { AccessContext } from '../../domain/access-context.js';
-import type { ConversationRepository } from '../ports/conversation-repository.js';
-import type { WorkOrganizationRepository } from '../ports/work-organization-repository.js';
-import type { WorkIdentityApi } from '../work/work-identity-api.js';
+import type { Work } from '../../domain/work/work.js';
 import {
   WorkBoardColumnNotFoundError,
   WorkBoardNotFoundError,
@@ -20,6 +18,9 @@ import {
   type WorkItemStatus,
   type WorkOrganizationOwnerScope,
 } from '../../domain/work-organization/work-organization.js';
+import type { ConversationRepository } from '../ports/conversation-repository.js';
+import type { WorkOrganizationRepository } from '../ports/work-organization-repository.js';
+import type { WorkIdentityApi } from '../work/work-identity-api.js';
 
 export interface WorkOrganizationServiceOptions {
   readonly repository: WorkOrganizationRepository;
@@ -31,7 +32,7 @@ export interface WorkOrganizationServiceOptions {
   readonly workListProjection: (input: {
     readonly tenantId: string;
     readonly workspaceId: string;
-    readonly work: any;
+    readonly work: Work;
   }) => Promise<{
     readonly id: string;
     readonly title: string;
@@ -102,12 +103,30 @@ export class WorkOrganizationService {
     };
   }
 
-  public async createWorkItem(input: CreateWorkItemInput): Promise<WorkItemDetail> {
-    const owner = WorkOrganizationService.ownerFromAccessContext(input.accessContext);
+  public async createWorkItem(
+    input: CreateWorkItemInput,
+  ): Promise<WorkItemDetail> {
+    const owner = WorkOrganizationService.ownerFromAccessContext(
+      input.accessContext,
+    );
     validateText(input.title, 1, 200, 'title');
     validateOptionalText(input.description, 16 * 1024, 'description');
     validateOptionalId(input.assigneeId, 'assigneeId');
     await this.validateConversationSource(input);
+
+    const boardId = input.boardId ?? null;
+    const columnId = input.columnId ?? null;
+    if ((boardId === null) !== (columnId === null))
+      throw new WorkOrganizationValidationError(
+        'boardId and columnId must be supplied together.',
+      );
+    if (boardId && columnId) {
+      const board = await this.repository.getBoardSnapshot(owner, boardId);
+      if (!board) throw new WorkBoardNotFoundError();
+      if (!board.columns.some((column) => column.id === columnId))
+        throw new WorkBoardColumnNotFoundError();
+    }
+
     const now = this.now().toISOString();
     const workItem = await this.repository.createWorkItem({
       ...owner,
@@ -121,15 +140,11 @@ export class WorkOrganizationService {
       sourceMessageId: input.sourceMessageId ?? null,
       now,
     });
-    if (input.boardId || input.columnId) {
-      if (!input.boardId || !input.columnId)
-        throw new WorkOrganizationValidationError(
-          'boardId and columnId must be supplied together.',
-        );
+    if (boardId && columnId) {
       const placement = await this.repository.placeWorkItem({
         ...owner,
-        boardId: input.boardId,
-        columnId: input.columnId,
+        boardId,
+        columnId,
         workItemId: workItem.id,
         position: normalizePosition(input.position),
         now,
@@ -144,7 +159,9 @@ export class WorkOrganizationService {
   ): Promise<readonly WorkItemDetail[]> {
     const owner = WorkOrganizationService.ownerFromAccessContext(accessContext);
     const items = await this.repository.listWorkItems(owner);
-    return Promise.all(items.map((item) => this.hydrateWorkItem(accessContext, item)));
+    return Promise.all(
+      items.map((item) => this.hydrateWorkItem(accessContext, item)),
+    );
   }
 
   public async getWorkItem(
@@ -159,7 +176,9 @@ export class WorkOrganizationService {
     return this.hydrateWorkItem(accessContext, item);
   }
 
-  public async updateWorkItem(input: UpdateWorkItemInput): Promise<WorkItemDetail> {
+  public async updateWorkItem(
+    input: UpdateWorkItemInput,
+  ): Promise<WorkItemDetail> {
     if (input.title !== undefined) validateText(input.title, 1, 200, 'title');
     validateOptionalText(input.description, 16 * 1024, 'description');
     validateOptionalId(input.assigneeId, 'assigneeId');
@@ -180,30 +199,41 @@ export class WorkOrganizationService {
     return this.hydrateWorkItem(input.accessContext, item);
   }
 
-  public async promoteWorkItem(input: PromoteWorkItemInput): Promise<WorkItemDetail> {
-    const owner = WorkOrganizationService.ownerFromAccessContext(input.accessContext);
-    return this.repository.withPromotionLock(owner, input.workItemId, async () => {
-      const current = await this.repository.findWorkItemById(owner, input.workItemId);
-      if (!current) throw new WorkItemNotFoundError();
-      if (!current.linkedWorkId) {
-        const work = await this.workIdentity.createWork({
+  public async promoteWorkItem(
+    input: PromoteWorkItemInput,
+  ): Promise<WorkItemDetail> {
+    const owner = WorkOrganizationService.ownerFromAccessContext(
+      input.accessContext,
+    );
+    return this.repository.withPromotionLock(
+      owner,
+      input.workItemId,
+      async () => {
+        const current = await this.repository.findWorkItemById(
           owner,
-          accessContext: input.accessContext,
-          definitionId: input.definitionId,
-          definitionVersionId: input.definitionVersionId,
-          title: input.title?.trim() || current.title,
-        });
-        const linked = await this.repository.linkWork({
-          ...owner,
-          workItemId: current.id,
-          workId: work.id,
-          now: this.now().toISOString(),
-        });
-        if (!linked) throw new WorkItemNotFoundError();
-        return this.hydrateWorkItem(input.accessContext, linked);
-      }
-      return this.hydrateWorkItem(input.accessContext, current);
-    });
+          input.workItemId,
+        );
+        if (!current) throw new WorkItemNotFoundError();
+        if (!current.linkedWorkId) {
+          const work = await this.workIdentity.createWork({
+            owner,
+            accessContext: input.accessContext,
+            definitionId: input.definitionId,
+            definitionVersionId: input.definitionVersionId,
+            title: input.title?.trim() || current.title,
+          });
+          const linked = await this.repository.linkWork({
+            ...owner,
+            workItemId: current.id,
+            workId: work.id,
+            now: this.now().toISOString(),
+          });
+          if (!linked) throw new WorkItemNotFoundError();
+          return this.hydrateWorkItem(input.accessContext, linked);
+        }
+        return this.hydrateWorkItem(input.accessContext, current);
+      },
+    );
   }
 
   public async addComment(input: {
@@ -252,7 +282,9 @@ export class WorkOrganizationService {
     });
   }
 
-  public listBoards(accessContext: AccessContext): Promise<readonly WorkBoard[]> {
+  public listBoards(
+    accessContext: AccessContext,
+  ): Promise<readonly WorkBoard[]> {
     return this.repository.listBoards(
       WorkOrganizationService.ownerFromAccessContext(accessContext),
     );
@@ -300,7 +332,9 @@ export class WorkOrganizationService {
     );
     if (!snapshot) throw new WorkBoardNotFoundError();
     const hydrated = await Promise.all(
-      snapshot.workItems.map((item) => this.hydrateWorkItem(accessContext, item)),
+      snapshot.workItems.map((item) =>
+        this.hydrateWorkItem(accessContext, item),
+      ),
     );
     return {
       ...snapshot,
@@ -418,7 +452,9 @@ export class WorkOrganizationService {
     return { workItem: projectedItem, linkedWork };
   }
 
-  private async validateConversationSource(input: CreateWorkItemInput): Promise<void> {
+  private async validateConversationSource(
+    input: CreateWorkItemInput,
+  ): Promise<void> {
     const conversationId = input.sourceConversationId ?? null;
     const messageId = input.sourceMessageId ?? null;
     if ((conversationId === null) !== (messageId === null))
@@ -454,7 +490,9 @@ export class WorkOrganizationService {
 function normalizePosition(value: number | undefined): number {
   if (value === undefined) return 0;
   if (!Number.isInteger(value) || value < 0 || value > 1_000_000)
-    throw new WorkOrganizationValidationError('position must be a non-negative integer.');
+    throw new WorkOrganizationValidationError(
+      'position must be a non-negative integer.',
+    );
   return value;
 }
 

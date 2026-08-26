@@ -43,6 +43,13 @@ export interface WorkDefinitionApplyRequestRecord {
   readonly createdAt: string;
 }
 
+export interface AgentWorkBindingOwner {
+  readonly tenantId: string;
+  readonly workspaceId: string;
+  readonly principalType: string;
+  readonly principalId: string;
+}
+
 /**
  * Internal immutable source registry behind the Composition compiler plus the
  * minimal Product metadata needed by the Developer API facade.
@@ -95,22 +102,16 @@ export interface WorkDefinitionSourceRepository {
     readonly resolvedFingerprint: string;
     readonly now: string;
   }): Promise<WorkDefinitionApplyRequestRecord>;
-  associateAgentWorkflow?(input: {
-    readonly tenantId: string;
-    readonly workspaceId: string;
+  associateAgentWorkflow?(input: AgentWorkBindingOwner & {
     readonly agentDefinitionId: string;
     readonly definitionId: string;
     readonly definitionVersionId: string;
     readonly now: string;
   }): Promise<void>;
-  listDefinitionsForAgent?(input: {
-    readonly tenantId: string;
-    readonly workspaceId: string;
+  listDefinitionsForAgent?(input: AgentWorkBindingOwner & {
     readonly agentDefinitionId: string;
   }): Promise<readonly WorkDefinitionSourceDefinition[]>;
-  listAgentWorkBindings?(input: {
-    readonly tenantId: string;
-    readonly workspaceId: string;
+  listAgentWorkBindings?(input: AgentWorkBindingOwner & {
     readonly agentDefinitionId: string;
   }): Promise<
     readonly {

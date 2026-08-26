@@ -97,13 +97,15 @@ export function registerAgentProfileRoute(
           tools: [...resolved.toolRefs].slice(0, 32),
           skills: resolved.skills.map((skill) => skill.ref).slice(0, 32),
         },
-        work_catalog: bindings.slice(0, 100).map(({ definition: work, version }) => ({
-          definition_id: work.id,
-          definition_version_id: version.id,
-          name: work.name,
-          description: work.description,
-          input_schema: version.source.inputSchema ?? emptyWorkInputSchema(),
-        })),
+        work_catalog: bindings
+          .slice(0, 100)
+          .map(({ definition: work, version }) => ({
+            definition_id: work.id,
+            definition_version_id: version.id,
+            name: work.name,
+            description: work.description,
+            input_schema: version.source.inputSchema ?? emptyWorkInputSchema(),
+          })),
       }),
     );
   });

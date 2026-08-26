@@ -41,7 +41,8 @@ export function registerBrowserCoworkerRoutes(
     const parsed = CreateCoworkerRequestSchema.safeParse(
       await c.req.json().catch(() => undefined),
     );
-    if (!parsed.success) return invalidRequest('The Coworker draft is invalid.');
+    if (!parsed.success)
+      return invalidRequest('The Coworker draft is invalid.');
     return forwardValidated(
       config,
       '/api/v1/coworkers',

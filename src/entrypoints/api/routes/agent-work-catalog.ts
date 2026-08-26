@@ -40,9 +40,17 @@ export function registerAgentWorkCatalogRoute(
       await readBoundedJson(c.req.raw, MAX_AGENT_REQUEST_BYTES),
     );
     if (!parsed.success)
-      throw new HttpError(400, 'invalid_request', 'The Capability binding is invalid.');
+      throw new HttpError(
+        400,
+        'invalid_request',
+        'The Capability binding is invalid.',
+      );
     if (!dependencies.definitions.associateAgentWorkflow)
-      throw new HttpError(503, 'work_catalog_unavailable', 'The Work Catalog is unavailable.');
+      throw new HttpError(
+        503,
+        'work_catalog_unavailable',
+        'The Work Catalog is unavailable.',
+      );
 
     const access = getAuthenticatedAccessContext(c);
     const owner = {
@@ -53,7 +61,11 @@ export function registerAgentWorkCatalogRoute(
     };
     const agent = await dependencies.agents.findDefinition(owner, agentId);
     if (!agent)
-      throw new HttpError(404, 'agent_not_found', 'The Agent does not exist in this owner scope.');
+      throw new HttpError(
+        404,
+        'agent_not_found',
+        'The Agent does not exist in this owner scope.',
+      );
 
     try {
       await dependencies.definitions.associateAgentWorkflow({
@@ -65,7 +77,10 @@ export function registerAgentWorkCatalogRoute(
         now: new Date().toISOString(),
       });
     } catch (error) {
-      if (error instanceof Error && error.message === 'agent_work_binding_not_found')
+      if (
+        error instanceof Error &&
+        error.message === 'agent_work_binding_not_found'
+      )
         throw new HttpError(
           404,
           'capability_not_found',

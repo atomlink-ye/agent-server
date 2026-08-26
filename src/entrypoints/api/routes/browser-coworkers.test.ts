@@ -140,50 +140,51 @@ describe('browser-safe Coworker facade', () => {
     enableServiceAccount();
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () =>
-        new Response(
-          JSON.stringify({
-            agent: {
-              id: AGENT_ID,
-              normalized_name: 'maya',
-              display_name: 'Maya',
-              created_at: '2026-08-22T00:00:00.000Z',
-              updated_at: '2026-08-22T00:00:00.000Z',
-              role_label: 'Research Analyst',
-              summary: 'Research competitors.',
-              links: {
-                self: `/api/v1/agents/${AGENT_ID}`,
-                versions: `/api/v1/agents/${AGENT_ID}/versions`,
-              },
-              active_agent_version_id: VERSION_ID,
-              runtime_status: 'available',
-            },
-            capabilities: {
-              model_policy_ref: 'free-only',
-              proposal_limit: 0,
-              tools: [],
-              skills: [],
-            },
-            work_catalog: [
-              {
-                definition_id: DEFINITION_ID,
-                definition_version_id: DEFINITION_VERSION_ID,
-                name: 'competitor-research',
-                description: 'Research competitors.',
-                input_schema: {
-                  type: 'object',
-                  properties: {
-                    company: { type: 'string', min_length: 1 },
-                  },
-                  required: ['company'],
-                  additional_properties: false,
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              agent: {
+                id: AGENT_ID,
+                normalized_name: 'maya',
+                display_name: 'Maya',
+                created_at: '2026-08-22T00:00:00.000Z',
+                updated_at: '2026-08-22T00:00:00.000Z',
+                role_label: 'Research Analyst',
+                summary: 'Research competitors.',
+                links: {
+                  self: `/api/v1/agents/${AGENT_ID}`,
+                  versions: `/api/v1/agents/${AGENT_ID}/versions`,
                 },
+                active_agent_version_id: VERSION_ID,
+                runtime_status: 'available',
               },
-            ],
-            provider_binding: 'must-not-reach-browser',
-          }),
-          { status: 200, headers: { 'content-type': 'application/json' } },
-        ),
+              capabilities: {
+                model_policy_ref: 'free-only',
+                proposal_limit: 0,
+                tools: [],
+                skills: [],
+              },
+              work_catalog: [
+                {
+                  definition_id: DEFINITION_ID,
+                  definition_version_id: DEFINITION_VERSION_ID,
+                  name: 'competitor-research',
+                  description: 'Research competitors.',
+                  input_schema: {
+                    type: 'object',
+                    properties: {
+                      company: { type: 'string', min_length: 1 },
+                    },
+                    required: ['company'],
+                    additional_properties: false,
+                  },
+                },
+              ],
+              provider_binding: 'must-not-reach-browser',
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          ),
       ),
     );
 
@@ -206,7 +207,9 @@ describe('browser-safe Coworker facade', () => {
     enableServiceAccount();
     const upstream = vi.fn(
       async (input: string | URL | Request, init?: RequestInit) => {
-        expect(String(input)).toContain(`/api/v1/agents/${AGENT_ID}/capabilities`);
+        expect(String(input)).toContain(
+          `/api/v1/agents/${AGENT_ID}/capabilities`,
+        );
         expect(JSON.parse(String(init?.body))).toEqual({
           definition_id: DEFINITION_ID,
           definition_version_id: DEFINITION_VERSION_ID,

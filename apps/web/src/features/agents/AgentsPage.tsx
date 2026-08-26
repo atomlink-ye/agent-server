@@ -24,7 +24,9 @@ export function AgentsPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [opening, setOpening] = useState(false);
-  const [authoring, setAuthoring] = useState<'coworker' | 'capability' | null>(null);
+  const [authoring, setAuthoring] = useState<'coworker' | 'capability' | null>(
+    null,
+  );
   const [reload, setReload] = useState(0);
 
   useEffect(() => {
@@ -126,8 +128,16 @@ export function AgentsPage() {
             <button
               type="button"
               className="agents-list-item"
-              data-active={selectedAgentId === agent.id && authoring !== 'coworker' ? 'true' : 'false'}
-              aria-current={selectedAgentId === agent.id && authoring !== 'coworker' ? 'page' : undefined}
+              data-active={
+                selectedAgentId === agent.id && authoring !== 'coworker'
+                  ? 'true'
+                  : 'false'
+              }
+              aria-current={
+                selectedAgentId === agent.id && authoring !== 'coworker'
+                  ? 'page'
+                  : undefined
+              }
               key={agent.id}
               onClick={() => {
                 setAuthoring(null);
@@ -141,7 +151,9 @@ export function AgentsPage() {
                 <strong>{agent.displayName}</strong>
                 <small>{agent.roleLabel ?? 'Coworker'}</small>
               </span>
-              <span className={`agents-runtime agents-runtime--${agent.runtimeStatus}`}>
+              <span
+                className={`agents-runtime agents-runtime--${agent.runtimeStatus}`}
+              >
                 {agent.runtimeStatus}
               </span>
             </button>
@@ -170,14 +182,30 @@ export function AgentsPage() {
         {authoring === null ? (
           <section className="agents-detail" aria-label="Agent profile">
             {error ? (
-              <p className="agents-error" role="alert">{error}</p>
+              <p className="agents-error" role="alert">
+                {error}
+              </p>
             ) : null}
             {!profile ? (
               <div className="work-main-empty">
                 <span className="work-main-icon">◎</span>
-                <h1>{agents.length ? 'Choose a Coworker' : 'Create a Coworker'}</h1>
-                <p>{agents.length ? 'Open a Coworker profile.' : 'Start with a name, role, and the kind of help you want.'}</p>
-                {!agents.length ? <button className="agents-primary" type="button" onClick={() => setAuthoring('coworker')}>New Coworker</button> : null}
+                <h1>
+                  {agents.length ? 'Choose a Coworker' : 'Create a Coworker'}
+                </h1>
+                <p>
+                  {agents.length
+                    ? 'Open a Coworker profile.'
+                    : 'Start with a name, role, and the kind of help you want.'}
+                </p>
+                {!agents.length ? (
+                  <button
+                    className="agents-primary"
+                    type="button"
+                    onClick={() => setAuthoring('coworker')}
+                  >
+                    New Coworker
+                  </button>
+                ) : null}
               </div>
             ) : (
               <>
@@ -188,13 +216,18 @@ export function AgentsPage() {
                   <div className="agents-profile-copy">
                     <span className="eyebrow">AI Coworker</span>
                     <h1>{profile.agent.displayName}</h1>
-                    <p>{profile.agent.roleLabel ?? 'Coworker'} · {profile.agent.runtimeStatus}</p>
+                    <p>
+                      {profile.agent.roleLabel ?? 'Coworker'} ·{' '}
+                      {profile.agent.runtimeStatus}
+                    </p>
                   </div>
                   <button
                     className="agents-primary"
                     type="button"
                     onClick={() => void openConversation()}
-                    disabled={opening || profile.agent.runtimeStatus !== 'available'}
+                    disabled={
+                      opening || profile.agent.runtimeStatus !== 'available'
+                    }
                   >
                     {opening ? 'Opening…' : 'Chat'}
                   </button>
@@ -210,22 +243,42 @@ export function AgentsPage() {
                     <span className="eyebrow">Can do</span>
                     <h2>Formal capabilities</h2>
                   </div>
-                  <button type="button" onClick={() => setAuthoring('capability')}>
+                  <button
+                    type="button"
+                    onClick={() => setAuthoring('capability')}
+                  >
                     + Add capability
                   </button>
                 </div>
                 {profile.workCatalog.length ? (
                   <div className="agents-capability-grid">
                     {profile.workCatalog.map((capability) => (
-                      <article className="agents-card agents-capability-card" key={capability.definitionId}>
+                      <article
+                        className="agents-card agents-capability-card"
+                        key={capability.definitionId}
+                      >
                         <div>
                           <h3>{humanize(capability.name)}</h3>
-                          <p>{capability.description ?? 'Formal Work capability'}</p>
+                          <p>
+                            {capability.description ?? 'Formal Work capability'}
+                          </p>
                         </div>
                         <div className="agents-capability-meta">
-                          <span>{Object.keys(capability.inputSchema.properties).length} inputs</span>
+                          <span>
+                            {
+                              Object.keys(capability.inputSchema.properties)
+                                .length
+                            }{' '}
+                            inputs
+                          </span>
                         </div>
-                        <button className="agents-primary" type="button" onClick={() => startCapability(capability.definitionVersionId)}>
+                        <button
+                          className="agents-primary"
+                          type="button"
+                          onClick={() =>
+                            startCapability(capability.definitionVersionId)
+                          }
+                        >
                           Start Work
                         </button>
                       </article>
@@ -234,7 +287,12 @@ export function AgentsPage() {
                 ) : (
                   <div className="agents-empty-capabilities">
                     <p>This Coworker has no formal Capabilities yet.</p>
-                    <button type="button" onClick={() => setAuthoring('capability')}>Teach the first capability</button>
+                    <button
+                      type="button"
+                      onClick={() => setAuthoring('capability')}
+                    >
+                      Teach the first capability
+                    </button>
                   </div>
                 )}
 
@@ -244,17 +302,42 @@ export function AgentsPage() {
                     <article className="agents-card">
                       <h3>Runtime</h3>
                       <dl>
-                        <dt>Status</dt><dd>{profile.agent.runtimeStatus}</dd>
-                        <dt>Published version</dt><dd className="agents-mono">{profile.agent.activeAgentVersionId}</dd>
-                        <dt>Model policy</dt><dd>{profile.capabilities.modelPolicyRef}</dd>
+                        <dt>Status</dt>
+                        <dd>{profile.agent.runtimeStatus}</dd>
+                        <dt>Published version</dt>
+                        <dd className="agents-mono">
+                          {profile.agent.activeAgentVersionId}
+                        </dd>
+                        <dt>Model policy</dt>
+                        <dd>{profile.capabilities.modelPolicyRef}</dd>
                       </dl>
                     </article>
                     <article className="agents-card">
                       <h3>Package capabilities</h3>
-                      <p><strong>Tools</strong></p>
-                      <div className="agents-chips">{profile.capabilities.tools.length ? profile.capabilities.tools.map((tool) => <span key={tool}>{tool}</span>) : <em>No declared tools</em>}</div>
-                      <p><strong>Skills</strong></p>
-                      <div className="agents-chips">{profile.capabilities.skills.length ? profile.capabilities.skills.map((skill) => <span key={skill}>{skill}</span>) : <em>No declared skills</em>}</div>
+                      <p>
+                        <strong>Tools</strong>
+                      </p>
+                      <div className="agents-chips">
+                        {profile.capabilities.tools.length ? (
+                          profile.capabilities.tools.map((tool) => (
+                            <span key={tool}>{tool}</span>
+                          ))
+                        ) : (
+                          <em>No declared tools</em>
+                        )}
+                      </div>
+                      <p>
+                        <strong>Skills</strong>
+                      </p>
+                      <div className="agents-chips">
+                        {profile.capabilities.skills.length ? (
+                          profile.capabilities.skills.map((skill) => (
+                            <span key={skill}>{skill}</span>
+                          ))
+                        ) : (
+                          <em>No declared skills</em>
+                        )}
+                      </div>
                     </article>
                   </div>
                 </details>

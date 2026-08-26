@@ -105,9 +105,15 @@ function Message({
               onChange={(event) => setTaskDescription(event.target.value)}
             />
           </label>
-          {taskError ? <p className="chat-task-error" role="alert">{taskError}</p> : null}
+          {taskError ? (
+            <p className="chat-task-error" role="alert">
+              {taskError}
+            </p>
+          ) : null}
           <div>
-            <button type="button" onClick={() => setCreatingTask(false)}>Cancel</button>
+            <button type="button" onClick={() => setCreatingTask(false)}>
+              Cancel
+            </button>
             <button type="submit" disabled={savingTask || !taskTitle.trim()}>
               {savingTask ? 'Creating…' : 'Create Task'}
             </button>

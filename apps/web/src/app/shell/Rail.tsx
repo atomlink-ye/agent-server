@@ -1,10 +1,4 @@
-export type DesktopTab =
-  | 'conversations'
-  | 'agents'
-  | 'tasks'
-  | 'boards'
-  | 'work'
-  | 'files';
+export type DesktopTab = 'conversations' | 'agents' | 'tasks' | 'boards' | 'work' | 'files';
 
 export interface RailProps {
   readonly activeTab: DesktopTab;

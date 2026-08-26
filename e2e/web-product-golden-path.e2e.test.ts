@@ -20,7 +20,9 @@ if (!parsedBaseUrl.hostname.endsWith('.localhost'))
 const baseUrl = configuredBaseUrl.replace(/\/$/u, '');
 const canonicalUuid =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
-const testTimeout = 8 * 60 * 1000;
+const runtimeExecutionBudgetMs = 10 * 60 * 1000;
+const resultObservationTimeoutMs = runtimeExecutionBudgetMs + 60 * 1000;
+const testTimeout = resultObservationTimeoutMs + 60 * 1000;
 let browser: Browser | undefined;
 
 describe('web Product Golden Path', () => {
@@ -327,7 +329,7 @@ async function waitForObservableResult(
   workId: string,
   runId: string,
 ): Promise<void> {
-  const deadline = Date.now() + 5 * 60 * 1000;
+  const deadline = Date.now() + resultObservationTimeoutMs;
   while (Date.now() < deadline) {
     const response = await page.request.get(
       `/api/works/${workId}/runs/${runId}`,

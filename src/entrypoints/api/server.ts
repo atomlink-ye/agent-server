@@ -46,7 +46,7 @@ if (
   );
   if (localAccount) process.env.AGENT_SERVER_SERVICE_TOKEN = localAccount.token;
 }
-if (config.productWorkAvailability.surface !== 'composed') {
+if (config.productWorkSurface !== 'composed') {
   app.use(
     '*',
     createBrowserFeatureAvailabilityGuard(

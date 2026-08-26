@@ -81,7 +81,7 @@ export function registerBrowserCoworkerRoutes(
     // here rather than through a `/api/agents` prefix guard -- that prefix
     // would wrongly take out the Coworker roster and profile routes above,
     // which stay reachable regardless of Product Work availability.
-    if (config.productWorkAvailability.surface !== 'composed')
+    if (config.productWorkSurface !== 'composed')
       return jsonResponse(
         {
           error: {

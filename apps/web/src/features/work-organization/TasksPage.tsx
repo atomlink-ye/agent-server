@@ -26,6 +26,8 @@ const TASKS_UNAVAILABLE =
   "This workspace doesn't currently offer Task tracking.";
 const TASKS_ACTION_ERROR =
   'That Task change could not be saved. Please try again.';
+const DEFINITIONS_UNAVAILABLE =
+  "This workspace doesn't currently offer Work execution.";
 
 type RecoverableError = {
   readonly source: 'comments' | 'action';
@@ -488,7 +490,7 @@ function TaskDetail({
     readonly PublishedWorkDefinition[]
   >([]);
   const [definitionsState, setDefinitionsState] = useState<
-    'loading' | 'ready' | 'error'
+    'loading' | 'ready' | 'unavailable' | 'error'
   >('loading');
   const [selectedDefinitionId, setSelectedDefinitionId] = useState('');
   const [saving, setSaving] = useState(false);
@@ -506,8 +508,10 @@ function TaskDetail({
         await workOrganizationClient.listPublishedWorkDefinitions(),
       );
       setDefinitionsState('ready');
-    } catch {
-      setDefinitionsState('error');
+    } catch (reason) {
+      setDefinitionsState(
+        isFeatureUnavailable(reason) ? 'unavailable' : 'error',
+      );
     }
   }, []);
 
@@ -806,13 +810,18 @@ function PublishedDefinitionField({
   onRetry,
 }: {
   readonly definitions: readonly PublishedWorkDefinition[];
-  readonly state: 'loading' | 'ready' | 'error';
+  readonly state: 'loading' | 'ready' | 'unavailable' | 'error';
   readonly value: string;
   readonly onChange: (value: string) => void;
   readonly onRetry: () => void;
 }) {
   if (state === 'loading')
     return <p className="work-org-muted">Loading published Definitions…</p>;
+  if (state === 'unavailable')
+    // feature_unavailable means this workspace does not compose the
+    // Product Work surface at all, so reloading can never succeed. No
+    // Retry here — see docs/frontend.md "Surface availability".
+    return <p className="work-org-muted">{DEFINITIONS_UNAVAILABLE}</p>;
   if (state === 'error')
     return (
       <div className="work-org-error" role="alert">

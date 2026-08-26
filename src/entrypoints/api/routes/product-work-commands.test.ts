@@ -31,7 +31,7 @@ const config = {
       disabled: false,
     },
   ],
-  productWorkAvailability: { surface: 'composed', execution: 'runtime' },
+  productWorkSurface: 'composed',
 } as unknown as AppConfig;
 
 describe('product Work command route', () => {

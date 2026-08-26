@@ -29,21 +29,16 @@ export type LarkCanaryConfig =
   Readonly<{ enabled: false }> | LarkCanaryEnabledConfig;
 
 /**
- * The Product Work plane's single, named availability fact. Derived once here
- * from `AGENT_SERVER_PRODUCT_WORK_PLANE` and `RUNTIME_ADAPTER` so every
- * consumer -- the HTTP surface gate, the browser BFF guard, composition --
- * answers "is Product Work available?" the same way instead of re-deriving
- * a bare string comparison at each call site.
+ * Whether this deployment composes the Product Work HTTP surface at all.
  *
- * `surface` is whether the Product Work HTTP surface is installed at all.
- * `execution` is whether a real execution plane is reachable behind it. A
- * composed surface with unavailable execution is a legitimate, expressible
- * state (see `ExecutionPlaneUnavailableError`'s HTTP mapping).
+ * Derived once from `AGENT_SERVER_PRODUCT_WORK_PLANE` so the surface gate, the
+ * browser BFF guard and composition answer "is Product Work available here?"
+ * the same way instead of re-deriving a bare string comparison at each call
+ * site. This is a statement about configuration, not about runtime
+ * reachability: a composed surface says the routes are installed, never that
+ * an execution plane is currently reachable behind them.
  */
-export type ProductWorkAvailability = Readonly<{
-  surface: 'composed' | 'absent';
-  execution: 'runtime' | 'unavailable';
-}>;
+export type ProductWorkSurface = 'composed' | 'absent';
 
 const OptionalConfigString = z.preprocess(
   (value) =>
@@ -300,11 +295,8 @@ export type AppConfig = Readonly<{
   directChatPlane: z.infer<
     typeof ConfigSchema
   >['AGENT_SERVER_DIRECT_CHAT_PLANE'];
-  productWorkPlane: z.infer<
-    typeof ConfigSchema
-  >['AGENT_SERVER_PRODUCT_WORK_PLANE'];
-  /** The single owned Product Work availability fact; see `ProductWorkAvailability`. */
-  productWorkAvailability: ProductWorkAvailability;
+  /** The single owned Product Work surface fact; see `ProductWorkSurface`. */
+  productWorkSurface: ProductWorkSurface;
   runtime?: {
     adapter: z.infer<typeof ConfigSchema>['RUNTIME_ADAPTER'];
   };
@@ -371,17 +363,10 @@ export function loadConfig(
     logLevel: parsed.data.LOG_LEVEL,
     serviceName: parsed.data.SERVICE_NAME,
     directChatPlane: parsed.data.AGENT_SERVER_DIRECT_CHAT_PLANE,
-    productWorkPlane: parsed.data.AGENT_SERVER_PRODUCT_WORK_PLANE,
-    productWorkAvailability: Object.freeze({
-      surface:
-        parsed.data.AGENT_SERVER_PRODUCT_WORK_PLANE === 'absent'
-          ? ('absent' as const)
-          : ('composed' as const),
-      execution:
-        parsed.data.RUNTIME_ADAPTER === 'none'
-          ? ('unavailable' as const)
-          : ('runtime' as const),
-    }),
+    productWorkSurface:
+      parsed.data.AGENT_SERVER_PRODUCT_WORK_PLANE === 'absent'
+        ? 'absent'
+        : 'composed',
     runtime: { adapter: parsed.data.RUNTIME_ADAPTER },
     runtimeMcp: {
       listenHost: parsed.data.RUNTIME_MCP_LISTEN_HOST,

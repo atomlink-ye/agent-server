@@ -155,8 +155,7 @@ export async function createResourceModule(
   });
 
   const directChatEnabled = options.config.directChatPlane !== 'absent';
-  const productWorkEnabled =
-    options.config.productWorkAvailability.surface === 'composed';
+  const productWorkEnabled = options.config.productWorkSurface === 'composed';
   const conversationRepository = directChatEnabled
     ? new PostgresConversationRepository(options.database)
     : undefined;

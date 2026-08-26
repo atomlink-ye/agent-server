@@ -82,8 +82,13 @@ Do not put credentials in `VITE_*` environment variables: Vite can embed them in
 ### Surface availability
 
 Not every deployment composes every product surface. When `AGENT_SERVER_PRODUCT_WORK_PLANE` is
-`absent`, the Work and Work Organization HTTP surfaces are never installed, so `/api/works`,
-`/api/work-items` and `/api/boards` have no upstream to forward to.
+`absent`, the Product Work HTTP surfaces are never installed, so `/api/works`, `/api/work-items`,
+`/api/boards`, `/api/work-definitions` and `POST /api/agents/:agentId/capabilities` have no
+upstream to forward to. Capability binding is included because a Capability is a published Work
+Definition; the Coworker roster and profile stay reachable regardless.
+
+This is a statement about configuration, not about runtime reachability. A composed surface means
+the routes are installed, never that an execution plane is currently reachable behind them.
 
 The facade answers those paths with an explicit availability result rather than letting the
 browser see the generic control-plane 404:

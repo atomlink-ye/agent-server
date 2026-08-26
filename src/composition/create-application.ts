@@ -160,12 +160,10 @@ export async function createApplication(
       logger,
     });
   const workOrganizationModule =
-    productWorkEnabled && workExecutionFacts
+    productWorkEnabled && workModule
       ? createWorkOrganizationCapabilities({
           database: pool,
-          definitions: resourceModule.definitionReadApi,
-          definitionResolution: resourceModule.workDefinitionResolution,
-          executionFacts: workExecutionFacts,
+          work: workModule,
           ...(directChatEnabled && conversations ? { conversations } : {}),
         })
       : undefined;

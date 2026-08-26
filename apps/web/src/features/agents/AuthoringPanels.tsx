@@ -4,6 +4,7 @@ import { ApiTransportError } from '../../api/transport';
 import { diagnosticsFrom } from '../work/components/definition-panel';
 import {
   type DefinitionDiagnostics,
+  type DefinitionApply,
   type DefinitionPlan,
   workDefinitionClient,
 } from '../work/clients/work-definition-client';
@@ -267,7 +268,7 @@ export function CapabilityBuilder({
     setStatus('saving');
     try {
       const applied = await workDefinitionClient.apply(ready.source);
-      await associateCapability(agent.id, applied);
+      await associateCapability(agent.id, capabilityBindingFromApply(applied));
       await onSaved();
       setStatus('ready');
       setMessage('Capability saved to this Coworker’s Work Catalog.');
@@ -633,6 +634,16 @@ export function CapabilityBuilder({
       </div>
     </section>
   );
+}
+
+export function capabilityBindingFromApply(applied: DefinitionApply): {
+  readonly definitionId: string;
+  readonly definitionVersionId: string;
+} {
+  return {
+    definitionId: applied.definitionId,
+    definitionVersionId: applied.versionId,
+  };
 }
 
 function PlanPreview({

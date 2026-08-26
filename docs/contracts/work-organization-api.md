@@ -97,6 +97,6 @@ A WorkItem can be promoted to Work. Work execution then uses the existing Work/W
 
 ## Persistence and recovery boundary
 
-`0061_coworker_work_organization.sql` adds durable WorkItem, comment, Board, column, and placement tables. The current Prove/MVE scope uses the existing single-service process for promotion serialization plus the durable unique linked-Work constraint. It does not claim multi-host promotion recovery or a generalized workflow engine.
+`0062_coworker_work_organization.sql` adds durable WorkItem, comment, Board, column, and placement tables. The current Prove/MVE scope uses the existing single-service process for promotion serialization plus the durable unique linked-Work constraint. It does not claim multi-host promotion recovery or a generalized workflow engine.
 
 The WorkItem/Board state is canonical database state. Frontend optimistic/drag UI must converge by re-reading the bounded API response.

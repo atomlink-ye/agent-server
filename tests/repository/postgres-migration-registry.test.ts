@@ -20,5 +20,16 @@ describe('durable PostgreSQL migration registry', () => {
 
     expect(registered).toEqual(directoryFiles);
     expect(new Set(registered).size).toBe(registered.length);
+
+    const migrationVersions = registered.map((fileName) => {
+      const version = fileName.match(/^(\d+[a-z]*)_/u)?.[1];
+      expect(
+        version,
+        `migration filename has no version: ${fileName}`,
+      ).toBeDefined();
+      return version;
+    });
+
+    expect(new Set(migrationVersions).size).toBe(migrationVersions.length);
   });
 });

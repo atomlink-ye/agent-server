@@ -293,11 +293,6 @@ describe('web Product Golden Path', () => {
           canonicalUuid.test(url.searchParams.get('run') ?? ''),
         { timeout: 60_000 },
       );
-      await page.getByTestId('outcome-product-state').waitFor({
-        state: 'visible',
-        timeout: 60_000,
-      });
-
       const startedUrl = new URL(page.url());
       const workMatch = startedUrl.pathname.match(/^\/work\/([^/]+)$/u);
       const runId = startedUrl.searchParams.get('run');

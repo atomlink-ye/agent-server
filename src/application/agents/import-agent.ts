@@ -11,6 +11,9 @@ export interface ImportAgentInput {
   readonly accessContext: AccessContext;
   readonly idempotencyKey: string;
   readonly source: string;
+  /** Product profile metadata is identity-owned, not executable package state. */
+  readonly roleLabel?: string | null;
+  readonly summary?: string | null;
   readonly now?: () => Date;
   readonly idFactory?: () => string;
 }
@@ -26,6 +29,8 @@ export async function importAgent(
     ...owner,
     normalizedName,
     displayName: parsed.package.metadata.name,
+    ...(input.roleLabel !== undefined ? { roleLabel: input.roleLabel } : {}),
+    ...(input.summary !== undefined ? { summary: input.summary } : {}),
     ...(input.idFactory ? { id: input.idFactory() } : {}),
     ...(input.now ? { now: input.now } : {}),
   });

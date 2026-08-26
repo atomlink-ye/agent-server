@@ -33,7 +33,7 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "format": "prettier --write .",
-    "format:check": "prettier --write apps/web/src/features/work/components/panes/overview-pane.test.ts tests/integration/semantic-closure-migration.integration.test.ts && printf '\\n===OVERVIEW===\\n' && cat apps/web/src/features/work/components/panes/overview-pane.test.ts && printf '\\n===MIGRATION===\\n' && cat tests/integration/semantic-closure-migration.integration.test.ts && prettier --check .",
+    "format:check": "prettier --check .",
     "lint": "node --import tsx scripts/quality/run-lint.ts",
     "scope:changed": "node --import tsx scripts/quality/change-scope.ts",
     "check:compatibility-surfaces": "node --import tsx scripts/quality/check-compatibility-surfaces.ts",

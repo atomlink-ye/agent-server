@@ -388,6 +388,12 @@ describe('managed agent HTTP contracts', () => {
     expect(ErrorResponseSchema.parse(await missingKey.json()).error.code).toBe(
       'invalid_idempotency_key',
     );
+    const afterMissingKey = await databaseControl.database!.query<{
+      count: number;
+    }>(`SELECT COUNT(*)::int AS count FROM agent_definitions WHERE name=$1`, [
+      draft.name,
+    ]);
+    expect(afterMissingKey.rows[0]?.count).toBe(before.rows[0]?.count);
 
     const first = await app.request('/api/v1/coworkers', {
       method: 'POST',
@@ -396,6 +402,29 @@ describe('managed agent HTTP contracts', () => {
     });
     expect(first.status).toBe(201);
     const firstBody = CreateCoworkerResponseSchema.parse(await first.json());
+    const publishedVersion = AgentVersionResponseSchema.parse(
+      await (
+        await app.request(
+          `/api/v1/agent-versions/${firstBody.agent_version_id}`,
+          { headers: headers() },
+        )
+      ).json(),
+    );
+    expect(publishedVersion).toMatchObject({
+      id: firstBody.agent_version_id,
+      definition_id: firstBody.agent_id,
+      status: 'published',
+    });
+    const activeVersion = await databaseControl.database!.query<{
+      active_agent_version_id: string;
+    }>(
+      `SELECT active_agent_version_id FROM agent_chat_runtimes
+       WHERE agent_definition_id=$1`,
+      [firstBody.agent_id],
+    );
+    expect(activeVersion.rows[0]?.active_agent_version_id).toBe(
+      firstBody.agent_version_id,
+    );
     const persisted = await databaseControl.database!.query<{
       count: number;
     }>(
@@ -481,7 +510,7 @@ describe('managed agent HTTP contracts', () => {
   // create-resource-capabilities.ts
   // imports/registers it in installHttp; this fixes an incomplete test-only
   // graph rather than expanding the contract.
-  it('exposes exactly the nine approved managed Agent routes', async () => {
+  it('exposes exactly the ten approved managed Agent routes', async () => {
     const app = await createTestApp(new FakeAgentRuntime(), {
       startDispatcher: false,
     });

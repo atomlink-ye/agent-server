@@ -100,7 +100,7 @@ it('does not silently replace an unavailable deep-link Coworker or Capability', 
   }
 });
 
-it('blocks Work creation for an unselected required boolean and accepts explicit No', async () => {
+it('blocks an unselected required boolean, then starts Run in the same turn after Work creation', async () => {
   const requests: Array<{ input: string; init?: RequestInit }> = [];
   const fetchMock = vi.fn(
     async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -174,10 +174,13 @@ it('blocks Work creation for an unselected required boolean and accepts explicit
     await act(async () => {
       choice!.value = 'false';
       choice!.dispatchEvent(new Event('change', { bubbles: true }));
-      await Promise.resolve();
       submit!.click();
-      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
+    expect(requests.slice(-2).map((request) => request.input)).toEqual([
+      '/api/works',
+      '/api/works/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/runs',
+    ]);
     const createRequest = requests.find(
       (request) => request.input === '/api/works',
     );

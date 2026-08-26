@@ -192,39 +192,50 @@ describe('web Product Golden Path', () => {
           new URL(response.url()).origin === browserOrigin &&
           new URL(response.url()).pathname === '/api/works',
       );
+      const runRequest = handledWait(
+        page.waitForRequest(
+          (request) =>
+            request.method() === 'POST' &&
+            new URL(request.url()).origin === browserOrigin &&
+            /\/api\/works\/[0-9a-f-]+\/runs$/iu.test(
+              new URL(request.url()).pathname,
+            ),
+          { timeout: 60_000 },
+        ),
+      );
+      const runResponse = handledWait(
+        page.waitForResponse(
+          (response) =>
+            response.request().method() === 'POST' &&
+            new URL(response.url()).origin === browserOrigin &&
+            /\/api\/works\/[0-9a-f-]+\/runs$/iu.test(
+              new URL(response.url()).pathname,
+            ),
+          { timeout: 60_000 },
+        ),
+      );
       await page.getByRole('button', { name: 'Start Work' }).click();
       const createdWorkResponse = await workCreateResponse;
       if (!createdWorkResponse.ok()) {
+        // Both waiters convert rejection to a handled result. Closing the
+        // browser in afterEach cancels them without unhandled rejections.
+        void Promise.all([runRequest, runResponse]);
         throw new Error(
           `Work creation failed (${createdWorkResponse.status()}): ${await boundedErrorBody(createdWorkResponse)} request=${sanitizedWorkCreateRequest(createdWorkResponse)}`,
         );
       }
       expect(createdWorkResponse.status()).toBe(201);
-      const runRequest = page.waitForRequest(
-        (request) =>
-          request.method() === 'POST' &&
-          new URL(request.url()).origin === browserOrigin &&
-          /\/api\/works\/[0-9a-f-]+\/runs$/iu.test(
-            new URL(request.url()).pathname,
-          ),
-        { timeout: 60_000 },
-      );
-      const runResponse = page.waitForResponse(
-        (response) =>
-          response.request().method() === 'POST' &&
-          new URL(response.url()).origin === browserOrigin &&
-          /\/api\/works\/[0-9a-f-]+\/runs$/iu.test(
-            new URL(response.url()).pathname,
-          ),
-        { timeout: 60_000 },
-      );
       let submittedRunRequest: import('playwright').Request;
       let startedRunResponse: import('playwright').Response;
       try {
-        [submittedRunRequest, startedRunResponse] = await Promise.all([
+        const [runRequestResult, runResponseResult] = await Promise.all([
           runRequest,
           runResponse,
         ]);
+        if ('error' in runRequestResult) throw runRequestResult.error;
+        if ('error' in runResponseResult) throw runResponseResult.error;
+        submittedRunRequest = runRequestResult.value;
+        startedRunResponse = runResponseResult.value;
       } catch (error) {
         throw new Error(
           `Work Run request was not sent after Work creation: ${await boundedUiStatus(page)} (${error instanceof Error ? error.message : String(error)})`,
@@ -304,6 +315,15 @@ async function waitForObservableResult(
     await new Promise((resolve) => setTimeout(resolve, 1_000));
   }
   throw new Error('Timed out waiting for the UI-started Work Run result.');
+}
+
+type WaitOutcome<T> = { readonly value: T } | { readonly error: unknown };
+
+function handledWait<T>(promise: Promise<T>): Promise<WaitOutcome<T>> {
+  return promise.then(
+    (value) => ({ value }),
+    (error: unknown) => ({ error }),
+  );
 }
 
 async function boundedErrorBody(

@@ -50,6 +50,7 @@ const canarySignalExitCodes: Record<CanarySignal, number> = {
 
 type CanarySignalLifecycle = Readonly<{
   readonly cleanup: () => Promise<void>;
+  readonly register: (child: ChildProcess) => void;
   readonly requestedSignal: () => CanarySignal | undefined;
   readonly signal: Promise<CanarySignal>;
   readonly dispose: () => void;
@@ -60,13 +61,24 @@ export function createCanarySignalLifecycle(
 ): CanarySignalLifecycle {
   let requestedSignal: CanarySignal | undefined;
   let cleanupPromise: Promise<void> | undefined;
+  let cleanupStarted = false;
   let resolveSignal: (signal: CanarySignal) => void = () => undefined;
   const signal = new Promise<CanarySignal>((resolveSignalValue) => {
     resolveSignal = resolveSignalValue;
   });
   const cleanup = (): Promise<void> => {
-    cleanupPromise ??= stopOwned(children);
+    cleanupStarted = true;
+    cleanupPromise ??= stopOwned([...children]);
     return cleanupPromise;
+  };
+  const register = (child: ChildProcess): void => {
+    children.push(child);
+    if (cleanupStarted) {
+      const childCleanup = stopOwned([child]);
+      cleanupPromise = cleanupPromise
+        ? Promise.all([cleanupPromise, childCleanup]).then(() => undefined)
+        : childCleanup;
+    }
   };
   const handlers = new Map<CanarySignal, () => void>();
   for (const signalName of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) {
@@ -82,6 +94,7 @@ export function createCanarySignalLifecycle(
   }
   return {
     cleanup,
+    register,
     requestedSignal: () => requestedSignal,
     signal,
     dispose: () => {
@@ -209,7 +222,7 @@ export async function runHostCanary(
         ],
         { environment: runtimeEnvironment, logName: 'canary-runtime-api' },
       );
-      children.push(api);
+      lifecycle.register(api);
       primaryChild = api;
       primaryEnvironment = runtimeEnvironment;
       await waitForHttp(`${apiBaseUrl}/health/ready`, readyTimeoutMs, {
@@ -273,7 +286,7 @@ export async function runHostCanary(
         logName: 'canary-golden-path-dev',
       },
     );
-    children.push(dev);
+    lifecycle.register(dev);
     primaryChild = dev;
     primaryEnvironment = devEnvironment;
     await waitForHttp(`${apiBaseUrl}/health/ready`, readyTimeoutMs, {

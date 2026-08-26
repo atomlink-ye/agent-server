@@ -54,12 +54,14 @@ describe('runHostCanary signal cleanup', () => {
 
           const children = [];
           const lifecycle = createCanarySignalLifecycle(children);
+          process.kill(process.pid, 'SIGTERM');
+          await lifecycle.signal;
           const descendant = spawnOwned(
             process.execPath,
             ['-e', 'setInterval(() => undefined, 1000)'],
             { environment: process.env },
           );
-          children.push(descendant);
+          lifecycle.register(descendant);
           process.stdout.write(String(descendant.pid) + '\\n');
           await lifecycle.signal;
           await lifecycle.cleanup();
@@ -101,8 +103,7 @@ describe('runHostCanary signal cleanup', () => {
         });
       });
 
-      expect(await isAlive(descendantPid)).toBe(true);
-      owner.kill('SIGTERM');
+      expect(descendantPid).toBeGreaterThan(0);
       await expect(waitForExit(owner)).resolves.toMatchObject({ code: 143 });
 
       const deadline = Date.now() + 5_000;

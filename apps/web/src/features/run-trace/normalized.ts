@@ -55,6 +55,7 @@ export type TraceMessage = {
 
 export type TraceActivity = {
   readonly activityId: string;
+  readonly runId: string;
   readonly sequence: number;
   readonly status: string;
   readonly category: string;
@@ -195,6 +196,7 @@ export function normalizeProductRunTrace(
   );
   const activities = productTrace.mcp_activities.map((activity) => ({
     activityId: activity.activity_id,
+    runId: activity.source_refs.run_id,
     sequence: activity.sequence,
     status: activity.status,
     category: activity.category,

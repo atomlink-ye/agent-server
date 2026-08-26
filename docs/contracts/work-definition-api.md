@@ -1,22 +1,22 @@
 # Work Definition API
 
-Status: MVE Product API contract
+Status: MVE Product API contract; active Worker cutover complete
 
 This contract is the public authoring boundary for Composition-first Work. It
 exposes Product intent (`Definition -> Work -> WorkRun`) and deliberately hides
 registry choreography, internal Team materialization, Task, TeamRun,
 RuntimeSession, and provider identities.
 
-The canonical formal shape is Worker-based: Work selects published
+The canonical and active formal shape is Worker-based: Work selects published
 `WorkerVersion` references, while Coworker `AgentVersion` remains Chat-plane
-identity. The current implementation baseline still has a compatibility
-`single_agent` / `agent_version_id` path and may materialize/publish Agents;
-that path is legacy and is not the target contract. See [Coworker Agent /
-Worker semantic split](../features/coworker-worker-semantic-split.md).
+identity. Active Product authoring, planning, materialization, and execution do
+not use `AgentVersion` as a Work participant and do not publish an Agent as a
+side effect. Historical Agent-shaped rows are migration evidence only. See
+[Coworker Agent / Worker semantic split](../features/coworker-worker-semantic-split.md).
 
 ## Author document
 
-Single Agent:
+Single Worker:
 
 ```yaml
 apiVersion: agentserver.dev/v1alpha1
@@ -254,9 +254,13 @@ The Product client should reason about Work/WorkRun/Product state. Technical Tas
 
 Retries and replay use the WorkRun's persisted input and resolved Worker
 manifest. They do not reload the latest WorkerVersion or silently substitute an
-AgentVersion. Existing recorded `single_agent` / `agent_version_id` rows may
-remain readable during migration, but new formal callers must use the Worker
-shape and the legacy fallback must be removed once those callers are cut over.
+AgentVersion. Historical Agent-shaped rows may remain in migration/audit data,
+but no active Product caller reads them as a formal Work authority.
+
+The compatibility `POST /api/v1/tasks:invoke` surface may still execute an
+explicit legacy Agent invokable for old technical clients. That compatibility
+surface is outside Product Work composition and does not reintroduce Agent as a
+WorkDefinition participant.
 
 ## Explicit non-goals
 

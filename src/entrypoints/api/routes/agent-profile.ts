@@ -4,6 +4,7 @@ import type {
   ManagedAgentCoworkerSummary,
   ManagedAgentDefinitionRead,
 } from '../../../application/ports/agent-registry.js';
+import type { ManagedAgentOwner } from '../../../domain/agents/managed-agent-owner.js';
 import type { AgentResolutionApi } from '../../../application/ports/agent-resolution-api.js';
 import { ServiceAccountAuthenticator } from '../../../application/control-plane/service-account-authenticator.js';
 import {
@@ -22,7 +23,7 @@ export function registerAgentProfileRoute(
     readonly config: AppConfig;
     readonly agents: Pick<
       ManagedAgentDefinitionRead,
-      'listManagedDefinitionsByTenant'
+      'listManagedDefinitionsForOwner'
     >;
     readonly resolution: AgentResolutionApi;
   },
@@ -37,11 +38,7 @@ export function registerAgentProfileRoute(
     if (!AgentIdSchema.safeParse(agentId).success)
       throw new HttpError(400, 'invalid_request', 'The Agent id is invalid.');
     const access = getAuthenticatedAccessContext(c);
-    const coworker = await findCoworker(
-      dependencies.agents,
-      access.tenantId,
-      agentId,
-    );
+    const coworker = await findCoworker(dependencies.agents, access, agentId);
     if (!coworker)
       throw new HttpError(404, 'agent_not_found', 'The Agent does not exist.');
 
@@ -92,15 +89,15 @@ export function registerAgentProfileRoute(
 }
 
 async function findCoworker(
-  agents: Pick<ManagedAgentDefinitionRead, 'listManagedDefinitionsByTenant'>,
-  tenantId: string,
+  agents: Pick<ManagedAgentDefinitionRead, 'listManagedDefinitionsForOwner'>,
+  owner: ManagedAgentOwner,
   agentId: string,
 ): Promise<ManagedAgentCoworkerSummary | null> {
-  if (!agents.listManagedDefinitionsByTenant) return null;
+  if (!agents.listManagedDefinitionsForOwner) return null;
   let cursor: string | null = null;
   do {
-    const page = await agents.listManagedDefinitionsByTenant({
-      tenantId,
+    const page = await agents.listManagedDefinitionsForOwner({
+      owner,
       command: { cursor, limit: 100 },
     });
     const found = page.items.find((item) => item.definition.id === agentId);

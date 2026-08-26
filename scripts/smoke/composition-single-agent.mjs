@@ -3,8 +3,101 @@ import pg from 'pg';
 
 const { Pool } = pg;
 
+export const COMPOSITION_ADMISSION_TIMEOUT_ENV =
+  'COMPOSITION_ADMISSION_TIMEOUT_MS';
+export const DEFAULT_COMPOSITION_ADMISSION_TIMEOUT_MS = 60_000;
+export const MAX_COMPOSITION_ADMISSION_TIMEOUT_MS = 600_000;
+const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
+const TERMINAL_PRODUCT_STATES = new Set([
+  'complete',
+  'problem',
+  'not_captured',
+]);
+
 function pause(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export function resolveCompositionAdmissionTimeoutMs(
+  environment = process.env,
+) {
+  const rawValue = environment[COMPOSITION_ADMISSION_TIMEOUT_ENV]?.trim();
+  if (!rawValue) return DEFAULT_COMPOSITION_ADMISSION_TIMEOUT_MS;
+  if (!/^\d+$/.test(rawValue))
+    throw new Error(
+      `${COMPOSITION_ADMISSION_TIMEOUT_ENV} must be a positive decimal safe integer no greater than ${MAX_COMPOSITION_ADMISSION_TIMEOUT_MS}.`,
+    );
+  const value = Number(rawValue);
+  if (
+    !Number.isSafeInteger(value) ||
+    value <= 0 ||
+    value > MAX_COMPOSITION_ADMISSION_TIMEOUT_MS
+  )
+    throw new Error(
+      `${COMPOSITION_ADMISSION_TIMEOUT_ENV} must be a positive decimal safe integer no greater than ${MAX_COMPOSITION_ADMISSION_TIMEOUT_MS}.`,
+    );
+  return value;
+}
+
+export function classifyCompositionWorkRunState({ summary, detail } = {}) {
+  const workRun = detail?.work_run ?? summary;
+  if (!workRun || typeof workRun.id !== 'string')
+    return { state: 'not_found', work_run_id: null };
+  if (workRun.bound_at === null)
+    return {
+      state: 'pending_unbound',
+      work_run_id: workRun.id,
+      bound_at: null,
+      product_state: null,
+    };
+  const productState = detail?.work_run?.product_state;
+  return {
+    state: TERMINAL_PRODUCT_STATES.has(productState)
+      ? 'terminal'
+      : 'bound_running',
+    work_run_id: workRun.id,
+    bound_at: workRun.bound_at,
+    product_state: productState ?? null,
+  };
+}
+
+export async function collectCompositionAdmissionAbortDiagnostic({
+  request,
+  workId,
+  triggerRef,
+  error,
+}) {
+  let summary;
+  let detail;
+  let lookup = 'found';
+  try {
+    const listed = await request(
+      `/api/v1/works/${workId}/runs?limit=100&order=created_desc`,
+      { expectedStatus: 200 },
+    );
+    summary = (Array.isArray(listed.work_runs) ? listed.work_runs : []).find(
+      (candidate) => candidate.trigger_ref === triggerRef,
+    );
+    if (!summary) lookup = 'not_found';
+    if (summary?.id) {
+      detail = await request(
+        `/api/v1/works/${workId}/runs/${encodeURIComponent(summary.id)}`,
+        { expectedStatus: 200 },
+      );
+    }
+  } catch {
+    lookup = 'unavailable';
+  }
+  return {
+    work_id: workId,
+    admission_error: error?.name === 'TimeoutError' ? 'timeout' : 'aborted',
+    lookup,
+    ...classifyCompositionWorkRunState({ summary, detail }),
+  };
+}
+
+function isCompositionAdmissionAbort(error) {
+  return error?.name === 'TimeoutError' || error?.name === 'AbortError';
 }
 
 export async function runCompositionSingleWorkerSmoke({
@@ -19,10 +112,20 @@ export async function runCompositionSingleWorkerSmoke({
   const databaseUrl = process.env.DATABASE_URL?.trim();
   if (!databaseUrl)
     throw new Error('composition smoke requires a host-native DATABASE_URL');
+  const compositionAdmissionTimeoutMs = resolveCompositionAdmissionTimeoutMs();
   const scenarioId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
   const marker = `COMPOSITION_SINGLE_WORKER_OK_${scenarioId}`;
+  const triggerRef = `composition-single-${scenarioId}`;
 
-  async function request(path, { method = 'GET', body, expectedStatus } = {}) {
+  async function request(
+    path,
+    {
+      method = 'GET',
+      body,
+      expectedStatus,
+      requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
+    } = {},
+  ) {
     const response = await fetch(new URL(path, baseUrl), {
       method,
       headers: {
@@ -36,7 +139,7 @@ export async function runCompositionSingleWorkerSmoke({
           : {}),
       },
       body: body === undefined ? undefined : JSON.stringify(body),
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.timeout(requestTimeoutMs),
     });
     const text = await response.text();
     const json = text ? JSON.parse(text) : {};
@@ -201,14 +304,34 @@ spec:
     if (typeof workId !== 'string')
       throw new Error('composition smoke Work id missing');
 
-    const started = await request(`/api/v1/works/${workId}/runs`, {
-      method: 'POST',
-      body: {
-        trigger_kind: 'manual',
-        input: { marker },
-      },
-      expectedStatus: 202,
-    });
+    let started;
+    try {
+      started = await request(`/api/v1/works/${workId}/runs`, {
+        method: 'POST',
+        body: {
+          trigger_kind: 'manual',
+          trigger_ref: triggerRef,
+          input: { marker },
+        },
+        expectedStatus: 202,
+        requestTimeoutMs: compositionAdmissionTimeoutMs,
+      });
+    } catch (error) {
+      if (isCompositionAdmissionAbort(error)) {
+        const diagnostic = await collectCompositionAdmissionAbortDiagnostic({
+          request,
+          workId,
+          triggerRef,
+          error,
+        });
+        progress('composition_single_worker_admission_aborted', diagnostic);
+        throw new Error(
+          `composition WorkRun admission ${diagnostic.admission_error}: state=${diagnostic.state} lookup=${diagnostic.lookup}`,
+          { cause: error },
+        );
+      }
+      throw error;
+    }
     const workRunId = started.work_run?.id;
     const rootTaskId = started.execution_receipt?.source_refs?.task_id;
     if (typeof workRunId !== 'string' || typeof rootTaskId !== 'string')
@@ -424,10 +547,20 @@ export async function runCompositionSingleWorkerInlineSmoke({
     throw new Error(
       'inline composition smoke requires a host-native DATABASE_URL',
     );
+  const compositionAdmissionTimeoutMs = resolveCompositionAdmissionTimeoutMs();
   const scenarioId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
   const marker = `COMPOSITION_SINGLE_WORKER_INLINE_OK_${scenarioId}`;
+  const triggerRef = `composition-inline-${scenarioId}`;
 
-  async function request(path, { method = 'GET', body, expectedStatus } = {}) {
+  async function request(
+    path,
+    {
+      method = 'GET',
+      body,
+      expectedStatus,
+      requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
+    } = {},
+  ) {
     const response = await fetch(new URL(path, baseUrl), {
       method,
       headers: {
@@ -441,7 +574,7 @@ export async function runCompositionSingleWorkerInlineSmoke({
           : {}),
       },
       body: body === undefined ? undefined : JSON.stringify(body),
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.timeout(requestTimeoutMs),
     });
     const text = await response.text();
     const json = text ? JSON.parse(text) : {};
@@ -588,14 +721,37 @@ spec:
     if (typeof workId !== 'string')
       throw new Error('inline smoke Work id missing');
 
-    const started = await request(`/api/v1/works/${workId}/runs`, {
-      method: 'POST',
-      body: {
-        trigger_kind: 'manual',
-        input: { marker },
-      },
-      expectedStatus: 202,
-    });
+    let started;
+    try {
+      started = await request(`/api/v1/works/${workId}/runs`, {
+        method: 'POST',
+        body: {
+          trigger_kind: 'manual',
+          trigger_ref: triggerRef,
+          input: { marker },
+        },
+        expectedStatus: 202,
+        requestTimeoutMs: compositionAdmissionTimeoutMs,
+      });
+    } catch (error) {
+      if (isCompositionAdmissionAbort(error)) {
+        const diagnostic = await collectCompositionAdmissionAbortDiagnostic({
+          request,
+          workId,
+          triggerRef,
+          error,
+        });
+        progress(
+          'composition_single_worker_inline_admission_aborted',
+          diagnostic,
+        );
+        throw new Error(
+          `inline WorkRun admission ${diagnostic.admission_error}: state=${diagnostic.state} lookup=${diagnostic.lookup}`,
+          { cause: error },
+        );
+      }
+      throw error;
+    }
     const workRunId = started.work_run?.id;
     const rootTaskId = started.execution_receipt?.source_refs?.task_id;
     if (typeof workRunId !== 'string' || typeof rootTaskId !== 'string')

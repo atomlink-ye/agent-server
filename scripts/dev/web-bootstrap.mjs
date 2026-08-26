@@ -387,11 +387,11 @@ async function bootstrapAgentWorkflowAssociation(
   try {
     const result = await pool.query(
       `INSERT INTO agent_work_bindings
-         (tenant_id,workspace_id,agent_definition_id,work_definition_id,active_work_definition_version_id,status,created_at,updated_at)
-       SELECT tenant_id,workspace_id,$1,id,$3,'enabled',now(),now()
+         (tenant_id,workspace_id,principal_type,principal_id,agent_definition_id,work_definition_id,active_work_definition_version_id,status,created_at,updated_at)
+       SELECT tenant_id,workspace_id,principal_type,principal_id,$1,id,$3,'enabled',now(),now()
          FROM work_definition_source_definitions
         WHERE id=$2
-       ON CONFLICT (tenant_id,workspace_id,agent_definition_id,work_definition_id)
+       ON CONFLICT (tenant_id,workspace_id,principal_type,principal_id,agent_definition_id,work_definition_id)
        DO UPDATE SET active_work_definition_version_id=EXCLUDED.active_work_definition_version_id,status='enabled',updated_at=EXCLUDED.updated_at`,
       [agentDefinitionId, definitionId, definitionVersionId],
     );
@@ -400,9 +400,11 @@ async function bootstrapAgentWorkflowAssociation(
         `SELECT b.active_work_definition_version_id,b.status
            FROM agent_work_bindings b
            JOIN work_definition_source_definitions d
-             ON d.id=b.work_definition_id
+            ON d.id=b.work_definition_id
             AND d.tenant_id=b.tenant_id
             AND d.workspace_id=b.workspace_id
+            AND d.principal_type=b.principal_type
+            AND d.principal_id=b.principal_id
           WHERE b.agent_definition_id=$1 AND b.work_definition_id=$2`,
         [agentDefinitionId, definitionId],
       );

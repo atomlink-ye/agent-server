@@ -76,7 +76,6 @@ function registry(commands: unknown[]): WorkerRegistry {
     },
     findDefinition: async () => null,
     findVersion: async () => null,
-    findVersionByTenant: async () => null,
   };
 }
 

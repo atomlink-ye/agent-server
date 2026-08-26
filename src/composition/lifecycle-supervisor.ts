@@ -23,6 +23,12 @@ export interface LifecycleResources {
 
 export type StartableLifecycleResources = LifecycleResources & {
   readonly dispatcher: Pick<RunDispatcher, 'start' | 'stop'>;
+  readonly runtimeProvider: Pick<
+    RuntimeExecutionProvider,
+    'ensureReady' | 'health' | 'close'
+  >;
+  /** Runtime mode initializes Paseo before the dispatcher and HTTP server run. */
+  readonly runtimeEnabled: boolean;
   readonly larkWorker?: Pick<LarkIngressWorker, 'start' | 'stop'>;
   readonly larkOutboxWorker?: Pick<LarkOutboxWorker, 'start' | 'stop'>;
   readonly chatWorker?: Pick<ChatDeliveryWorker, 'start' | 'stop'>;
@@ -102,6 +108,8 @@ export async function startServiceResources(
   resources: StartableLifecycleResources,
 ): Promise<void> {
   try {
+    if (resources.runtimeEnabled)
+      await ensureRuntimeProviderReady(resources.runtimeProvider);
     resources.dispatcher.start();
     await resources.larkReceiver?.start();
     resources.larkWorker?.start();
@@ -109,7 +117,10 @@ export async function startServiceResources(
     resources.chatWorker?.start();
     resources.workChatWorker?.start();
   } catch (error: unknown) {
-    const startupFailure = lifecycleError('service startup');
+    const startupFailure =
+      error instanceof Error && error.name === 'ServiceLifecycleError'
+        ? error
+        : lifecycleError('service startup');
     try {
       await closeServiceResources(resources);
     } catch (cleanupError: unknown) {
@@ -119,6 +130,39 @@ export async function startServiceResources(
       );
     }
     throw startupFailure;
+  }
+}
+
+async function ensureRuntimeProviderReady(
+  runtimeProvider: Pick<RuntimeExecutionProvider, 'ensureReady' | 'health'>,
+): Promise<void> {
+  let ready: boolean;
+  try {
+    ready = await runtimeProvider.ensureReady();
+  } catch (error: unknown) {
+    throw lifecycleError(
+      'runtime provider startup',
+      error instanceof Error ? error.name : typeof error,
+    );
+  }
+  if (ready) return;
+
+  try {
+    const health = await runtimeProvider.health();
+    const failedChecks = health.checks
+      .filter((check) => !check.ready)
+      .map((check) => check.name);
+    throw lifecycleError(
+      'runtime provider readiness',
+      `plane=${health.plane}; checks=${failedChecks.join(',') || 'unknown'}`,
+    );
+  } catch (error: unknown) {
+    if (error instanceof Error && error.name === 'ServiceLifecycleError')
+      throw error;
+    throw lifecycleError(
+      'runtime provider readiness',
+      error instanceof Error ? error.name : typeof error,
+    );
   }
 }
 
@@ -141,8 +185,8 @@ function throwFailures(failures: readonly Error[], message: string): void {
   throw new AggregateError(failures, message);
 }
 
-function lifecycleError(label: string): Error {
-  const safe = new Error(`${label} failed`);
+function lifecycleError(label: string, detail?: string): Error {
+  const safe = new Error(`${label} failed${detail ? ` (${detail})` : ''}`);
   safe.name = 'ServiceLifecycleError';
   return safe;
 }

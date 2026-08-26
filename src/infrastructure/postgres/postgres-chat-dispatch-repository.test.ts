@@ -3,11 +3,46 @@ import { describe, expect, it } from 'vitest';
 
 import { applyDurableKernelMigrations } from './postgres.js';
 import { PostgresChatDispatchRepository } from './postgres-chat-dispatch-repository.js';
+import type { PostgresConnectable } from './postgres-conversation-repository.js';
 
 const conversationId = '00000000-0000-4000-8000-00000000d201';
 const runtimeId = '00000000-0000-4000-8000-00000000d301';
 
 describe('PostgresChatDispatchRepository N2 activation semantics', () => {
+  it('uses a connection-scoped claim statement identity for pool-backed databases', async () => {
+    const statements: Array<Record<string, unknown>> = [];
+    const client = {
+      async query(
+        sqlOrConfig: string | Record<string, unknown>,
+        _values?: readonly unknown[],
+      ) {
+        if (typeof sqlOrConfig !== 'string') statements.push(sqlOrConfig);
+        return { rows: [] };
+      },
+      release() {},
+    };
+    const repository = new PostgresChatDispatchRepository({
+      async query() {
+        throw new Error('claim should use the leased connection');
+      },
+      async connect() {
+        return client;
+      },
+    } as PostgresConnectable);
+
+    await repository.claimNext('worker-a', 60_000);
+
+    expect(statements).toHaveLength(1);
+    expect(statements[0]).toMatchObject({
+      name: expect.stringMatching(/^agent_server_chat_claim_/),
+      portal: expect.stringMatching(/^agent_server_chat_claim_portal_/),
+      values: ['worker-a', 60_000],
+    });
+    expect(statements[0]?.text).toEqual(
+      expect.stringContaining('claimed_by=$1'),
+    );
+  });
+
   it('coalesces an unclaimed user message and Work wake without dropping either cause', async () => {
     const db = await database();
     const repository = new PostgresChatDispatchRepository(db);

@@ -619,6 +619,8 @@ function mapClaimedRunRow(row: RunRow): ClaimedRun {
 function mapRunRow(row: RunRow): Run {
   const snapshot: RunSnapshot = {
     id: row.id,
+    taskId: row.task_id,
+    attempt: row.attempt,
     prompt: decodeRootTaskRunRequestSnapshotRef(row.input_snapshot_ref).prompt,
     status: row.status,
     createdAt: toIsoInstant(row.created_at),

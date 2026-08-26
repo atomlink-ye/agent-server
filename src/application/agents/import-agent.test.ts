@@ -44,7 +44,6 @@ describe('ImportAgent application boundary', () => {
         principalType: 'service_account',
         principalId: 'principal',
       },
-      compatibilityWorkspaceId: 'workspace',
       normalizedName: 'my-agent',
       idempotencyKey: 'request-1',
       requestFingerprint: hash(source),
@@ -81,10 +80,6 @@ describe('ImportAgent application boundary', () => {
       principalType: 'service_account',
       principalId: 'principal',
     });
-    expect(calls.map((call) => call.compatibilityWorkspaceId)).toEqual([
-      'workspace',
-      'workspace-2',
-    ]);
   });
 
   it('rejects an overlong normalized name before calling the registry', async () => {

@@ -45,6 +45,7 @@ interface AgentRouteDependencies {
   readonly agentRegistry: AgentRegistry &
     Pick<
       ManagedAgentDefinitionRead,
+      | 'listManagedDefinitionsForOwner'
       | 'findManagedDefinitionByTenant'
       | 'findVersionByTenant'
       | 'listVersionsByTenant'
@@ -125,19 +126,15 @@ export function registerAgentRoutes(
     const query = parseListQuery(c.req.url);
     try {
       const access = getAuthenticatedAccessContext(c);
-      const coworkerRead =
-        dependencies.agentRegistry as typeof dependencies.agentRegistry &
-          Partial<
-            Pick<ManagedAgentDefinitionRead, 'listManagedDefinitionsByTenant'>
-          >;
-      if (!coworkerRead.listManagedDefinitionsByTenant)
+      const coworkerRead = dependencies.agentRegistry;
+      if (!coworkerRead.listManagedDefinitionsForOwner)
         throw new HttpError(
           404,
           'not_found',
           'The coworker roster is unavailable.',
         );
-      const page = await coworkerRead.listManagedDefinitionsByTenant({
-        tenantId: access.tenantId,
+      const page = await coworkerRead.listManagedDefinitionsForOwner({
+        owner: access,
         command: query,
       });
       return c.json(
@@ -236,11 +233,10 @@ export function registerAgentRoutes(
         versionId,
       });
       if (dependencies.coworkerProvisioning) {
-        const definition =
-          await dependencies.agentRegistry.findManagedDefinitionByTenant({
-            tenantId: access.tenantId,
-            definitionId: version.definitionId,
-          });
+        const definition = await dependencies.agentRegistry.findDefinition(
+          access,
+          version.definitionId,
+        );
         if (!definition) throw new AgentNotFoundError();
         await dependencies.coworkerProvisioning.execute({
           accessContext: access,

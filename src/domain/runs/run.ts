@@ -32,6 +32,9 @@ export const RUN_CANCELLED_ERROR: RunFailure = Object.freeze({
 
 export interface Run {
   readonly id: string;
+  /** Immutable durable execution lineage, present on repository reloads. */
+  readonly taskId?: string;
+  readonly attempt?: number;
   readonly prompt: string;
   readonly status: RunStatus;
   readonly createdAt: string;
@@ -48,6 +51,8 @@ export function createRun(
   prompt: string,
   options: {
     readonly id?: string;
+    readonly taskId?: string;
+    readonly attempt?: number;
     readonly now?: () => Date;
   } = {},
 ): Run {
@@ -55,6 +60,8 @@ export function createRun(
 
   return Object.freeze({
     id: options.id ?? randomUUID(),
+    ...(options.taskId ? { taskId: options.taskId } : {}),
+    ...(options.attempt !== undefined ? { attempt: options.attempt } : {}),
     prompt,
     status: 'queued',
     createdAt: timestamp,

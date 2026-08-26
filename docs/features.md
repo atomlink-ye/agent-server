@@ -2,16 +2,16 @@
 
 This is the authoritative capability ledger. Status values are `implemented`, `baseline`, `planned`, and `reserved`. `baseline` is a proven seam with known temporary limitations; it is not production completion.
 
-| Feature area                     | Current status | Baseline evidence                                                                                                                                                                                                                                                                                                                                                                      | V1 destination                                                                                        |
-| -------------------------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| Identity and Access              | Baseline       | Service-account bearer auth and server-derived owner scope                                                                                                                                                                                                                                                                                                                             | Tenant, canonical user, OIDC/Lark, ACL, richer service accounts                                       |
-| Agents and Teams                 | Baseline       | Managed Coworker Agent/Team registries plus Worker registry/migration scaffolding. **Composition-first Work cutover is incomplete:** active Work callers still expose legacy single-Agent composition in places; the target resolves formal WorkerVersion participants, Environment, Memory, Skills, domain Tools, and platform capabilities into one frozen WorkRun resource manifest | Dynamic rosters, nested Teams, and generalized graphs                                                 |
-| Workspace and Memory             | Baseline       | **API-first MVE implemented:** authenticated PostgreSQL Memory Store → stable Memory → immutable Version API with SHA-256 CAS, no-op/revert semantics, exact owner scope, plus retained proposal/snapshot/Lark compatibility paths                                                                                                                                                     | Retrieval, context assembly, memory policy, broader Memory lifecycle                                  |
-| Sessions, Tasks and Runs         | Baseline       | Product **Definition → Work → WorkRun** lifecycle with typed WorkRun input, immutable resolved manifest, Product state/Trace projection, runtime binding, durable lifecycle events, final assistant Message, replayable SSE, owner-scoped cancellation, and the retained technical Task/Run execution tree                                                                             | Runtime Session V2 create/resume/status, incremental deltas, retry, receipts, recovery                |
-| Runtime, Tools and Credentials   | Baseline       | Paseo/OpenCode Execution Plane with native Bootstrap/per-turn separation, reusable/fresh RuntimeSession policies, external Workspace binding, platform MCP capability admission, same-Agent continuation, zero-key model selection, sanitized runtime projections, and typed Tool activity                                                                                             | Production isolation, placement, tool gateway, credential broker, approvals, Agent Memory HTTP client |
-| Artifacts and Evidence           | Planned        | Result text only; Work-first Web deliberately renders Artifacts as unavailable rather than inferring deliverables                                                                                                                                                                                                                                                                      | Immutable Artifact versions, evidence, source and child lineage                                       |
-| Channels, API and Console        | Baseline       | Product WorkDefinition `validate/plan/apply`, DefinitionVersion reads, Work/WorkRun Product APIs, Run Trace, fixed Lark compatibility, Developer CLI/client, and canonical Work-first Next.js BFF/UI with explicit Start Run                                                                                                                                                           | Web console, canonical identities, broader Lark adapter                                               |
-| Schedules, Triggers and Delivery | Planned        | None                                                                                                                                                                                                                                                                                                                                                                                   | Idempotent admission, controlled schedules/events, durable delivery                                   |
+## Capability snapshot
+
+- **Identity and Access — Baseline.** Service-account bearer auth and server-derived owner scope. V1 destination: tenant, canonical user, OIDC/Lark, ACL, and richer service accounts.
+- **Agents and Teams — Baseline.** Cumora-style Coworker Agent identity is separated from formal Worker execution. Active Product Work uses `WorkerDefinition` / `WorkerVersion`, `single_worker`, Worker-only Team composition, exact owner scope, and a frozen WorkRun resource manifest. Agent Work Catalog bindings expose exact published WorkDefinition versions without making the Coworker an execution authority. V1 destination: dynamic rosters, nested Teams, and generalized graphs.
+- **Workspace and Memory — Baseline.** Authenticated PostgreSQL Memory Store → stable Memory → immutable Version API with SHA-256 CAS, no-op/revert semantics, exact owner scope, plus retained proposal/snapshot/Lark compatibility paths. V1 destination: retrieval, context assembly, memory policy, and broader Memory lifecycle.
+- **Sessions, Tasks and Runs — Baseline.** Product `Definition → Work → WorkRun` lifecycle with typed WorkRun input, immutable resolved manifest, Product state/Trace projection, runtime binding, durable lifecycle events, final assistant Message, replayable SSE, owner-scoped cancellation, and the retained technical Task/Run execution tree. V1 destination: Runtime Session V2 create/resume/status, incremental deltas, retry, receipts, and recovery.
+- **Runtime, Tools and Credentials — Baseline.** Paseo/OpenCode Execution Plane with native Bootstrap/per-turn separation, reusable/fresh RuntimeSession policies, external Workspace binding, platform MCP capability admission, same-Agent continuation, zero-key model selection, sanitized runtime projections, and typed Tool activity. V1 destination: production isolation, placement, tool gateway, credential broker, approvals, and Agent Memory HTTP client.
+- **Artifacts and Evidence — Planned.** Result text only; Work-first Web deliberately renders Artifacts as unavailable rather than inferring deliverables. V1 destination: immutable Artifact versions, evidence, source lineage, and child lineage.
+- **Channels, API and Console — Baseline.** Product WorkDefinition `validate/plan/apply`, DefinitionVersion reads, Work/WorkRun Product APIs, Run Trace, fixed Lark compatibility, Developer CLI/client, and the single Vite Work/Coworker shell with server-side BFF routes. V1 destination: Web console, canonical identities, and broader Lark adapter.
+- **Schedules, Triggers and Delivery — Planned.** No current Product surface. V1 destination: idempotent admission, controlled schedules/events, and durable delivery.
 
 ## Identity and Access
 
@@ -23,28 +23,21 @@ This is the authoritative capability ledger. Status values are `implemented`, `b
 
 ## Agents and Teams
 
-**Outcome:** users publish reusable, immutable definitions instead of depending on an ad hoc runtime conversation.
+**Outcome:** users interact with long-lived Coworkers while formal Work executes through reusable immutable Workers.
 
-**Managed registry baseline:** the managed Agent package contract validates one safe YAML 1.2 document, canonicalizes it, and records a SHA-256 fingerprint. PostgreSQL stores durable managed `AgentDefinition`/`AgentVersion` records. Import and publish are idempotent; publication is immutable. Owner-scoped drafts remain readable/listable/publishable through the registry API, while technical Task admission resolves only explicit published versions. Foreign and missing resources remain hidden. The managed Agent package contract does not claim arbitrary model execution or that referenced tools and skills are available merely because their references parse.
+**Coworker baseline:** PostgreSQL stores durable managed `AgentDefinition`/`AgentVersion` records for user-visible Coworkers. Import and publish are idempotent; publication is immutable. Agent publication can provision the Coworker Chat relationship and active Chat runtime. The Agents roster is explicit Coworker identity and is not inferred from Team membership.
 
-**Agent Teams v2 baseline:** a bounded Team has one Lead and a non-empty declared roster. `TeamDriver`, Workboard/Mailbox collaboration, participant activation, revision-fenced commands, bounded attempts, completion decisions, and addressed continuations live in the control plane. Platform Collaboration MCP is mounted as a platform capability and authorized at call time; it is not represented as a user/domain tool ref. Team coordination remains independent of a shared Paseo session.
+**Worker baseline:** formal execution has an independent `WorkerDefinition`/`WorkerVersion` registry. Worker import/publish is idempotent and immutable, uses exact tenant/workspace/principal owner scope, and has no Chat publication side effect. The current Worker package grammar reuses hardened executable parsing introduced for managed Agents; this is parser reuse only and does not merge product identity or lifecycle.
 
-**Composition-first Product baseline:** Product `WorkDefinition` authoring has a
-legacy `single_agent` / `agent_version_id` compatibility shape and bounded
-collaboration. The formal target is `single_worker` / `worker_version_id` and
-WorkerVersion Team composition. `validate` and `plan` are side-effect free;
-`apply` publishes an immutable Product DefinitionVersion, resolves exact
-resource identities, and records a stable resolved fingerprint. During the
-cutover, some active paths may still materialize or publish Agents; that is a
-known legacy gap, not the Worker contract. For collaboration the author
-declares Lead/members rather than a Team ID; the internal Team binding remains
-an execution detail.
+**Agent Teams v2 baseline:** a bounded Team has one Lead and a non-empty declared roster of WorkerVersion pins. `TeamDriver`, Workboard/Mailbox collaboration, participant activation, revision-fenced commands, bounded attempts, completion decisions, and addressed continuations live in the control plane. Platform Collaboration MCP is mounted as a platform capability and authorized at call time; it is not represented as a user/domain tool ref. Team coordination remains independent of a shared Paseo session.
 
-**V1 acceptance:** the compatibility Task ingress may retain an Invokable
-contract, but formal Work composition has one WorkerVersion authority and Team
-composition validates Worker refs, schemas, reachability, bounds, completion,
-failure, and capability attenuation. Published versions are immutable, and
-Team coordination never requires a shared Paseo session.
+**Composition-first Product baseline:** Product `WorkDefinition` authoring is canonically `single_worker` / `worker_version_id` or bounded collaboration over Worker versions. `validate` and `plan` are side-effect free; `apply` publishes an immutable Product DefinitionVersion, resolves exact Worker/Environment/Memory/Skill/Tool identities, and records a stable resolved fingerprint. Collaboration authors declare Lead/members rather than a Team ID; the internal Team binding remains an execution detail. Active Work materialization does not import or publish Agents.
+
+**Coworker Work Catalog baseline:** an enabled binding identifies one Coworker AgentDefinition, one WorkDefinition, and one exact published WorkDefinitionVersion from the same owner/lineage. The catalog tells Chat what formal work the Coworker can start; WorkerVersion remains the execution authority.
+
+Historical Agent-shaped Work composition survives only in migration/audit data and explicitly named compatibility fixtures. The technical Task ingress may retain an explicit legacy direct-Agent invokable for old non-Product clients; it is not an active WorkDefinition participant model.
+
+**V1 acceptance:** formal Work composition has one WorkerVersion authority and Team composition validates Worker refs, schemas, reachability, bounds, completion, failure, and capability attenuation. Published versions are immutable, and Team coordination never requires a shared Paseo session.
 
 The MVE does not claim crash recovery, restart/resume, generalized retry, dynamic roster mutation, generalized graph execution, or production readiness.
 
@@ -62,13 +55,13 @@ Phase H minimum release evidence is approved: the managed single-agent transcrip
 
 ## Sessions, Tasks and Runs
 
-**Product Work baseline:** the canonical MVE product journey is `WorkDefinition -> Work -> WorkRun -> Product state / Run Trace`. Work creation pins an immutable DefinitionVersion. Starting a Product-authored WorkRun validates the bounded input contract before provider admission, durably records the input fingerprint/snapshot, resolves runtime capability requirements, freezes the exact resource manifest, and only then admits the technical root Task. Single-Agent and bounded-collaboration Work share this admission pipeline while retaining their appropriate execution policies.
+**Product Work baseline:** the canonical MVE product journey is `WorkDefinition -> Work -> WorkRun -> Product state / Run Trace`. Work creation pins an immutable DefinitionVersion. Starting a Product-authored WorkRun validates the bounded input contract before provider admission, durably records the input fingerprint/snapshot, resolves runtime capability requirements, freezes the exact resource manifest, and only then admits the technical root Task. Single-Worker and bounded-collaboration Work share this admission pipeline while retaining their appropriate execution policies.
 
 Work and WorkRun list APIs preserve their original compatibility ordering when no order is supplied and expose bounded latest-first product ordering for Work-first consumers (`updated_desc` for Work, `created_desc` for WorkRun). Cursor traversal is seek-based rather than offset-based.
 
 **Managed Environment baseline:** the authenticated Managed Environment API is implemented with fixed Paseo/OpenCode/free-only package values. ProductSession creation pins a published EnvironmentVersion, and first use creates one internal RuntimeSession, launch snapshot, and derived Runtime Cell per ProductSession. Composition-first Work also pins the EnvironmentVersion in the Definition/WorkRun resource manifest. This does not claim production isolation or full Runtime Session V2.
 
-**Technical execution baseline:** authenticated `POST /api/v1/tasks:invoke` remains a compatibility/execution ingress. Durable Task/Run lifecycle state, normalized events, final assistant Message persistence, replayable SSE, cancellation, participant activation, and Team child execution remain technical control-plane machinery behind the Product Work surface. Cross-owner resources remain hidden. This is an MVE slice and does not claim full Runtime Session V2 or production recovery.
+**Technical execution baseline:** authenticated `POST /api/v1/tasks:invoke` remains a compatibility/execution ingress. Durable Task/Run lifecycle state, normalized events, final assistant Message persistence, replayable SSE, cancellation, participant activation, and Team child execution remain technical control-plane machinery behind the Product Work surface. Cross-owner resources remain hidden. Worker Task admission resolves WorkerVersion through exact owner scope. This is an MVE slice and does not claim full Runtime Session V2 or production recovery.
 
 **V1 acceptance:** Task is the only node invocation identity at the execution boundary. Root/child admission and idempotency are durable. Run attempts use atomic claim, lease, activation, fence, typed completion, waiting/resume, cancel, retry, reconciliation, and immutable terminal history.
 
@@ -78,18 +71,9 @@ Agent Teams v2 materializes child Tasks/Runs only for bounded Lead turns, Work a
 
 **Baseline:** Paseo is behind the Execution Plane/runtime ports; domain/application code does not depend on the Paseo package. OpenCode models are discovered at startup; automatic selection is free-only; provider errors are normalized; caller model selection is forbidden. Native Bootstrap/per-turn execution sends stable system/context setup at Agent creation and continues later turns according to the resolved RuntimeSession policy.
 
-Platform MCP capabilities are registered separately from managed Agent domain
-tool refs. Composition admission checks the required runtime capabilities
-before technical Task/provider admission, and the WorkRun resource manifest
-pins the exact resolved Definition/Worker/Environment/Memory/Skill/Tool/
-platform-capability facts used for formal execution. Chat Agent identity is
-not replaced by this Worker snapshot.
+Platform MCP capabilities are registered separately from managed Agent domain tool refs. Composition admission checks the required runtime capabilities before technical Task/provider admission, and the WorkRun resource manifest pins the exact resolved Definition/Worker/Environment/Memory/Skill/Tool/platform-capability facts used for formal execution. Chat Agent identity is not replaced by this Worker snapshot.
 
-Local development is host-native: Agent Server, Web, and optional Paseo runtime
-processes run on the developer host. A reachable native PostgreSQL instance is
-used when real PostgreSQL semantics are required; ordinary development can use
-PGlite. This is not production sandboxing, tenant isolation, or a placement
-guarantee.
+Local development is host-native: Agent Server, Web, and optional Paseo runtime processes run on the developer host. A reachable native PostgreSQL instance is used when real PostgreSQL semantics are required; ordinary development can use PGlite. This is not production sandboxing, tenant isolation, or a placement guarantee.
 
 **V1 acceptance:** dedicated execution placement, compatibility suite, normalized events, audience-bound capability tokens, credential-aware tool operations, approval policy, receipt-based side-effect recovery, and no raw business credential in a runtime-readable surface.
 
@@ -103,9 +87,9 @@ guarantee.
 
 **Developer/Product API baseline:** one `work.yaml` plus a service-account token can drive `validate -> plan -> apply -> immutable DefinitionVersion -> Work -> typed WorkRun -> Product state / Run Trace`. `ProductDeveloperClient` and `agentctl definition|work` are thin helpers over those resource APIs rather than a second orchestration truth. Exact Product DefinitionVersion reads are available by version ID; the original Team-shaped Work Definition read remains compatibility-only.
 
-**Work-first Web baseline:** `/` is the canonical My Work entry. It renders server-projected Product state and latest Run summary, opens Work Detail with Overview / Runs / Artifacts / Definition, supports an explicit Start Run control, and reads the exact Product DefinitionVersion used by the selected current or historical Run. The same-origin BFF keeps the Agent Server bearer server-side. Work/WorkRun latest ordering is requested from the Product API rather than reconstructed by downloading every historical page. Canonical Work-first browser tests run in deterministic CI.
+**Work-first Web baseline:** the Vite Coworker/Work shell is the canonical browser product. Work renders inside the same shell as Conversations and Agents, opens Work Detail with Overview / Runs / Artifacts / Definition, supports explicit Start Run and Work Definition authoring, and reads the exact Product DefinitionVersion used by the selected current or historical Run. The same-origin Hono BFF keeps the Agent Server bearer server-side. Work/WorkRun latest ordering is requested from the Product API rather than reconstructed by downloading every historical page. Canonical browser tests run in deterministic CI.
 
-The Web Chat + Paseo rich-events path remains at canonical `/conversations` as a compatibility/runtime-debugging surface. Native EventSource consumes BFF SSE and the runtime projects complete `assistant_text` snapshots plus sanitized reasoning disclosures, typed Tool previews, direct-child activity, usage, and permission projections. Provider payloads, credentials, provider IDs, unsafe paths, and unbounded detail remain excluded.
+Chat and Work are linked through durable Work references/cards rather than by sharing Agent and Worker identity. A Coworker Chat can list/describe its bound WorkDefinitions, start formal Work, receive completion wakes, and continue a Work from feedback.
 
 The Agent Teams v2 project view remains a fixed local/single-operator compatibility observation surface. Its same-origin strict BFF projects safe Team execution state and replay without exposing RuntimeSession prompts/raw provider events. Product Work-first UI is the canonical product entry rather than this compatibility Team project identity.
 

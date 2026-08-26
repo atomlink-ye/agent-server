@@ -10,6 +10,7 @@ import {
 } from '../../src/infrastructure/postgres/postgres.js';
 import { PostgresInvokableRepository } from '../../src/infrastructure/postgres/postgres-invokable-repository.js';
 import { PostgresAgentRegistry } from '../../src/infrastructure/postgres/postgres-agent-registry.js';
+import { AgentNotFoundError } from '../../src/application/agents/errors.js';
 
 const definitionId = '00000000-0000-4000-8000-0000000b0001';
 const versionId = '00000000-0000-4000-8000-0000000b0101';
@@ -284,16 +285,14 @@ describe('managed agent registry migration', () => {
     ]);
   });
 
-  it('uniquifies managed owners by tenant, principal, and normalized name, not workspace', async () => {
+  it('uniquifies managed owners by tenant, workspace, principal, and normalized name', async () => {
     const db = await database();
     await insertManagedDefinition(db);
-    await expect(
-      insertManagedDefinition(
-        db,
-        '00000000-0000-4000-8000-0000000b0002',
-        'workspace_two',
-      ),
-    ).rejects.toThrow(/unique/i);
+    await insertManagedDefinition(
+      db,
+      '00000000-0000-4000-8000-0000000b0002',
+      'workspace_two',
+    );
     await insertManagedDefinition(
       db,
       '00000000-0000-4000-8000-0000000b0003',
@@ -392,26 +391,32 @@ describe('managed agent registry migration', () => {
     ).rejects.toThrow(/unique/i);
   });
 
-  it('scopes idempotency by tenant and principal, distinguishes operation, and excludes workspace', async () => {
+  it('scopes idempotency by tenant, workspace, and principal, and distinguishes operation', async () => {
     const db = await database();
     await db.query(
       `INSERT INTO agent_registry_idempotency
-      (operation, tenant_id, principal_type, principal_id, idempotency_key, request_fingerprint, created_at, updated_at)
-      VALUES ('import', 'tenant_one', 'service_account', 'principal_one', 'same-key', 'fp-1', $1, $1)`,
+      (operation, tenant_id, workspace_id, principal_type, principal_id, idempotency_key, request_fingerprint, created_at, updated_at)
+      VALUES ('import', 'tenant_one', 'workspace_one', 'service_account', 'principal_one', 'same-key', 'fp-1', $1, $1)`,
       [now],
     );
     await expect(
       db.query(
         `INSERT INTO agent_registry_idempotency
-      (operation, tenant_id, principal_type, principal_id, idempotency_key, request_fingerprint, created_at, updated_at)
-      VALUES ('import', 'tenant_one', 'service_account', 'principal_one', 'same-key', 'fp-2', $1, $1)`,
+      (operation, tenant_id, workspace_id, principal_type, principal_id, idempotency_key, request_fingerprint, created_at, updated_at)
+      VALUES ('import', 'tenant_one', 'workspace_one', 'service_account', 'principal_one', 'same-key', 'fp-2', $1, $1)`,
         [now],
       ),
     ).rejects.toThrow(/unique/i);
     await db.query(
       `INSERT INTO agent_registry_idempotency
-      (operation, tenant_id, principal_type, principal_id, idempotency_key, request_fingerprint, created_at, updated_at)
-      VALUES ('publish', 'tenant_one', 'service_account', 'principal_one', 'same-key', 'fp-2', $1, $1)`,
+      (operation, tenant_id, workspace_id, principal_type, principal_id, idempotency_key, request_fingerprint, created_at, updated_at)
+      VALUES ('publish', 'tenant_one', 'workspace_one', 'service_account', 'principal_one', 'same-key', 'fp-2', $1, $1)`,
+      [now],
+    );
+    await db.query(
+      `INSERT INTO agent_registry_idempotency
+      (operation, tenant_id, workspace_id, principal_type, principal_id, idempotency_key, request_fingerprint, created_at, updated_at)
+      VALUES ('import', 'tenant_one', 'workspace_two', 'service_account', 'principal_one', 'same-key', 'fp-3', $1, $1)`,
       [now],
     );
   });
@@ -436,47 +441,47 @@ describe('managed agent registry migration', () => {
     });
     await db.query(
       `INSERT INTO agent_registry_idempotency
-       (operation, tenant_id, principal_type, principal_id, idempotency_key, request_fingerprint, definition_id, version_id, created_at, updated_at)
-       VALUES ('import', 'tenant_one', 'service_account', 'principal_one', 'valid-result', 'fp-valid', $1, $2, $3, $3)`,
+       (operation, tenant_id, workspace_id, principal_type, principal_id, idempotency_key, request_fingerprint, definition_id, version_id, created_at, updated_at)
+       VALUES ('import', 'tenant_one', 'workspace_one', 'service_account', 'principal_one', 'valid-result', 'fp-valid', $1, $2, $3, $3)`,
       [definitionId, versionId, now],
     );
     await expect(
       db.query(
         `INSERT INTO agent_registry_idempotency
-         (operation, tenant_id, principal_type, principal_id, idempotency_key, request_fingerprint, definition_id, version_id, created_at, updated_at)
-         VALUES ('import', 'tenant_two', 'service_account', 'principal_one', 'cross-owner', 'fp-cross', $1, $2, $3, $3)`,
+         (operation, tenant_id, workspace_id, principal_type, principal_id, idempotency_key, request_fingerprint, definition_id, version_id, created_at, updated_at)
+         VALUES ('import', 'tenant_two', 'workspace_one', 'service_account', 'principal_one', 'cross-owner', 'fp-cross', $1, $2, $3, $3)`,
         [definitionId, versionId, now],
       ),
     ).rejects.toThrow(/foreign|owner|key/i);
     await expect(
       db.query(
         `INSERT INTO agent_registry_idempotency
-         (operation, tenant_id, principal_type, principal_id, idempotency_key, request_fingerprint, definition_id, version_id, created_at, updated_at)
-         VALUES ('import', 'tenant_one', 'service_account', 'principal_two', 'cross-principal', 'fp-cross-principal', $1, $2, $3, $3)`,
+         (operation, tenant_id, workspace_id, principal_type, principal_id, idempotency_key, request_fingerprint, definition_id, version_id, created_at, updated_at)
+         VALUES ('import', 'tenant_one', 'workspace_one', 'service_account', 'principal_two', 'cross-principal', 'fp-cross-principal', $1, $2, $3, $3)`,
         [definitionId, versionId, now],
       ),
     ).rejects.toThrow(/foreign|owner|key/i);
     await expect(
       db.query(
         `INSERT INTO agent_registry_idempotency
-         (operation, tenant_id, principal_type, principal_id, idempotency_key, request_fingerprint, definition_id, version_id, created_at, updated_at)
-         VALUES ('publish', 'tenant_one', 'service_account', 'principal_one', 'mismatched-pair', 'fp-pair', $1, $2, $3, $3)`,
+         (operation, tenant_id, workspace_id, principal_type, principal_id, idempotency_key, request_fingerprint, definition_id, version_id, created_at, updated_at)
+         VALUES ('publish', 'tenant_one', 'workspace_one', 'service_account', 'principal_one', 'mismatched-pair', 'fp-pair', $1, $2, $3, $3)`,
         [definitionId, secondVersionId, now],
       ),
     ).rejects.toThrow(/foreign|definition|owner/i);
     await expect(
       db.query(
         `INSERT INTO agent_registry_idempotency
-         (operation, tenant_id, principal_type, principal_id, idempotency_key, request_fingerprint, definition_id, version_id, created_at, updated_at)
-         VALUES ('import', 'tenant_one', 'service_account', 'principal_one', 'half-null', 'fp-half', $1, NULL, $2, $2)`,
+         (operation, tenant_id, workspace_id, principal_type, principal_id, idempotency_key, request_fingerprint, definition_id, version_id, created_at, updated_at)
+         VALUES ('import', 'tenant_one', 'workspace_one', 'service_account', 'principal_one', 'half-null', 'fp-half', $1, NULL, $2, $2)`,
         [definitionId, now],
       ),
     ).rejects.toThrow(/check|result/i);
     await expect(
       db.query(
         `INSERT INTO agent_registry_idempotency
-         (operation, tenant_id, principal_type, principal_id, idempotency_key, request_fingerprint, definition_id, version_id, created_at, updated_at)
-         VALUES ('import', 'tenant_one', 'service_account', 'principal_one', 'other-half-null', 'fp-half-2', NULL, $1, $2, $2)`,
+         (operation, tenant_id, workspace_id, principal_type, principal_id, idempotency_key, request_fingerprint, definition_id, version_id, created_at, updated_at)
+         VALUES ('import', 'tenant_one', 'workspace_one', 'service_account', 'principal_one', 'other-half-null', 'fp-half-2', NULL, $1, $2, $2)`,
         [versionId, now],
       ),
     ).rejects.toThrow(/check|result/i);
@@ -678,8 +683,8 @@ describe('managed agent registry migration', () => {
     await expect(
       db.query(
         `INSERT INTO agent_registry_idempotency
-      (operation, tenant_id, principal_type, principal_id, idempotency_key, request_fingerprint, created_at, updated_at)
-      VALUES ('invalid', 't', 'p', 'i', 'k', 'fp', $1, $1)`,
+      (operation, tenant_id, workspace_id, principal_type, principal_id, idempotency_key, request_fingerprint, created_at, updated_at)
+      VALUES ('invalid', 't', 'w', 'p', 'i', 'k', 'fp', $1, $1)`,
         [now],
       ),
     ).rejects.toThrow(/check|operation/i);
@@ -702,7 +707,7 @@ describe('managed agent registry migration', () => {
     };
     await expectIndexDefinition(
       'agent_definitions_managed_owner_name_uq',
-      'CREATE UNIQUE INDEX agent_definitions_managed_owner_name_uq ON public.agent_definitions USING btree (tenant_id, principal_type, principal_id, normalized_name) WHERE (managed_discriminator = managed_agent_v1)',
+      'CREATE UNIQUE INDEX agent_definitions_managed_owner_name_uq ON public.agent_definitions USING btree (tenant_id, workspace_id, principal_type, principal_id, normalized_name) WHERE (managed_discriminator = managed_agent_v1)',
     );
     await expectIndexDefinition(
       'agent_versions_managed_definition_fingerprint_uq',
@@ -731,7 +736,7 @@ describe('managed agent registry migration', () => {
     expect(idempotencyKey.rows).toEqual([
       {
         definition:
-          'PRIMARY KEY (operation, tenant_id, principal_type, principal_id, idempotency_key)',
+          'PRIMARY KEY (operation, tenant_id, workspace_id, principal_type, principal_id, idempotency_key)',
       },
     ]);
   });
@@ -757,7 +762,6 @@ describe('PostgresAgentRegistry repository contract (PGlite)', () => {
     });
     const command = {
       owner,
-      compatibilityWorkspaceId: 'workspace-first',
       idempotencyKey: 'import-1',
       requestFingerprint: 'fp-1',
       normalizedName: 'registry-agent',
@@ -805,7 +809,6 @@ describe('PostgresAgentRegistry repository contract (PGlite)', () => {
     });
     await registry.importAgent({
       owner,
-      compatibilityWorkspaceId: owner.workspaceId,
       idempotencyKey: 'owner-scope-import',
       requestFingerprint: 'owner-scope-fingerprint',
       normalizedName: definition.normalizedName,
@@ -819,6 +822,38 @@ describe('PostgresAgentRegistry repository contract (PGlite)', () => {
         definition.id,
       ),
     ).toBeNull();
+    expect(
+      await registry.findDefinition(
+        { ...owner, workspaceId: 'workspace_other' },
+        definition.id,
+      ),
+    ).toBeNull();
+    expect(
+      await registry.findVersion(
+        { ...owner, principalId: 'principal_other' },
+        version.id,
+      ),
+    ).toBeNull();
+    expect(
+      await registry.findVersion(
+        { ...owner, workspaceId: 'workspace_other' },
+        version.id,
+      ),
+    ).toBeNull();
+    await expect(
+      registry.listVersionsForOwner(
+        { ...owner, workspaceId: 'workspace_other' },
+        { definitionId: definition.id, cursor: null, limit: 10 },
+      ),
+    ).resolves.toBeNull();
+    await expect(
+      registry.publishAgentVersion({
+        owner: { ...owner, workspaceId: 'workspace_other' },
+        idempotencyKey: 'owner-scope-publish-foreign-workspace',
+        requestFingerprint: 'owner-scope-publish-foreign-workspace-fp',
+        versionId: version.id,
+      }),
+    ).rejects.toBeInstanceOf(AgentNotFoundError);
   });
 
   it('keeps import idempotency timestamps on database time when entity timestamps are stale', async () => {
@@ -841,7 +876,6 @@ describe('PostgresAgentRegistry repository contract (PGlite)', () => {
     });
     await registry.importAgent({
       owner,
-      compatibilityWorkspaceId: 'workspace-stale',
       idempotencyKey: 'stale-import',
       requestFingerprint: 'stale-fingerprint',
       normalizedName: 'stale-agent',
@@ -879,7 +913,6 @@ describe('PostgresAgentRegistry repository contract (PGlite)', () => {
     });
     await registry.importAgent({
       owner,
-      compatibilityWorkspaceId: 'workspace-stale-publish',
       idempotencyKey: 'stale-publish-import',
       requestFingerprint: 'stale-publish-import-fp',
       normalizedName: 'stale-publish-agent',
@@ -918,7 +951,7 @@ describe('PostgresAgentRegistry repository contract (PGlite)', () => {
     expect(after?.updatedAt).toBe(published.updatedAt);
     expect(await registry.findDefinition(owner, definition.id)).toEqual({
       ...definition,
-      workspaceId: 'workspace-stale-publish',
+      workspaceId: owner.workspaceId,
     });
     const idempotency = await db.query<{
       created_at: string;
@@ -1012,7 +1045,6 @@ describeRealPostgres(
       });
       return {
         owner: realOwner,
-        compatibilityWorkspaceId: 'real-workspace',
         idempotencyKey: key,
         requestFingerprint: fingerprint,
         normalizedName: 'registry-agent',

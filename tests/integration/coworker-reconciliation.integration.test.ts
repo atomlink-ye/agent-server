@@ -63,7 +63,6 @@ describe('published Coworker reconciliation', () => {
     });
     await registry.importAgent({
       owner: definition,
-      compatibilityWorkspaceId: ownerWorkspaceId,
       idempotencyKey: 'legacy-coworker-import',
       requestFingerprint: parsed.fingerprint,
       normalizedName: definition.normalizedName,

@@ -21,10 +21,6 @@ export interface WorkerRegistry {
     owner: WorkerOwner,
     versionId: string,
   ): Promise<WorkerVersion | null>;
-  findVersionByTenant(input: {
-    readonly tenantId: string;
-    readonly versionId: string;
-  }): Promise<WorkerVersion | null>;
 }
 
 export interface ImportWorkerAtomicCommand {

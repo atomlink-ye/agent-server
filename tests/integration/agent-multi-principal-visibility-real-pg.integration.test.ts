@@ -149,7 +149,6 @@ describe('Multi-principal Agent Visibility on real PostgreSQL', () => {
 
     const importCommand: ImportAgentAtomicCommand = {
       owner: sa1,
-      compatibilityWorkspaceId: sa1.workspaceId,
       idempotencyKey: 'import-agent-a-1',
       requestFingerprint: parsed.fingerprint,
       normalizedName: 'test-agent-a',

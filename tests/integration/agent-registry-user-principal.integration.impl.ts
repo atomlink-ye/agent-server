@@ -98,7 +98,6 @@ describe('agent registry user principal authorization', () => {
     // Service account imports and publishes an agent
     const imported = await registry.importAgent({
       owner: serviceAccountOwner,
-      compatibilityWorkspaceId: workspaceId,
       idempotencyKey: 'import-user-principal-test',
       requestFingerprint: 'fp-user-principal-test-import',
       normalizedName: 'user-principal-test-agent',
@@ -153,7 +152,6 @@ describe('agent registry user principal authorization', () => {
     // Service account imports and publishes
     await registry.importAgent({
       owner: serviceAccountOwner,
-      compatibilityWorkspaceId: workspaceId,
       idempotencyKey: 'import-list-test',
       requestFingerprint: 'fp-list-test-import',
       normalizedName: 'user-principal-list-test',
@@ -210,7 +208,6 @@ describe('agent registry user principal authorization', () => {
     // Service account imports (leaving as draft, not published)
     await registry.importAgent({
       owner: serviceAccountOwner,
-      compatibilityWorkspaceId: workspaceId,
       idempotencyKey: 'import-publish-test',
       requestFingerprint: 'fp-publish-test-import',
       normalizedName: 'user-principal-publish-test',

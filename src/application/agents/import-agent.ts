@@ -37,7 +37,6 @@ export async function importAgent(
   });
   return registry.importAgent({
     owner,
-    compatibilityWorkspaceId: input.accessContext.workspaceId,
     idempotencyKey: input.idempotencyKey,
     requestFingerprint: hash(input.source),
     normalizedName,

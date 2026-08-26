@@ -14,7 +14,7 @@ import type {
 
 export class ResolveWorkerVersion implements WorkerResolutionApi {
   public constructor(
-    private readonly registry: Pick<WorkerRegistry, 'findVersionByTenant'>,
+    private readonly registry: Pick<WorkerRegistry, 'findVersion'>,
     private readonly skillCatalog: SkillCatalogPort,
   ) {}
 
@@ -23,10 +23,15 @@ export class ResolveWorkerVersion implements WorkerResolutionApi {
     scope: WorkerVersionResolutionScope,
     options: { readonly resolveExtensions?: boolean } = {},
   ): Promise<ResolvedWorkerVersion | null> {
-    const version = await this.registry.findVersionByTenant({
-      tenantId: scope.tenantId,
+    const version = await this.registry.findVersion(
+      {
+        tenantId: scope.tenantId,
+        workspaceId: scope.workspaceId,
+        principalType: scope.principalType,
+        principalId: scope.principalId,
+      },
       versionId,
-    });
+    );
     if (!version || version.status !== 'published') return null;
     const modelPolicyRef = version.package.spec.runtime.modelPolicyRef;
     if (!isModelPolicyRef(modelPolicyRef))

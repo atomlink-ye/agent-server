@@ -265,8 +265,71 @@
   border-style: dashed;
 }
 
+.chat-message-with-actions {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.chat-message-task-action {
+  opacity: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted, #667085);
+  font-size: 12px;
+  padding: 4px 6px;
+  transition: opacity 120ms ease;
+}
+
+.chat-message-with-actions:hover .chat-message-task-action,
+.chat-message-task-action:focus-visible {
+  opacity: 1;
+}
+
+.chat-task-form {
+  width: min(560px, 84%);
+  margin: 6px 0 14px;
+  border: 1px solid var(--line, #d8dee8);
+  border-radius: 12px;
+  background: var(--panel, #fff);
+  padding: 12px;
+  display: grid;
+  gap: 9px;
+}
+
+.chat-task-form label {
+  display: grid;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.chat-task-form input,
+.chat-task-form textarea {
+  border: 1px solid var(--line, #d8dee8);
+  border-radius: 8px;
+  padding: 8px 9px;
+  font: inherit;
+}
+
+.chat-task-form > div {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.chat-task-error {
+  margin: 0;
+  color: #a12824;
+  font-size: 12px;
+}
+
 @media (max-width: 980px) {
   .work-org-detail-grid {
     grid-template-columns: 1fr;
+  }
+
+  .chat-message-task-action {
+    opacity: 1;
   }
 }

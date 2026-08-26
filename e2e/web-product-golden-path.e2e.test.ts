@@ -64,6 +64,12 @@ describe('web Product Golden Path', () => {
           new URL(response.url()).origin === browserOrigin &&
           new URL(response.url()).pathname === '/api/agents',
       );
+      const conversationListResponse = page.waitForResponse(
+        (response) =>
+          response.request().method() === 'GET' &&
+          new URL(response.url()).origin === browserOrigin &&
+          new URL(response.url()).pathname === '/api/conversations',
+      );
       await page.getByRole('button', { name: 'Create & Chat' }).click();
       expect((await createResponse).status()).toBe(201);
       await page.waitForURL(/\/conversations\/[^/]+$/u, { timeout: 60_000 });
@@ -74,6 +80,14 @@ describe('web Product Golden Path', () => {
           'Conversation id was not returned after Coworker creation.',
         );
       await page.locator('.chat-header h1').waitFor({ state: 'visible' });
+      expect((await conversationListResponse).status()).toBe(200);
+      await page.waitForFunction(
+        (expectedName) =>
+          document.querySelector('.chat-header h1')?.textContent?.trim() ===
+          expectedName,
+        coworkerName,
+        { timeout: 60_000 },
+      );
       expect((await page.locator('.chat-header h1').innerText()).trim()).toBe(
         coworkerName,
       );

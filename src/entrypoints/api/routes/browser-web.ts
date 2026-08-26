@@ -6,6 +6,7 @@ import {
   CreateWorkResponseSchema,
   ErrorResponseSchema,
   GetProductWorkDefinitionVersionResponseSchema,
+  ListProductWorkDefinitionsResponseSchema,
   GetWorkResponseSchema,
   ProductExecutionDetailResponseSchema,
   ProductRunTraceResponseSchema,
@@ -125,6 +126,21 @@ const startRunErrorSchema = z.object({
     path: z.string().optional(),
   }),
 });
+const browserWorkDefinitionSelectorResponseSchema = z
+  .object({
+    items: z
+      .array(
+        z
+          .object({
+            definitionId: z.string().uuid(),
+            displayName: z.string().min(1),
+            currentPublishedVersionId: z.string().uuid(),
+          })
+          .strict(),
+      )
+      .max(100),
+  })
+  .strict();
 
 /**
  * Browser-safe facade for the single Vite frontend.
@@ -348,6 +364,19 @@ export function registerBrowserWebRoutes(
       GetProductWorkDefinitionVersionResponseSchema,
     );
   });
+  app.get('/api/work-definitions', async () =>
+    forwardDecoded(
+      config,
+      logger,
+      '/api/v1/work-definitions?limit=100',
+      { method: 'GET' },
+      ListProductWorkDefinitionsResponseSchema,
+      ErrorResponseSchema,
+      {
+        transform: browserWorkDefinitionSelectors,
+      },
+    ),
+  );
   app.post('/api/work-definitions/validate', async (c) =>
     writeWorkDefinition(
       config,
@@ -503,6 +532,7 @@ async function forwardDecoded(
   options: {
     readonly successStatus?: number;
     readonly notFoundCode?: string;
+    readonly transform?: (value: unknown) => unknown;
   } = {},
 ): Promise<Response> {
   let upstream: Response;
@@ -528,7 +558,7 @@ async function forwardDecoded(
     const decoded = decodeProductResponse(body, successSchema);
     if (!decoded.success) return invalidUpstream();
     return jsonResponse(
-      decoded.data,
+      options.transform ? options.transform(decoded.data) : decoded.data,
       options.successStatus ?? upstream.status,
       { 'x-agent-server-upstream': 'fetched' },
     );
@@ -547,6 +577,17 @@ async function forwardDecoded(
     );
   }
   return jsonResponse(decoded.data, safeStatus(upstream.status));
+}
+
+function browserWorkDefinitionSelectors(value: unknown): unknown {
+  const response = ListProductWorkDefinitionsResponseSchema.parse(value);
+  return browserWorkDefinitionSelectorResponseSchema.parse({
+    items: response.items.map((item) => ({
+      definitionId: item.definition_id,
+      displayName: item.display_name,
+      currentPublishedVersionId: item.current_published_version_id,
+    })),
+  });
 }
 
 function workParams(params: Record<string, string>): {

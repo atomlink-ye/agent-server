@@ -144,6 +144,23 @@ export const GetProductWorkDefinitionResponseSchema = z
   })
   .strict();
 
+// Selector reads intentionally expose only display-safe metadata and the
+// canonical published version identity needed to create/promote Product Work.
+export const ProductWorkDefinitionSelectorItemSchema = z
+  .object({
+    definition_id: z.uuid(),
+    display_name: z.string().min(1),
+    current_published_version_id: z.uuid(),
+  })
+  .strict();
+
+export const ListProductWorkDefinitionsResponseSchema = z
+  .object({
+    items: z.array(ProductWorkDefinitionSelectorItemSchema),
+    next_cursor: z.string().nullable(),
+  })
+  .strict();
+
 // List responses omit the full source payload; single-version reads include it.
 export const ProductWorkDefinitionVersionSummarySchema =
   ProductWorkDefinitionVersionSchema.omit({ source: true });
@@ -167,4 +184,10 @@ export type ProductWorkDefinitionResponse = z.infer<
 >;
 export type ProductWorkDefinitionVersionResponse = z.infer<
   typeof ProductWorkDefinitionVersionSchema
+>;
+export type ProductWorkDefinitionSelectorItem = z.infer<
+  typeof ProductWorkDefinitionSelectorItemSchema
+>;
+export type ListProductWorkDefinitionsResponse = z.infer<
+  typeof ListProductWorkDefinitionsResponseSchema
 >;

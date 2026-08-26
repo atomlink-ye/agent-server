@@ -100,9 +100,9 @@ export function WorkPage({
               <span className="work-main-icon" aria-hidden="true">
                 ✓
               </span>
-              <h1>Choose a Work item</h1>
+              <h1>Choose Work</h1>
               <p>
-                Select a real Work item from the pane, or create a new Work.
+                Select existing formal Work from the pane, or create new Work.
               </p>
               <button type="button" onClick={() => setShowNewWork(true)}>
                 New Work

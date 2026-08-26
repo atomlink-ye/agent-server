@@ -111,7 +111,9 @@ Two rules keep this honest:
 
 `ApiTransportError.code` carries the upstream `error.code` to the client, and
 `apps/web/src/api/feature-availability.ts` is the single place that recognises this condition.
-Any client wrapper that re-wraps a transport error must preserve `code`, or the signal is lost.
+Any client wrapper that re-wraps a transport error must preserve `code`, or the signal is lost —
+this applies to mutation wrappers as well as read wrappers, and is guarded by
+`apps/web/src/features/work/clients/errors.test.ts`.
 
 ## Routing
 

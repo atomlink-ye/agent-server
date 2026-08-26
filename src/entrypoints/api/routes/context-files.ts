@@ -18,19 +18,18 @@ import { getAuthenticatedAccessContext } from '../access-context.js';
 import { requireServiceAccountAccess } from '../authentication.js';
 import { readBoundedJson } from '../read-bounded-json.js';
 import { HttpError } from '../../../contracts/http.js';
+import {
+  ContextAgentPinRequestSchema,
+  ContextConversationToUserPromotionRequestSchema,
+  ContextConversationToWorkAdmissionRequestSchema,
+  ContextScopeKindSchema,
+  ContextWorkResultPublicationRequestSchema,
+} from '../../../contracts/context.js';
 import type { ApiEnvironment } from '../http-types.js';
 import type { AppConfig } from '../../../shared/config.js';
 
 const BASE = '/api/v1/context';
 const MAX_REQUEST_BYTES = 64 * 1024;
-const scopeKindSchema = z.enum([
-  'organization',
-  'workspace',
-  'agent',
-  'agent_user',
-  'conversation',
-  'work',
-]);
 
 interface Queryable {
   query<T = Record<string, unknown>>(
@@ -116,7 +115,7 @@ export function registerContextFileRoutes(
 
   app.post(`${BASE}/promotions/conversation-to-user`, async (c) => {
     const access = getAuthenticatedAccessContext(c);
-    const parsed = conversationToUserSchema.safeParse(
+    const parsed = ContextConversationToUserPromotionRequestSchema.safeParse(
       await readBoundedJson(c.req.raw, MAX_REQUEST_BYTES),
     );
     if (!parsed.success) throw invalidRequest();
@@ -147,7 +146,7 @@ export function registerContextFileRoutes(
 
   app.post(`${BASE}/admissions/conversation-to-work`, async (c) => {
     const access = getAuthenticatedAccessContext(c);
-    const parsed = conversationToWorkSchema.safeParse(
+    const parsed = ContextConversationToWorkAdmissionRequestSchema.safeParse(
       await readBoundedJson(c.req.raw, MAX_REQUEST_BYTES),
     );
     if (!parsed.success) throw invalidRequest();
@@ -170,7 +169,7 @@ export function registerContextFileRoutes(
 
   app.post(`${BASE}/publications/work-result`, async (c) => {
     const access = getAuthenticatedAccessContext(c);
-    const parsed = workResultSchema.safeParse(
+    const parsed = ContextWorkResultPublicationRequestSchema.safeParse(
       await readBoundedJson(c.req.raw, MAX_REQUEST_BYTES),
     );
     if (!parsed.success) throw invalidRequest();
@@ -187,7 +186,7 @@ export function registerContextFileRoutes(
 
   app.post(`${BASE}/pins/agent`, async (c) => {
     const access = getAuthenticatedAccessContext(c);
-    const parsed = pinAgentSchema.safeParse(
+    const parsed = ContextAgentPinRequestSchema.safeParse(
       await readBoundedJson(c.req.raw, MAX_REQUEST_BYTES),
     );
     if (!parsed.success) throw invalidRequest();
@@ -222,7 +221,7 @@ export function registerContextFileRoutes(
 
 type Access = ReturnType<typeof getAuthenticatedAccessContext>;
 type RequestedScope = {
-  readonly kind: z.infer<typeof scopeKindSchema>;
+  readonly kind: z.infer<typeof ContextScopeKindSchema>;
   readonly agentDefinitionId?: string;
   readonly conversationId?: string;
   readonly workId?: string;
@@ -376,7 +375,7 @@ async function requireAgentAccess(
 }
 
 function parseScopeRequest(params: URLSearchParams): RequestedScope {
-  const kind = scopeKindSchema.safeParse(params.get('scope'));
+  const kind = ContextScopeKindSchema.safeParse(params.get('scope'));
   if (!kind.success) throw invalidRequest();
   return {
     kind: kind.data,
@@ -389,46 +388,6 @@ function parseScopeRequest(params: URLSearchParams): RequestedScope {
     ...(params.get('work_id') ? { workId: params.get('work_id')! } : {}),
   };
 }
-
-const commonPath = z.string().trim().min(1).max(2048);
-const conversationToUserSchema = z
-  .object({
-    agent_definition_id: z.string().trim().min(1),
-    conversation_id: z.string().uuid(),
-    source_path: commonPath,
-    target_path: commonPath,
-  })
-  .strict();
-const conversationToWorkSchema = z
-  .object({
-    conversation_id: z.string().uuid(),
-    work_id: z.string().uuid(),
-    source_path: commonPath,
-    target_path: commonPath,
-  })
-  .strict();
-const workResultSchema = z
-  .object({
-    work_id: z.string().uuid(),
-    source_path: commonPath,
-    target_path: commonPath,
-  })
-  .strict();
-const pinAgentSchema = z
-  .object({
-    agent_definition_id: z.string().trim().min(1),
-    source: z
-      .object({
-        scope: scopeKindSchema.exclude(['organization']),
-        agent_definition_id: z.string().optional(),
-        conversation_id: z.string().uuid().optional(),
-        work_id: z.string().uuid().optional(),
-        path: commonPath,
-      })
-      .strict(),
-    target_path: commonPath,
-  })
-  .strict();
 
 function entryResponse(entry: {
   id: string;

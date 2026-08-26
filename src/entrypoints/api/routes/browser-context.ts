@@ -9,6 +9,27 @@ import {
   readJson,
   safeStatus,
 } from './browser-bff-transport.js';
+import {
+  ContextAgentPinRequestSchema,
+  ContextConversationToUserPromotionRequestSchema,
+  ContextConversationToWorkAdmissionRequestSchema,
+  ContextWorkResultPublicationRequestSchema,
+} from '../../../contracts/context.js';
+
+/**
+ * The browser facade states the same ContextFS request contract the
+ * `/api/v1/context` entrypoint enforces, instead of relaying an unvalidated
+ * body and letting the browser discover the shape from an upstream rejection.
+ * Both sides now read one module, so they cannot drift.
+ */
+const CONTEXT_MUTATION_CONTRACTS = {
+  'promotions/conversation-to-user':
+    ContextConversationToUserPromotionRequestSchema,
+  'admissions/conversation-to-work':
+    ContextConversationToWorkAdmissionRequestSchema,
+  'publications/work-result': ContextWorkResultPublicationRequestSchema,
+  'pins/agent': ContextAgentPinRequestSchema,
+} as const;
 
 /** Browser-safe pass-through for bounded ContextFS product projections. */
 export function registerBrowserContextRoutes(
@@ -22,16 +43,31 @@ export function registerBrowserContextRoutes(
     forward(config, `/api/v1/context/file${querySuffix(c.req.url)}`, 'GET'),
   );
 
-  for (const path of [
-    'promotions/conversation-to-user',
-    'admissions/conversation-to-work',
-    'publications/work-result',
-    'pins/agent',
-  ] as const) {
-    app.post(`/api/context/${path}`, async (c) =>
-      forward(config, `/api/v1/context/${path}`, 'POST', await c.req.text()),
-    );
+  for (const [path, schema] of Object.entries(CONTEXT_MUTATION_CONTRACTS)) {
+    app.post(`/api/context/${path}`, async (c) => {
+      const body = await c.req.text();
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(body);
+      } catch {
+        return invalidContextRequest();
+      }
+      if (!schema.safeParse(parsed).success) return invalidContextRequest();
+      return forward(config, `/api/v1/context/${path}`, 'POST', body);
+    });
   }
+}
+
+function invalidContextRequest(): Response {
+  return jsonResponse(
+    {
+      error: {
+        code: 'invalid_request',
+        message: 'The context request is invalid.',
+      },
+    },
+    400,
+  );
 }
 
 async function forward(

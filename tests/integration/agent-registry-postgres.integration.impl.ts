@@ -762,7 +762,6 @@ describe('PostgresAgentRegistry repository contract (PGlite)', () => {
     });
     const command = {
       owner,
-      compatibilityWorkspaceId: owner.workspaceId,
       idempotencyKey: 'import-1',
       requestFingerprint: 'fp-1',
       normalizedName: 'registry-agent',
@@ -810,7 +809,6 @@ describe('PostgresAgentRegistry repository contract (PGlite)', () => {
     });
     await registry.importAgent({
       owner,
-      compatibilityWorkspaceId: owner.workspaceId,
       idempotencyKey: 'owner-scope-import',
       requestFingerprint: 'owner-scope-fingerprint',
       normalizedName: definition.normalizedName,
@@ -878,7 +876,6 @@ describe('PostgresAgentRegistry repository contract (PGlite)', () => {
     });
     await registry.importAgent({
       owner,
-      compatibilityWorkspaceId: 'workspace-stale',
       idempotencyKey: 'stale-import',
       requestFingerprint: 'stale-fingerprint',
       normalizedName: 'stale-agent',
@@ -916,7 +913,6 @@ describe('PostgresAgentRegistry repository contract (PGlite)', () => {
     });
     await registry.importAgent({
       owner,
-      compatibilityWorkspaceId: owner.workspaceId,
       idempotencyKey: 'stale-publish-import',
       requestFingerprint: 'stale-publish-import-fp',
       normalizedName: 'stale-publish-agent',
@@ -1049,7 +1045,6 @@ describeRealPostgres(
       });
       return {
         owner: realOwner,
-        compatibilityWorkspaceId: workspaceId,
         idempotencyKey: key,
         requestFingerprint: fingerprint,
         normalizedName: 'registry-agent',

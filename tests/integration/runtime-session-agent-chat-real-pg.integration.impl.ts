@@ -277,7 +277,6 @@ async function importDraft(input: {
   });
   const result = await registry.importAgent({
     owner,
-    compatibilityWorkspaceId: workspaceId,
     idempotencyKey: input.importKey,
     requestFingerprint: parsed.fingerprint,
     normalizedName: definition.normalizedName,

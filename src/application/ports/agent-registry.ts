@@ -100,7 +100,6 @@ export interface ManagedAgentVersionPage {
 
 export interface ImportAgentAtomicCommand {
   readonly owner: ManagedAgentOwner;
-  readonly compatibilityWorkspaceId: string;
   readonly idempotencyKey: string;
   readonly requestFingerprint: string;
   readonly normalizedName: string;

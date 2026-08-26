@@ -203,7 +203,6 @@ describe('Cumora-style Coworker lifecycle provisioning', () => {
     });
     await registry.importAgent({
       owner: definition,
-      compatibilityWorkspaceId: workspaceId,
       idempotencyKey: 'coworker-import',
       requestFingerprint: parsed.fingerprint,
       normalizedName: definition.normalizedName,

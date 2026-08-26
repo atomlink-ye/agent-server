@@ -26,12 +26,15 @@ export type TimelineLaneRow = {
   readonly key: string;
   readonly subject: string | null;
   readonly workItemId: string | null;
+  readonly actorId: string | null;
   readonly spans: readonly TimelineSpan[];
 };
 
 export type ActorRow = {
   readonly key: string;
   readonly name: string;
+  /** What this lane is, when it is not an agent. */
+  readonly note: string | null;
   readonly rows: readonly TimelineLaneRow[];
 };
 
@@ -226,45 +229,68 @@ export function selectInspectorModel(
 }
 
 /**
- * Lanes for the Timeline. Team traces keep one lane per captured actor
- * (plus an honest "Name not captured" catch-all for runs an actor cannot
- * be resolved for, e.g. the root run that bootstraps the whole WorkRun).
- * A single-agent Work has no captured actors at all -- trace.actors is
- * empty -- so it falls back to one lane per distinct task, named
- * neutrally. It is not labeled "lead": role === 'lead' gates real lead
- * behavior in the domain, and a lone agent does not hold that role. It is
- * not labeled "Name not captured" either: the name is not missing from
- * capture, it is simply not part of this response shape.
+ * Lanes for the Timeline. Team traces keep one lane per captured actor, plus
+ * the Work Run's own root run: the run whose task is the root task, which has
+ * no actor because it belongs to the Work rather than to any agent. That lane
+ * used to be labeled "Name not captured", which read as a capture defect for
+ * the one run that is working exactly as designed. The honest catch-all is
+ * still there for a span that resolves to neither.
+ *
+ * A single-agent Work has no captured actors at all -- trace.actors is empty --
+ * so it falls back to one lane per distinct task, named neutrally. It is not
+ * labeled "lead": role === 'lead' gates real lead behavior in the domain, and a
+ * lone agent does not hold that role.
  */
 export function selectActorRows(trace: NormalizedTrace): readonly ActorRow[] {
   const spans = selectTimelineSpans(trace);
   if (trace.actors.size === 0) return selectSingleAgentLanes(spans);
+  const rootRunIds = new Set(
+    trace.runs
+      .filter(
+        (run) =>
+          run.actorId === null &&
+          run.taskId !== null &&
+          run.taskId === run.rootTaskId,
+      )
+      .map((run) => run.id),
+  );
   const spansByActorId = new Map<string, TimelineSpan[]>();
+  const rootSpans: TimelineSpan[] = [];
   const uncapturedSpans: TimelineSpan[] = [];
   for (const span of spans) {
     if (trace.actors.has(span.laneKey)) {
       const bucket = spansByActorId.get(span.laneKey) ?? [];
       bucket.push(span);
       spansByActorId.set(span.laneKey, bucket);
+    } else if (rootRunIds.has(span.key)) {
+      rootSpans.push(span);
     } else {
       uncapturedSpans.push(span);
     }
   }
-  const rows = [...trace.actors.values()].map((actor) => ({
+  const rows: ActorRow[] = [...trace.actors.values()].map((actor) => ({
     key: actor.id,
     name: actor.name ?? 'Name not captured',
-    rows: groupSpansIntoLaneRows(trace, spansByActorId.get(actor.id) ?? []),
+    note: null,
+    rows: groupSpansIntoLaneRows(trace, spansByActorId.get(actor.id) ?? [], {
+      actorId: actor.id,
+    }),
   }));
-  return uncapturedSpans.length
-    ? [
-        ...rows,
-        {
-          key: 'uncaptured-actor',
-          name: 'Name not captured',
-          rows: groupSpansIntoLaneRows(trace, uncapturedSpans),
-        },
-      ]
-    : rows;
+  if (rootSpans.length)
+    rows.push({
+      key: 'work-root-run',
+      name: 'Work Run',
+      note: 'The Work Run itself, not an agent',
+      rows: groupSpansIntoLaneRows(trace, rootSpans, { actorId: null }),
+    });
+  if (uncapturedSpans.length)
+    rows.push({
+      key: 'uncaptured-actor',
+      name: 'Name not captured',
+      note: null,
+      rows: groupSpansIntoLaneRows(trace, uncapturedSpans, { actorId: null }),
+    });
+  return rows;
 }
 
 function selectSingleAgentLanes(
@@ -279,13 +305,15 @@ function selectSingleAgentLanes(
   return [...spansByLaneKey.entries()].map(([key, laneSpans]) => ({
     key,
     name: 'Agent',
-    rows: groupSpansIntoLaneRows(null, laneSpans),
+    note: null,
+    rows: groupSpansIntoLaneRows(null, laneSpans, { actorId: null }),
   }));
 }
 
 function groupSpansIntoLaneRows(
   trace: NormalizedTrace | null,
   spans: readonly TimelineSpan[],
+  lane: { readonly actorId: string | null },
 ): readonly TimelineLaneRow[] {
   const grouped = new Map<string, TimelineSpan[]>();
   for (const span of spans) {
@@ -302,23 +330,71 @@ function groupSpansIntoLaneRows(
         ? (trace?.workItems.get(workItemId)?.subject ?? null)
         : null,
       workItemId,
+      actorId: lane.actorId,
       spans: groupedSpans,
     };
   });
 }
 
-export function interactionsForWorkItem(
+export type RowInteractions = {
+  readonly messages: number;
+  readonly calls: number;
+  readonly tools: readonly { readonly name: string; readonly count: number }[];
+};
+
+/**
+ * What a lane row actually did, as tool calls rather than dispatch records.
+ *
+ * Two corrections live here. First, an MCP activity is recorded twice — once
+ * when it is dispatched and once when it is confirmed — so counting rows
+ * reported double the calls that happened. The pair shares an activity id, but
+ * that id is only an ordinal within a session ("activity-2") and repeats across
+ * sessions, so the identity has to be the (actor, activity) pair. Second, the
+ * count used to be looked up by Work Item alone, which meant a lead's own
+ * coordination run — no Work Item, and in a real trace the majority of the tool
+ * calls — showed nothing at all, and the Timeline looked like a row of bars with
+ * no interaction between them.
+ */
+export function interactionsForRow(
   trace: NormalizedTrace,
-  workItemId: string,
-) {
+  row: Pick<TimelineLaneRow, 'workItemId' | 'actorId'>,
+): RowInteractions {
+  const matches = (activity: TraceActivity): boolean =>
+    row.workItemId !== null
+      ? activity.workItemId === row.workItemId
+      : row.actorId !== null &&
+        activity.actorId === row.actorId &&
+        activity.workItemId === null;
+  const seen = new Set<string>();
+  const toolCounts = new Map<string, number>();
+  for (const activity of trace.activities) {
+    if (!matches(activity)) continue;
+    const identity = `${activity.actorId ?? ''}:${activity.activityId}`;
+    if (seen.has(identity)) continue;
+    seen.add(identity);
+    toolCounts.set(
+      activity.toolName,
+      (toolCounts.get(activity.toolName) ?? 0) + 1,
+    );
+  }
   return {
-    messages: trace.edges.filter(
-      (edge) =>
-        edge.kind === 'observed_message' && edge.workItemId === workItemId,
-    ).length,
-    activities: trace.activities.filter(
-      (activity) => activity.workItemId === workItemId,
-    ).length,
+    messages: trace.edges.filter((edge) => {
+      if (edge.kind !== 'observed_message') return false;
+      if (row.workItemId !== null) return edge.workItemId === row.workItemId;
+      return (
+        row.actorId !== null &&
+        edge.workItemId === null &&
+        (edge.senderActorId === row.actorId ||
+          edge.recipientActorId === row.actorId)
+      );
+    }).length,
+    calls: seen.size,
+    tools: [...toolCounts.entries()]
+      .map(([name, count]) => ({ name, count }))
+      .sort(
+        (left, right) =>
+          right.count - left.count || left.name.localeCompare(right.name),
+      ),
   };
 }
 

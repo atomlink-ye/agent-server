@@ -101,6 +101,10 @@ export type TraceExecutionRun = {
   readonly actorId: string | null;
   readonly workItemId: string | null;
   readonly taskId: string | null;
+  // A run whose task IS the root task is the Work Run's own bootstrap run.
+  // It has no actor because it belongs to the Work, not to an agent, and the
+  // Timeline needs to say so rather than report a missing name.
+  readonly rootTaskId: string | null;
   readonly startedAt: string | null;
   readonly endedAt: string | null;
 };
@@ -277,6 +281,7 @@ export function normalizeProductRunTrace(
       actorId: run.actor_id,
       workItemId: run.work_item_id,
       taskId: run.source_refs.task_id ?? null,
+      rootTaskId: run.source_refs.root_task_id ?? null,
       startedAt: run.started_at,
       endedAt: run.ended_at,
     })),

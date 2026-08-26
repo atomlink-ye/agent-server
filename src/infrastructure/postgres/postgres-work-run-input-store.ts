@@ -3,6 +3,7 @@ import type {
   WorkRunInputStore,
 } from '../../application/ports/work-run-input-store.js';
 import type { WorkIdentityOwnerScope } from '../../application/ports/work-identity-repository.js';
+import { canonicalizeProjectValue } from '../../domain/projects/project-canonicalization.js';
 import type { WorkInputSnapshot } from '../../domain/work/work-input-schema.js';
 
 interface Queryable {
@@ -51,7 +52,17 @@ export class PostgresWorkRunInputStore implements WorkRunInputStore {
     }
     if (!row.input_snapshot || row.input_fingerprint !== input.fingerprint)
       throw new WorkRunInputConflictError();
-    if (JSON.stringify(row.input_snapshot) !== JSON.stringify(input.snapshot))
+    // Compare canonically, not with raw JSON.stringify. What comes back is a
+    // jsonb round-trip, and jsonb normalises object key order, so stringifying
+    // both sides reported a conflict for two snapshots that differ only in the
+    // order the author happened to write the keys in. That made every Work
+    // Definition with more than one typed input property impossible to start:
+    // the WorkRun was created, its input recorded, and then this check threw
+    // before a root Task was ever admitted.
+    if (
+      canonicalizeProjectValue(row.input_snapshot) !==
+      canonicalizeProjectValue(input.snapshot)
+    )
       throw new WorkRunInputConflictError();
     return {
       workRunId: row.id,

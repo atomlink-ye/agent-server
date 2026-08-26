@@ -81,3 +81,43 @@ function card(
     resultCaptureStatus: resultSummary ? 'present' : 'not_present',
   };
 }
+
+it('condenses a long markdown result instead of pasting the whole report', async () => {
+  const report = [
+    '## Capacity report — grc-external-indicator-provider',
+    '',
+    '### 1. Signals',
+    '',
+    '- **CPU**: mean `79%`, peak `98%`',
+    '',
+    '```',
+    'container_cpu_cfs_throttled_periods_total',
+    '```',
+    '',
+    'x'.repeat(4000),
+  ].join('\n');
+  vi.mocked(loadWorkCard).mockResolvedValue(card('complete', report));
+
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(<WorkCard workRef={workId} onOpen={() => undefined} />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const summary = host.querySelector('.work-card-result')?.textContent ?? '';
+    expect(summary.length).toBeLessThanOrEqual(181);
+    expect(summary).toContain('Capacity report');
+    // Markdown syntax and fenced code are not summary content.
+    expect(summary).not.toContain('##');
+    expect(summary).not.toContain('**');
+    expect(summary).not.toContain('container_cpu_cfs');
+    expect(summary.endsWith('…')).toBe(true);
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+  }
+});

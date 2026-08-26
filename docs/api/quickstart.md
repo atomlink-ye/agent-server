@@ -9,7 +9,7 @@ This is the canonical first-run Product API flow. A new developer should need on
 3. one service-account `AGENT_SERVER_TOKEN` already bound to a workspace;
 4. the Product concepts **Definition -> Work -> Run**.
 
-You do **not** manually import/publish an Agent, Environment, or Team in this flow. `WorkDefinition:apply` materializes inline authoring resources into immutable internal versions and hides the registry choreography.
+You do **not** manually import/publish a Worker, Environment, or Team in this flow. `WorkDefinition:apply` materializes inline authoring resources into immutable internal versions and hides the registry choreography.
 
 ## 1. Create `work.yaml`
 
@@ -20,16 +20,16 @@ metadata:
   name: quickstart-research
   description: Answer the requested research question concisely.
 spec:
-  kind: single_agent
+  kind: single_worker
 
-  agent:
+  worker:
     source: |
       apiVersion: agent-server/v1alpha1
-      kind: ManagedAgent
+      kind: Worker
       metadata:
-        name: quickstart-research-agent
+        name: quickstart-research-worker
       spec:
-        description: Product API quickstart Agent
+        description: Product API quickstart Worker
         instructions: "Answer the Product Work input directly and concisely."
         runtime:
           provider: paseo
@@ -82,7 +82,7 @@ spec:
     additional_properties: false
 ```
 
-The inline Agent and Environment are convenience authoring objects. After `apply`, execution is pinned to immutable internal versions just like advanced registry-authored resources.
+The inline Worker and Environment are convenience authoring objects. After `apply`, execution is pinned to immutable internal versions just like advanced registry-authored resources.
 
 ## 2. Configure the connection
 

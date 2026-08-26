@@ -63,6 +63,44 @@
   letter-spacing: -0.02em;
   margin: 0;
 }
+/* The report reads as a document: measured line length, its own surface, and a
+   bounded height so the Run Trace below it stays reachable without scrolling
+   past a whole report. */
+.work-overview__outcome {
+  border-top: 1px solid var(--ink-100);
+  margin-top: var(--space-4);
+  max-height: 420px;
+  max-width: 760px;
+  overflow-y: auto;
+  padding-top: var(--space-3);
+  color: var(--ink-700);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+}
+.work-overview__outcome .assistant-markdown > :first-child {
+  margin-top: 0;
+}
+.work-overview__outcome .assistant-markdown > :last-child {
+  margin-bottom: 0;
+}
+.work-overview__outcome .assistant-markdown table {
+  display: block;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+.work-overview__outcome .assistant-markdown th,
+.work-overview__outcome .assistant-markdown td {
+  border: 1px solid var(--ink-100);
+  padding: var(--space-1) var(--space-2);
+  text-align: left;
+}
+.work-overview__outcome .assistant-markdown pre {
+  border: 1px solid var(--ink-100);
+  border-radius: var(--radius-md);
+  background: var(--paper);
+  padding: var(--space-3);
+  overflow-x: auto;
+}
 .work-section-heading {
   max-width: 760px;
 }

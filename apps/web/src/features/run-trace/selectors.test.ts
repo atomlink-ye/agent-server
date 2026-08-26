@@ -1,8 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { selectTimelineSpans } from './selectors';
+import {
+  interactionsForRow,
+  selectActorRows,
+  selectTimelineSpans,
+} from './selectors';
 import type {
   NormalizedTrace,
+  TraceActivity,
   TraceAttempt,
   TraceExecutionEvent,
   TraceExecutionRun,
@@ -38,6 +43,7 @@ function run(overrides: Partial<TraceExecutionRun>): TraceExecutionRun {
     actorId: null,
     workItemId: null,
     taskId: null,
+    rootTaskId: null,
     startedAt: '2026-01-01T00:00:00.000Z',
     endedAt: '2026-01-01T00:01:00.000Z',
     ...overrides,
@@ -185,5 +191,107 @@ describe('selectTimelineSpans', () => {
     } finally {
       vi.restoreAllMocks();
     }
+  });
+});
+
+describe('interactionsForRow', () => {
+  // An MCP activity is recorded twice, on dispatch and on confirmation, and the
+  // activity id it is paired by is only an ordinal within a session -- the same
+  // "activity-2" belongs to a different call in another actor's session. Counting
+  // rows reported double; keying on the id alone would merge two agents' calls.
+  const activity = (
+    overrides: Partial<TraceActivity> & Pick<TraceActivity, 'activityId'>,
+  ): TraceActivity => ({
+    sequence: 1,
+    status: 'running',
+    category: 'read',
+    toolName: 'board_list',
+    resultCaptureStatus: 'present',
+    actorId: 'actor-1',
+    workItemId: null,
+    ...overrides,
+  });
+
+  const trace = baseTrace({
+    activities: [
+      activity({ activityId: 'activity-1', status: 'running' }),
+      activity({ activityId: 'activity-1', status: 'completed', sequence: 2 }),
+      activity({
+        activityId: 'activity-2',
+        toolName: 'collaboration_state',
+        sequence: 3,
+      }),
+      activity({
+        activityId: 'activity-2',
+        toolName: 'collaboration_state',
+        status: 'completed',
+        sequence: 4,
+      }),
+      // Same ordinal, different session: a second actor's own first call.
+      activity({
+        activityId: 'activity-1',
+        actorId: 'actor-2',
+        workItemId: 'work-item-1',
+        toolName: 'board_submit',
+        sequence: 1,
+      }),
+    ],
+  });
+
+  it('counts tool calls rather than dispatch records', () => {
+    const result = interactionsForRow(trace, {
+      workItemId: null,
+      actorId: 'actor-1',
+    });
+    expect(result.calls).toBe(2);
+    expect(result.tools).toEqual([
+      { name: 'board_list', count: 1 },
+      { name: 'collaboration_state', count: 1 },
+    ]);
+  });
+
+  it('does not merge two actors that share an activity ordinal', () => {
+    expect(
+      interactionsForRow(trace, {
+        workItemId: 'work-item-1',
+        actorId: 'actor-2',
+      }),
+    ).toMatchObject({ calls: 1, tools: [{ name: 'board_submit', count: 1 }] });
+  });
+});
+
+describe('selectActorRows', () => {
+  it("names the Work Run's own root run instead of reporting a missing name", () => {
+    const rows = selectActorRows(
+      baseTrace({
+        actors: new Map([['actor-1', { id: 'actor-1', name: 'analyst' }]]),
+        runs: [
+          run({ id: 'run-root', taskId: 'task-root', rootTaskId: 'task-root' }),
+          run({
+            id: 'run-analyst',
+            actorId: 'actor-1',
+            taskId: 'task-a',
+            rootTaskId: 'task-root',
+          }),
+        ],
+      }),
+    );
+    expect(rows.map((row) => row.name)).toEqual(['analyst', 'Work Run']);
+    expect(rows.at(-1)?.note).toBe('The Work Run itself, not an agent');
+  });
+
+  it('still reports a span that resolves to neither an actor nor the root run', () => {
+    const rows = selectActorRows(
+      baseTrace({
+        actors: new Map([['actor-1', { id: 'actor-1', name: 'analyst' }]]),
+        runs: [
+          run({ id: 'run-orphan', taskId: 'task-x', rootTaskId: 'task-root' }),
+        ],
+      }),
+    );
+    expect(rows.map((row) => row.name)).toEqual([
+      'analyst',
+      'Name not captured',
+    ]);
   });
 });

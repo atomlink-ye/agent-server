@@ -4,8 +4,8 @@ import type { ChatCommands } from '../../features/conversations/contracts';
 import { ConversationsPage } from '../../features/conversations/ConversationsPage';
 import AgentsPage from '../../features/agents/AgentsPage';
 import FilesPage from '../../features/files/FilesPage';
-import { TasksPage } from '../../features/work-organization/TasksPage';
 import { BoardsPage } from '../../features/work-organization/BoardsPage';
+import { TasksPage } from '../../features/work-organization/TasksPage';
 import { WorkPage } from '../../features/work/WorkPage';
 import type { AppStore } from '../../features/conversations/stores/app';
 import type { ConversationsStore } from '../../features/conversations/stores/conversations';
@@ -59,11 +59,19 @@ export function AppShell({
       return;
     }
     if (tab === 'tasks') {
-      navigate(selectedWorkItemId ? `/tasks/${encodeURIComponent(selectedWorkItemId)}` : '/tasks');
+      navigate(
+        selectedWorkItemId
+          ? `/tasks/${encodeURIComponent(selectedWorkItemId)}`
+          : '/tasks',
+      );
       return;
     }
     if (tab === 'boards') {
-      navigate(selectedBoardId ? `/boards/${encodeURIComponent(selectedBoardId)}` : '/boards');
+      navigate(
+        selectedBoardId
+          ? `/boards/${encodeURIComponent(selectedBoardId)}`
+          : '/boards',
+      );
       return;
     }
     if (tab === 'agents') {

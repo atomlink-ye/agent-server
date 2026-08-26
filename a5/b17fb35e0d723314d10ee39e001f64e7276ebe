@@ -1,13 +1,13 @@
-apps/web/src/features/conversations/components/ChatTranscript.browser.test.tsx
-  aa841554b33a269e 105-141
 apps/web/src/features/work/components/WorkCard.tsx
   aa841554b33a269e 6,13-20,26-29,31-34,36-38,42-53,58,65,72,76-77,80,85,95-99,102-121
-apps/web/src/features/work/components/WorkCard.browser.test.tsx
-  aa841554b33a269e 84-123
-apps/web/src/index.css
-  aa841554b33a269e 1102-1105,1107-1116,1121-1126,1130,1134,1137,1140-1141,1143-1144,1146-1148,1162-1168
 apps/web/src/features/conversations/components/ChatTranscript.tsx
   aa841554b33a269e 28,32,41-44,46-60,111-123,134-137
+apps/web/src/index.css
+  aa841554b33a269e 1102-1105,1107-1116,1121-1126,1130,1134,1137,1140-1141,1143-1144,1146-1148,1162-1168
+apps/web/src/features/conversations/components/ChatTranscript.browser.test.tsx
+  aa841554b33a269e 105-141
+apps/web/src/features/work/components/WorkCard.browser.test.tsx
+  aa841554b33a269e 84-123
 ---
 {
   "schema_version": "authorship/3.0.0",

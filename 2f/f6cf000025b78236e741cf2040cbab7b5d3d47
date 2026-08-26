@@ -1,7 +1,7 @@
-docs/api/quickstart.md
-  aa841554b33a269e 12,23,25,28,30,32,85
 e2e/web-product-work.e2e.test.ts
   aa841554b33a269e 171-172,175,177,179
+docs/api/quickstart.md
+  aa841554b33a269e 12,23,25,28,30,32,85
 ---
 {
   "schema_version": "authorship/3.0.0",

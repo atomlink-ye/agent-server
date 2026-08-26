@@ -398,7 +398,7 @@ function BoardCanvas({
     if (!title) return;
     const description = window.prompt('Description (optional)')?.trim() ?? '';
     try {
-      const created = await workOrganizationClient.createWorkItem({
+      await workOrganizationClient.createWorkItem({
         title,
         description: description || null,
         boardId: snapshot.board.id,
@@ -406,7 +406,6 @@ function BoardCanvas({
         position,
       });
       await refresh();
-      navigate(`/tasks/${encodeURIComponent(created.work_item.id)}`);
     } catch {
       onError(BOARDS_ACTION_ERROR);
     }

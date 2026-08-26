@@ -276,7 +276,7 @@ describe('web Product Golden Path', () => {
           canonicalUuid.test(url.searchParams.get('run') ?? ''),
         { timeout: 60_000 },
       );
-      await page.getByText(/Product Work\/Run reads/u).waitFor({
+      await page.getByTestId('outcome-product-state').waitFor({
         state: 'visible',
         timeout: 60_000,
       });

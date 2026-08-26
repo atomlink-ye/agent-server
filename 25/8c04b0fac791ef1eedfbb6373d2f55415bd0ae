@@ -1,0 +1,23 @@
+e2e/web-product-golden-path.e2e.test.ts
+  332722555a433035 324
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2-bit.10+672fbf0",
+  "base_commit_sha": "258c04b0fac791ef1eedfbb6373d2f55415bd0ae",
+  "prompts": {
+    "332722555a433035": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7132c83d-0af3-4374-a794-91b5fb06a3a2",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "link.ye",
+      "messages": [],
+      "total_additions": 261,
+      "total_deletions": 1,
+      "accepted_lines": 261,
+      "overriden_lines": 0
+    }
+  }
+}

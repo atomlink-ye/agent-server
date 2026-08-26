@@ -28,6 +28,32 @@ function waitForExit(
   });
 }
 
+function waitForOwnerMessage(
+  owner: ChildProcess,
+  kind: 'ready' | 'descendant',
+): Promise<number | undefined> {
+  return new Promise((resolveMessage, rejectMessage) => {
+    const timer = setTimeout(() => {
+      owner.removeListener('message', onMessage);
+      rejectMessage(new Error(`timed out waiting for owner message: ${kind}`));
+    }, 5_000);
+    const onMessage = (message: unknown) => {
+      if (!message || typeof message !== 'object') return;
+      const record = message as { kind?: unknown; pid?: unknown };
+      if (record.kind !== kind) return;
+      clearTimeout(timer);
+      owner.removeListener('message', onMessage);
+      resolveMessage(typeof record.pid === 'number' ? record.pid : undefined);
+    };
+    owner.on('message', onMessage);
+    owner.once('error', (error) => {
+      clearTimeout(timer);
+      owner.removeListener('message', onMessage);
+      rejectMessage(error);
+    });
+  });
+}
+
 async function isAlive(pid: number): Promise<boolean> {
   try {
     process.kill(pid, 0);
@@ -54,7 +80,8 @@ describe('runHostCanary signal cleanup', () => {
 
           const children = [];
           const lifecycle = createCanarySignalLifecycle(children);
-          process.stdout.write('ready\\n');
+          const keepalive = setInterval(() => undefined, 1000);
+          process.send?.({ kind: 'ready' });
           await lifecycle.signal;
           const descendant = spawnOwned(
             process.execPath,
@@ -62,68 +89,30 @@ describe('runHostCanary signal cleanup', () => {
             { environment: process.env },
           );
           lifecycle.register(descendant);
-          process.stdout.write(String(descendant.pid) + '\\n');
+          process.send?.({ kind: 'descendant', pid: descendant.pid });
           await lifecycle.cleanup();
+          clearInterval(keepalive);
           lifecycle.dispose();
         `,
       ],
       {
         cwd: repositoryRoot,
         env: { ...process.env },
-        stdio: ['ignore', 'pipe', 'pipe'],
+        stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
       },
     );
 
-    let output = '';
     let descendantPid: number | undefined;
     owner.stdout?.setEncoding('utf8');
-    owner.stdout?.on('data', (chunk: string) => {
-      output += chunk;
-    });
     try {
-      await new Promise<void>((resolveReady, rejectReady) => {
-        const timer = setTimeout(
-          () =>
-            rejectReady(
-              new Error(`timed out waiting for owner readiness: ${output}`),
-            ),
-          5_000,
-        );
-        const check = () => {
-          if (!/^ready\s*$/m.test(output)) return;
-          clearTimeout(timer);
-          resolveReady();
-        };
-        owner.stdout?.on('data', check);
-        owner.once('error', (error) => {
-          clearTimeout(timer);
-          rejectReady(error);
-        });
-      });
+      await waitForOwnerMessage(owner, 'ready');
       owner.kill('SIGTERM');
 
-      descendantPid = await new Promise<number>((resolvePid, rejectPid) => {
-        const timer = setTimeout(
-          () =>
-            rejectPid(
-              new Error(`timed out waiting for owner output: ${output}`),
-            ),
-          5_000,
-        );
-        const check = () => {
-          const match = /^(\d+)\s*$/m.exec(output);
-          if (!match) return;
-          clearTimeout(timer);
-          resolvePid(Number(match[1]));
-        };
-        owner.stdout?.on('data', check);
-        owner.once('error', (error) => {
-          clearTimeout(timer);
-          rejectPid(error);
-        });
-      });
+      descendantPid = await waitForOwnerMessage(owner, 'descendant');
 
-      expect(descendantPid).toBeGreaterThan(0);
+      expect(descendantPid).toEqual(expect.any(Number));
+      if (descendantPid === undefined)
+        throw new Error('missing descendant PID');
       await expect(waitForExit(owner)).resolves.toMatchObject({ code: 143 });
 
       const deadline = Date.now() + 5_000;

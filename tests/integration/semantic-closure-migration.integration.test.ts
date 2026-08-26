@@ -5,6 +5,9 @@ import { fileURLToPath } from 'node:url';
 import { PGlite } from '@electric-sql/pglite';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { fingerprintWorkDefinitionSource } from '../../src/domain/work/work-definition-source.js';
+import { PostgresWorkDefinitionSourceRepository } from '../../src/infrastructure/postgres/postgres-work-definition-source-repository.js';
+
 const migrations = join(
   fileURLToPath(
     new URL('../../src/infrastructure/postgres/migrations/', import.meta.url),
@@ -25,14 +28,14 @@ const workerVersion = '41000000-0000-4000-8000-00000000a001';
 const workA = '50000000-0000-4000-8000-00000000a001';
 const healthyConversation = '60000000-0000-4000-8000-00000000a001';
 const orphanConversation = '60000000-0000-4000-8000-00000000a002';
-const sourceA = JSON.stringify({
-  kind: 'single_worker',
+const sourceObject = {
+  kind: 'single_worker' as const,
   workerVersionId: workerVersion,
   environmentVersionId: '70000000-0000-4000-8000-00000000a001',
-  memoryVersionIds: [],
-});
-const hashA = `sha256:${'a'.repeat(64)}`;
-const hashB = `sha256:${'b'.repeat(64)}`;
+  memoryVersionIds: [] as readonly string[],
+};
+const sourceA = JSON.stringify(sourceObject);
+const sourceHash = fingerprintWorkDefinitionSource(sourceObject);
 
 afterEach(async () => {
   await db?.close();
@@ -66,7 +69,7 @@ async function seedPreClosure(database: PGlite): Promise<void> {
       (id,tenant_id,workspace_id,principal_type,principal_id,name,managed_discriminator,normalized_name,created_at,updated_at)
     VALUES
       ('${agentA}','tenant-a','${workspaceA}','service_account','service-a','Coworker A','managed_agent_v1','coworker-a',now(),now()),
-      ('${agentB}','tenant-a','${workspaceA}','service_account','service-a','Coworker B','managed_agent_v1','coworker-b',now(),now());
+      ('${agentB}','tenant-a','${workspaceA}','service_account','service-b','Coworker B','managed_agent_v1','coworker-b',now(),now());
 
     INSERT INTO worker_definitions
       (id,tenant_id,workspace_id,principal_type,principal_id,name,normalized_name,description,created_at,updated_at)
@@ -92,8 +95,8 @@ async function seedPreClosure(database: PGlite): Promise<void> {
     INSERT INTO work_definition_source_versions
       (id,definition_id,tenant_id,workspace_id,principal_type,principal_id,status,source,fingerprint,created_at,published_at)
     VALUES
-      ('${definitionVersionA}','${definitionA}','tenant-a','${workspaceA}','service_account','service-a','published','${sourceA}'::jsonb,'${hashA}',now(),now()),
-      ('${definitionVersionB}','${definitionB}','tenant-a','${workspaceA}','service_account','service-a','published','${sourceA}'::jsonb,'${hashB}',now(),now());
+      ('${definitionVersionA}','${definitionA}','tenant-a','${workspaceA}','service_account','service-a','published','${sourceA}'::jsonb,'${sourceHash}',now(),now()),
+      ('${definitionVersionB}','${definitionB}','tenant-a','${workspaceA}','service_account','service-a','published','${sourceA}'::jsonb,'${sourceHash}',now(),now());
 
     INSERT INTO agent_work_bindings
       (tenant_id,workspace_id,agent_definition_id,work_definition_id,active_work_definition_version_id,status,created_at,updated_at)
@@ -163,12 +166,44 @@ describe('0061 semantic closure migration', () => {
       { agent_definition_id: agentA, principal_id: 'service-a' },
     ]);
 
+    const repository = new PostgresWorkDefinitionSourceRepository(db as never);
+    await expect(
+      repository.associateAgentWorkflow({
+        tenantId: 'tenant-a',
+        workspaceId: workspaceA,
+        agentDefinitionId: agentA,
+        definitionId: definitionA,
+        definitionVersionId: definitionVersionB,
+        now: new Date().toISOString(),
+      }),
+    ).rejects.toThrow('agent_work_binding_not_found');
+
+    await expect(
+      repository.associateAgentWorkflow({
+        tenantId: 'tenant-a',
+        workspaceId: workspaceA,
+        agentDefinitionId: agentA,
+        definitionId: definitionA,
+        definitionVersionId: definitionVersionA,
+        now: new Date().toISOString(),
+      }),
+    ).resolves.toBeUndefined();
+
     await expect(
       db.exec(`
         INSERT INTO agent_work_bindings
           (tenant_id,workspace_id,principal_type,principal_id,agent_definition_id,work_definition_id,active_work_definition_version_id,status,created_at,updated_at)
         VALUES
-          ('tenant-a','${workspaceA}','service_account','service-a','${agentB}','${definitionA}','${definitionVersionB}','enabled',now(),now());
+          ('tenant-a','${workspaceA}','service_account','service-a','${agentB}','${definitionA}','${definitionVersionA}','enabled',now(),now());
+      `),
+    ).rejects.toThrow('Coworker owner mismatch');
+
+    await expect(
+      db.exec(`
+        INSERT INTO agent_work_bindings
+          (tenant_id,workspace_id,principal_type,principal_id,agent_definition_id,work_definition_id,active_work_definition_version_id,status,created_at,updated_at)
+        VALUES
+          ('tenant-a','${workspaceA}','service_account','service-a','${agentA}','${definitionA}','${definitionVersionB}','enabled',now(),now());
       `),
     ).rejects.toThrow();
 

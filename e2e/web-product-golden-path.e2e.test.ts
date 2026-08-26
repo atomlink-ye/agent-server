@@ -18,6 +18,8 @@ if (!parsedBaseUrl.hostname.endsWith('.localhost'))
     'WEB_E2E_BASE_URL must use a trustworthy .localhost hostname for the Golden Path browser canary.',
   );
 const baseUrl = configuredBaseUrl.replace(/\/$/u, '');
+const canonicalUuid =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const testTimeout = 8 * 60 * 1000;
 let browser: Browser | undefined;
 
@@ -197,7 +199,7 @@ describe('web Product Golden Path', () => {
           (request) =>
             request.method() === 'POST' &&
             new URL(request.url()).origin === browserOrigin &&
-            /\/api\/works\/[0-9a-f-]+\/runs$/iu.test(
+            /\/api\/works\/[^/]+\/runs$/iu.test(
               new URL(request.url()).pathname,
             ),
           { timeout: 60_000 },
@@ -208,7 +210,7 @@ describe('web Product Golden Path', () => {
           (response) =>
             response.request().method() === 'POST' &&
             new URL(response.url()).origin === browserOrigin &&
-            /\/api\/works\/[0-9a-f-]+\/runs$/iu.test(
+            /\/api\/works\/[^/]+\/runs$/iu.test(
               new URL(response.url()).pathname,
             ),
           { timeout: 60_000 },
@@ -225,20 +227,34 @@ describe('web Product Golden Path', () => {
         );
       }
       expect(createdWorkResponse.status()).toBe(201);
+      const createdWorkBody = (await createdWorkResponse.json()) as {
+        work?: { id?: unknown };
+      };
+      const createdWorkId = createdWorkBody.work?.id;
+      if (
+        typeof createdWorkId !== 'string' ||
+        !canonicalUuid.test(createdWorkId)
+      )
+        throw new Error(
+          `Work creation returned a malformed Work id: ${sanitizedWorkCreateRequest(createdWorkResponse)}`,
+        );
+      const expectedRunPath = `/api/works/${createdWorkId}/runs`;
       let submittedRunRequest: import('playwright').Request;
       let startedRunResponse: import('playwright').Response;
+      let observedRunPath = expectedRunPath;
       try {
         const [runRequestResult, runResponseResult] = await Promise.all([
           runRequest,
           runResponse,
         ]);
         if ('error' in runRequestResult) throw runRequestResult.error;
-        if ('error' in runResponseResult) throw runResponseResult.error;
         submittedRunRequest = runRequestResult.value;
+        observedRunPath = new URL(submittedRunRequest.url()).pathname;
+        if ('error' in runResponseResult) throw runResponseResult.error;
         startedRunResponse = runResponseResult.value;
       } catch (error) {
         throw new Error(
-          `Work Run request was not sent after Work creation: ${await boundedUiStatus(page)} (${error instanceof Error ? error.message : String(error)})`,
+          `Work Run request was not sent after Work creation: workId=${createdWorkId} runPath=${observedRunPath} ui=${await boundedUiStatus(page)} (${error instanceof Error ? error.message : String(error)})`,
         );
       }
       expect(JSON.parse(submittedRunRequest.postData() ?? '{}')).toMatchObject({

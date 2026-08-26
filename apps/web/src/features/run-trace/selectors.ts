@@ -345,15 +345,12 @@ export type RowInteractions = {
 /**
  * What a lane row actually did, as tool calls rather than dispatch records.
  *
- * Two corrections live here. First, an MCP activity is recorded twice — once
- * when it is dispatched and once when it is confirmed — so counting rows
- * reported double the calls that happened. The pair shares an activity id, but
- * that id is only an ordinal within a session ("activity-2") and repeats across
- * sessions, so the identity has to be the (actor, activity) pair. Second, the
- * count used to be looked up by Work Item alone, which meant a lead's own
- * coordination run — no Work Item, and in a real trace the majority of the tool
- * calls — showed nothing at all, and the Timeline looked like a row of bars with
- * no interaction between them.
+ * An MCP activity is recorded twice — once when it is dispatched and once when
+ * it is confirmed — so counting rows reports double the calls that happened.
+ * The pair shares an activity id, but that id is an ordinal that restarts in a
+ * later Run. The stable dedup identity therefore includes Run provenance,
+ * actor, and activity id. The row lookup also supports actor-owned coordination
+ * runs that have no Work Item, so those calls remain visible.
  */
 export function interactionsForRow(
   trace: NormalizedTrace,
@@ -369,7 +366,7 @@ export function interactionsForRow(
   const toolCounts = new Map<string, number>();
   for (const activity of trace.activities) {
     if (!matches(activity)) continue;
-    const identity = `${activity.actorId ?? ''}:${activity.activityId}`;
+    const identity = `${activity.runId}:${activity.actorId ?? ''}:${activity.activityId}`;
     if (seen.has(identity)) continue;
     seen.add(identity);
     toolCounts.set(

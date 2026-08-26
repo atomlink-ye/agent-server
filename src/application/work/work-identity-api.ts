@@ -316,7 +316,10 @@ export class WorkIdentityApi {
     } catch (error) {
       if (error instanceof WorkDefinitionValidationError) throw error;
       if (error instanceof WorkCompositionResolutionError)
-        throw new WorkDefinitionValidationError();
+        throw new WorkDefinitionValidationError(
+          error.message,
+          error.diagnosticPath,
+        );
       throw error;
     }
   }
@@ -430,10 +433,11 @@ function compatibilityTeamResolution(
 
 export class WorkDefinitionValidationError extends Error {
   public readonly code = 'invalid_work_definition';
-  public constructor() {
-    super(
-      'The definition and published version must belong to this owner scope and lineage.',
-    );
+  public constructor(
+    message = 'The definition and published version must belong to this owner scope and lineage.',
+    public readonly diagnosticPath = '$',
+  ) {
+    super(message);
     this.name = 'WorkDefinitionValidationError';
   }
 }

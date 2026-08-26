@@ -5,6 +5,7 @@ export const ErrorResponseSchema = z.object({
     code: z.string().min(1),
     message: z.string().min(1),
     request_id: z.string().min(1),
+    path: z.string().min(1).optional(),
   }),
 });
 
@@ -15,6 +16,7 @@ export class HttpError extends Error {
     public readonly status: 400 | 403 | 404 | 409 | 413 | 422 | 503,
     public readonly code: string,
     message: string,
+    public readonly path?: string,
   ) {
     super(message);
     this.name = 'HttpError';

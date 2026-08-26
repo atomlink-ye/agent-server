@@ -255,7 +255,12 @@ export function registerProductWorkCommandRoutes(
       if (error instanceof WorkWorkspaceScopeUnavailableError)
         throw new HttpError(409, 'workspace_scope_unavailable', error.message);
       if (error instanceof WorkDefinitionValidationError)
-        throw new HttpError(400, error.code, error.message);
+        throw new HttpError(
+          400,
+          error.code,
+          error.message,
+          error.diagnosticPath,
+        );
       throw error;
     }
   });

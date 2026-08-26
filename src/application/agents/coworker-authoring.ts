@@ -25,14 +25,12 @@ const DEFAULT_COWORKER_WORK_TOOLS = Object.freeze([
   AGENT_SERVER_DESCRIBE_WORKFLOW_TOOL_REF,
 ]);
 
-/**
- * Friendly Coworker authoring is a projection onto the existing immutable
- * ManagedAgent package contract, never a second execution definition.
- */
+/** Friendly authoring projected onto the canonical immutable Agent package. */
 export function compileCoworkerDraft(draft: CoworkerAuthoringDraft): string {
-  const instructions =
-    draft.instructions?.trim() ||
-    `You are ${draft.name.trim()}, ${draft.role.trim()}. ${draft.summary.trim()}`;
+  const identityInstruction = `You are ${draft.name.trim()}, ${draft.role.trim()}. ${draft.summary.trim()}`;
+  const instructions = draft.instructions?.trim()
+    ? `${identityInstruction}\n\nWorking style:\n${draft.instructions.trim()}`
+    : identityInstruction;
   const tools = unique([
     ...DEFAULT_COWORKER_WORK_TOOLS,
     ...(draft.tools ?? []),
@@ -59,25 +57,17 @@ export function compileCoworkerDraft(draft: CoworkerAuthoringDraft): string {
           properties: {},
           additionalProperties: false,
         },
-        prompt: 'Respond to the current Coworker conversation and use formal Work capabilities when appropriate.',
+        prompt:
+          'Respond to the current Coworker conversation and use formal Work capabilities when appropriate.',
       },
       session: {
         invocation: 'fresh_per_invocation',
         followUps: 'queued',
         binding: 'reusable',
       },
-      memory: {
-        policy: 'workspace_snapshot',
-        proposalLimit: 0,
-      },
-      permissions: {
-        network: 'read_only',
-        filesystem: 'workspace_read',
-      },
-      completion: {
-        type: 'executable',
-        command: 'done',
-      },
+      memory: { policy: 'workspace_snapshot', proposalLimit: 0 },
+      permissions: { network: 'read_only', filesystem: 'workspace_read' },
+      completion: { type: 'executable', command: 'done' },
     },
   });
 }

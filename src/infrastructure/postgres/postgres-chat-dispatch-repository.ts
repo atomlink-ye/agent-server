@@ -1,10 +1,34 @@
+import { randomUUID } from 'node:crypto';
+
 import type { ChatActivationCause } from '../../domain/chat/chat-activation.js';
 import type {
   ChatActivationPriority,
   ChatDispatch,
   ChatDispatchRepository,
 } from '../../application/ports/chat-dispatch-repository.js';
-import type { PostgresQueryable } from './postgres-conversation-repository.js';
+import type {
+  PostgresClient,
+  PostgresConnectable,
+  PostgresQueryable,
+} from './postgres-conversation-repository.js';
+
+type PreparedQuery = {
+  readonly name: string;
+  readonly portal: string;
+  readonly text: string;
+  readonly values: readonly unknown[];
+};
+
+type PreparedQueryable = PostgresClient & {
+  query<Row = Record<string, unknown>>(
+    config: PreparedQuery,
+  ): Promise<{
+    readonly rows?: readonly Row[];
+    readonly rowCount?: number | null;
+  }>;
+};
+
+const claimStatementNames = new WeakMap<object, string>();
 
 type ChatDispatchRow = {
   id: string | number;
@@ -167,8 +191,7 @@ export class PostgresChatDispatchRepository implements ChatDispatchRepository {
     workerId: string,
     leaseMs: number,
   ): Promise<ChatDispatch | null> {
-    const result = await this.database.query<ChatDispatchRow>(
-      `WITH candidate AS (
+    const text = `WITH candidate AS (
          SELECT id
          FROM chat_dispatches
          WHERE published_at IS NULL
@@ -186,11 +209,40 @@ export class PostgresChatDispatchRepository implements ChatDispatchRepository {
            updated_at=NOW()
        FROM candidate
        WHERE dispatch.id=candidate.id
-       RETURNING dispatch.*`,
-      [workerId, leaseMs],
-    );
+       RETURNING dispatch.*`;
+    const result = await this.queryClaim<ChatDispatchRow>(text, [
+      workerId,
+      leaseMs,
+    ]);
     const row = result.rows?.[0];
     return row ? this.mapDispatch(row) : null;
+  }
+
+  private async queryClaim<Row = Record<string, unknown>>(
+    text: string,
+    values: readonly unknown[],
+  ): Promise<{
+    readonly rows?: readonly Row[];
+    readonly rowCount?: number | null;
+  }> {
+    if (!isConnectable(this.database))
+      return this.database.query<Row>(text, values);
+
+    // PGlite's development wire server multiplexes pool clients over one
+    // backend session. Keep this claim's statement and portal distinct from
+    // exact-owner queries that may have a different parameter arity.
+    const client = await this.database.connect();
+    try {
+      const prepared = client as PreparedQueryable;
+      return await prepared.query<Row>({
+        name: claimStatementName(client),
+        portal: `agent_server_chat_claim_portal_${randomUUID().replaceAll('-', '')}`,
+        text,
+        values,
+      });
+    } finally {
+      client.release();
+    }
   }
 
   async completeClaim(input: {
@@ -315,6 +367,23 @@ export class PostgresChatDispatchRepository implements ChatDispatchRepository {
       publishedAt: isoDate(row.published_at),
     });
   }
+}
+
+function isConnectable(
+  database: PostgresQueryable,
+): database is PostgresConnectable {
+  return (
+    'connect' in database &&
+    typeof (database as { connect?: unknown }).connect === 'function'
+  );
+}
+
+function claimStatementName(client: object): string {
+  const existing = claimStatementNames.get(client);
+  if (existing) return existing;
+  const name = `agent_server_chat_claim_${randomUUID().replaceAll('-', '')}`;
+  claimStatementNames.set(client, name);
+  return name;
 }
 
 function mapCause(row: CauseRow): ChatActivationCause {

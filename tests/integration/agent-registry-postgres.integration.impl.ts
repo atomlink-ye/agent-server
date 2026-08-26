@@ -10,6 +10,7 @@ import {
 } from '../../src/infrastructure/postgres/postgres.js';
 import { PostgresInvokableRepository } from '../../src/infrastructure/postgres/postgres-invokable-repository.js';
 import { PostgresAgentRegistry } from '../../src/infrastructure/postgres/postgres-agent-registry.js';
+import { AgentNotFoundError } from '../../src/application/agents/errors.js';
 
 const definitionId = '00000000-0000-4000-8000-0000000b0001';
 const versionId = '00000000-0000-4000-8000-0000000b0101';
@@ -757,7 +758,7 @@ describe('PostgresAgentRegistry repository contract (PGlite)', () => {
     });
     const command = {
       owner,
-      compatibilityWorkspaceId: 'workspace-first',
+      compatibilityWorkspaceId: owner.workspaceId,
       idempotencyKey: 'import-1',
       requestFingerprint: 'fp-1',
       normalizedName: 'registry-agent',
@@ -819,6 +820,38 @@ describe('PostgresAgentRegistry repository contract (PGlite)', () => {
         definition.id,
       ),
     ).toBeNull();
+    expect(
+      await registry.findDefinition(
+        { ...owner, workspaceId: 'workspace_other' },
+        definition.id,
+      ),
+    ).toBeNull();
+    expect(
+      await registry.findVersion(
+        { ...owner, principalId: 'principal_other' },
+        version.id,
+      ),
+    ).toBeNull();
+    expect(
+      await registry.findVersion(
+        { ...owner, workspaceId: 'workspace_other' },
+        version.id,
+      ),
+    ).toBeNull();
+    await expect(
+      registry.listVersionsForOwner(
+        { ...owner, workspaceId: 'workspace_other' },
+        { definitionId: definition.id, cursor: null, limit: 10 },
+      ),
+    ).resolves.toBeNull();
+    await expect(
+      registry.publishAgentVersion({
+        owner: { ...owner, workspaceId: 'workspace_other' },
+        idempotencyKey: 'owner-scope-publish-foreign-workspace',
+        requestFingerprint: 'owner-scope-publish-foreign-workspace-fp',
+        versionId: version.id,
+      }),
+    ).rejects.toBeInstanceOf(AgentNotFoundError);
   });
 
   it('keeps import idempotency timestamps on database time when entity timestamps are stale', async () => {
@@ -879,7 +912,7 @@ describe('PostgresAgentRegistry repository contract (PGlite)', () => {
     });
     await registry.importAgent({
       owner,
-      compatibilityWorkspaceId: 'workspace-stale-publish',
+      compatibilityWorkspaceId: owner.workspaceId,
       idempotencyKey: 'stale-publish-import',
       requestFingerprint: 'stale-publish-import-fp',
       normalizedName: 'stale-publish-agent',
@@ -918,7 +951,7 @@ describe('PostgresAgentRegistry repository contract (PGlite)', () => {
     expect(after?.updatedAt).toBe(published.updatedAt);
     expect(await registry.findDefinition(owner, definition.id)).toEqual({
       ...definition,
-      workspaceId: 'workspace-stale-publish',
+      workspaceId: owner.workspaceId,
     });
     const idempotency = await db.query<{
       created_at: string;
@@ -1012,7 +1045,7 @@ describeRealPostgres(
       });
       return {
         owner: realOwner,
-        compatibilityWorkspaceId: 'real-workspace',
+        compatibilityWorkspaceId: workspaceId,
         idempotencyKey: key,
         requestFingerprint: fingerprint,
         normalizedName: 'registry-agent',

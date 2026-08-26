@@ -1,6 +1,7 @@
 import type { ChildProcess } from 'node:child_process';
 import { rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import {
   LOCAL_SERVICE_TOKEN,
@@ -38,6 +39,63 @@ const runtimeSmokeCommands: Partial<Record<CanaryKind, string[]>> = {
 };
 
 const webBootstrapEnvPath = resolve(repositoryRoot, '.local/web-bootstrap.env');
+
+type CanarySignal = 'SIGINT' | 'SIGTERM' | 'SIGHUP';
+
+const canarySignalExitCodes: Record<CanarySignal, number> = {
+  SIGINT: 130,
+  SIGTERM: 143,
+  SIGHUP: 129,
+};
+
+type CanarySignalLifecycle = Readonly<{
+  readonly cleanup: () => Promise<void>;
+  readonly requestedSignal: () => CanarySignal | undefined;
+  readonly signal: Promise<CanarySignal>;
+  readonly dispose: () => void;
+}>;
+
+export function createCanarySignalLifecycle(
+  children: ChildProcess[],
+): CanarySignalLifecycle {
+  let requestedSignal: CanarySignal | undefined;
+  let cleanupPromise: Promise<void> | undefined;
+  let resolveSignal: (signal: CanarySignal) => void = () => undefined;
+  const signal = new Promise<CanarySignal>((resolveSignalValue) => {
+    resolveSignal = resolveSignalValue;
+  });
+  const cleanup = (): Promise<void> => {
+    cleanupPromise ??= stopOwned(children);
+    return cleanupPromise;
+  };
+  const handlers = new Map<CanarySignal, () => void>();
+  for (const signalName of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) {
+    const handler = () => {
+      if (requestedSignal) return;
+      requestedSignal = signalName;
+      process.exitCode = canarySignalExitCodes[signalName];
+      resolveSignal(signalName);
+      void cleanup().catch(() => undefined);
+    };
+    handlers.set(signalName, handler);
+    process.on(signalName, handler);
+  }
+  return {
+    cleanup,
+    requestedSignal: () => requestedSignal,
+    signal,
+    dispose: () => {
+      for (const [signalName, handler] of handlers) {
+        process.removeListener(signalName, handler);
+      }
+    },
+  };
+}
+
+function throwIfCanaryInterrupted(lifecycle: CanarySignalLifecycle): void {
+  const signal = lifecycle.requestedSignal();
+  if (signal) throw new Error(`canary interrupted by ${signal}`);
+}
 
 function canaryPort(
   environment: NodeJS.ProcessEnv,
@@ -109,13 +167,16 @@ export async function runHostCanary(
   kind: CanaryKind,
   environment: NodeJS.ProcessEnv = process.env,
 ): Promise<void> {
-  const loaded = await loadLocalDotEnv(environment);
   const children: ChildProcess[] = [];
+  const lifecycle = createCanarySignalLifecycle(children);
+  let loaded = environment;
   let primaryChild: ChildProcess | undefined;
   let primaryEnvironment: NodeJS.ProcessEnv | undefined;
   let goldenApiPort: number | undefined;
   let runError: unknown;
   try {
+    loaded = await loadLocalDotEnv(environment);
+    throwIfCanaryInterrupted(lifecycle);
     let commandEnvironment: NodeJS.ProcessEnv;
     const runtimeSmokeCommand = runtimeSmokeCommands[kind];
     if (runtimeSmokeCommand) {
@@ -123,6 +184,7 @@ export async function runHostCanary(
       // the host-native API wrapped by the existing Paseo helper, then run one
       // bounded real-provider turn.
       const prepared = await prepareHostNativeEnvironment(loaded);
+      throwIfCanaryInterrupted(lifecycle);
       const runtimeEnvironment: NodeJS.ProcessEnv = {
         ...hostRuntimeEnvironment(prepared),
         ...(kind === 'runtime'
@@ -133,6 +195,7 @@ export async function runHostCanary(
       await assertCanaryPortFree('runtime API', apiPort);
       const readyTimeoutMs = canaryReadyTimeout(runtimeEnvironment);
       await setupProviders(runtimeEnvironment);
+      throwIfCanaryInterrupted(lifecycle);
       const apiBaseUrl = `http://127.0.0.1:${apiPort}`;
       const api = spawnOwned(
         'node',
@@ -154,6 +217,7 @@ export async function runHostCanary(
         environment: runtimeEnvironment,
         label: 'runtime canary API',
       });
+      throwIfCanaryInterrupted(lifecycle);
       commandEnvironment = {
         ...runtimeEnvironment,
         AGENT_SERVER_BASE_URL: apiBaseUrl,
@@ -184,6 +248,7 @@ export async function runHostCanary(
           label: 'runtime canary API',
         },
       });
+      throwIfCanaryInterrupted(lifecycle);
       return;
     }
 
@@ -191,9 +256,11 @@ export async function runHostCanary(
     goldenApiPort = apiPort;
     await assertCanaryPortFree('golden-path API', apiPort);
     await assertCanaryPortFree('golden-path web', 3001);
+    throwIfCanaryInterrupted(lifecycle);
     const readyTimeoutMs = canaryReadyTimeout(loaded);
     const apiBaseUrl = `http://127.0.0.1:${apiPort}`;
     await rm(webBootstrapEnvPath, { force: true });
+    throwIfCanaryInterrupted(lifecycle);
     const devEnvironment: NodeJS.ProcessEnv = {
       ...loaded,
       HOST_NATIVE_WATCH: '0',
@@ -214,11 +281,13 @@ export async function runHostCanary(
       environment: devEnvironment,
       label: 'golden-path dev',
     });
+    throwIfCanaryInterrupted(lifecycle);
     await waitForHttp('http://127.0.0.1:3001', readyTimeoutMs, {
       child: dev,
       environment: devEnvironment,
       label: 'golden-path dev',
     });
+    throwIfCanaryInterrupted(lifecycle);
     commandEnvironment = hostWebEnvironment({
       ...loaded,
       AGENT_SERVER_BASE_URL: apiBaseUrl,
@@ -259,6 +328,7 @@ export async function runHostCanary(
         },
       },
     );
+    throwIfCanaryInterrupted(lifecycle);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     const logPath = primaryChild && ownedChildLogPath(primaryChild);
@@ -279,7 +349,7 @@ export async function runHostCanary(
   } finally {
     let cleanupError: unknown;
     try {
-      await stopOwned(children);
+      await lifecycle.cleanup();
     } catch (error) {
       cleanupError = error;
     }
@@ -294,6 +364,23 @@ export async function runHostCanary(
         );
       }
     }
+    lifecycle.dispose();
+    const requestedSignal = lifecycle.requestedSignal();
+    if (requestedSignal) {
+      process.exitCode = canarySignalExitCodes[requestedSignal];
+      if (runError || cleanupError) {
+        const details = [runError, cleanupError]
+          .filter(Boolean)
+          .map((error) =>
+            error instanceof Error ? error.message : String(error),
+          )
+          .join('\n');
+        process.stderr.write(
+          `canary interrupted by ${requestedSignal}\n${details}\n`,
+        );
+      }
+      return;
+    }
     if (runError && cleanupError) {
       throw new Error(
         `${runError instanceof Error ? runError.message : String(runError)}\n${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`,
@@ -305,9 +392,18 @@ export async function runHostCanary(
   }
 }
 
-runHostCanary(parseKind(process.argv[2])).catch((error: unknown) => {
-  process.stderr.write(
-    `canary failed: ${error instanceof Error ? error.message : String(error)}\n`,
+function isEntrypoint(): boolean {
+  return (
+    process.argv[1] !== undefined &&
+    resolve(process.argv[1]) === fileURLToPath(import.meta.url)
   );
-  process.exitCode = 1;
-});
+}
+
+if (isEntrypoint()) {
+  runHostCanary(parseKind(process.argv[2])).catch((error: unknown) => {
+    process.stderr.write(
+      `canary failed: ${error instanceof Error ? error.message : String(error)}\n`,
+    );
+    process.exitCode = 1;
+  });
+}

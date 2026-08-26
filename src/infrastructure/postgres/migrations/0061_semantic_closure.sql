@@ -273,9 +273,26 @@ WHERE a.principal_type IS NULL
   AND v.status = 'published'
   AND ad.id = a.agent_definition_id
   AND ad.tenant_id = a.tenant_id
+  AND ad.workspace_id = a.workspace_id::text
   AND ad.principal_type = v.principal_type
   AND ad.principal_id = v.principal_id
   AND ad.managed_discriminator = 'managed_agent_v1';
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM agent_work_bindings a
+    JOIN agent_definitions ad
+      ON ad.id = a.agent_definition_id
+     AND ad.tenant_id = a.tenant_id
+    WHERE ad.workspace_id <> a.workspace_id::text
+  ) THEN
+    RAISE EXCEPTION 'Cannot migrate cross-workspace legacy Agent Work binding'
+      USING DETAIL = 'Run scripts/ops/migrations/diagnose-semantic-closure.sql before retrying.';
+  END IF;
+END
+$$;
 
 -- Any pre-existing hybrid/foreign binding cannot be interpreted safely under
 -- the new object model. Remove it rather than preserve two semantic authorities.
@@ -351,10 +368,8 @@ BEGIN
 END
 $$;
 
--- agent_definitions still stores workspace_id as text for historical reasons.
--- A Coworker may be authorized in more than one Product Workspace, so the
--- binding workspace is the Work Catalog scope; tenant and principal identity
--- remain exact in this database invariant.
+-- agent_definitions still stores workspace_id as text for historical reasons;
+-- all four owner dimensions remain exact for a Catalog binding.
 CREATE OR REPLACE FUNCTION validate_agent_work_binding_coworker_owner()
 RETURNS trigger AS $$
 BEGIN
@@ -363,6 +378,7 @@ BEGIN
     FROM agent_definitions d
     WHERE d.id = NEW.agent_definition_id
       AND d.tenant_id = NEW.tenant_id
+      AND d.workspace_id = NEW.workspace_id::text
       AND d.principal_type = NEW.principal_type
       AND d.principal_id = NEW.principal_id
       AND d.managed_discriminator = 'managed_agent_v1'

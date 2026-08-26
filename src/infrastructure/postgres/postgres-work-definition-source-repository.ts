@@ -381,12 +381,13 @@ export class PostgresWorkDefinitionSourceRepository implements WorkDefinitionSou
   ): Promise<void> {
     const agent = await this.db.query(
       `SELECT principal_type,principal_id FROM agent_definitions
-        WHERE id=$1 AND tenant_id=$2
-          AND principal_type=$3 AND principal_id=$4
+        WHERE id=$1 AND tenant_id=$2 AND workspace_id=$3
+          AND principal_type=$4 AND principal_id=$5
           AND managed_discriminator='managed_agent_v1'`,
       [
         input.agentDefinitionId,
         input.tenantId,
+        input.workspaceId,
         input.principalType,
         input.principalId,
       ],

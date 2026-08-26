@@ -194,6 +194,38 @@ describe('0061 semantic closure migration', () => {
     ).resolves.toBeUndefined();
 
     await expect(
+      repository.listAgentWorkBindings({
+        tenantId: 'tenant-a',
+        workspaceId: workspaceA,
+        principalType: 'service_account',
+        principalId: 'service-a',
+        agentDefinitionId: agentA,
+      }),
+    ).resolves.toHaveLength(1);
+
+    await expect(
+      repository.associateAgentWorkflow({
+        tenantId: 'tenant-a',
+        workspaceId: workspaceA,
+        principalType: 'service_account',
+        principalId: 'service-b',
+        agentDefinitionId: agentA,
+        definitionId: definitionA,
+        definitionVersionId: definitionVersionA,
+        now: new Date().toISOString(),
+      }),
+    ).rejects.toThrow('agent_work_binding_not_found');
+    await expect(
+      repository.listAgentWorkBindings({
+        tenantId: 'tenant-a',
+        workspaceId: workspaceA,
+        principalType: 'service_account',
+        principalId: 'service-b',
+        agentDefinitionId: agentA,
+      }),
+    ).resolves.toHaveLength(0);
+
+    await expect(
       db.exec(`
         INSERT INTO agent_work_bindings
           (tenant_id,workspace_id,principal_type,principal_id,agent_definition_id,work_definition_id,active_work_definition_version_id,status,created_at,updated_at)

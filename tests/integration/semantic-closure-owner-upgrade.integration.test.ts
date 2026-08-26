@@ -6,7 +6,6 @@ import { PGlite } from '@electric-sql/pglite';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { fingerprintWorkDefinitionSource } from '../../src/domain/work/work-definition-source.js';
-import { PostgresWorkDefinitionSourceRepository } from '../../src/infrastructure/postgres/postgres-work-definition-source-repository.js';
 
 const migrations = join(
   fileURLToPath(
@@ -65,7 +64,7 @@ afterEach(async () => {
 });
 
 describe('0061 semantic owner upgrade', () => {
-  it('preserves a Coworker Work Catalog binding across authorized workspaces', async () => {
+  it('fails closed for a cross-workspace legacy Coworker binding', async () => {
     db = new PGlite();
     await migrateThrough0060(db);
     await seedWorkspaces(db);
@@ -94,69 +93,26 @@ describe('0061 semantic owner upgrade', () => {
         ('tenant-a','${workspaceB}','${agentId}','${definitionB}','${definitionVersionB}','enabled',now(),now());
     `);
 
-    await db.exec(closureSql());
+    await expect(db.exec(closureSql())).rejects.toThrow(
+      'Cannot migrate cross-workspace legacy Agent Work binding',
+    );
+    await db.exec('ROLLBACK');
 
     const bindings = await db.query<{
       workspace_id: string;
-      principal_id: string;
       agent_definition_id: string;
       work_definition_id: string;
     }>(
-      `SELECT workspace_id::text,principal_id,agent_definition_id,work_definition_id
+      `SELECT workspace_id::text,agent_definition_id,work_definition_id
          FROM agent_work_bindings`,
     );
     expect(bindings.rows).toEqual([
       {
         workspace_id: workspaceB,
-        principal_id: 'service-a',
         agent_definition_id: agentId,
         work_definition_id: definitionB,
       },
     ]);
-
-    const repository = new PostgresWorkDefinitionSourceRepository(db as never);
-    await expect(
-      repository.associateAgentWorkflow({
-        tenantId: 'tenant-a',
-        workspaceId: workspaceB,
-        principalType: 'service_account',
-        principalId: 'service-a',
-        agentDefinitionId: agentId,
-        definitionId: definitionB,
-        definitionVersionId: definitionVersionB,
-        now: new Date().toISOString(),
-      }),
-    ).resolves.toBeUndefined();
-    await expect(
-      repository.listAgentWorkBindings({
-        tenantId: 'tenant-a',
-        workspaceId: workspaceB,
-        principalType: 'service_account',
-        principalId: 'service-a',
-        agentDefinitionId: agentId,
-      }),
-    ).resolves.toHaveLength(1);
-    await expect(
-      repository.associateAgentWorkflow({
-        tenantId: 'tenant-a',
-        workspaceId: workspaceB,
-        principalType: 'service_account',
-        principalId: 'service-b',
-        agentDefinitionId: agentId,
-        definitionId: definitionB,
-        definitionVersionId: definitionVersionB,
-        now: new Date().toISOString(),
-      }),
-    ).rejects.toThrow('agent_work_binding_not_found');
-    await expect(
-      repository.listAgentWorkBindings({
-        tenantId: 'tenant-a',
-        workspaceId: workspaceB,
-        principalType: 'service_account',
-        principalId: 'service-b',
-        agentDefinitionId: agentId,
-      }),
-    ).resolves.toHaveLength(0);
   });
 
   it('backfills completed Worker claims and allows the same idempotency key in another workspace', async () => {

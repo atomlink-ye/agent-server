@@ -1,0 +1,157 @@
+import React, { act } from 'react';
+import { createRoot } from 'react-dom/client';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { afterEach, expect, it, vi } from 'vitest';
+
+import { BoardsPage } from './BoardsPage';
+
+(
+  globalThis as typeof globalThis & {
+    IS_REACT_ACT_ENVIRONMENT?: boolean;
+  }
+).IS_REACT_ACT_ENVIRONMENT = true;
+
+const boardId = '00000000-0000-4000-8000-000000000201';
+const columnId = '00000000-0000-4000-8000-000000000202';
+const newWorkItemId = '00000000-0000-4000-8000-000000000203';
+
+afterEach(() => vi.unstubAllGlobals());
+
+it('stays on the Board and shows the new card after "+ Task" instead of jumping to the Task detail page', async () => {
+  let cardCreated = false;
+  const promptValues = ['New card title', ''];
+  vi.stubGlobal(
+    'prompt',
+    vi.fn(() => promptValues.shift() ?? null),
+  );
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (path === '/api/boards' && (init?.method ?? 'GET') === 'GET')
+        return json({ boards: [board()] });
+      if (path === `/api/boards/${boardId}`) return json(snapshot(cardCreated));
+      if (path === '/api/work-items' && init?.method === 'POST') {
+        cardCreated = true;
+        return json({
+          work_item: workItem(),
+          linked_work: null,
+        });
+      }
+      throw new Error(`Unexpected browser request: ${path}`);
+    }),
+  );
+
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(
+        <MemoryRouter initialEntries={[`/boards/${boardId}`]}>
+          <Routes>
+            <Route
+              path="/boards/:boardId"
+              element={<BoardsPage selectedBoardId={boardId} />}
+            />
+            <Route
+              path="/tasks/:workItemId"
+              element={<p>Task detail page</p>}
+            />
+          </Routes>
+        </MemoryRouter>,
+      );
+    });
+    await act(settle);
+    await act(settle);
+
+    expect(host.textContent).not.toContain('New card title');
+
+    const addCardButton = [
+      ...host.querySelectorAll<HTMLButtonElement>('button'),
+    ].find((button) => button.textContent === '+ Task');
+    if (!addCardButton) throw new Error('Expected a "+ Task" button.');
+
+    await act(async () => {
+      addCardButton.click();
+      await settle();
+    });
+
+    expect(host.textContent).not.toContain('Task detail page');
+    expect(host.textContent).toContain('New card title');
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+  }
+});
+
+function board() {
+  return {
+    id: boardId,
+    workspace_id: '00000000-0000-4000-8000-000000000205',
+    title: 'Launch board',
+    description: null,
+    created_by: 'principal-1',
+    created_at: '2026-08-26T00:00:00.000Z',
+    updated_at: '2026-08-26T00:00:00.000Z',
+  };
+}
+
+function workItem() {
+  return {
+    id: newWorkItemId,
+    workspace_id: '00000000-0000-4000-8000-000000000205',
+    title: 'New card title',
+    description: null,
+    status: 'todo',
+    assignee_id: null,
+    created_by: 'principal-1',
+    source_conversation_id: null,
+    source_message_id: null,
+    linked_work_id: null,
+    created_at: '2026-08-26T00:00:00.000Z',
+    updated_at: '2026-08-26T00:00:00.000Z',
+  };
+}
+
+function snapshot(withCard: boolean) {
+  return {
+    board: board(),
+    columns: [
+      {
+        id: columnId,
+        board_id: boardId,
+        title: 'Todo',
+        position: 0,
+        created_at: '2026-08-26T00:00:00.000Z',
+        updated_at: '2026-08-26T00:00:00.000Z',
+      },
+    ],
+    placements: withCard
+      ? [
+          {
+            board_id: boardId,
+            column_id: columnId,
+            work_item_id: newWorkItemId,
+            position: 0,
+            created_at: '2026-08-26T00:00:00.000Z',
+            updated_at: '2026-08-26T00:00:00.000Z',
+          },
+        ]
+      : [],
+    work_items: withCard ? [workItem()] : [],
+  };
+}
+
+function json(body: unknown): Response {
+  return new Response(JSON.stringify(body), {
+    headers: { 'content-type': 'application/json' },
+  });
+}
+
+async function settle(): Promise<void> {
+  for (let turn = 0; turn < 4; turn += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await Promise.resolve();
+  }
+}

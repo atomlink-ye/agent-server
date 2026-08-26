@@ -45,8 +45,7 @@ afterEach(async () => {
 async function migrateBefore0061(database: PGlite): Promise<void> {
   const files = readdirSync(migrations)
     .filter(
-      (name) =>
-        name.endsWith('.sql') && name < '0061_semantic_closure.sql',
+      (name) => name.endsWith('.sql') && name < '0061_semantic_closure.sql',
     )
     .sort();
   for (const file of files)

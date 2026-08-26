@@ -13,6 +13,10 @@ import {
   stopOwned,
   waitForHttp,
 } from './host-native.js';
+import {
+  CORE_READINESS_TIMEOUT_MS,
+  runtimeReadinessTimeout,
+} from './readiness-timeout.js';
 
 export type HostDevMode = 'core' | 'runtime';
 
@@ -70,6 +74,10 @@ export async function startHostDevelopment(
     mode === 'runtime'
       ? hostRuntimeEnvironment(prepared)
       : hostCoreEnvironment(prepared);
+  const readinessTimeoutMs =
+    mode === 'runtime'
+      ? runtimeReadinessTimeout(applicationEnvironment)
+      : CORE_READINESS_TIMEOUT_MS;
   const apiPort = Number.parseInt(applicationEnvironment.PORT ?? '3000', 10);
   const apiBaseUrl = `http://127.0.0.1:${apiPort}`;
   const children: ChildProcess[] = [];
@@ -110,7 +118,7 @@ export async function startHostDevelopment(
     await Promise.race([
       waitForHttp(
         `${apiBaseUrl}${mode === 'runtime' ? '/health/ready' : '/health/live'}`,
-        mode === 'runtime' ? 60_000 : 30_000,
+        readinessTimeoutMs,
       ),
       exitOf(api).then(({ code }) => {
         throw new Error(`Agent Server exited before readiness (${code})`);

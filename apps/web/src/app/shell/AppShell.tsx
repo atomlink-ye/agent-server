@@ -4,6 +4,8 @@ import type { ChatCommands } from '../../features/conversations/contracts';
 import { ConversationsPage } from '../../features/conversations/ConversationsPage';
 import AgentsPage from '../../features/agents/AgentsPage';
 import FilesPage from '../../features/files/FilesPage';
+import { TasksPage } from '../../features/work-organization/TasksPage';
+import { BoardsPage } from '../../features/work-organization/BoardsPage';
 import { WorkPage } from '../../features/work/WorkPage';
 import type { AppStore } from '../../features/conversations/stores/app';
 import type { ConversationsStore } from '../../features/conversations/stores/conversations';
@@ -18,6 +20,9 @@ export interface AppShellProps {
   readonly messagesStore?: MessagesStore;
   readonly routeConversationId?: string | null;
   readonly returnConversationId?: string | null;
+  readonly selectedWorkItemId?: string | null;
+  readonly selectedBoardId?: string | null;
+  readonly returnWorkItemId?: string | null;
   readonly selectedWorkId?: string | null;
   readonly workTab?: string | null;
   readonly selectedRunId?: string | null;
@@ -31,6 +36,9 @@ export function AppShell({
   messagesStore,
   routeConversationId = null,
   returnConversationId = null,
+  selectedWorkItemId = null,
+  selectedBoardId = null,
+  returnWorkItemId = null,
   selectedWorkId = null,
   workTab = null,
   selectedRunId = null,
@@ -48,6 +56,14 @@ export function AppShell({
           ? workPath(selectedWorkId, originConversationId)
           : workRootPath(originConversationId),
       );
+      return;
+    }
+    if (tab === 'tasks') {
+      navigate(selectedWorkItemId ? `/tasks/${encodeURIComponent(selectedWorkItemId)}` : '/tasks');
+      return;
+    }
+    if (tab === 'boards') {
+      navigate(selectedBoardId ? `/boards/${encodeURIComponent(selectedBoardId)}` : '/boards');
       return;
     }
     if (tab === 'agents') {
@@ -77,10 +93,17 @@ export function AppShell({
         />
       ) : null}
       {activeTab === 'agents' ? <AgentsPage /> : null}
+      {activeTab === 'tasks' ? (
+        <TasksPage selectedWorkItemId={selectedWorkItemId} />
+      ) : null}
+      {activeTab === 'boards' ? (
+        <BoardsPage selectedBoardId={selectedBoardId} />
+      ) : null}
       {activeTab === 'files' ? <FilesPage /> : null}
       {activeTab === 'work' ? (
         <WorkPage
           returnConversationId={returnConversationId}
+          returnWorkItemId={returnWorkItemId}
           selectedWorkId={selectedWorkId}
           workTab={workTab}
           selectedRunId={selectedRunId}
@@ -92,6 +115,8 @@ export function AppShell({
 }
 
 function tabForPath(pathname: string): DesktopTab {
+  if (pathname.startsWith('/tasks')) return 'tasks';
+  if (pathname.startsWith('/boards')) return 'boards';
   if (pathname.startsWith('/work')) return 'work';
   if (pathname.startsWith('/agents')) return 'agents';
   if (pathname.startsWith('/files')) return 'files';

@@ -31,18 +31,18 @@ WorkDefinition and immutable WorkerVersion snapshot own formal execution.
 
 ## Object ownership and lifecycle
 
-| Object | Product meaning | Lifecycle owner | Versioning rule | Conversation roster? |
-| --- | --- | --- | --- | --- |
-| `AgentDefinition` | Long-lived Coworker identity | Coworker / Chat plane | Stable identity | Yes |
-| `AgentVersion` | Immutable Coworker behavior/configuration | Coworker / Chat plane | Draft publishes once; published immutable | Indirectly via AgentDefinition |
-| `WorkerDefinition` | Reusable formal execution role | Work / execution plane | Stable execution identity | No |
-| `WorkerVersion` | Immutable executable Worker snapshot | Work / execution plane | Draft publishes once; published immutable | No |
-| `WorkDefinition` | Formal job/workflow contract | Product Work plane | Published versions immutable | No |
-| `TeamDefinition` / `TeamVersion` | Formal collaboration composition | Work / execution plane | TeamVersion pins WorkerVersion refs | No |
-| `Work` | Durable user order | Product Work plane | Stable Work identity | No |
-| `WorkRun` | One execution occurrence | Product Work plane | Pins input + exact resource snapshot | No |
-| `Task` / `Run` / `Attempt` | Technical execution facts | Orchestration kernel | Retry/history append-only | No |
-| `RuntimeSession` | Replaceable provider/runtime binding | Runtime boundary | Never product identity | No |
+| Object                           | Product meaning                           | Lifecycle owner        | Versioning rule                           | Conversation roster?           |
+| -------------------------------- | ----------------------------------------- | ---------------------- | ----------------------------------------- | ------------------------------ |
+| `AgentDefinition`                | Long-lived Coworker identity              | Coworker / Chat plane  | Stable identity                           | Yes                            |
+| `AgentVersion`                   | Immutable Coworker behavior/configuration | Coworker / Chat plane  | Draft publishes once; published immutable | Indirectly via AgentDefinition |
+| `WorkerDefinition`               | Reusable formal execution role            | Work / execution plane | Stable execution identity                 | No                             |
+| `WorkerVersion`                  | Immutable executable Worker snapshot      | Work / execution plane | Draft publishes once; published immutable | No                             |
+| `WorkDefinition`                 | Formal job/workflow contract              | Product Work plane     | Published versions immutable              | No                             |
+| `TeamDefinition` / `TeamVersion` | Formal collaboration composition          | Work / execution plane | TeamVersion pins WorkerVersion refs       | No                             |
+| `Work`                           | Durable user order                        | Product Work plane     | Stable Work identity                      | No                             |
+| `WorkRun`                        | One execution occurrence                  | Product Work plane     | Pins input + exact resource snapshot      | No                             |
+| `Task` / `Run` / `Attempt`       | Technical execution facts                 | Orchestration kernel   | Retry/history append-only                 | No                             |
+| `RuntimeSession`                 | Replaceable provider/runtime binding      | Runtime boundary       | Never product identity                    | No                             |
 
 The Worker v1 package grammar may reuse hardened executable parsing that was
 first introduced for managed Agents. Shared parsing is implementation reuse,
@@ -178,15 +178,15 @@ surfaces from reintroducing obsolete Agent-shaped Work composition vocabulary.
 
 ## Current baseline and next product work
 
-| Area | Current state | Next Feature work |
-| --- | --- | --- |
-| Worker identity | Active cutover complete; exact owner scope | Product Worker authoring UX only when needed |
+| Area             | Current state                                           | Next Feature work                             |
+| ---------------- | ------------------------------------------------------- | --------------------------------------------- |
+| Worker identity  | Active cutover complete; exact owner scope              | Product Worker authoring UX only when needed  |
 | Work composition | `single_worker` and bounded collaboration are canonical | Generalized composition only from real demand |
-| Team roster | WorkerVersion-only active authority | Dynamic/nested Teams deferred |
-| Work snapshot | Worker/input/resources pinned before Task admission | Richer retry/recovery receipts later |
-| Coworker Chat | Agent-owned, isolated from Worker publication | Work Catalog / Coworker capability UX |
-| Context/VFS | Separate Chat and Work views | Broader production isolation later |
-| Deliverables | Result text/trace exist | Artifact & Evidence MVE |
+| Team roster      | WorkerVersion-only active authority                     | Dynamic/nested Teams deferred                 |
+| Work snapshot    | Worker/input/resources pinned before Task admission     | Richer retry/recovery receipts later          |
+| Coworker Chat    | Agent-owned, isolated from Worker publication           | Work Catalog / Coworker capability UX         |
+| Context/VFS      | Separate Chat and Work views                            | Broader production isolation later            |
+| Deliverables     | Result text/trace exist                                 | Artifact & Evidence MVE                       |
 
 The semantic foundation is considered closed for MVE Feature development. New
 structural Agent/Worker refactors require a concrete product need rather than a

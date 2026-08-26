@@ -75,6 +75,39 @@ describe('web Product Golden Path', () => {
       expect((await page.locator('.chat-header h1').innerText()).trim()).toBe(
         coworkerName,
       );
+      const chatMarker = `GOLDEN_PATH_CHAT_${suffix}`;
+      const messageInput = page.locator('textarea#message');
+      await messageInput.fill(
+        `Reply with exactly this marker and no other text: ${chatMarker}`,
+      );
+      const messageResponse = page.waitForResponse(
+        (response) =>
+          response.request().method() === 'POST' &&
+          new URL(response.url()).pathname ===
+            `/api/conversations/${conversationId}/messages`,
+      );
+      await page.getByRole('button', { name: 'Send message' }).click();
+      expect((await messageResponse).status()).toBe(202);
+      await page.waitForFunction(
+        (marker) => {
+          const assistant = [
+            ...document.querySelectorAll('article.chat-message'),
+          ]
+            .filter(
+              (element) =>
+                element.getAttribute('data-author-type') === 'agent_definition',
+            )
+            .some((element) =>
+              (element.querySelector('p')?.textContent ?? '').includes(marker),
+            );
+          return (
+            assistant &&
+            !document.querySelector('button[aria-label="Sending message"]')
+          );
+        },
+        chatMarker,
+        { timeout: 5 * 60 * 1000 },
+      );
 
       await page.getByRole('button', { name: 'Agents' }).click();
       await page

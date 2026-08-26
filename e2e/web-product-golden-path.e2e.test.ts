@@ -189,6 +189,7 @@ describe('web Product Golden Path', () => {
       const workCreateResponse = page.waitForResponse(
         (response) =>
           response.request().method() === 'POST' &&
+          new URL(response.url()).origin === browserOrigin &&
           new URL(response.url()).pathname === '/api/works',
       );
       const runRequest = page.waitForRequest(
@@ -207,6 +208,11 @@ describe('web Product Golden Path', () => {
       );
       await page.getByRole('button', { name: 'Start Work' }).click();
       const createdWorkResponse = await workCreateResponse;
+      if (!createdWorkResponse.ok()) {
+        throw new Error(
+          `Work creation failed (${createdWorkResponse.status()}): ${await boundedErrorBody(createdWorkResponse)} request=${sanitizedWorkCreateRequest(createdWorkResponse)}`,
+        );
+      }
       expect(createdWorkResponse.status()).toBe(201);
       const submittedRunRequest = await runRequest;
       expect(JSON.parse(submittedRunRequest.postData() ?? '{}')).toMatchObject({
@@ -317,6 +323,23 @@ function sanitizedBindingRequest(
     return JSON.stringify({
       definition_id: boundedRequestValue(value.definition_id),
       definition_version_id: boundedRequestValue(value.definition_version_id),
+    });
+  } catch {
+    return '{}';
+  }
+}
+
+function sanitizedWorkCreateRequest(
+  response: import('playwright').Response,
+): string {
+  const raw = response.request().postData();
+  if (!raw) return '{}';
+  try {
+    const value = JSON.parse(raw) as Record<string, unknown>;
+    return JSON.stringify({
+      definition_id: boundedRequestValue(value.definition_id),
+      definition_version_id: boundedRequestValue(value.definition_version_id),
+      title: boundedRequestValue(value.title),
     });
   } catch {
     return '{}';

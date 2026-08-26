@@ -329,13 +329,13 @@ describe('web Product Golden Path', () => {
       expect(
         await page.getByTestId('outcome-product-state').innerText(),
       ).toMatch(/Complete/u);
-      await page.locator('.work-overview__outcome').waitFor({
+      await page.getByTestId('outcome-summary').waitFor({
         state: 'visible',
         timeout: 60_000,
       });
-      expect(
-        await page.locator('.work-overview__outcome').innerText(),
-      ).toContain(companyValue);
+      expect(await page.getByTestId('outcome-summary').innerText()).toContain(
+        companyValue,
+      );
       await page.getByRole('tab', { name: 'MCP Activity' }).click();
       await page.getByTestId('trace-events').waitFor({
         state: 'visible',

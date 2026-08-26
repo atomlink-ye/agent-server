@@ -1,0 +1,127 @@
+name: Authoring Golden Path fixups
+
+on:
+  push:
+    branches:
+      - feature/coworker-capability-authoring-golden-path
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - name: Apply exact fixups
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('tests/contract/agents.contract.test.ts')
+          s = p.read_text()
+          s = s.replace("it('exposes exactly the eight approved managed Agent routes'", "it('exposes exactly the nine approved managed Agent routes'")
+          needle = "        'POST /api/v1/agent-versions/:versionId:publish',\n        'POST /api/v1/agents:import',"
+          repl = "        'POST /api/v1/agent-versions/:versionId:publish',\n        'POST /api/v1/agents/:agentId/capabilities',\n        'POST /api/v1/agents:import',"
+          if needle not in s:
+              raise SystemExit('agent route inventory anchor missing')
+          s = s.replace(needle, repl, 1)
+          p.write_text(s)
+
+          p = Path('apps/web/src/features/work/components/new-work.tsx')
+          s = p.read_text()
+          needle = "    setState('creating');\n    setMessage('Creating the Work record…');"
+          repl = "    const friendlyInputError = validateFriendlyInput(capability, values);\n    if (friendlyInputError) {\n      setState('error');\n      setMessage(friendlyInputError);\n      return;\n    }\n    setState('creating');\n    setMessage('Creating the Work record…');"
+          if needle not in s:
+              raise SystemExit('startWork anchor missing')
+          s = s.replace(needle, repl, 1)
+
+          old_bool = """  if (property.type === 'boolean') {\n    return (\n      <label className=\"new-work-form__boolean\">\n        <input\n          type=\"checkbox\"\n          checked={value === true}\n          disabled={disabled}\n          onChange={(event) => onChange(event.target.checked)}\n        />\n        {label}\n        {required ? ' *' : ''}\n      </label>\n    );\n  }"""
+          new_bool = """  if (property.type === 'boolean') {\n    return (\n      <div className=\"new-work-form__field\">\n        <label htmlFor={`work-input-${name}`}>\n          {label}\n          {required ? ' *' : ''}\n        </label>\n        <select\n          id={`work-input-${name}`}\n          value={value === true ? 'true' : value === false ? 'false' : ''}\n          disabled={disabled}\n          required={required}\n          onChange={(event) =>\n            onChange(\n              event.target.value === ''\n                ? undefined\n                : event.target.value === 'true',\n            )\n          }\n        >\n          <option value=\"\">Choose…</option>\n          <option value=\"true\">Yes</option>\n          <option value=\"false\">No</option>\n        </select>\n      </div>\n    );\n  }"""
+          if old_bool not in s:
+              raise SystemExit('boolean input anchor missing')
+          s = s.replace(old_bool, new_bool, 1)
+
+          build_anchor = "\nfunction buildInput(\n"
+          helper = r'''
+function validateFriendlyInput(
+  capability: CoworkerCapability,
+  values: Readonly<Record<string, unknown>>,
+): string | null {
+  for (const [key, property] of Object.entries(
+    capability.inputSchema.properties,
+  )) {
+    const label = humanize(key);
+    const raw = values[key];
+    const missing = raw === undefined || raw === null || raw === '';
+    if (capability.inputSchema.required.includes(key) && missing)
+      return `Complete required input: ${label}.`;
+    if (missing) continue;
+
+    if (property.type === 'string') {
+      const value = String(raw);
+      if (property.minLength !== undefined && value.length < property.minLength)
+        return `${label} must be at least ${property.minLength} characters.`;
+      if (property.maxLength !== undefined && value.length > property.maxLength)
+        return `${label} must be at most ${property.maxLength} characters.`;
+      if (property.choices?.length && !property.choices.includes(value))
+        return `${label} must use one of the available choices.`;
+      continue;
+    }
+
+    if (property.type === 'boolean') {
+      if (typeof raw !== 'boolean') return `${label} must be Yes or No.`;
+      continue;
+    }
+
+    const numeric = typeof raw === 'number' ? raw : Number(raw);
+    if (!Number.isFinite(numeric)) return `${label} must be a number.`;
+    if (property.type === 'integer' && !Number.isInteger(numeric))
+      return `${label} must be a whole number.`;
+    if (property.minimum !== undefined && numeric < property.minimum)
+      return `${label} must be at least ${property.minimum}.`;
+    if (property.maximum !== undefined && numeric > property.maximum)
+      return `${label} must be at most ${property.maximum}.`;
+  }
+  return null;
+}
+'''
+          if build_anchor not in s:
+              raise SystemExit('buildInput anchor missing')
+          s = s.replace(build_anchor, '\n' + helper + build_anchor, 1)
+
+          s = s.replace("        <input\n          value={title}", "        <input\n          id=\"work-title\"\n          value={title}", 1)
+          s = s.replace("        <textarea\n          value={source}", "        <textarea\n          id=\"work-definition\"\n          value={source}", 1)
+          button_anchor = """      <button\n        type=\"button\"\n        disabled={\n          !title.trim() ||\n          !source.trim() ||"""
+          button_repl = """      <button\n        type=\"button\"\n        data-testid=\"new-work-submit\"\n        disabled={\n          !title.trim() ||\n          !source.trim() ||"""
+          if button_anchor not in s:
+              raise SystemExit('advanced submit anchor missing')
+          s = s.replace(button_anchor, button_repl, 1)
+
+          bool_build_old = """    if (property.type === 'boolean') {\n      if (raw !== undefined || capability.inputSchema.required.includes(key))\n        input[key] = raw === true;\n      continue;\n    }"""
+          bool_build_new = """    if (property.type === 'boolean') {\n      if (raw !== undefined) input[key] = raw === true;\n      continue;\n    }"""
+          if bool_build_old not in s:
+              raise SystemExit('boolean buildInput anchor missing')
+          s = s.replace(bool_build_old, bool_build_new, 1)
+          p.write_text(s)
+          PY
+      - name: Format changed files
+        run: pnpm exec prettier --write tests/contract/agents.contract.test.ts apps/web/src/features/work/components/new-work.tsx
+      - name: Commit fixups
+        run: |
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add tests/contract/agents.contract.test.ts apps/web/src/features/work/components/new-work.tsx
+          git commit -m 'fix(authoring): close contract and typed-input validation gaps'
+          git push origin HEAD:feature/coworker-capability-authoring-golden-path

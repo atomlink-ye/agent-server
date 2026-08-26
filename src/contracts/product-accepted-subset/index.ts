@@ -4,3 +4,4 @@ export * from '../product-work-commands.js';
 export * from '../product-work-definitions.js';
 export * from '../product-projection/index.js';
 export * from '../product-work-controls.js';
+export * from '../work-organization.js';

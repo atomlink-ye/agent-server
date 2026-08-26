@@ -30,7 +30,23 @@ export async function main() {
   );
   token = env('AGENT_SERVER_SERVICE_TOKEN') || 'token-local-dev';
   const skipProductWork = env('WEB_BOOTSTRAP_SKIP_WORK') === '1';
+  const emptyProduct = env('WEB_BOOTSTRAP_EMPTY_PRODUCT') === '1';
   const workspaceName = env('WEB_WORKSPACE_NAME') || 'Web Chat MVE';
+
+  if (emptyProduct) {
+    await mkdir(dirname(outputPath), { recursive: true });
+    await writeFile(
+      outputPath,
+      [`AGENT_SERVER_BASE_URL=${baseUrl}`, ''].join('\n'),
+      {
+        mode: 0o600,
+      },
+    );
+    process.stdout.write(
+      `web bootstrap ready: ${outputPath} (empty product)\n`,
+    );
+    return;
+  }
 
   // Each cached id below is a performance optimisation, not a source of
   // truth: a dev database reset or a destructive test leaves the cache

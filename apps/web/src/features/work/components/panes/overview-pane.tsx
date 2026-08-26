@@ -44,7 +44,7 @@ export function OverviewPane({
         >
           {stateView.label}
         </span>
-        <div>
+        <div data-testid="outcome-summary">
           <p className="work-shell-kicker">Latest recorded outcome</p>
           <h2>
             {outcome

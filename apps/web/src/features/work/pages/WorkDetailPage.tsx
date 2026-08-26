@@ -7,6 +7,7 @@ import { RunTrigger } from '../components/run-trigger';
 import { WorkDetailHeader } from '../components/work-header';
 import { WorkTabs } from '../components/work-tabs';
 import { normalizeWorkTab } from '../components/work-presentation';
+import { workRootPath } from '../../../app/routes';
 import { useWorkDetail } from '../queries/use-work-detail';
 import '../components/work-shell.css';
 import '../components/work-list.css';
@@ -87,7 +88,9 @@ export function WorkDetailPage({
           Run is starting…
         </p>
       ) : null}
-      {query.status === 'error' ? <WorkDetailError /> : null}
+      {query.status === 'error' ? (
+        <WorkDetailError originConversationId={originConversationId} />
+      ) : null}
       {detail ? (
         <>
           <WorkDetailHeader
@@ -114,12 +117,22 @@ export function WorkDetailPage({
   );
 }
 
-function WorkDetailError() {
+function WorkDetailError({
+  originConversationId,
+}: {
+  readonly originConversationId?: string | null;
+}) {
   return (
     <section className="work-list-state work-list-state--error" role="alert">
       <p className="work-list-state__eyebrow">Couldn't load Work</p>
       <h2>The selected Work or Run is unavailable.</h2>
-      <p>Return to My Work and choose an available Product Work record.</p>
+      <p>Return to My Work or retry loading this Work.</p>
+      <div className="work-status-actions">
+        <a href={workRootPath(originConversationId ?? null)}>Back to My Work</a>
+        <button type="button" onClick={() => window.location.reload()}>
+          Retry loading
+        </button>
+      </div>
     </section>
   );
 }

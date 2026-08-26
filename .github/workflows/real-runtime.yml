@@ -149,8 +149,11 @@ jobs:
         if: steps.credentials.outputs.available == 'true'
         run: pnpm canary:runtime
 
-      - name: Real-provider Golden Path
+      - name: Real-provider Golden Path (authoring + ProductSession replay)
         if: steps.credentials.outputs.available == 'true'
+        env:
+          WEB_E2E_BASE_URL: http://web.localhost:3001
+          WEB_BOOTSTRAP_EMPTY_PRODUCT: '1'
         run: pnpm canary:golden-path
 
       - name: Enforce runtime-browser execution

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { Hono } from 'hono';
 import { type ZodType } from 'zod';
 
@@ -5,6 +6,10 @@ import {
   AgentCoworkerListResponseSchema,
   AgentCoworkerProfileResponseSchema,
   AgentIdSchema,
+  AssociateAgentCapabilityRequestSchema,
+  AssociateAgentCapabilityResponseSchema,
+  CreateCoworkerRequestSchema,
+  CreateCoworkerResponseSchema,
 } from '../../../contracts/agents.js';
 import type { ApiEnvironment } from '../http-types.js';
 import type { AppConfig } from '../../../shared/config.js';
@@ -16,7 +21,7 @@ import {
   safeStatus,
 } from './browser-bff-transport.js';
 
-/** Browser-safe canonical Agent roster/profile facade for the Vite client. */
+/** Browser-safe canonical Agent roster/profile/authoring facade for Vite. */
 export function registerBrowserCoworkerRoutes(
   app: Hono<ApiEnvironment>,
   config: AppConfig,
@@ -25,31 +30,71 @@ export function registerBrowserCoworkerRoutes(
     return forwardValidated(
       config,
       '/api/v1/agents?limit=100',
+      { method: 'GET' },
       AgentCoworkerListResponseSchema,
       'Coworkers could not be loaded.',
       'The service returned an invalid Coworker roster.',
     );
   });
 
+  app.post('/api/agents', async (c) => {
+    const parsed = CreateCoworkerRequestSchema.safeParse(
+      await c.req.json().catch(() => undefined),
+    );
+    if (!parsed.success)
+      return invalidRequest('The Coworker draft is invalid.');
+    return forwardValidated(
+      config,
+      '/api/v1/coworkers',
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'idempotency-key': randomUUID(),
+        },
+        body: JSON.stringify(parsed.data),
+      },
+      CreateCoworkerResponseSchema,
+      'The Coworker could not be created.',
+      'The service returned an invalid Coworker creation result.',
+      201,
+    );
+  });
+
   app.get('/api/agents/:agentId/profile', async (c) => {
     const agentId = c.req.param('agentId');
-    if (!AgentIdSchema.safeParse(agentId).success) {
-      return jsonResponse(
-        {
-          error: {
-            code: 'invalid_request',
-            message: 'The Agent id is invalid.',
-          },
-        },
-        400,
-      );
-    }
+    if (!AgentIdSchema.safeParse(agentId).success)
+      return invalidRequest('The Agent id is invalid.');
     return forwardValidated(
       config,
       `/api/v1/agents/${agentId}/profile`,
+      { method: 'GET' },
       AgentCoworkerProfileResponseSchema,
       'The Coworker profile could not be loaded.',
       'The service returned an invalid Coworker profile.',
+    );
+  });
+
+  app.post('/api/agents/:agentId/capabilities', async (c) => {
+    const agentId = c.req.param('agentId');
+    if (!AgentIdSchema.safeParse(agentId).success)
+      return invalidRequest('The Agent id is invalid.');
+    const parsed = AssociateAgentCapabilityRequestSchema.safeParse(
+      await c.req.json().catch(() => undefined),
+    );
+    if (!parsed.success)
+      return invalidRequest('The Capability binding is invalid.');
+    return forwardValidated(
+      config,
+      `/api/v1/agents/${agentId}/capabilities`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(parsed.data),
+      },
+      AssociateAgentCapabilityResponseSchema,
+      'The Capability could not be added to this Coworker.',
+      'The service returned an invalid Capability binding result.',
     );
   });
 }
@@ -57,13 +102,15 @@ export function registerBrowserCoworkerRoutes(
 async function forwardValidated(
   config: AppConfig,
   path: string,
+  init: RequestInit,
   schema: ZodType<unknown>,
   requestFailure: string,
   invalidResponse: string,
+  successStatus?: number,
 ): Promise<Response> {
   let upstream: Response;
   try {
-    upstream = await fetchAuthenticated(config, path, { method: 'GET' });
+    upstream = await fetchAuthenticated(config, path, init);
   } catch {
     return jsonResponse(
       { error: { code: 'service_unavailable', message: requestFailure } },
@@ -84,9 +131,13 @@ async function forwardValidated(
       502,
     );
   }
-  return jsonResponse(decoded.data, upstream.status, {
+  return jsonResponse(decoded.data, successStatus ?? upstream.status, {
     'x-agent-server-upstream': 'fetched',
   });
+}
+
+function invalidRequest(message: string): Response {
+  return jsonResponse({ error: { code: 'invalid_request', message } }, 400);
 }
 
 function normalizeError(

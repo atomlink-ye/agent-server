@@ -8,6 +8,7 @@ import {
   type CoworkerProfile,
 } from './agents-gateway';
 import type { Coworker } from './contracts';
+import { CapabilityBuilder, NewCoworkerForm } from './AuthoringPanels';
 import TitleBar from '../../app/shell/TitleBar';
 import './agents.css';
 
@@ -23,6 +24,10 @@ export function AgentsPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [opening, setOpening] = useState(false);
+  const [authoring, setAuthoring] = useState<'coworker' | 'capability' | null>(
+    null,
+  );
+  const [reload, setReload] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -32,7 +37,7 @@ export function AgentsPage() {
         if (!active) return;
         setAgents(items);
         setLoading(false);
-        if (!selectedAgentId && items[0])
+        if (!selectedAgentId && items[0] && authoring !== 'coworker')
           navigate(`/agents/${encodeURIComponent(items[0].id)}`, {
             replace: true,
           });
@@ -46,7 +51,7 @@ export function AgentsPage() {
     return () => {
       active = false;
     };
-  }, [navigate, selectedAgentId]);
+  }, [navigate, selectedAgentId, reload, authoring]);
 
   useEffect(() => {
     if (!selectedAgentId) {
@@ -64,7 +69,7 @@ export function AgentsPage() {
     return () => {
       active = false;
     };
-  }, [selectedAgentId]);
+  }, [selectedAgentId, reload]);
 
   async function openConversation(): Promise<void> {
     if (!selectedAgentId || opening) return;
@@ -72,11 +77,18 @@ export function AgentsPage() {
     setError(null);
     try {
       const conversation = await createConversation(selectedAgentId);
-      navigate('/', { state: { returnConversationId: conversation.id } });
+      navigate(`/conversations/${encodeURIComponent(conversation.id)}`);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
       setOpening(false);
     }
+  }
+
+  function startCapability(versionId: string): void {
+    if (!selectedAgentId) return;
+    navigate(
+      `/work?new=1&agent=${encodeURIComponent(selectedAgentId)}&capability=${encodeURIComponent(versionId)}`,
+    );
   }
 
   return (
@@ -87,26 +99,55 @@ export function AgentsPage() {
             <span className="eyebrow">Coworkers</span>
             <h1>Agents</h1>
           </div>
+          <button
+            className="pane-refresh"
+            type="button"
+            aria-label="New Coworker"
+            data-testid="new-coworker-cta"
+            onClick={() => {
+              setAuthoring('coworker');
+              setError(null);
+            }}
+          >
+            +
+          </button>
         </div>
         <div className="agents-list">
           {loading && agents.length === 0 ? (
-            <p className="pane-placeholder">Loading Agents…</p>
+            <p className="pane-placeholder">Loading Coworkers…</p>
+          ) : null}
+          {!loading && agents.length === 0 ? (
+            <div className="pane-placeholder">
+              <p>No Coworkers yet.</p>
+              <button type="button" onClick={() => setAuthoring('coworker')}>
+                Create your first Coworker
+              </button>
+            </div>
           ) : null}
           {agents.map((agent) => (
             <button
               type="button"
               className="agents-list-item"
-              data-active={selectedAgentId === agent.id ? 'true' : 'false'}
-              aria-current={selectedAgentId === agent.id ? 'page' : undefined}
-              key={agent.id}
-              onClick={() =>
-                navigate(`/agents/${encodeURIComponent(agent.id)}`)
+              data-active={
+                selectedAgentId === agent.id && authoring !== 'coworker'
+                  ? 'true'
+                  : 'false'
               }
+              aria-current={
+                selectedAgentId === agent.id && authoring !== 'coworker'
+                  ? 'page'
+                  : undefined
+              }
+              key={agent.id}
+              onClick={() => {
+                setAuthoring(null);
+                navigate(`/agents/${encodeURIComponent(agent.id)}`);
+              }}
             >
               <span className="agents-avatar" aria-hidden="true">
                 {agent.displayName.slice(0, 1).toUpperCase()}
               </span>
-              <span>
+              <span className="agents-list-copy">
                 <strong>{agent.displayName}</strong>
                 <small>{agent.roleLabel ?? 'Coworker'}</small>
               </span>
@@ -122,84 +163,199 @@ export function AgentsPage() {
 
       <main className="chat-panel agents-main">
         <TitleBar section="Agents" />
-        <section className="agents-detail" aria-label="Agent profile">
-          {error ? (
-            <p className="agents-error" role="alert">
-              {error}
-            </p>
-          ) : null}
-          {!profile ? (
-            <div className="work-main-empty">
-              <span className="work-main-icon">◎</span>
-              <h1>Choose an Agent</h1>
-              <p>Open a canonical Coworker profile.</p>
-            </div>
-          ) : (
-            <>
-              <header className="agents-profile-header">
-                <span className="agents-profile-avatar" aria-hidden="true">
-                  {profile.agent.displayName.slice(0, 1).toUpperCase()}
-                </span>
-                <div>
-                  <span className="eyebrow">AI Coworker</span>
-                  <h1>{profile.agent.displayName}</h1>
-                  <p>{profile.agent.roleLabel ?? 'Agent'}</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => void openConversation()}
-                  disabled={
-                    opening || profile.agent.runtimeStatus !== 'available'
-                  }
-                >
-                  {opening ? 'Opening…' : 'Open conversation'}
-                </button>
-              </header>
-              <div className="agents-card-grid">
-                <article className="agents-card">
+        {authoring === 'coworker' ? (
+          <NewCoworkerForm
+            onCancel={() => setAuthoring(null)}
+            onCreated={({ conversationId }) =>
+              navigate(`/conversations/${encodeURIComponent(conversationId)}`)
+            }
+          />
+        ) : null}
+        {authoring === 'capability' && profile ? (
+          <CapabilityBuilder
+            agent={profile.agent}
+            onCancel={() => setAuthoring(null)}
+            onSaved={async () => setReload((value) => value + 1)}
+            onStart={startCapability}
+          />
+        ) : null}
+        {authoring === null ? (
+          <section className="agents-detail" aria-label="Agent profile">
+            {error ? (
+              <p className="agents-error" role="alert">
+                {error}
+              </p>
+            ) : null}
+            {!profile ? (
+              <div className="work-main-empty">
+                <span className="work-main-icon">◎</span>
+                <h1>
+                  {agents.length ? 'Choose a Coworker' : 'Create a Coworker'}
+                </h1>
+                <p>
+                  {agents.length
+                    ? 'Open a Coworker profile.'
+                    : 'Start with a name, role, and the kind of help you want.'}
+                </p>
+                {!agents.length ? (
+                  <button
+                    className="agents-primary"
+                    type="button"
+                    onClick={() => setAuthoring('coworker')}
+                  >
+                    New Coworker
+                  </button>
+                ) : null}
+              </div>
+            ) : (
+              <>
+                <header className="agents-profile-header">
+                  <span className="agents-profile-avatar" aria-hidden="true">
+                    {profile.agent.displayName.slice(0, 1).toUpperCase()}
+                  </span>
+                  <div className="agents-profile-copy">
+                    <span className="eyebrow">AI Coworker</span>
+                    <h1>{profile.agent.displayName}</h1>
+                    <p>
+                      {profile.agent.roleLabel ?? 'Coworker'} ·{' '}
+                      {profile.agent.runtimeStatus}
+                    </p>
+                  </div>
+                  <button
+                    className="agents-primary"
+                    type="button"
+                    onClick={() => void openConversation()}
+                    disabled={
+                      opening || profile.agent.runtimeStatus !== 'available'
+                    }
+                  >
+                    {opening ? 'Opening…' : 'Chat'}
+                  </button>
+                </header>
+
+                <article className="agents-card agents-about-card">
                   <h2>About</h2>
                   <p>{profile.agent.summary ?? 'No summary provided.'}</p>
-                  <dl>
-                    <dt>Runtime</dt>
-                    <dd>{profile.agent.runtimeStatus}</dd>
-                    <dt>Published version</dt>
-                    <dd className="agents-mono">
-                      {profile.agent.activeAgentVersionId}
-                    </dd>
-                    <dt>Model policy</dt>
-                    <dd>{profile.capabilities.modelPolicyRef}</dd>
-                  </dl>
                 </article>
-                <article className="agents-card">
-                  <h2>Capabilities</h2>
-                  <h3>Tools</h3>
-                  <div className="agents-chips">
-                    {profile.capabilities.tools.length ? (
-                      profile.capabilities.tools.map((tool) => (
-                        <span key={tool}>{tool}</span>
-                      ))
-                    ) : (
-                      <em>No declared tools</em>
-                    )}
+
+                <div className="agents-section-heading">
+                  <div>
+                    <span className="eyebrow">Can do</span>
+                    <h2>Formal capabilities</h2>
                   </div>
-                  <h3>Skills</h3>
-                  <div className="agents-chips">
-                    {profile.capabilities.skills.length ? (
-                      profile.capabilities.skills.map((skill) => (
-                        <span key={skill}>{skill}</span>
-                      ))
-                    ) : (
-                      <em>No declared skills</em>
-                    )}
+                  <button
+                    type="button"
+                    onClick={() => setAuthoring('capability')}
+                  >
+                    + Add capability
+                  </button>
+                </div>
+                {profile.workCatalog.length ? (
+                  <div className="agents-capability-grid">
+                    {profile.workCatalog.map((capability) => (
+                      <article
+                        className="agents-card agents-capability-card"
+                        key={capability.definitionId}
+                      >
+                        <div>
+                          <h3>{humanize(capability.name)}</h3>
+                          <p>
+                            {capability.description ?? 'Formal Work capability'}
+                          </p>
+                        </div>
+                        <div className="agents-capability-meta">
+                          <span>
+                            {
+                              Object.keys(capability.inputSchema.properties)
+                                .length
+                            }{' '}
+                            inputs
+                          </span>
+                        </div>
+                        <button
+                          className="agents-primary"
+                          type="button"
+                          onClick={() =>
+                            startCapability(capability.definitionVersionId)
+                          }
+                        >
+                          Start Work
+                        </button>
+                      </article>
+                    ))}
                   </div>
-                </article>
-              </div>
-            </>
-          )}
-        </section>
+                ) : (
+                  <div className="agents-empty-capabilities">
+                    <p>This Coworker has no formal Capabilities yet.</p>
+                    <button
+                      type="button"
+                      onClick={() => setAuthoring('capability')}
+                    >
+                      Teach the first capability
+                    </button>
+                  </div>
+                )}
+
+                <details className="agents-advanced agents-technical-details">
+                  <summary>Advanced · runtime and package details</summary>
+                  <div className="agents-card-grid">
+                    <article className="agents-card">
+                      <h3>Runtime</h3>
+                      <dl>
+                        <dt>Status</dt>
+                        <dd>{profile.agent.runtimeStatus}</dd>
+                        <dt>Published version</dt>
+                        <dd className="agents-mono">
+                          {profile.agent.activeAgentVersionId}
+                        </dd>
+                        <dt>Model policy</dt>
+                        <dd>{profile.capabilities.modelPolicyRef}</dd>
+                      </dl>
+                    </article>
+                    <article className="agents-card">
+                      <h3>Package capabilities</h3>
+                      <p>
+                        <strong>Tools</strong>
+                      </p>
+                      <div className="agents-chips">
+                        {profile.capabilities.tools.length ? (
+                          profile.capabilities.tools.map((tool) => (
+                            <span key={tool}>{tool}</span>
+                          ))
+                        ) : (
+                          <em>No declared tools</em>
+                        )}
+                      </div>
+                      <p>
+                        <strong>Skills</strong>
+                      </p>
+                      <div className="agents-chips">
+                        {profile.capabilities.skills.length ? (
+                          profile.capabilities.skills.map((skill) => (
+                            <span key={skill}>{skill}</span>
+                          ))
+                        ) : (
+                          <em>No declared skills</em>
+                        )}
+                      </div>
+                    </article>
+                  </div>
+                </details>
+              </>
+            )}
+          </section>
+        ) : null}
       </main>
     </>
   );
+}
+
+function humanize(value: string): string {
+  return value
+    .split('-')
+    .filter(Boolean)
+    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+    .join(' ');
 }
 
 export default AgentsPage;

@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 import { NewWork } from './components/new-work';
 import { WorkDetailPage } from './pages/WorkDetailPage';
-import { workPath, workRootPath } from '../../app/routes';
+import { workRootPath } from '../../app/routes';
 import { TitleBar } from '../../app/shell/TitleBar';
 import WorkPane from './WorkPane';
 import './work-page.css';
@@ -26,16 +26,21 @@ export function WorkPage({
   selectedSessionIndex = null,
 }: WorkPageProps) {
   const navigate = useNavigate();
-  const [showNewWork, setShowNewWork] = useState(false);
+  const location = useLocation();
+  const authoringRequest = useMemo(() => {
+    const query = new URLSearchParams(location.search);
+    return {
+      requested: query.get('new') === '1',
+      agentId: query.get('agent'),
+      capabilityVersionId: query.get('capability'),
+    };
+  }, [location.search]);
+  const [showNewWork, setShowNewWork] = useState(authoringRequest.requested);
 
   useEffect(() => {
     if (selectedWorkId) setShowNewWork(false);
-  }, [selectedWorkId]);
-
-  const openWork = (workId: string): void => {
-    setShowNewWork(false);
-    navigate(workPath(workId, returnConversationId));
-  };
+    else if (authoringRequest.requested) setShowNewWork(true);
+  }, [selectedWorkId, authoringRequest.requested]);
 
   const respondInChat = (): void => {
     navigate(
@@ -84,7 +89,11 @@ export function WorkPage({
             </div>
           ) : null}
           {showNewWork ? (
-            <NewWork originConversationId={returnConversationId} />
+            <NewWork
+              originConversationId={returnConversationId}
+              initialAgentId={authoringRequest.agentId}
+              initialCapabilityVersionId={authoringRequest.capabilityVersionId}
+            />
           ) : null}
           {!showNewWork && selectedWorkId ? (
             <WorkDetailPage

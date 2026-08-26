@@ -681,7 +681,12 @@ const manifestFor = (
   );
 };
 
-const workRunErrorPaths = ['error.code', 'error.message', 'error.request_id'];
+const workRunErrorPaths = [
+  'error.code',
+  'error.message',
+  'error.request_id',
+  'error.path',
+];
 
 /**
  * Provisional S8 lineage manifest. The path lists above are authored product

@@ -24,6 +24,7 @@ export default defineConfig({
       'src/features/work/components/work-list.browser.test.tsx',
       'src/features/work/components/work-detail.browser.test.tsx',
       'src/features/work/components/definition-authoring.browser.test.tsx',
+      'src/features/work/components/new-work.browser.test.tsx',
       'src/features/run-trace/run-trace.browser.test.tsx',
       'src/features/run-trace/events.browser.test.tsx',
       'src/features/run-trace/map.browser.test.tsx',

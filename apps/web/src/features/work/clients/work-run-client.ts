@@ -30,8 +30,6 @@ export type StartWorkRunResponse = {
 export type AgentSummary = {
   readonly label: {
     readonly name: string;
-    // Team membership is optional extra structure, not a precondition for a
-    // stream to exist: a lone agent (no Team) has no role.
     readonly role: string | null;
     readonly status: string;
     readonly status_basis: 'team_member_run' | 'agent_runs';
@@ -141,7 +139,10 @@ export class WorkRunClient {
     }));
   }
 
-  async start(workId: string): Promise<StartWorkRunResponse> {
+  async start(
+    workId: string,
+    input?: Readonly<Record<string, unknown>>,
+  ): Promise<StartWorkRunResponse> {
     try {
       return parseProduct(
         StartWorkRunResponseSchema,
@@ -151,7 +152,10 @@ export class WorkRunClient {
             method: 'POST',
             cache: 'no-store',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ trigger_kind: 'manual' }),
+            body: JSON.stringify({
+              trigger_kind: 'manual',
+              ...(input === undefined ? {} : { input }),
+            }),
           },
         ),
       );

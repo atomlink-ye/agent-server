@@ -5,6 +5,7 @@ import {
   AgentIdSchema,
   AgentVersionResponseSchema,
   AgentVersionListResponseSchema,
+  CreateCoworkerResponseSchema,
   ImportAgentResponseSchema,
   ValidateAgentPackageResponseSchema,
   type AgentVersionResponse,
@@ -16,6 +17,7 @@ import {
   primaryServiceAccountToken,
   secondaryServiceAccountToken,
 } from '../fixtures/create-test-app.js';
+import type { TestDatabase } from '../fixtures/create-test-app.js';
 import { FakeAgentRuntime } from '../fixtures/fake-agent-runtime.js';
 
 const source = `apiVersion: agent-server/v1alpha1
@@ -346,6 +348,121 @@ describe('managed agent HTTP contracts', () => {
     );
   });
 
+  it('keeps Coworker authoring strict and converges one canonical lifecycle', async () => {
+    const databaseControl: { database?: TestDatabase } = {};
+    const app = await createTestApp(new FakeAgentRuntime(), {
+      startDispatcher: false,
+      databaseControl,
+    });
+    const draft = {
+      name: 'Contract Coworker',
+      role: 'Research Analyst',
+      summary: 'Researches competitors.',
+    };
+    const before = await databaseControl.database!.query<{ count: number }>(
+      `SELECT COUNT(*)::int AS count FROM agent_definitions WHERE name=$1`,
+      [draft.name],
+    );
+    const invalid = await app.request('/api/v1/coworkers', {
+      method: 'POST',
+      headers: headers(primaryServiceAccountToken, 'coworker-invalid'),
+      body: JSON.stringify({ ...draft, unexpected: true }),
+    });
+    expect(invalid.status).toBe(400);
+    expect(ErrorResponseSchema.parse(await invalid.json()).error.code).toBe(
+      'invalid_request',
+    );
+    const afterInvalid = await databaseControl.database!.query<{
+      count: number;
+    }>(`SELECT COUNT(*)::int AS count FROM agent_definitions WHERE name=$1`, [
+      draft.name,
+    ]);
+    expect(afterInvalid.rows[0]?.count).toBe(before.rows[0]?.count);
+
+    const missingKey = await app.request('/api/v1/coworkers', {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify(draft),
+    });
+    expect(missingKey.status).toBe(400);
+    expect(ErrorResponseSchema.parse(await missingKey.json()).error.code).toBe(
+      'invalid_idempotency_key',
+    );
+    const afterMissingKey = await databaseControl.database!.query<{
+      count: number;
+    }>(`SELECT COUNT(*)::int AS count FROM agent_definitions WHERE name=$1`, [
+      draft.name,
+    ]);
+    expect(afterMissingKey.rows[0]?.count).toBe(before.rows[0]?.count);
+
+    const first = await app.request('/api/v1/coworkers', {
+      method: 'POST',
+      headers: headers(primaryServiceAccountToken, 'coworker-create'),
+      body: JSON.stringify(draft),
+    });
+    expect(first.status).toBe(201);
+    const firstBody = CreateCoworkerResponseSchema.parse(await first.json());
+    const publishedVersion = AgentVersionResponseSchema.parse(
+      await (
+        await app.request(
+          `/api/v1/agent-versions/${firstBody.agent_version_id}`,
+          { headers: headers() },
+        )
+      ).json(),
+    );
+    expect(publishedVersion).toMatchObject({
+      id: firstBody.agent_version_id,
+      definition_id: firstBody.agent_id,
+      status: 'published',
+    });
+    const activeVersion = await databaseControl.database!.query<{
+      active_agent_version_id: string;
+    }>(
+      `SELECT active_agent_version_id FROM agent_chat_runtimes
+       WHERE agent_definition_id=$1`,
+      [firstBody.agent_id],
+    );
+    expect(activeVersion.rows[0]?.active_agent_version_id).toBe(
+      firstBody.agent_version_id,
+    );
+    const persisted = await databaseControl.database!.query<{
+      count: number;
+    }>(
+      `SELECT COUNT(*)::int AS count FROM agent_definitions WHERE id=$1
+       UNION ALL SELECT COUNT(*)::int AS count FROM agent_versions WHERE definition_id=$1
+       UNION ALL SELECT COUNT(*)::int AS count FROM conversations WHERE direct_pair_key=$2`,
+      [
+        firstBody.agent_id,
+        `direct:tenant_alpha:svc_enabled:${firstBody.agent_id}`,
+      ],
+    );
+    expect(persisted.rows.map((row) => row.count)).toEqual([1, 1, 1]);
+
+    const replay = await app.request('/api/v1/coworkers', {
+      method: 'POST',
+      headers: headers(primaryServiceAccountToken, 'coworker-create'),
+      body: JSON.stringify(draft),
+    });
+    expect(replay.status).toBe(201);
+    expect(CreateCoworkerResponseSchema.parse(await replay.json())).toEqual(
+      firstBody,
+    );
+    const persistedAfterReplay = await databaseControl.database!.query<{
+      count: number;
+    }>(
+      `SELECT COUNT(*)::int AS count FROM agent_definitions WHERE id=$1
+       UNION ALL SELECT COUNT(*)::int AS count FROM agent_versions WHERE definition_id=$1
+       UNION ALL SELECT COUNT(*)::int AS count FROM conversations WHERE direct_pair_key=$2`,
+      [
+        firstBody.agent_id,
+        `direct:tenant_alpha:svc_enabled:${firstBody.agent_id}`,
+      ],
+    );
+    expect(persistedAfterReplay.rows.map((row) => row.count)).toEqual([
+      1, 1, 1,
+    ]);
+  });
+
   it('exposes exactly the managed Agent route inventory in its namespace', async () => {
     const { app, body } = await importedApp();
     const routes = [
@@ -393,14 +510,16 @@ describe('managed agent HTTP contracts', () => {
   // create-resource-capabilities.ts
   // imports/registers it in installHttp; this fixes an incomplete test-only
   // graph rather than expanding the contract.
-  it('exposes exactly the eight approved managed Agent routes', async () => {
+  it('exposes exactly the ten approved managed Agent routes', async () => {
     const app = await createTestApp(new FakeAgentRuntime(), {
       startDispatcher: false,
     });
     const actual = app.routes
       .filter(
         (route) =>
-          route.path.startsWith('/api/v1/agent') && route.method !== 'ALL',
+          (route.path.startsWith('/api/v1/agent') ||
+            route.path === '/api/v1/coworkers') &&
+          route.method !== 'ALL',
       )
       .map((route) => `${route.method} ${route.path}`)
       .sort();
@@ -413,7 +532,9 @@ describe('managed agent HTTP contracts', () => {
         'GET /api/v1/agents/:agentId/profile',
         'POST /api/v1/agent-packages:validate',
         'POST /api/v1/agent-versions/:versionId:publish',
+        'POST /api/v1/agents/:agentId/capabilities',
         'POST /api/v1/agents:import',
+        'POST /api/v1/coworkers',
       ].sort(),
     );
   });

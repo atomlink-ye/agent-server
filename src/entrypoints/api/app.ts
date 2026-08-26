@@ -172,7 +172,7 @@ export function createHttpApp(
     const requestId = context.get('requestId');
     if (error instanceof HttpError) {
       return context.json(
-        errorResponse(error.code, error.message, requestId),
+        errorResponse(error.code, error.message, requestId, error.path),
         error.status,
       );
     }
@@ -198,6 +198,14 @@ function errorResponse(
   code: string,
   message: string,
   requestId: string,
+  path?: string,
 ): ErrorResponse {
-  return { error: { code, message, request_id: requestId } };
+  return {
+    error: {
+      code,
+      message,
+      request_id: requestId,
+      ...(path ? { path } : {}),
+    },
+  };
 }

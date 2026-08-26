@@ -29,11 +29,14 @@ export const LOCAL_SERVICE_TOKEN = 'token-local-dev';
 const PGLITE_HOST = '127.0.0.1';
 const PGLITE_DEFAULT_PORT = 55_432;
 const PGLITE_DATABASE = 'postgres';
-const PGLITE_STATE_PATH = resolve(
+const PGLITE_DEFAULT_STATE_PATH = resolve(
   repositoryRoot,
   '.local/dev-runtime/pglite.json',
 );
-const PGLITE_DATA_PATH = resolve(repositoryRoot, '.local/dev-runtime/pglite');
+const PGLITE_DEFAULT_DATA_PATH = resolve(
+  repositoryRoot,
+  '.local/dev-runtime/pglite',
+);
 const HOST_RUNTIME_LOG_DIRECTORY = resolve(
   repositoryRoot,
   process.env.PASEO_RUNTIME_ROOT?.trim() || '.local/dev-runtime',
@@ -72,6 +75,26 @@ type PGliteState = Readonly<{
   url: string;
   dataPath: string;
 }>;
+
+export type PGlitePaths = Readonly<{
+  readonly statePath: string;
+  readonly dataPath: string;
+}>;
+
+export function resolvePGlitePaths(
+  environment: NodeJS.ProcessEnv = process.env,
+): PGlitePaths {
+  return {
+    statePath: resolve(
+      repositoryRoot,
+      environment.PGLITE_STATE_PATH?.trim() || PGLITE_DEFAULT_STATE_PATH,
+    ),
+    dataPath: resolve(
+      repositoryRoot,
+      environment.PGLITE_DATA_PATH?.trim() || PGLITE_DEFAULT_DATA_PATH,
+    ),
+  };
+}
 
 export type HostDatabaseBackend = 'pglite' | 'postgres';
 
@@ -505,14 +528,14 @@ function processIsAlive(pid: number): boolean {
   }
 }
 
-async function clearPGliteState(statePath = PGLITE_STATE_PATH): Promise<void> {
+async function clearPGliteState(statePath: string): Promise<void> {
   await unlink(statePath).catch((error: unknown) => {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   });
 }
 
 export async function readPGliteState(
-  statePath = PGLITE_STATE_PATH,
+  statePath: string,
 ): Promise<PGliteState | null> {
   let contents: string;
   try {
@@ -562,8 +585,10 @@ export async function readPGliteState(
 
 export async function identifyDatabaseBackend(
   connectionString: string,
+  environment: NodeJS.ProcessEnv = process.env,
 ): Promise<HostDatabaseBackend> {
-  const state = await readPGliteState();
+  const { statePath } = resolvePGlitePaths(environment);
+  const state = await readPGliteState(statePath);
   return state && state.url === connectionString && processIsAlive(state.pid)
     ? 'pglite'
     : 'postgres';
@@ -572,6 +597,7 @@ export async function identifyDatabaseBackend(
 async function waitForPGlite(
   child: ChildProcess,
   fallbackUrl: string,
+  statePath: string,
 ): Promise<string> {
   let exited:
     { code: number | null; signal: NodeJS.Signals | null } | undefined;
@@ -585,7 +611,7 @@ async function waitForPGlite(
         `PGlite fallback exited before becoming ready (${exited.code ?? exited.signal ?? 'unknown'}). Check ${resolve(repositoryRoot, '.local/dev-runtime/pglite.log')}.`,
       );
     }
-    const state = await readPGliteState();
+    const state = await readPGliteState(statePath);
     if (
       state &&
       state.pid === child.pid &&
@@ -605,17 +631,20 @@ async function ensurePGliteDatabase(
   environment: NodeJS.ProcessEnv,
 ): Promise<string> {
   await ensureLocalDirectories();
+  const paths = resolvePGlitePaths(environment);
+  await mkdir(paths.dataPath, { recursive: true });
+  await mkdir(dirname(paths.statePath), { recursive: true });
   const port = pglitePort(environment);
   const fallbackUrl = pgliteUrl(PGLITE_HOST, port);
-  const existing = await readPGliteState();
+  const existing = await readPGliteState(paths.statePath);
   if (existing) {
     if (!processIsAlive(existing.pid)) {
-      await clearPGliteState();
+      await clearPGliteState(paths.statePath);
     } else if ((await connectablePostgres(existing.url)).ok) {
       return existing.url;
     } else {
       throw new Error(
-        `PGlite state claims live process ${existing.pid}, but ${existing.url} is unreachable. Stop that process or remove ${PGLITE_STATE_PATH} after verifying it is stale.`,
+        `PGlite state claims live process ${existing.pid}, but ${existing.url} is unreachable. Stop that process or remove ${paths.statePath} after verifying it is stale.`,
       );
     }
   }
@@ -644,8 +673,8 @@ async function ensurePGliteDatabase(
           PGLITE_HOST,
           PGLITE_PORT: String(port),
           PGLITE_DATABASE,
-          PGLITE_DATA_PATH,
-          PGLITE_STATE_PATH,
+          PGLITE_DATA_PATH: paths.dataPath,
+          PGLITE_STATE_PATH: paths.statePath,
         },
         stdio: ['ignore', logFd, logFd],
       },
@@ -654,7 +683,7 @@ async function ensurePGliteDatabase(
     closeSync(logFd);
   }
   child.unref();
-  return waitForPGlite(child, fallbackUrl);
+  return waitForPGlite(child, fallbackUrl, paths.statePath);
 }
 
 export async function prepareHostNativeEnvironment(

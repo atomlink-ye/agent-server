@@ -3,7 +3,10 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { HttpError } from '../../../contracts/http.js';
 import { WorkWorkspaceScopeUnavailableError } from '../../../domain/work/work.js';
-import type { WorkIdentityApi } from '../../../application/work/work-identity-api.js';
+import {
+  WorkDefinitionValidationError,
+  type WorkIdentityApi,
+} from '../../../application/work/work-identity-api.js';
 import {
   UpdateWorkDefinitionVersionResponseSchema,
   WorkDefinitionResponseSchema,
@@ -11,6 +14,7 @@ import {
 } from '../../../contracts/product-work-commands.js';
 import type { AppConfig } from '../../../shared/config.js';
 import type { ApiEnvironment } from '../http-types.js';
+import { createHttpApp } from '../app.js';
 import {
   registerProductWorkCommandRoutes,
   type ProductWorkCommandDependencies,
@@ -185,6 +189,99 @@ describe('product Work command route', () => {
     });
   });
 
+  it('returns the bounded Work composition diagnostic path on create failure', async () => {
+    const createWork = vi
+      .fn()
+      .mockRejectedValue(
+        new WorkDefinitionValidationError(
+          'The selected Worker version is unavailable.',
+          '$.spec.worker_version_id',
+        ),
+      ) as unknown as WorkIdentityApi['createWork'];
+    const app = createApp(createWork);
+    const response = await app.request('/api/v1/works', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(validRequest()),
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: {
+        code: 'invalid_work_definition',
+        message: 'The selected Worker version is unavailable.',
+        path: '$.spec.worker_version_id',
+      },
+    });
+  });
+
+  it('serializes the diagnostic path through the standard HTTP error envelope', async () => {
+    const createWork = vi
+      .fn()
+      .mockRejectedValue(
+        new WorkDefinitionValidationError(
+          'The selected Worker version is unavailable.',
+          '$.spec.worker_version_id',
+        ),
+      ) as unknown as WorkIdentityApi['createWork'];
+    const app = createHttpApp({
+      config,
+      logger: { log: () => undefined },
+      readiness: { check: async () => [] } as never,
+      runtime: {} as never,
+      submitRun: {} as never,
+      getRun: {} as never,
+      invokeTask: {} as never,
+      getTask: {} as never,
+      getTaskTree: {} as never,
+      teamExecutions: {} as never,
+      teamDriver: {} as never,
+      teamMessages: {} as never,
+      tasks: {} as never,
+      sessions: {} as never,
+      submitSessionTurn: {} as never,
+      events: {} as never,
+      cancelTask: {} as never,
+      workModule: {
+        installHttp(target: Hono<ApiEnvironment>) {
+          registerProductWorkCommandRoutes(target, {
+            config,
+            workIdentity: {
+              createWork,
+              listWorks: vi.fn(),
+              listWorkRuns: vi.fn(),
+              getWorkDefinition: vi.fn(),
+              updateCurrentDefinitionVersion: vi.fn(),
+              getWorkRun: vi.fn(),
+            },
+            startWorkRun: { execute: vi.fn() },
+            workListProjection: vi.fn(),
+          });
+        },
+      },
+      memoryModule: { installHttp() {} },
+      resourceModule: {
+        installHttp() {},
+        managedAgentDefinitions: {} as never,
+      },
+    });
+    const response = await app.request('/api/v1/works', {
+      method: 'POST',
+      headers: { ...headers, 'x-request-id': 'req-work-diagnostic' },
+      body: JSON.stringify(validRequest()),
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: {
+        code: 'invalid_work_definition',
+        message: 'The selected Worker version is unavailable.',
+        request_id: 'req-work-diagnostic',
+        path: '$.spec.worker_version_id',
+      },
+    });
+  });
+
   it('preserves unrelated persistence failures as internal errors', async () => {
     const createWork = vi
       .fn()
@@ -237,7 +334,13 @@ function createApp(
   app.onError((error, context) => {
     if (error instanceof HttpError)
       return context.json(
-        { error: { code: error.code, message: error.message } },
+        {
+          error: {
+            code: error.code,
+            message: error.message,
+            ...(error.path ? { path: error.path } : {}),
+          },
+        },
         error.status,
       );
     return context.json(

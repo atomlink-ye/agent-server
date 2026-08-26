@@ -41,7 +41,8 @@ describe('web Product Golden Path', () => {
     async () => {
       const suffix = randomUUID().slice(0, 8);
       const coworkerName = `Golden Path ${suffix}`;
-      const capabilityName = `Competitor Brief ${suffix}`;
+      const capabilityName = `Bounded Brief ${suffix}`;
+      const companyValue = `Acme-${suffix}`;
       let conversationId: string;
       const browserOrigin = new URL(baseUrl!).origin;
       browser = await chromium.launch({ headless: true });
@@ -152,11 +153,20 @@ describe('web Product Golden Path', () => {
       await page.getByPlaceholder('Competitor Research').fill(capabilityName);
       await page
         .getByPlaceholder(/Research a company’s major competitors/u)
-        .fill('Compare a company with its major competitors.');
+        .fill(
+          'Bounded brief\nPrepared bounded brief for the supplied Company.',
+        );
       await page.getByRole('button', { name: '+ Add input' }).click();
       const inputRow = page.locator('.agents-input-row').last();
       await inputRow.getByLabel('Input label').fill('Company');
       await inputRow.getByLabel('Input key').fill('company');
+      await page
+        .locator('.agents-participant')
+        .first()
+        .getByLabel('Instructions')
+        .fill(
+          'Use only the supplied Company input. Do not use tools, browse, access files, or wait or retry. Return exactly two lines: Bounded brief and Prepared bounded brief for the supplied Company value. End the turn.',
+        );
       await page.getByRole('button', { name: 'Preview plan' }).click();
       await page.getByText(/Ready to save/u).waitFor({
         state: 'visible',
@@ -200,7 +210,7 @@ describe('web Product Golden Path', () => {
       await page.locator('#work-capability').waitFor({ state: 'visible' });
       const company = page.locator('#work-input-company');
       await company.waitFor({ state: 'visible', timeout: 60_000 });
-      await company.fill('Acme');
+      await company.fill(companyValue);
       const workCreateResponse = page.waitForResponse(
         (response) =>
           response.request().method() === 'POST' &&
@@ -272,7 +282,7 @@ describe('web Product Golden Path', () => {
       }
       expect(JSON.parse(submittedRunRequest.postData() ?? '{}')).toMatchObject({
         trigger_kind: 'manual',
-        input: { company: 'Acme' },
+        input: { company: companyValue },
       });
       expect(startedRunResponse.status()).toBe(202);
       await page.waitForURL(
@@ -312,6 +322,9 @@ describe('web Product Golden Path', () => {
         state: 'visible',
         timeout: 60_000,
       });
+      expect(
+        await page.locator('.work-overview__outcome').innerText(),
+      ).toContain(companyValue);
       await page.getByRole('tab', { name: 'MCP Activity' }).click();
       await page.getByTestId('trace-events').waitFor({
         state: 'visible',

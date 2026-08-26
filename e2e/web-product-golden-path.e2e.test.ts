@@ -3,11 +3,25 @@ import { randomUUID } from 'node:crypto';
 import { chromium, type Browser, type Page } from 'playwright';
 import { afterEach, describe, expect, it } from 'vitest';
 
-const baseUrl = process.env.WEB_E2E_BASE_URL?.replace(/\/$/u, '');
+const configuredBaseUrl = process.env.WEB_E2E_BASE_URL?.trim();
+if (!configuredBaseUrl)
+  throw new Error(
+    'WEB_E2E_BASE_URL is required for the Golden Path browser canary.',
+  );
+if (process.env.WEB_BOOTSTRAP_EMPTY_PRODUCT !== '1')
+  throw new Error(
+    'WEB_BOOTSTRAP_EMPTY_PRODUCT=1 is required for the Golden Path browser canary.',
+  );
+const parsedBaseUrl = new URL(configuredBaseUrl);
+if (!parsedBaseUrl.hostname.endsWith('.localhost'))
+  throw new Error(
+    'WEB_E2E_BASE_URL must use a trustworthy .localhost hostname for the Golden Path browser canary.',
+  );
+const baseUrl = configuredBaseUrl.replace(/\/$/u, '');
 const testTimeout = 8 * 60 * 1000;
 let browser: Browser | undefined;
 
-describe.skipIf(baseUrl === undefined)('web Product Golden Path', () => {
+describe('web Product Golden Path', () => {
   afterEach(async () => {
     await browser?.close();
     browser = undefined;

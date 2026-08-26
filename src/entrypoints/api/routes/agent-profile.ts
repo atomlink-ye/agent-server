@@ -103,7 +103,10 @@ export function registerAgentProfileRoute(
         work_catalog: bindings
           .slice(0, 100)
           .map(({ definition: work, version }) => ({
-            definition_id: work.id,
+            // The binding query joins definition and version rows with shared
+            // column names; the version's lineage is the authoritative
+            // definition identity at this response boundary.
+            definition_id: version.definitionId,
             definition_version_id: version.id,
             name: work.name,
             description: work.description,

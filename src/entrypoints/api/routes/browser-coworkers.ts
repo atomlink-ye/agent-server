@@ -76,6 +76,21 @@ export function registerBrowserCoworkerRoutes(
   });
 
   app.post('/api/agents/:agentId/capabilities', async (c) => {
+    // Capability binding is Product-Work-shaped (a Capability is a
+    // published Work Definition), so it asserts availability explicitly
+    // here rather than through a `/api/agents` prefix guard -- that prefix
+    // would wrongly take out the Coworker roster and profile routes above,
+    // which stay reachable regardless of Product Work availability.
+    if (config.productWorkAvailability.surface !== 'composed')
+      return jsonResponse(
+        {
+          error: {
+            code: 'feature_unavailable',
+            message: 'Work management is not available in this environment.',
+          },
+        },
+        503,
+      );
     const agentId = c.req.param('agentId');
     if (!AgentIdSchema.safeParse(agentId).success)
       return invalidRequest('The Agent id is invalid.');

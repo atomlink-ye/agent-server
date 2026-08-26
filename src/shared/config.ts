@@ -28,6 +28,23 @@ export type LarkCanaryEnabledConfig = Readonly<{
 export type LarkCanaryConfig =
   Readonly<{ enabled: false }> | LarkCanaryEnabledConfig;
 
+/**
+ * The Product Work plane's single, named availability fact. Derived once here
+ * from `AGENT_SERVER_PRODUCT_WORK_PLANE` and `RUNTIME_ADAPTER` so every
+ * consumer -- the HTTP surface gate, the browser BFF guard, composition --
+ * answers "is Product Work available?" the same way instead of re-deriving
+ * a bare string comparison at each call site.
+ *
+ * `surface` is whether the Product Work HTTP surface is installed at all.
+ * `execution` is whether a real execution plane is reachable behind it. A
+ * composed surface with unavailable execution is a legitimate, expressible
+ * state (see `ExecutionPlaneUnavailableError`'s HTTP mapping).
+ */
+export type ProductWorkAvailability = Readonly<{
+  surface: 'composed' | 'absent';
+  execution: 'runtime' | 'unavailable';
+}>;
+
 const OptionalConfigString = z.preprocess(
   (value) =>
     typeof value === 'string' && value.trim() === '' ? undefined : value,
@@ -286,6 +303,8 @@ export type AppConfig = Readonly<{
   productWorkPlane: z.infer<
     typeof ConfigSchema
   >['AGENT_SERVER_PRODUCT_WORK_PLANE'];
+  /** The single owned Product Work availability fact; see `ProductWorkAvailability`. */
+  productWorkAvailability: ProductWorkAvailability;
   runtime?: {
     adapter: z.infer<typeof ConfigSchema>['RUNTIME_ADAPTER'];
   };
@@ -353,6 +372,16 @@ export function loadConfig(
     serviceName: parsed.data.SERVICE_NAME,
     directChatPlane: parsed.data.AGENT_SERVER_DIRECT_CHAT_PLANE,
     productWorkPlane: parsed.data.AGENT_SERVER_PRODUCT_WORK_PLANE,
+    productWorkAvailability: Object.freeze({
+      surface:
+        parsed.data.AGENT_SERVER_PRODUCT_WORK_PLANE === 'absent'
+          ? ('absent' as const)
+          : ('composed' as const),
+      execution:
+        parsed.data.RUNTIME_ADAPTER === 'none'
+          ? ('unavailable' as const)
+          : ('runtime' as const),
+    }),
     runtime: { adapter: parsed.data.RUNTIME_ADAPTER },
     runtimeMcp: {
       listenHost: parsed.data.RUNTIME_MCP_LISTEN_HOST,

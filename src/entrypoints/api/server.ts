@@ -10,17 +10,22 @@ import { registerBrowserWebRoutes } from './routes/browser-web.js';
 import { registerBrowserWorkOrganizationRoutes } from './routes/browser-work-organization.js';
 import { shutdownService } from './shutdown.js';
 
-// Work and Work Organization are only reachable when the Product Work plane
-// is installed (see src/entrypoints/api/app.ts). When it is absent, guard
-// their browser BFF surfaces from configuration rather than letting the
-// browser see a bare control-plane route_not_found -- the BFF cannot tell
-// an uninstalled route apart from a typo that way. /api/work-definitions is
-// deliberately left unguarded: registerProductWorkDefinitionRoutes installs
-// unconditionally, so that surface genuinely is available.
+// Work, Work Organization, and Work Definition authoring are only reachable
+// when the Product Work surface is composed (see
+// src/entrypoints/api/app.ts, the single owner of that gate). When it is
+// absent, guard their browser BFF surfaces from configuration rather than
+// letting the browser see a bare control-plane route_not_found -- the BFF
+// cannot tell an uninstalled route apart from a typo that way.
+//
+// /api/agents is deliberately NOT included here: the Coworker roster and
+// profile stay reachable regardless of Product Work availability, so the
+// Capability-binding route (POST /api/agents/:agentId/capabilities) asserts
+// availability explicitly inside its own handler instead.
 const PRODUCT_WORK_BROWSER_ROUTE_PREFIXES = [
   '/api/works',
   '/api/work-items',
   '/api/boards',
+  '/api/work-definitions',
 ] as const;
 
 const config = loadConfig();
@@ -41,7 +46,7 @@ if (
   );
   if (localAccount) process.env.AGENT_SERVER_SERVICE_TOKEN = localAccount.token;
 }
-if (config.productWorkPlane === 'absent') {
+if (config.productWorkAvailability.surface !== 'composed') {
   app.use(
     '*',
     createBrowserFeatureAvailabilityGuard(

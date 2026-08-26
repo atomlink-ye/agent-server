@@ -44,7 +44,10 @@ export interface KernelCapabilities {
 
 export interface CreateKernelCapabilitiesOptions {
   readonly pool: Pool;
-  readonly config: Pick<AppConfig, 'directChatPlane' | 'productWorkPlane'>;
+  readonly config: Pick<
+    AppConfig,
+    'directChatPlane' | 'productWorkAvailability'
+  >;
   readonly definitionReadApi: DefinitionReadApi;
   readonly agentResolutionApi: AgentResolutionApi;
   readonly workerResolutionApi: WorkerResolutionApi;
@@ -59,7 +62,8 @@ export function createKernelCapabilities(
   const admissionRepository = new PostgresAdmissionRepository(options.pool);
   const sessions = new PostgresSessionRepository(options.pool);
   const directChatEnabled = options.config.directChatPlane !== 'absent';
-  const productWorkEnabled = options.config.productWorkPlane !== 'absent';
+  const productWorkEnabled =
+    options.config.productWorkAvailability.surface === 'composed';
   const conversations = directChatEnabled
     ? new PostgresConversationRepository(options.pool)
     : undefined;

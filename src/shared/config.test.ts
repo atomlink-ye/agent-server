@@ -12,6 +12,7 @@ describe('loadConfig', () => {
       serviceName: 'agent-server',
       directChatPlane: 'execution_runtime',
       productWorkPlane: 'execution_runtime',
+      productWorkAvailability: { surface: 'composed', execution: 'runtime' },
       runtime: {
         adapter: 'paseo',
       },

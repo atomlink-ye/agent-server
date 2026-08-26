@@ -31,6 +31,7 @@ const config = {
       disabled: false,
     },
   ],
+  productWorkAvailability: { surface: 'composed', execution: 'runtime' },
 } as unknown as AppConfig;
 
 describe('product Work command route', () => {
@@ -262,6 +263,7 @@ describe('product Work command route', () => {
       memoryModule: { installHttp() {} },
       resourceModule: {
         installHttp() {},
+        installProductWorkHttp() {},
         managedAgentDefinitions: {} as never,
       },
     });

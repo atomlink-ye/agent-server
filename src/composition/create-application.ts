@@ -83,9 +83,9 @@ export async function createApplication(
   });
 
   const directChatPlane = config.directChatPlane;
-  const productWorkPlane = config.productWorkPlane;
   const directChatEnabled = directChatPlane !== 'absent';
-  const productWorkEnabled = productWorkPlane !== 'absent';
+  const productWorkEnabled =
+    config.productWorkAvailability.surface === 'composed';
   const kernel = createKernelCapabilities({
     pool,
     config,

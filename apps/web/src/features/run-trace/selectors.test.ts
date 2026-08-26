@@ -121,10 +121,6 @@ describe('selectTimelineSpans', () => {
   });
 
   it('a still-running run with no ended_at falls back to the last captured event, never to Date.now()', () => {
-    // Date.now() is pinned far past every fixture timestamp: if the
-    // selector ever fell back to wall-clock time, durationMs would reflect
-    // that instead of the fixture's last captured event, and the test
-    // would fail.
     vi.spyOn(Date, 'now').mockReturnValue(
       Date.parse('2099-01-01T00:00:00.000Z'),
     );
@@ -195,13 +191,10 @@ describe('selectTimelineSpans', () => {
 });
 
 describe('interactionsForRow', () => {
-  // An MCP activity is recorded twice, on dispatch and on confirmation, and the
-  // activity id it is paired by is only an ordinal within a session -- the same
-  // "activity-2" belongs to a different call in another actor's session. Counting
-  // rows reported double; keying on the id alone would merge two agents' calls.
   const activity = (
     overrides: Partial<TraceActivity> & Pick<TraceActivity, 'activityId'>,
   ): TraceActivity => ({
+    runId: 'run-1',
     sequence: 1,
     status: 'running',
     category: 'read',
@@ -227,7 +220,7 @@ describe('interactionsForRow', () => {
         status: 'completed',
         sequence: 4,
       }),
-      // Same ordinal, different session: a second actor's own first call.
+      // Same ordinal, different actor session: a second actor's own first call.
       activity({
         activityId: 'activity-1',
         actorId: 'actor-2',
@@ -257,6 +250,49 @@ describe('interactionsForRow', () => {
         actorId: 'actor-2',
       }),
     ).toMatchObject({ calls: 1, tools: [{ name: 'board_submit', count: 1 }] });
+  });
+
+  it('does not merge retry/rework calls when an actor reuses an activity ordinal in a later Run', () => {
+    const rework = baseTrace({
+      activities: [
+        activity({
+          activityId: 'activity-1',
+          runId: 'run-1',
+          workItemId: 'work-item-1',
+          toolName: 'board_submit',
+        }),
+        activity({
+          activityId: 'activity-1',
+          runId: 'run-1',
+          workItemId: 'work-item-1',
+          toolName: 'board_submit',
+          status: 'completed',
+          sequence: 2,
+        }),
+        activity({
+          activityId: 'activity-1',
+          runId: 'run-2',
+          workItemId: 'work-item-1',
+          toolName: 'board_submit',
+          sequence: 1,
+        }),
+        activity({
+          activityId: 'activity-1',
+          runId: 'run-2',
+          workItemId: 'work-item-1',
+          toolName: 'board_submit',
+          status: 'completed',
+          sequence: 2,
+        }),
+      ],
+    });
+
+    expect(
+      interactionsForRow(rework, {
+        workItemId: 'work-item-1',
+        actorId: 'actor-1',
+      }),
+    ).toMatchObject({ calls: 2, tools: [{ name: 'board_submit', count: 2 }] });
   });
 });
 

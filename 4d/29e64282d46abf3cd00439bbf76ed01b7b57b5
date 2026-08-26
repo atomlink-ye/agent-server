@@ -1,7 +1,7 @@
-src/application/ports/work-definition-source-repository.ts
-  42086e822b43892a 50-51
 src/entrypoints/mcp/product-work-mcp-tools.ts
   42086e822b43892a 523-524,682-683
+src/application/ports/work-definition-source-repository.ts
+  42086e822b43892a 50-51
 ---
 {
   "schema_version": "authorship/3.0.0",

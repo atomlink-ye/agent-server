@@ -1,7 +1,7 @@
-src/contracts/product-projection/lineage-manifest.test.ts
-  d137a11113fe9e62 123-124
 src/contracts/product-projection/lineage-manifest.ts
   d137a11113fe9e62 684-689
+src/contracts/product-projection/lineage-manifest.test.ts
+  d137a11113fe9e62 123-124
 docs/features/coworker-worker-semantic-split.md
   d137a11113fe9e62 34-45,181-183,185-189
 ---

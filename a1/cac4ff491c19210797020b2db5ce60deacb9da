@@ -1,19 +1,19 @@
+src/application/work/list-agent-workflows.ts
+  42086e822b43892a 24-25
+src/entrypoints/mcp/product-work-mcp-tools.ts
+  42086e822b43892a 523-524,682-683
 tests/integration/semantic-closure-migration.integration.test.ts
   42086e822b43892a 174-175,187-188,200-201,206-226
 src/infrastructure/postgres/postgres-work-definition-source-repository.ts
   42086e822b43892a 2,423-430,433,435-441,443,448-449,469-470,479-481,490-491,493-499,504,519-520,522-528
-tests/harness/seed/work.ts
-  42086e822b43892a 95-96
-src/entrypoints/api/routes/agent-work-catalog.ts
-  42086e822b43892a 74-75
-src/application/work/list-agent-workflows.ts
-  42086e822b43892a 24-25
 src/entrypoints/api/routes/agent-profile.ts
   42086e822b43892a 73-74
+src/entrypoints/api/routes/agent-work-catalog.ts
+  42086e822b43892a 74-75
+tests/harness/seed/work.ts
+  42086e822b43892a 95-96
 src/application/ports/work-definition-source-repository.ts
   42086e822b43892a 50-59,116-126
-src/entrypoints/mcp/product-work-mcp-tools.ts
-  42086e822b43892a 523-524,682-683
 ---
 {
   "schema_version": "authorship/3.0.0",

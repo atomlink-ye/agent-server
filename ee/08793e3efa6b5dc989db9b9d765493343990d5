@@ -1,11 +1,11 @@
-src/entrypoints/api/routes/agent-work-catalog.ts
-  42086e822b43892a 74-75
 src/application/work/list-agent-workflows.ts
   42086e822b43892a 24-25
-src/entrypoints/mcp/product-work-mcp-tools.ts
-  42086e822b43892a 525-526,684-685
+src/entrypoints/api/routes/agent-work-catalog.ts
+  42086e822b43892a 74-75
 src/entrypoints/api/routes/agent-profile.ts
   42086e822b43892a 73-74
+src/entrypoints/mcp/product-work-mcp-tools.ts
+  42086e822b43892a 525-526,684-685
 ---
 {
   "schema_version": "authorship/3.0.0",

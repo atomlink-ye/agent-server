@@ -43,7 +43,13 @@ import type { ApiEnvironment } from '../http-types.js';
 interface AgentRouteDependencies {
   readonly config: AppConfig;
   readonly agentRegistry: AgentRegistry &
-    Pick<ManagedAgentDefinitionRead, 'listManagedDefinitionsForOwner'>;
+    Pick<
+      ManagedAgentDefinitionRead,
+      | 'listManagedDefinitionsForOwner'
+      | 'findManagedDefinitionByTenant'
+      | 'findVersionByTenant'
+      | 'listVersionsByTenant'
+    >;
   readonly coworkerProvisioning?: Pick<EnsureCoworkerConversation, 'execute'>;
 }
 const validatePath = '/api/v1/agent-packages:validate';

@@ -46,7 +46,9 @@ export interface CreateWorkOrganizationCapabilitiesOptions {
 export function createWorkOrganizationCapabilities(
   options: CreateWorkOrganizationCapabilitiesOptions,
 ): WorkOrganizationModule {
-  const workIdentityRepository = new PostgresWorkIdentityRepository(options.database);
+  const workIdentityRepository = new PostgresWorkIdentityRepository(
+    options.database,
+  );
   const workIdentity = new WorkIdentityApi({
     repository: workIdentityRepository,
     definitions: options.definitions,

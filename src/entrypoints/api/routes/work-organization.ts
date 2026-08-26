@@ -188,7 +188,9 @@ export function registerWorkOrganizationRoutes(
         workItemId,
         definitionId: parsed.data.definition_id,
         definitionVersionId: parsed.data.definition_version_id,
-        ...(parsed.data.title !== undefined ? { title: parsed.data.title } : {}),
+        ...(parsed.data.title !== undefined
+          ? { title: parsed.data.title }
+          : {}),
       });
       return context.json(
         WorkItemDetailSchema.parse(toWorkItemDetailResponse(detail)),
@@ -236,10 +238,7 @@ export function registerWorkOrganizationRoutes(
         workItemId,
         body: parsed.data.body,
       });
-      return context.json(
-        { comment: toWorkItemCommentResponse(comment) },
-        201,
-      );
+      return context.json({ comment: toWorkItemCommentResponse(comment) }, 201);
     } catch (error) {
       throw mapWorkOrganizationError(error);
     }
@@ -355,70 +354,52 @@ export function registerWorkOrganizationRoutes(
           ? { position: parsed.data.position }
           : {}),
       });
-      return context.json(
-        { column: toWorkBoardColumnResponse(column) },
-        201,
-      );
+      return context.json({ column: toWorkBoardColumnResponse(column) }, 201);
     } catch (error) {
       throw mapWorkOrganizationError(error);
     }
   });
 
-  app.patch(
-    '/api/v1/boards/:boardId/columns/:columnId',
-    async (context) => {
-      const boardId = requireUuid(context.req.param('boardId'), 'boardId');
-      const columnId = requireUuid(
-        context.req.param('columnId'),
-        'columnId',
-      );
-      const parsed = UpdateWorkBoardColumnRequestSchema.safeParse(
-        await readBoundedJson(context.req.raw, 32 * 1024),
-      );
-      if (!parsed.success)
-        throw invalidRequest('A valid Board column update is required.');
-      try {
-        const column = await dependencies.service.updateColumn({
-          accessContext: getAuthenticatedAccessContext(context),
-          boardId,
-          columnId,
-          ...(parsed.data.title !== undefined
-            ? { title: parsed.data.title }
-            : {}),
-          ...(parsed.data.position !== undefined
-            ? { position: parsed.data.position }
-            : {}),
-        });
-        return context.json(
-          { column: toWorkBoardColumnResponse(column) },
-          200,
-        );
-      } catch (error) {
-        throw mapWorkOrganizationError(error);
-      }
-    },
-  );
+  app.patch('/api/v1/boards/:boardId/columns/:columnId', async (context) => {
+    const boardId = requireUuid(context.req.param('boardId'), 'boardId');
+    const columnId = requireUuid(context.req.param('columnId'), 'columnId');
+    const parsed = UpdateWorkBoardColumnRequestSchema.safeParse(
+      await readBoundedJson(context.req.raw, 32 * 1024),
+    );
+    if (!parsed.success)
+      throw invalidRequest('A valid Board column update is required.');
+    try {
+      const column = await dependencies.service.updateColumn({
+        accessContext: getAuthenticatedAccessContext(context),
+        boardId,
+        columnId,
+        ...(parsed.data.title !== undefined
+          ? { title: parsed.data.title }
+          : {}),
+        ...(parsed.data.position !== undefined
+          ? { position: parsed.data.position }
+          : {}),
+      });
+      return context.json({ column: toWorkBoardColumnResponse(column) }, 200);
+    } catch (error) {
+      throw mapWorkOrganizationError(error);
+    }
+  });
 
-  app.delete(
-    '/api/v1/boards/:boardId/columns/:columnId',
-    async (context) => {
-      const boardId = requireUuid(context.req.param('boardId'), 'boardId');
-      const columnId = requireUuid(
-        context.req.param('columnId'),
-        'columnId',
-      );
-      try {
-        await dependencies.service.deleteColumn({
-          accessContext: getAuthenticatedAccessContext(context),
-          boardId,
-          columnId,
-        });
-        return context.body(null, 204);
-      } catch (error) {
-        throw mapWorkOrganizationError(error);
-      }
-    },
-  );
+  app.delete('/api/v1/boards/:boardId/columns/:columnId', async (context) => {
+    const boardId = requireUuid(context.req.param('boardId'), 'boardId');
+    const columnId = requireUuid(context.req.param('columnId'), 'columnId');
+    try {
+      await dependencies.service.deleteColumn({
+        accessContext: getAuthenticatedAccessContext(context),
+        boardId,
+        columnId,
+      });
+      return context.body(null, 204);
+    } catch (error) {
+      throw mapWorkOrganizationError(error);
+    }
+  });
 
   app.put('/api/v1/boards/:boardId/placement', async (context) => {
     const boardId = requireUuid(context.req.param('boardId'), 'boardId');

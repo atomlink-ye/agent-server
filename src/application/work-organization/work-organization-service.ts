@@ -37,11 +37,7 @@ export interface WorkOrganizationServiceOptions {
     readonly id: string;
     readonly title: string;
     readonly product_state:
-      | 'running'
-      | 'needs_you'
-      | 'complete'
-      | 'problem'
-      | 'not_captured';
+      'running' | 'needs_you' | 'complete' | 'problem' | 'not_captured';
     readonly latest_run_summary: {
       readonly id: string;
       readonly result_summary: string | null;

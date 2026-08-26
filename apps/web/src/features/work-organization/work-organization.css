@@ -74,9 +74,18 @@
   background: #eef2f6;
 }
 
-.work-org-status--in_progress { background: #e8f1ff; color: #245a9c; }
-.work-org-status--in_review { background: #fff3d6; color: #8a5a00; }
-.work-org-status--done { background: #e6f7ed; color: #276749; }
+.work-org-status--in_progress {
+  background: #e8f1ff;
+  color: #245a9c;
+}
+.work-org-status--in_review {
+  background: #fff3d6;
+  color: #8a5a00;
+}
+.work-org-status--done {
+  background: #e6f7ed;
+  color: #276749;
+}
 
 .work-org-main {
   min-width: 0;
@@ -254,9 +263,15 @@
   cursor: grab;
 }
 
-.work-board-card:active { cursor: grabbing; }
-.work-board-card strong { font-size: 13px; }
-.work-board-card small { color: var(--muted, #667085); }
+.work-board-card:active {
+  cursor: grabbing;
+}
+.work-board-card strong {
+  font-size: 13px;
+}
+.work-board-card small {
+  color: var(--muted, #667085);
+}
 
 .work-board-add-card,
 .work-board-add-column {

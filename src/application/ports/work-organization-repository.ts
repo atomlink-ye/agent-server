@@ -52,7 +52,9 @@ export interface WorkOrganizationRepository {
     owner: WorkOrganizationOwnerScope,
     id: string,
   ): Promise<WorkItem | null>;
-  listWorkItems(owner: WorkOrganizationOwnerScope): Promise<readonly WorkItem[]>;
+  listWorkItems(
+    owner: WorkOrganizationOwnerScope,
+  ): Promise<readonly WorkItem[]>;
   updateWorkItem(input: UpdateWorkItemRecordInput): Promise<WorkItem | null>;
   linkWork(input: {
     readonly tenantId: string;
@@ -95,9 +97,14 @@ export interface WorkOrganizationRepository {
     readonly description?: string | null;
     readonly now: string;
   }): Promise<WorkBoard | null>;
-  deleteBoard(owner: WorkOrganizationOwnerScope, boardId: string): Promise<boolean>;
+  deleteBoard(
+    owner: WorkOrganizationOwnerScope,
+    boardId: string,
+  ): Promise<boolean>;
 
-  createBoardColumn(input: CreateBoardColumnRecordInput): Promise<WorkBoardColumn | null>;
+  createBoardColumn(
+    input: CreateBoardColumnRecordInput,
+  ): Promise<WorkBoardColumn | null>;
   updateBoardColumn(input: {
     readonly tenantId: string;
     readonly workspaceId: string;

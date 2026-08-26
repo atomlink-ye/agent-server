@@ -43,7 +43,9 @@ class InMemoryWorkOrganizationRepository implements WorkOrganizationRepository {
   public readonly columns = new Map<string, WorkBoardColumn>();
   public readonly placements = new Map<string, WorkBoardPlacement>();
 
-  public async createWorkItem(input: CreateWorkItemRecordInput): Promise<WorkItem> {
+  public async createWorkItem(
+    input: CreateWorkItemRecordInput,
+  ): Promise<WorkItem> {
     const item: WorkItem = {
       id: input.id,
       tenantId: input.tenantId,
@@ -255,7 +257,11 @@ class InMemoryWorkOrganizationRepository implements WorkOrganizationRepository {
     readonly now: string;
   }): Promise<WorkBoardColumn | null> {
     const current = this.columns.get(input.columnId);
-    if (!current || !sameOwner(current, input) || current.boardId !== input.boardId)
+    if (
+      !current ||
+      !sameOwner(current, input) ||
+      current.boardId !== input.boardId
+    )
       return null;
     const next: WorkBoardColumn = {
       ...current,
@@ -274,11 +280,16 @@ class InMemoryWorkOrganizationRepository implements WorkOrganizationRepository {
     readonly columnId: string;
   }): Promise<boolean> {
     const column = this.columns.get(input.columnId);
-    if (!column || !sameOwner(column, input) || column.boardId !== input.boardId)
+    if (
+      !column ||
+      !sameOwner(column, input) ||
+      column.boardId !== input.boardId
+    )
       return false;
     this.columns.delete(input.columnId);
     for (const [workItemId, placement] of this.placements) {
-      if (placement.columnId === input.columnId) this.placements.delete(workItemId);
+      if (placement.columnId === input.columnId)
+        this.placements.delete(workItemId);
     }
     return true;
   }
@@ -325,10 +336,15 @@ class InMemoryWorkOrganizationRepository implements WorkOrganizationRepository {
     const board = await this.findBoardById(owner, boardId);
     if (!board) return null;
     const columns = [...this.columns.values()]
-      .filter((column) => column.boardId === boardId && sameOwner(column, owner))
+      .filter(
+        (column) => column.boardId === boardId && sameOwner(column, owner),
+      )
       .sort((left, right) => left.position - right.position);
     const placements = [...this.placements.values()]
-      .filter((placement) => placement.boardId === boardId && sameOwner(placement, owner))
+      .filter(
+        (placement) =>
+          placement.boardId === boardId && sameOwner(placement, owner),
+      )
       .sort((left, right) => left.position - right.position);
     const workItems = placements
       .map((placement) => this.items.get(placement.workItemId))
@@ -341,7 +357,9 @@ function sameOwner(
   value: { readonly tenantId: string; readonly workspaceId: string },
   owner: WorkOrganizationOwnerScope,
 ): boolean {
-  return value.tenantId === owner.tenantId && value.workspaceId === owner.workspaceId;
+  return (
+    value.tenantId === owner.tenantId && value.workspaceId === owner.workspaceId
+  );
 }
 
 describe('Cumora-inspired coworker work organization MVE', () => {
@@ -441,7 +459,9 @@ describe('Cumora-inspired coworker work organization MVE', () => {
       body: '@agent-researcher please include evidence.',
     });
     expect(comment.body).toContain('@agent-researcher');
-    expect(await service.listComments(accessContext, created.workItem.id)).toHaveLength(1);
+    expect(
+      await service.listComments(accessContext, created.workItem.id),
+    ).toHaveLength(1);
 
     await service.updateWorkItem({
       accessContext,
@@ -499,7 +519,9 @@ describe('Cumora-inspired coworker work organization MVE', () => {
     expect(done.workItem.status).toBe('done');
 
     await service.deleteBoard(accessContext, board.id);
-    expect(await service.getWorkItem(accessContext, created.workItem.id)).toMatchObject({
+    expect(
+      await service.getWorkItem(accessContext, created.workItem.id),
+    ).toMatchObject({
       workItem: { status: 'done' },
     });
   });

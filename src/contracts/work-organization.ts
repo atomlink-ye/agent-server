@@ -54,7 +54,12 @@ export const WorkItemListResponseSchema = z
 export const CreateWorkItemRequestSchema = z
   .object({
     title: z.string().trim().min(1).max(200),
-    description: z.string().trim().max(16 * 1024).nullable().optional(),
+    description: z
+      .string()
+      .trim()
+      .max(16 * 1024)
+      .nullable()
+      .optional(),
     assignee_id: z.string().trim().min(1).max(256).nullable().optional(),
     source_conversation_id: z.uuid().nullable().optional(),
     source_message_id: z.uuid().nullable().optional(),
@@ -67,7 +72,12 @@ export const CreateWorkItemRequestSchema = z
 export const UpdateWorkItemRequestSchema = z
   .object({
     title: z.string().trim().min(1).max(200).optional(),
-    description: z.string().trim().max(16 * 1024).nullable().optional(),
+    description: z
+      .string()
+      .trim()
+      .max(16 * 1024)
+      .nullable()
+      .optional(),
     status: WorkItemStatusSchema.optional(),
     assignee_id: z.string().trim().min(1).max(256).nullable().optional(),
   })
@@ -89,13 +99,22 @@ export const WorkItemCommentSchema = z
     id: z.uuid(),
     work_item_id: z.uuid(),
     author_id: z.string().min(1),
-    body: z.string().min(1).max(16 * 1024),
+    body: z
+      .string()
+      .min(1)
+      .max(16 * 1024),
     created_at: z.string().datetime(),
   })
   .strict();
 
 export const CreateWorkItemCommentRequestSchema = z
-  .object({ body: z.string().trim().min(1).max(16 * 1024) })
+  .object({
+    body: z
+      .string()
+      .trim()
+      .min(1)
+      .max(16 * 1024),
+  })
   .strict();
 
 export const WorkItemCommentsResponseSchema = z
@@ -218,7 +237,8 @@ export function toWorkItemDetailResponse(input: {
   readonly linkedWork: {
     readonly workId: string;
     readonly title: string;
-    readonly productState: 'running' | 'needs_you' | 'complete' | 'problem' | 'not_captured';
+    readonly productState:
+      'running' | 'needs_you' | 'complete' | 'problem' | 'not_captured';
     readonly latestWorkRunId: string | null;
     readonly resultSummary: string | null;
   } | null;

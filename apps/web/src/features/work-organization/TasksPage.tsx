@@ -27,7 +27,9 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
   const location = useLocation();
   const [items, setItems] = useState<readonly WorkItemDetailDto[]>([]);
   const [agents, setAgents] = useState<readonly Coworker[]>([]);
-  const [comments, setComments] = useState<Awaited<ReturnType<typeof workOrganizationClient.listComments>>>([]);
+  const [comments, setComments] = useState<
+    Awaited<ReturnType<typeof workOrganizationClient.listComments>>
+  >([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -44,9 +46,12 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
       setItems(nextItems);
       setAgents(nextAgents);
       if (selectedWorkItemId) {
-        const detail = nextItems.find((entry) => entry.work_item.id === selectedWorkItemId);
+        const detail = nextItems.find(
+          (entry) => entry.work_item.id === selectedWorkItemId,
+        );
         if (!detail) {
-          const fetched = await workOrganizationClient.getWorkItem(selectedWorkItemId);
+          const fetched =
+            await workOrganizationClient.getWorkItem(selectedWorkItemId);
           setItems((current) => [fetched, ...current]);
         }
       }
@@ -66,9 +71,11 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
       setComments([]);
       return;
     }
-    void workOrganizationClient.listComments(selectedWorkItemId).then(setComments, (reason: unknown) => {
-      setError(reason instanceof Error ? reason.message : String(reason));
-    });
+    void workOrganizationClient
+      .listComments(selectedWorkItemId)
+      .then(setComments, (reason: unknown) => {
+        setError(reason instanceof Error ? reason.message : String(reason));
+      });
   }, [selectedWorkItemId]);
 
   useEffect(() => {
@@ -90,12 +97,14 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
     [filter, items],
   );
   const selected = selectedWorkItemId
-    ? items.find((entry) => entry.work_item.id === selectedWorkItemId) ?? null
+    ? (items.find((entry) => entry.work_item.id === selectedWorkItemId) ?? null)
     : null;
 
   const replaceItem = (detail: WorkItemDetailDto): void => {
     setItems((current) => {
-      const found = current.some((entry) => entry.work_item.id === detail.work_item.id);
+      const found = current.some(
+        (entry) => entry.work_item.id === detail.work_item.id,
+      );
       return found
         ? current.map((entry) =>
             entry.work_item.id === detail.work_item.id ? detail : entry,
@@ -112,24 +121,32 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
             <span className="eyebrow">Coworker Workspace</span>
             <h1>Tasks</h1>
           </div>
-          <button type="button" className="work-org-primary" onClick={() => setCreating(true)}>
+          <button
+            type="button"
+            className="work-org-primary"
+            onClick={() => setCreating(true)}
+          >
             + Task
           </button>
         </div>
         <div className="work-org-filters" aria-label="Task status filters">
-          {(['all', 'todo', 'in_progress', 'in_review', 'done'] as const).map((value) => (
-            <button
-              type="button"
-              key={value}
-              data-active={filter === value ? 'true' : 'false'}
-              onClick={() => setFilter(value)}
-            >
-              {value === 'all' ? 'All' : STATUS_LABELS[value]}
-            </button>
-          ))}
+          {(['all', 'todo', 'in_progress', 'in_review', 'done'] as const).map(
+            (value) => (
+              <button
+                type="button"
+                key={value}
+                data-active={filter === value ? 'true' : 'false'}
+                onClick={() => setFilter(value)}
+              >
+                {value === 'all' ? 'All' : STATUS_LABELS[value]}
+              </button>
+            ),
+          )}
         </div>
         <div className="work-org-list">
-          {loading && items.length === 0 ? <p className="pane-placeholder">Loading Tasks…</p> : null}
+          {loading && items.length === 0 ? (
+            <p className="pane-placeholder">Loading Tasks…</p>
+          ) : null}
           {!loading && visibleItems.length === 0 ? (
             <p className="pane-placeholder">No Tasks in this view.</p>
           ) : null}
@@ -138,15 +155,23 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
               type="button"
               key={entry.work_item.id}
               className="work-org-list-item"
-              data-active={selectedWorkItemId === entry.work_item.id ? 'true' : 'false'}
-              onClick={() => navigate(`/tasks/${encodeURIComponent(entry.work_item.id)}`)}
+              data-active={
+                selectedWorkItemId === entry.work_item.id ? 'true' : 'false'
+              }
+              onClick={() =>
+                navigate(`/tasks/${encodeURIComponent(entry.work_item.id)}`)
+              }
             >
-              <span className={`work-org-status work-org-status--${entry.work_item.status}`}>
+              <span
+                className={`work-org-status work-org-status--${entry.work_item.status}`}
+              >
                 {STATUS_LABELS[entry.work_item.status]}
               </span>
               <strong>{entry.work_item.title}</strong>
               <small>
-                {entry.work_item.assignee_id ? `Assigned · ${entry.work_item.assignee_id}` : 'Unassigned'}
+                {entry.work_item.assignee_id
+                  ? `Assigned · ${entry.work_item.assignee_id}`
+                  : 'Unassigned'}
               </small>
             </button>
           ))}
@@ -156,7 +181,11 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
       <main className="chat-panel work-org-main">
         <TitleBar section="Tasks" />
         <section className="work-org-content" aria-label="Task detail">
-          {error ? <p className="work-org-error" role="alert">{error}</p> : null}
+          {error ? (
+            <p className="work-org-error" role="alert">
+              {error}
+            </p>
+          ) : null}
           {creating ? (
             <CreateTaskForm
               agents={agents}
@@ -165,7 +194,9 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
               onCreated={(detail) => {
                 replaceItem(detail);
                 setCreating(false);
-                navigate(`/tasks/${encodeURIComponent(detail.work_item.id)}`, { replace: true });
+                navigate(`/tasks/${encodeURIComponent(detail.work_item.id)}`, {
+                  replace: true,
+                });
               }}
               onError={setError}
             />
@@ -180,10 +211,14 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
             />
           ) : (
             <div className="work-main-empty">
-              <span className="work-main-icon" aria-hidden="true">☑</span>
+              <span className="work-main-icon" aria-hidden="true">
+                ☑
+              </span>
               <h1>Choose a Task</h1>
               <p>Capture work before it is formal enough to become a Work.</p>
-              <button type="button" onClick={() => setCreating(true)}>New Task</button>
+              <button type="button" onClick={() => setCreating(true)}>
+                New Task
+              </button>
             </div>
           )}
         </section>
@@ -211,9 +246,15 @@ function CreateTaskForm({
     title?: unknown;
     description?: unknown;
   } | null;
-  const sourceConversationId = typeof state?.sourceConversationId === 'string' ? state.sourceConversationId : null;
-  const sourceMessageId = typeof state?.sourceMessageId === 'string' ? state.sourceMessageId : null;
-  const [title, setTitle] = useState(typeof state?.title === 'string' ? state.title : '');
+  const sourceConversationId =
+    typeof state?.sourceConversationId === 'string'
+      ? state.sourceConversationId
+      : null;
+  const sourceMessageId =
+    typeof state?.sourceMessageId === 'string' ? state.sourceMessageId : null;
+  const [title, setTitle] = useState(
+    typeof state?.title === 'string' ? state.title : '',
+  );
   const [description, setDescription] = useState(
     typeof state?.description === 'string' ? state.description : '',
   );
@@ -243,22 +284,49 @@ function CreateTaskForm({
   }
 
   return (
-    <form className="work-org-card work-org-form" onSubmit={(event) => void submit(event)}>
+    <form
+      className="work-org-card work-org-form"
+      onSubmit={(event) => void submit(event)}
+    >
       <span className="eyebrow">New Task</span>
       <h1>Capture work</h1>
-      {sourceConversationId ? <p className="work-org-source-note">Linked to the source conversation message.</p> : null}
+      {sourceConversationId ? (
+        <p className="work-org-source-note">
+          Linked to the source conversation message.
+        </p>
+      ) : null}
       <label>
         Title
-        <input autoFocus value={title} onChange={(event) => setTitle(event.target.value)} maxLength={200} required />
+        <input
+          autoFocus
+          value={title}
+          onChange={(event) => setTitle(event.target.value)}
+          maxLength={200}
+          required
+        />
       </label>
       <label>
         Description
-        <textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={5} />
+        <textarea
+          value={description}
+          onChange={(event) => setDescription(event.target.value)}
+          rows={5}
+        />
       </label>
-      <AssigneeField agents={agents} value={assigneeId} onChange={setAssigneeId} />
+      <AssigneeField
+        agents={agents}
+        value={assigneeId}
+        onChange={setAssigneeId}
+      />
       <div className="work-org-actions">
-        <button type="button" onClick={onCancel}>Cancel</button>
-        <button type="submit" className="work-org-primary" disabled={saving || !title.trim()}>
+        <button type="button" onClick={onCancel}>
+          Cancel
+        </button>
+        <button
+          type="submit"
+          className="work-org-primary"
+          disabled={saving || !title.trim()}
+        >
           {saving ? 'Creating…' : 'Create Task'}
         </button>
       </div>
@@ -276,9 +344,13 @@ function TaskDetail({
 }: {
   readonly detail: WorkItemDetailDto;
   readonly agents: readonly Coworker[];
-  readonly comments: Awaited<ReturnType<typeof workOrganizationClient.listComments>>;
+  readonly comments: Awaited<
+    ReturnType<typeof workOrganizationClient.listComments>
+  >;
   readonly onChanged: (detail: WorkItemDetailDto) => void;
-  readonly onCommentsChanged: (comments: Awaited<ReturnType<typeof workOrganizationClient.listComments>>) => void;
+  readonly onCommentsChanged: (
+    comments: Awaited<ReturnType<typeof workOrganizationClient.listComments>>,
+  ) => void;
   readonly onError: (message: string | null) => void;
 }) {
   const navigate = useNavigate();
@@ -297,7 +369,9 @@ function TaskDetail({
     setAssigneeId(item.assignee_id ?? '');
   }, [item.assignee_id, item.description, item.id, item.title]);
 
-  async function update(input: Parameters<typeof workOrganizationClient.updateWorkItem>[1]) {
+  async function update(
+    input: Parameters<typeof workOrganizationClient.updateWorkItem>[1],
+  ) {
     setSaving(true);
     onError(null);
     try {
@@ -320,7 +394,10 @@ function TaskDetail({
   async function addComment() {
     if (!comment.trim()) return;
     try {
-      const created = await workOrganizationClient.addComment(item.id, comment.trim());
+      const created = await workOrganizationClient.addComment(
+        item.id,
+        comment.trim(),
+      );
       onCommentsChanged([...comments, created]);
       setComment('');
     } catch (reason) {
@@ -358,28 +435,56 @@ function TaskDetail({
             aria-label="Task status"
             value={item.status}
             disabled={saving}
-            onChange={(event) => void update({ status: event.target.value as WorkItemStatus })}
+            onChange={(event) =>
+              void update({ status: event.target.value as WorkItemStatus })
+            }
           >
             {(Object.keys(STATUS_LABELS) as WorkItemStatus[]).map((status) => (
-              <option key={status} value={status}>{STATUS_LABELS[status]}</option>
+              <option key={status} value={status}>
+                {STATUS_LABELS[status]}
+              </option>
             ))}
           </select>
         </div>
         <label>
           Title
-          <input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={200} />
+          <input
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            maxLength={200}
+          />
         </label>
         <label>
           Description
-          <textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={6} />
+          <textarea
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+            rows={6}
+          />
         </label>
-        <AssigneeField agents={agents} value={assigneeId} onChange={setAssigneeId} />
+        <AssigneeField
+          agents={agents}
+          value={assigneeId}
+          onChange={setAssigneeId}
+        />
         <div className="work-org-actions">
-          <button type="button" className="work-org-primary" disabled={saving || !title.trim()} onClick={() => void saveFields()}>
+          <button
+            type="button"
+            className="work-org-primary"
+            disabled={saving || !title.trim()}
+            onClick={() => void saveFields()}
+          >
             {saving ? 'Saving…' : 'Save'}
           </button>
           {item.source_conversation_id ? (
-            <button type="button" onClick={() => navigate(`/conversations/${encodeURIComponent(item.source_conversation_id!)}`)}>
+            <button
+              type="button"
+              onClick={() =>
+                navigate(
+                  `/conversations/${encodeURIComponent(item.source_conversation_id!)}`,
+                )
+              }
+            >
               Back to conversation
             </button>
           ) : null}
@@ -392,13 +497,19 @@ function TaskDetail({
           {detail.linked_work ? (
             <>
               <h2>{detail.linked_work.title}</h2>
-              <p className="work-org-muted">{detail.linked_work.product_state.replace('_', ' ')}</p>
-              {detail.linked_work.result_summary ? <p>{detail.linked_work.result_summary}</p> : null}
+              <p className="work-org-muted">
+                {detail.linked_work.product_state.replace('_', ' ')}
+              </p>
+              {detail.linked_work.result_summary ? (
+                <p>{detail.linked_work.result_summary}</p>
+              ) : null}
               <button
                 type="button"
                 className="work-org-primary"
                 onClick={() =>
-                  navigate(`/work/${encodeURIComponent(detail.linked_work!.work_id)}?from_task=${encodeURIComponent(item.id)}`)
+                  navigate(
+                    `/work/${encodeURIComponent(detail.linked_work!.work_id)}?from_task=${encodeURIComponent(item.id)}`,
+                  )
                 }
               >
                 Open Work
@@ -407,16 +518,36 @@ function TaskDetail({
           ) : (
             <>
               <h2>Start Work</h2>
-              <p className="work-org-muted">Choose the published Work Definition identity required by the canonical Work contract.</p>
+              <p className="work-org-muted">
+                Choose the published Work Definition identity required by the
+                canonical Work contract.
+              </p>
               <label>
                 Definition ID
-                <input value={definitionId} onChange={(event) => setDefinitionId(event.target.value)} placeholder="UUID" />
+                <input
+                  value={definitionId}
+                  onChange={(event) => setDefinitionId(event.target.value)}
+                  placeholder="UUID"
+                />
               </label>
               <label>
                 Definition version ID
-                <input value={definitionVersionId} onChange={(event) => setDefinitionVersionId(event.target.value)} placeholder="UUID" />
+                <input
+                  value={definitionVersionId}
+                  onChange={(event) =>
+                    setDefinitionVersionId(event.target.value)
+                  }
+                  placeholder="UUID"
+                />
               </label>
-              <button type="button" className="work-org-primary" disabled={saving || !definitionId.trim() || !definitionVersionId.trim()} onClick={() => void promote()}>
+              <button
+                type="button"
+                className="work-org-primary"
+                disabled={
+                  saving || !definitionId.trim() || !definitionVersionId.trim()
+                }
+                onClick={() => void promote()}
+              >
                 Create Work
               </button>
             </>
@@ -426,7 +557,9 @@ function TaskDetail({
         <article className="work-org-card">
           <span className="eyebrow">Comments</span>
           <div className="work-org-comments">
-            {comments.length === 0 ? <p className="work-org-muted">No comments yet.</p> : null}
+            {comments.length === 0 ? (
+              <p className="work-org-muted">No comments yet.</p>
+            ) : null}
             {comments.map((entry) => (
               <div key={entry.id} className="work-org-comment">
                 <strong>{entry.author_id}</strong>
@@ -434,8 +567,19 @@ function TaskDetail({
               </div>
             ))}
           </div>
-          <textarea value={comment} onChange={(event) => setComment(event.target.value)} rows={3} placeholder="Add a comment. @participant mentions stay visible in the shared work record." />
-          <button type="button" disabled={!comment.trim()} onClick={() => void addComment()}>Comment</button>
+          <textarea
+            value={comment}
+            onChange={(event) => setComment(event.target.value)}
+            rows={3}
+            placeholder="Add a comment. @participant mentions stay visible in the shared work record."
+          />
+          <button
+            type="button"
+            disabled={!comment.trim()}
+            onClick={() => void addComment()}
+          >
+            Comment
+          </button>
         </article>
       </aside>
     </div>
@@ -462,7 +606,9 @@ function AssigneeField({
       />
       <datalist id="work-item-assignees">
         {agents.map((agent) => (
-          <option value={agent.id} key={agent.id}>{agent.displayName}</option>
+          <option value={agent.id} key={agent.id}>
+            {agent.displayName}
+          </option>
         ))}
       </datalist>
     </label>

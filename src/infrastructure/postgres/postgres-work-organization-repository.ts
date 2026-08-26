@@ -89,7 +89,9 @@ export class PostgresWorkOrganizationRepository implements WorkOrganizationRepos
 
   public constructor(private readonly db: Queryable) {}
 
-  public async createWorkItem(input: CreateWorkItemRecordInput): Promise<WorkItem> {
+  public async createWorkItem(
+    input: CreateWorkItemRecordInput,
+  ): Promise<WorkItem> {
     const result = await this.db.query<WorkItemRow>(
       `INSERT INTO product_work_items
         (id,tenant_id,workspace_id,title,description,status,assignee_id,created_by,
@@ -212,7 +214,8 @@ export class PostgresWorkOrganizationRepository implements WorkOrganizationRepos
       return await callback();
     } finally {
       release();
-      if (this.promotionQueues.get(key) === queued) this.promotionQueues.delete(key);
+      if (this.promotionQueues.get(key) === queued)
+        this.promotionQueues.delete(key);
     }
   }
 
@@ -460,32 +463,35 @@ export class PostgresWorkOrganizationRepository implements WorkOrganizationRepos
   ): Promise<WorkBoardSnapshot | null> {
     const board = await this.findBoardById(owner, boardId);
     if (!board) return null;
-    const [columnsResult, placementsResult, workItemsResult] = await Promise.all([
-      this.db.query<ColumnRow>(
-        `SELECT * FROM product_work_board_columns
+    const [columnsResult, placementsResult, workItemsResult] =
+      await Promise.all([
+        this.db.query<ColumnRow>(
+          `SELECT * FROM product_work_board_columns
           WHERE tenant_id=$1 AND workspace_id=$2 AND board_id=$3
           ORDER BY position ASC,created_at ASC,id ASC`,
-        [owner.tenantId, owner.workspaceId, boardId],
-      ),
-      this.db.query<PlacementRow>(
-        `SELECT * FROM product_work_board_placements
+          [owner.tenantId, owner.workspaceId, boardId],
+        ),
+        this.db.query<PlacementRow>(
+          `SELECT * FROM product_work_board_placements
           WHERE tenant_id=$1 AND workspace_id=$2 AND board_id=$3
           ORDER BY column_id,position ASC,created_at ASC,work_item_id ASC`,
-        [owner.tenantId, owner.workspaceId, boardId],
-      ),
-      this.db.query<WorkItemRow>(
-        `SELECT w.* FROM product_work_items w
+          [owner.tenantId, owner.workspaceId, boardId],
+        ),
+        this.db.query<WorkItemRow>(
+          `SELECT w.* FROM product_work_items w
           JOIN product_work_board_placements p ON p.work_item_id=w.id
          WHERE p.tenant_id=$1 AND p.workspace_id=$2 AND p.board_id=$3
            AND w.tenant_id=$1 AND w.workspace_id=$2
          ORDER BY p.position ASC,w.created_at ASC,w.id ASC`,
-        [owner.tenantId, owner.workspaceId, boardId],
-      ),
-    ]);
+          [owner.tenantId, owner.workspaceId, boardId],
+        ),
+      ]);
     return Object.freeze({
       board,
       columns: Object.freeze((columnsResult.rows ?? []).map(mapColumn)),
-      placements: Object.freeze((placementsResult.rows ?? []).map(mapPlacement)),
+      placements: Object.freeze(
+        (placementsResult.rows ?? []).map(mapPlacement),
+      ),
       workItems: Object.freeze((workItemsResult.rows ?? []).map(mapWorkItem)),
     });
   }

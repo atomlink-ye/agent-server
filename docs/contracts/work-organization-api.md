@@ -43,15 +43,15 @@ Status is coordination state. The UI can move among the closed values, but it ca
 
 ### Routes
 
-| Method | Path | Success | Semantics |
-| --- | --- | --- | --- |
-| `GET` | `/api/v1/work-items` | `200` | Lists owner-scoped WorkItems with bounded linked-Work summaries. |
-| `POST` | `/api/v1/work-items` | `201` | Creates a durable WorkItem; optional source and Board placement are validated before materialization. |
-| `GET` | `/api/v1/work-items/{id}` | `200` | Reads one WorkItem and current linked Work Product projection. |
-| `PATCH` | `/api/v1/work-items/{id}` | `200` | Updates title, description, status and/or assignee. |
-| `POST` | `/api/v1/work-items/{id}/promote` | `200` | Idempotently creates/reuses one formal linked Work through canonical `WorkIdentityApi`. |
-| `GET` | `/api/v1/work-items/{id}/comments` | `200` | Lists persistent comments in creation order. |
-| `POST` | `/api/v1/work-items/{id}/comments` | `201` | Adds one bounded comment authored by the authenticated principal. |
+| Method  | Path                               | Success | Semantics                                                                                             |
+| ------- | ---------------------------------- | ------- | ----------------------------------------------------------------------------------------------------- |
+| `GET`   | `/api/v1/work-items`               | `200`   | Lists owner-scoped WorkItems with bounded linked-Work summaries.                                      |
+| `POST`  | `/api/v1/work-items`               | `201`   | Creates a durable WorkItem; optional source and Board placement are validated before materialization. |
+| `GET`   | `/api/v1/work-items/{id}`          | `200`   | Reads one WorkItem and current linked Work Product projection.                                        |
+| `PATCH` | `/api/v1/work-items/{id}`          | `200`   | Updates title, description, status and/or assignee.                                                   |
+| `POST`  | `/api/v1/work-items/{id}/promote`  | `200`   | Idempotently creates/reuses one formal linked Work through canonical `WorkIdentityApi`.               |
+| `GET`   | `/api/v1/work-items/{id}/comments` | `200`   | Lists persistent comments in creation order.                                                          |
+| `POST`  | `/api/v1/work-items/{id}/comments` | `201`   | Adds one bounded comment authored by the authenticated principal.                                     |
 
 Promotion requires explicit `definition_id` and published `definition_version_id`, preserving the existing formal Work contract rather than inventing a hidden default Definition. Repeated promotion of the same WorkItem returns the already linked Work. The persistent `linked_work_id` relation is unique.
 
@@ -75,17 +75,17 @@ A Board is a Workspace-scoped coordination projection. A WorkItem can exist with
 
 ### Routes
 
-| Method | Path | Success | Semantics |
-| --- | --- | --- | --- |
-| `GET` | `/api/v1/boards` | `200` | Lists owner-scoped Boards. |
-| `POST` | `/api/v1/boards` | `201` | Creates a Board. |
-| `GET` | `/api/v1/boards/{id}` | `200` | Returns Board, ordered columns, placements, and the referenced WorkItems. |
-| `PATCH` | `/api/v1/boards/{id}` | `200` | Updates title/description. |
-| `DELETE` | `/api/v1/boards/{id}` | `204` | Deletes Board projection; WorkItems remain. |
-| `POST` | `/api/v1/boards/{id}/columns` | `201` | Creates an ordered column. |
-| `PATCH` | `/api/v1/boards/{id}/columns/{columnId}` | `200` | Updates column title/position. |
-| `DELETE` | `/api/v1/boards/{id}/columns/{columnId}` | `204` | Removes the column and its placements; WorkItems remain. |
-| `PUT` | `/api/v1/boards/{id}/placement` | `200` | Creates or moves one WorkItem placement to the requested column/position. |
+| Method   | Path                                     | Success | Semantics                                                                 |
+| -------- | ---------------------------------------- | ------- | ------------------------------------------------------------------------- |
+| `GET`    | `/api/v1/boards`                         | `200`   | Lists owner-scoped Boards.                                                |
+| `POST`   | `/api/v1/boards`                         | `201`   | Creates a Board.                                                          |
+| `GET`    | `/api/v1/boards/{id}`                    | `200`   | Returns Board, ordered columns, placements, and the referenced WorkItems. |
+| `PATCH`  | `/api/v1/boards/{id}`                    | `200`   | Updates title/description.                                                |
+| `DELETE` | `/api/v1/boards/{id}`                    | `204`   | Deletes Board projection; WorkItems remain.                               |
+| `POST`   | `/api/v1/boards/{id}/columns`            | `201`   | Creates an ordered column.                                                |
+| `PATCH`  | `/api/v1/boards/{id}/columns/{columnId}` | `200`   | Updates column title/position.                                            |
+| `DELETE` | `/api/v1/boards/{id}/columns/{columnId}` | `204`   | Removes the column and its placements; WorkItems remain.                  |
+| `PUT`    | `/api/v1/boards/{id}/placement`          | `200`   | Creates or moves one WorkItem placement to the requested column/position. |
 
 Board creation, column creation, placement, rename/delete, and drag/move are product coordination operations only. They never create technical Tasks/Runs or call an Agent runtime.
 

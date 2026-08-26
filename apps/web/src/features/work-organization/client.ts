@@ -18,16 +18,22 @@ import { z } from 'zod';
 import { apiTransport } from '../../api/transport';
 
 const boardResponseSchema = z.object({ board: WorkBoardSchema }).strict();
-const columnResponseSchema = z.object({ column: WorkBoardColumnSchema }).strict();
+const columnResponseSchema = z
+  .object({ column: WorkBoardColumnSchema })
+  .strict();
 const placementResponseSchema = z
   .object({ placement: WorkBoardPlacementSchema })
   .strict();
-const commentResponseSchema = z.object({ comment: WorkItemCommentSchema }).strict();
+const commentResponseSchema = z
+  .object({ comment: WorkItemCommentSchema })
+  .strict();
 
 function parse<T>(schema: z.ZodType<T>, value: unknown): T {
   const result = schema.safeParse(value);
   if (!result.success)
-    throw new Error('The work-organization response did not match the browser contract.');
+    throw new Error(
+      'The work-organization response did not match the browser contract.',
+    );
   return result.data;
 }
 
@@ -64,10 +70,13 @@ export const workOrganizationClient = {
   async getWorkItem(workItemId: string): Promise<WorkItemDetailDto> {
     return parse(
       WorkItemDetailSchema,
-      await apiTransport.request(`/api/work-items/${encodeURIComponent(workItemId)}`, {
-        method: 'GET',
-        cache: 'no-store',
-      }),
+      await apiTransport.request(
+        `/api/work-items/${encodeURIComponent(workItemId)}`,
+        {
+          method: 'GET',
+          cache: 'no-store',
+        },
+      ),
     );
   },
 
@@ -79,8 +88,12 @@ export const workOrganizationClient = {
         cache: 'no-store',
         body: JSON.stringify({
           title: input.title,
-          ...(input.description !== undefined ? { description: input.description } : {}),
-          ...(input.assigneeId !== undefined ? { assignee_id: input.assigneeId } : {}),
+          ...(input.description !== undefined
+            ? { description: input.description }
+            : {}),
+          ...(input.assigneeId !== undefined
+            ? { assignee_id: input.assigneeId }
+            : {}),
           ...(input.sourceConversationId !== undefined
             ? { source_conversation_id: input.sourceConversationId }
             : {}),
@@ -88,7 +101,9 @@ export const workOrganizationClient = {
             ? { source_message_id: input.sourceMessageId }
             : {}),
           ...(input.boardId !== undefined ? { board_id: input.boardId } : {}),
-          ...(input.columnId !== undefined ? { column_id: input.columnId } : {}),
+          ...(input.columnId !== undefined
+            ? { column_id: input.columnId }
+            : {}),
           ...(input.position !== undefined ? { position: input.position } : {}),
         }),
       }),
@@ -101,16 +116,23 @@ export const workOrganizationClient = {
   ): Promise<WorkItemDetailDto> {
     return parse(
       WorkItemDetailSchema,
-      await apiTransport.request(`/api/work-items/${encodeURIComponent(workItemId)}`, {
-        method: 'PATCH',
-        cache: 'no-store',
-        body: JSON.stringify({
-          ...(input.title !== undefined ? { title: input.title } : {}),
-          ...(input.description !== undefined ? { description: input.description } : {}),
-          ...(input.status !== undefined ? { status: input.status } : {}),
-          ...(input.assigneeId !== undefined ? { assignee_id: input.assigneeId } : {}),
-        }),
-      }),
+      await apiTransport.request(
+        `/api/work-items/${encodeURIComponent(workItemId)}`,
+        {
+          method: 'PATCH',
+          cache: 'no-store',
+          body: JSON.stringify({
+            ...(input.title !== undefined ? { title: input.title } : {}),
+            ...(input.description !== undefined
+              ? { description: input.description }
+              : {}),
+            ...(input.status !== undefined ? { status: input.status } : {}),
+            ...(input.assigneeId !== undefined
+              ? { assignee_id: input.assigneeId }
+              : {}),
+          }),
+        },
+      ),
     );
   },
 
@@ -168,7 +190,10 @@ export const workOrganizationClient = {
   async listBoards(): Promise<readonly WorkBoardDto[]> {
     const response = parse(
       WorkBoardListResponseSchema,
-      await apiTransport.request('/api/boards', { method: 'GET', cache: 'no-store' }),
+      await apiTransport.request('/api/boards', {
+        method: 'GET',
+        cache: 'no-store',
+      }),
     );
     return response.boards;
   },
@@ -227,11 +252,14 @@ export const workOrganizationClient = {
   ) {
     const response = parse(
       columnResponseSchema,
-      await apiTransport.request(`/api/boards/${encodeURIComponent(boardId)}/columns`, {
-        method: 'POST',
-        cache: 'no-store',
-        body: JSON.stringify(input),
-      }),
+      await apiTransport.request(
+        `/api/boards/${encodeURIComponent(boardId)}/columns`,
+        {
+          method: 'POST',
+          cache: 'no-store',
+          body: JSON.stringify(input),
+        },
+      ),
     );
     return response.column;
   },
@@ -261,19 +289,28 @@ export const workOrganizationClient = {
 
   async placeWorkItem(
     boardId: string,
-    input: { readonly columnId: string; readonly workItemId: string; readonly position?: number },
+    input: {
+      readonly columnId: string;
+      readonly workItemId: string;
+      readonly position?: number;
+    },
   ) {
     const response = parse(
       placementResponseSchema,
-      await apiTransport.request(`/api/boards/${encodeURIComponent(boardId)}/placement`, {
-        method: 'PUT',
-        cache: 'no-store',
-        body: JSON.stringify({
-          column_id: input.columnId,
-          work_item_id: input.workItemId,
-          ...(input.position !== undefined ? { position: input.position } : {}),
-        }),
-      }),
+      await apiTransport.request(
+        `/api/boards/${encodeURIComponent(boardId)}/placement`,
+        {
+          method: 'PUT',
+          cache: 'no-store',
+          body: JSON.stringify({
+            column_id: input.columnId,
+            work_item_id: input.workItemId,
+            ...(input.position !== undefined
+              ? { position: input.position }
+              : {}),
+          }),
+        },
+      ),
     );
     return response.placement;
   },

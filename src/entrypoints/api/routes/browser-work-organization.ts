@@ -33,11 +33,15 @@ import {
 } from './browser-bff-transport.js';
 
 const boardResponseSchema = z.object({ board: WorkBoardSchema }).strict();
-const columnResponseSchema = z.object({ column: WorkBoardColumnSchema }).strict();
+const columnResponseSchema = z
+  .object({ column: WorkBoardColumnSchema })
+  .strict();
 const placementResponseSchema = z
   .object({ placement: WorkBoardPlacementSchema })
   .strict();
-const commentResponseSchema = z.object({ comment: WorkItemCommentSchema }).strict();
+const commentResponseSchema = z
+  .object({ comment: WorkItemCommentSchema })
+  .strict();
 const emptyResponseSchema = z.null();
 
 export function registerBrowserWorkOrganizationRoutes(
@@ -45,14 +49,26 @@ export function registerBrowserWorkOrganizationRoutes(
   config: AppConfig,
 ): void {
   app.get('/api/work-items', async () =>
-    forward(config, '/api/v1/work-items', { method: 'GET' }, WorkItemListResponseSchema),
+    forward(
+      config,
+      '/api/v1/work-items',
+      { method: 'GET' },
+      WorkItemListResponseSchema,
+    ),
   );
   app.post('/api/work-items', async (context) => {
     const parsed = CreateWorkItemRequestSchema.safeParse(
       await context.req.json().catch(() => undefined),
     );
     if (!parsed.success) return invalidRequest();
-    return forwardJson(config, '/api/v1/work-items', 'POST', parsed.data, WorkItemDetailSchema, 201);
+    return forwardJson(
+      config,
+      '/api/v1/work-items',
+      'POST',
+      parsed.data,
+      WorkItemDetailSchema,
+      201,
+    );
   });
   app.get('/api/work-items/:workItemId', async (context) => {
     const workItemId = context.req.param('workItemId');
@@ -122,14 +138,26 @@ export function registerBrowserWorkOrganizationRoutes(
   });
 
   app.get('/api/boards', async () =>
-    forward(config, '/api/v1/boards', { method: 'GET' }, WorkBoardListResponseSchema),
+    forward(
+      config,
+      '/api/v1/boards',
+      { method: 'GET' },
+      WorkBoardListResponseSchema,
+    ),
   );
   app.post('/api/boards', async (context) => {
     const parsed = CreateWorkBoardRequestSchema.safeParse(
       await context.req.json().catch(() => undefined),
     );
     if (!parsed.success) return invalidRequest();
-    return forwardJson(config, '/api/v1/boards', 'POST', parsed.data, boardResponseSchema, 201);
+    return forwardJson(
+      config,
+      '/api/v1/boards',
+      'POST',
+      parsed.data,
+      boardResponseSchema,
+      201,
+    );
   });
   app.get('/api/boards/:boardId', async (context) => {
     const boardId = context.req.param('boardId');
@@ -263,7 +291,12 @@ async function forward(
     });
     if (isUpstreamOversizeResponse(body)) {
       return jsonResponse(
-        { error: { code: 'upstream_response_too_large', message: 'The upstream response was too large.' } },
+        {
+          error: {
+            code: 'upstream_response_too_large',
+            message: 'The upstream response was too large.',
+          },
+        },
         502,
       );
     }
@@ -272,33 +305,60 @@ async function forward(
       return jsonResponse(
         decoded.success
           ? decoded.data
-          : { error: { code: 'upstream_error', message: 'The upstream request failed.' } },
+          : {
+              error: {
+                code: 'upstream_error',
+                message: 'The upstream request failed.',
+              },
+            },
         safeStatus(upstream.status),
       );
     }
     const decoded = successSchema.safeParse(body);
     if (!decoded.success)
       return jsonResponse(
-        { error: { code: 'upstream_decode_failed', message: 'The upstream response did not match the browser contract.' } },
+        {
+          error: {
+            code: 'upstream_decode_failed',
+            message:
+              'The upstream response did not match the browser contract.',
+          },
+        },
         502,
       );
-    if (successStatus === 204) return new Response(null, { status: 204, headers: { 'cache-control': 'no-store' } });
+    if (successStatus === 204)
+      return new Response(null, {
+        status: 204,
+        headers: { 'cache-control': 'no-store' },
+      });
     return jsonResponse(decoded.data, successStatus);
   } catch {
     return jsonResponse(
-      { error: { code: 'browser_gateway_unavailable', message: 'The Agent Server browser gateway is unavailable.' } },
+      {
+        error: {
+          code: 'browser_gateway_unavailable',
+          message: 'The Agent Server browser gateway is unavailable.',
+        },
+      },
       503,
     );
   }
 }
 
 function isUuid(value: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value);
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(
+    value,
+  );
 }
 
 function invalidRequest(): Response {
   return jsonResponse(
-    { error: { code: 'invalid_request', message: 'The browser request is invalid.' } },
+    {
+      error: {
+        code: 'invalid_request',
+        message: 'The browser request is invalid.',
+      },
+    },
     400,
   );
 }

@@ -74,11 +74,7 @@ export interface LinkedWorkSummary {
   readonly workId: string;
   readonly title: string;
   readonly productState:
-    | 'running'
-    | 'needs_you'
-    | 'complete'
-    | 'problem'
-    | 'not_captured';
+    'running' | 'needs_you' | 'complete' | 'problem' | 'not_captured';
   readonly latestWorkRunId: string | null;
   readonly resultSummary: string | null;
 }
@@ -118,7 +114,9 @@ export class WorkBoardColumnNotFoundError extends Error {
 
 export class WorkOrganizationValidationError extends Error {
   public readonly code = 'work_organization_invalid';
-  public constructor(message = 'The requested work-organization change is invalid.') {
+  public constructor(
+    message = 'The requested work-organization change is invalid.',
+  ) {
     super(message);
     this.name = 'WorkOrganizationValidationError';
   }

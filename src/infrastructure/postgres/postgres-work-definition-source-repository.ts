@@ -374,19 +374,57 @@ export class PostgresWorkDefinitionSourceRepository implements WorkDefinitionSou
   public async associateAgentWorkflow(input: {
     readonly tenantId: string;
     readonly workspaceId: string;
+    readonly principalType: string;
+    readonly principalId: string;
     readonly agentDefinitionId: string;
     readonly definitionId: string;
     readonly definitionVersionId: string;
     readonly now: string;
   }): Promise<void> {
+    const owner: WorkDefinitionSourceOwner = {
+      tenantId: input.tenantId,
+      workspaceId: input.workspaceId,
+      principalType: input.principalType,
+      principalId: input.principalId,
+    };
+    const [definition, version, agent] = await Promise.all([
+      this.findDefinition(input.definitionId, owner),
+      this.findPublishedVersion(input.definitionVersionId, owner),
+      this.db.query<{ id: string }>(
+        `SELECT id FROM agent_definitions
+          WHERE id=$1 AND tenant_id=$2 AND workspace_id=$3
+            AND principal_type=$4 AND principal_id=$5
+            AND managed_discriminator='managed_agent_v1'`,
+        [
+          input.agentDefinitionId,
+          input.tenantId,
+          input.workspaceId,
+          input.principalType,
+          input.principalId,
+        ],
+      ),
+    ]);
+    if (
+      !definition ||
+      !version ||
+      version.definitionId !== definition.id ||
+      !agent.rows?.[0]
+    )
+      throw new Error('agent_work_binding_not_found');
+
     await this.db.query(
       `INSERT INTO agent_work_bindings
-       (tenant_id,workspace_id,agent_definition_id,work_definition_id,active_work_definition_version_id,status,created_at,updated_at)
-       VALUES($1,$2,$3,$4,$5,'enabled',$6,$6)
-       ON CONFLICT (tenant_id,workspace_id,agent_definition_id,work_definition_id) DO NOTHING`,
+       (tenant_id,workspace_id,principal_type,principal_id,agent_definition_id,
+        work_definition_id,active_work_definition_version_id,status,created_at,updated_at)
+       VALUES($1,$2,$3,$4,$5,$6,$7,'enabled',$8,$8)
+       ON CONFLICT (tenant_id,workspace_id,principal_type,principal_id,agent_definition_id,work_definition_id)
+       DO UPDATE SET active_work_definition_version_id=EXCLUDED.active_work_definition_version_id,
+                     status='enabled',updated_at=EXCLUDED.updated_at`,
       [
         input.tenantId,
         input.workspaceId,
+        input.principalType,
+        input.principalId,
         input.agentDefinitionId,
         input.definitionId,
         input.definitionVersionId,
@@ -398,15 +436,28 @@ export class PostgresWorkDefinitionSourceRepository implements WorkDefinitionSou
   public async listDefinitionsForAgent(input: {
     readonly tenantId: string;
     readonly workspaceId: string;
+    readonly principalType: string;
+    readonly principalId: string;
     readonly agentDefinitionId: string;
   }): Promise<readonly WorkDefinitionSourceDefinition[]> {
     const result = await this.db.query<DefinitionRow>(
       `SELECT d.${definitionColumns.split(',').join(',d.')}
-         FROM work_definition_source_definitions d
-         JOIN agent_work_bindings a ON a.work_definition_id = d.id
-        WHERE a.tenant_id=$1 AND a.workspace_id=$2 AND a.agent_definition_id=$3 AND a.status='enabled'
+         FROM agent_work_bindings a
+         JOIN work_definition_source_definitions d
+           ON d.id=a.work_definition_id
+          AND d.tenant_id=a.tenant_id AND d.workspace_id=a.workspace_id
+          AND d.principal_type=a.principal_type AND d.principal_id=a.principal_id
+        WHERE a.tenant_id=$1 AND a.workspace_id=$2
+          AND a.principal_type=$3 AND a.principal_id=$4
+          AND a.agent_definition_id=$5 AND a.status='enabled'
         ORDER BY a.created_at ASC`,
-      [input.tenantId, input.workspaceId, input.agentDefinitionId],
+      [
+        input.tenantId,
+        input.workspaceId,
+        input.principalType,
+        input.principalId,
+        input.agentDefinitionId,
+      ],
     );
     return (result.rows ?? []).map(mapDefinition);
   }
@@ -414,16 +465,34 @@ export class PostgresWorkDefinitionSourceRepository implements WorkDefinitionSou
   public async listAgentWorkBindings(input: {
     readonly tenantId: string;
     readonly workspaceId: string;
+    readonly principalType: string;
+    readonly principalId: string;
     readonly agentDefinitionId: string;
   }) {
     const result = await this.db.query<DefinitionRow & VersionRow>(
       `SELECT d.${definitionColumns.split(',').join(',d.')},v.${versionColumns.split(',').join(',v.')}
          FROM agent_work_bindings a
-         JOIN work_definition_source_definitions d ON d.id=a.work_definition_id
-         JOIN work_definition_source_versions v ON v.id=a.active_work_definition_version_id
-        WHERE a.tenant_id=$1 AND a.workspace_id=$2 AND a.agent_definition_id=$3 AND a.status='enabled'
+         JOIN work_definition_source_definitions d
+           ON d.id=a.work_definition_id
+          AND d.tenant_id=a.tenant_id AND d.workspace_id=a.workspace_id
+          AND d.principal_type=a.principal_type AND d.principal_id=a.principal_id
+         JOIN work_definition_source_versions v
+           ON v.id=a.active_work_definition_version_id
+          AND v.definition_id=a.work_definition_id
+          AND v.tenant_id=a.tenant_id AND v.workspace_id=a.workspace_id
+          AND v.principal_type=a.principal_type AND v.principal_id=a.principal_id
+          AND v.status='published'
+        WHERE a.tenant_id=$1 AND a.workspace_id=$2
+          AND a.principal_type=$3 AND a.principal_id=$4
+          AND a.agent_definition_id=$5 AND a.status='enabled'
         ORDER BY a.created_at ASC`,
-      [input.tenantId, input.workspaceId, input.agentDefinitionId],
+      [
+        input.tenantId,
+        input.workspaceId,
+        input.principalType,
+        input.principalId,
+        input.agentDefinitionId,
+      ],
     );
     return (result.rows ?? []).map((row) => ({
       definition: mapDefinition(row),

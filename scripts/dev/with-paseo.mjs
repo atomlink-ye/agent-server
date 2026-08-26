@@ -281,24 +281,30 @@ if (command.length === 0) {
     process.on(signalName, handler);
   }
 
-  paseo = await startPaseo({
-    repositoryRoot,
-    runtimeRoot,
-    port: paseoPort,
-    listenHost: paseoListenHost,
-    environmentVariableNames: paseoEnvironmentNames,
-    onChild: register,
-  });
-  process.stderr.write(
-    `with-paseo phase=paseo-start elapsed_ms=${Date.now() - startedAt}\n`,
-  );
-  if (requestedSignal) {
+  let startupError;
+  try {
+    paseo = await startPaseo({
+      repositoryRoot,
+      runtimeRoot,
+      port: paseoPort,
+      listenHost: paseoListenHost,
+      environmentVariableNames: paseoEnvironmentNames,
+      onChild: register,
+    });
+  } catch (error) {
+    startupError = error;
+  }
+  if (startupError && !requestedSignal) throw startupError;
+  if (startupError || requestedSignal) {
     await stop();
     for (const [signalName, handler] of signalHandlers) {
       process.removeListener(signalName, handler);
     }
     process.exitCode = signalExitCodes[requestedSignal];
   } else {
+    process.stderr.write(
+      `with-paseo phase=paseo-start elapsed_ms=${Date.now() - startedAt}\n`,
+    );
     child = spawn(command[0], command.slice(1), {
       cwd: repositoryRoot,
       env: createApplicationEnvironment({

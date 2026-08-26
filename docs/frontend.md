@@ -79,6 +79,35 @@ The facade must:
 
 Do not put credentials in `VITE_*` environment variables: Vite can embed them into browser assets.
 
+### Surface availability
+
+Not every deployment composes every product surface. When `AGENT_SERVER_PRODUCT_WORK_PLANE` is
+`absent`, the Work and Work Organization HTTP surfaces are never installed, so `/api/works`,
+`/api/work-items` and `/api/boards` have no upstream to forward to.
+
+The facade answers those paths with an explicit availability result rather than letting the
+browser see the generic control-plane 404:
+
+```json
+HTTP 503
+{ "error": { "code": "feature_unavailable", "message": "<browser-safe sentence>", "request_id": "..." } }
+```
+
+Two rules keep this honest:
+
+- **Availability is asserted from configuration at registration time**, from the same config the
+  composition root reads. The facade must never infer availability by inspecting an upstream
+  response — a 404 cannot be told apart from a mistyped URL, and treating one as the other would
+  launder real routing bugs into "feature off".
+- **The browser must distinguish four load states**, never fewer: `loading`, `ready` (which may be
+  legitimately empty), `unavailable`, and `error`. "You have nothing" may only be claimed from a
+  successful load. `unavailable` offers no Retry, because a retry cannot succeed; `error` does.
+  Controls that cannot succeed in the current state are disabled rather than offered.
+
+`ApiTransportError.code` carries the upstream `error.code` to the client, and
+`apps/web/src/api/feature-availability.ts` is the single place that recognises this condition.
+Any client wrapper that re-wraps a transport error must preserve `code`, or the signal is lost.
+
 ## Routing
 
 Current routes are deep links into the same workspace shell:

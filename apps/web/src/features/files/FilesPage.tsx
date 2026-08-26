@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { loadConversations } from '../conversations/conversations-gateway';
 import { loadCoworkers } from '../agents/agents-gateway';
 import { workClient } from '../work/clients/work-client';
+import { isFeatureUnavailable } from '../../api/feature-availability';
 import {
   admitConversationToWork,
   loadContextFile,
@@ -46,22 +47,39 @@ export function FilesPage() {
   const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
+    // Coworkers, conversations and Work are three independent scope
+    // sources: one surface failing must not discard the other two, so each
+    // load runs and reports on its own rather than sharing a Promise.all
+    // that would collapse all three results to the single rejection.
     let active = true;
-    void Promise.all([
-      loadCoworkers(),
-      loadConversations(),
-      workClient.list().then((response) => response.works),
-    ]).then(
-      ([nextCoworkers, nextConversations, nextWorks]) => {
-        if (!active) return;
-        setCoworkers(nextCoworkers);
-        setConversations(nextConversations);
-        setWorks(nextWorks);
-        setTargetWorkId(nextWorks[0]?.id ?? '');
-      },
+    void loadCoworkers().then(
+      (next) => active && setCoworkers(next),
       (reason: unknown) =>
         active &&
         setError(reason instanceof Error ? reason.message : String(reason)),
+    );
+    void loadConversations().then(
+      (next) => active && setConversations(next),
+      (reason: unknown) =>
+        active &&
+        setError(reason instanceof Error ? reason.message : String(reason)),
+    );
+    void workClient.list().then(
+      (response) => {
+        if (!active) return;
+        setWorks(response.works);
+        setTargetWorkId(response.works[0]?.id ?? '');
+      },
+      (reason: unknown) => {
+        if (!active) return;
+        // A workspace that does not compose the Work surface is a
+        // non-error absence of Work-derived scopes: Files itself still
+        // works, it simply offers no Work scopes, so this must not surface
+        // through the error alert. A genuine transport failure of Work
+        // still must, same as coworkers/conversations.
+        if (isFeatureUnavailable(reason)) return;
+        setError(reason instanceof Error ? reason.message : String(reason));
+      },
     );
     return () => {
       active = false;

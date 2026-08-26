@@ -61,9 +61,15 @@ export function WorkPage({
     navigate(`/tasks/${encodeURIComponent(returnWorkItemId)}`);
   };
 
-  const isEmpty = !showNewWork && !selectedWorkId;
   const workUnavailable = workListStatus === 'unavailable';
   const workListFailed = workListStatus === 'error';
+  // Unavailable must win over any requested authoring or selection state: a
+  // workspace that does not compose the Work surface cannot honor "start new
+  // Work" (including the ?new=1 golden-path deep link) or "open this Work",
+  // so the centred placeholder applies whenever Work is unavailable, not
+  // only when nothing else is selected. A transport blip (workListFailed)
+  // must NOT gate authoring the same way, since a retry there can succeed.
+  const isEmpty = workUnavailable || (!showNewWork && !selectedWorkId);
 
   return (
     <>
@@ -97,14 +103,14 @@ export function WorkPage({
               </button>
             </div>
           ) : null}
-          {showNewWork ? (
+          {!workUnavailable && showNewWork ? (
             <NewWork
               originConversationId={returnConversationId}
               initialAgentId={authoringRequest.agentId}
               initialCapabilityVersionId={authoringRequest.capabilityVersionId}
             />
           ) : null}
-          {!showNewWork && selectedWorkId ? (
+          {!workUnavailable && !showNewWork && selectedWorkId ? (
             <WorkDetailPage
               workId={selectedWorkId}
               tab={workTab ?? undefined}

@@ -42,12 +42,17 @@ export function WorkPane({
           <h1>Work</h1>
         </div>
         <div className="work-pane-actions">
-          <span
-            className="pane-count"
-            aria-label={`${works.length} Work items`}
-          >
-            {works.length}
-          </span>
+          {/* The count is only known once a load has actually succeeded. A
+              non-ready state must not assert "0 Work items" alongside a
+              message that says the count could not be determined. */}
+          {status === 'ready' ? (
+            <span
+              className="pane-count"
+              aria-label={`${works.length} Work items`}
+            >
+              {works.length}
+            </span>
+          ) : null}
           <button
             className="pane-refresh"
             type="button"

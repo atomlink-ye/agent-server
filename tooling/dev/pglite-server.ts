@@ -1,4 +1,5 @@
-import { unlink, writeFile } from 'node:fs/promises';
+import { rename, unlink, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -19,7 +20,7 @@ import { repositoryRoot } from './host-native.js';
  * real PostgreSQL semantics visibly outside this development-only server.
  */
 
-type PGliteState = Readonly<{
+export type PGliteState = Readonly<{
   kind: 'agent-server-pglite';
   pid: number;
   host: string;
@@ -28,6 +29,24 @@ type PGliteState = Readonly<{
   url: string;
   dataPath: string;
 }>;
+
+export async function writePGliteState(
+  targetPath: string,
+  state: PGliteState,
+): Promise<void> {
+  const temporaryPath = `${targetPath}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(temporaryPath, `${JSON.stringify(state)}\n`, {
+      encoding: 'utf8',
+      mode: 0o600,
+    });
+    await rename(temporaryPath, targetPath);
+  } finally {
+    await unlink(temporaryPath).catch((error: unknown) => {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    });
+  }
+}
 
 const host = process.env.PGLITE_HOST?.trim() || '127.0.0.1';
 const port = Number.parseInt(process.env.PGLITE_PORT?.trim() || '55432', 10);
@@ -84,10 +103,7 @@ async function start(): Promise<void> {
     url,
     dataPath,
   };
-  await writeFile(statePath, `${JSON.stringify(state)}\n`, {
-    encoding: 'utf8',
-    mode: 0o600,
-  });
+  await writePGliteState(statePath, state);
   process.stdout.write(`host-native PGlite ready at ${url}\n`);
 }
 

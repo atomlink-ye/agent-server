@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { compileCoworkerDraft } from './coworker-authoring.js';
-import { validateAgentPackage } from './validate-agent-package.js';
+import { parseForImport } from './validate-agent-package.js';
 
 const WORK_TOOLS = [
   'agent-server/product-work-create',
@@ -18,9 +18,9 @@ describe('compileCoworkerDraft', () => {
       summary: 'Researches competitors and challenges assumptions.',
       instructions: 'Cite evidence and stay concise.',
     });
-    const parsed = validateAgentPackage(source);
+    const parsed = parseForImport(source);
 
-    expect(parsed.metadata.normalizedName).toBe('maya');
+    expect(parsed.normalizedName).toBe('maya');
     expect(parsed.package.spec.description).toContain('competitors');
     expect(parsed.package.spec.instructions).toContain('Research Analyst');
     expect(parsed.package.spec.instructions).toContain('Cite evidence');
@@ -29,7 +29,9 @@ describe('compileCoworkerDraft', () => {
       modelPolicyRef: 'free-only',
       mode: 'isolated',
     });
-    expect(parsed.package.spec.tools.map((tool) => tool.ref)).toEqual(WORK_TOOLS);
+    expect(parsed.package.spec.tools.map((tool) => tool.ref)).toEqual(
+      WORK_TOOLS,
+    );
     expect(parsed.package.spec.input.schema).toMatchObject({
       type: 'object',
       properties: {},
@@ -44,7 +46,7 @@ describe('compileCoworkerDraft', () => {
       summary: 'Researches markets.',
       tools: ['agent-server/memory-read', 'agent-server/memory-read'],
     });
-    const parsed = validateAgentPackage(source);
+    const parsed = parseForImport(source);
     expect(parsed.package.spec.tools.map((tool) => tool.ref)).toEqual([
       ...WORK_TOOLS,
       'agent-server/memory-read',

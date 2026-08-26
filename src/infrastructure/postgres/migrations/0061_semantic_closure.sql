@@ -133,6 +133,123 @@ END
 $$;
 
 -- ---------------------------------------------------------------------------
+-- 1b. Coworker owner identity: include workspace in convergence and claims.
+-- ---------------------------------------------------------------------------
+
+DROP INDEX IF EXISTS agent_definitions_managed_owner_name_uq;
+CREATE UNIQUE INDEX IF NOT EXISTS agent_definitions_managed_owner_name_uq
+  ON agent_definitions (
+    tenant_id,
+    workspace_id,
+    principal_type,
+    principal_id,
+    normalized_name
+  )
+  WHERE managed_discriminator = 'managed_agent_v1';
+
+-- The historical Agent claim table predates workspace ownership. Infer the
+-- immutable workspace from its completed Definition/Version result before
+-- replacing the key. Incomplete claims cannot be safely assigned to a
+-- workspace, so abort this transactional migration rather than guess.
+ALTER TABLE agent_registry_idempotency
+  ADD COLUMN IF NOT EXISTS workspace_id text NULL;
+
+UPDATE agent_registry_idempotency i
+SET workspace_id = d.workspace_id
+FROM agent_definitions d
+WHERE i.workspace_id IS NULL
+  AND i.definition_id = d.id
+  AND i.tenant_id = d.tenant_id
+  AND i.principal_type = d.principal_type
+  AND i.principal_id = d.principal_id;
+
+UPDATE agent_registry_idempotency i
+SET workspace_id = v.workspace_id
+FROM agent_versions v
+WHERE i.workspace_id IS NULL
+  AND i.version_id = v.id
+  AND i.tenant_id = v.tenant_id
+  AND i.principal_type = v.principal_type
+  AND i.principal_id = v.principal_id;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM agent_registry_idempotency
+    WHERE workspace_id IS NULL
+  ) THEN
+    RAISE EXCEPTION 'Cannot infer workspace for legacy Agent idempotency claim';
+  END IF;
+END
+$$;
+
+ALTER TABLE agent_registry_idempotency
+  ALTER COLUMN workspace_id SET NOT NULL;
+
+ALTER TABLE agent_registry_idempotency
+  DROP CONSTRAINT IF EXISTS agent_registry_idempotency_owner_definition_fk,
+  DROP CONSTRAINT IF EXISTS agent_registry_idempotency_owner_version_fk,
+  DROP CONSTRAINT IF EXISTS agent_registry_idempotency_pkey;
+
+DROP INDEX IF EXISTS agent_definitions_owner_identity_uq;
+DROP INDEX IF EXISTS agent_versions_owner_identity_uq;
+CREATE UNIQUE INDEX IF NOT EXISTS agent_definitions_owner_identity_uq
+  ON agent_definitions (id, tenant_id, workspace_id, principal_type, principal_id);
+CREATE UNIQUE INDEX IF NOT EXISTS agent_versions_owner_identity_uq
+  ON agent_versions (
+    id,
+    definition_id,
+    tenant_id,
+    workspace_id,
+    principal_type,
+    principal_id
+  );
+
+ALTER TABLE agent_registry_idempotency
+  ADD CONSTRAINT agent_registry_idempotency_pkey
+  PRIMARY KEY (
+    operation,
+    tenant_id,
+    workspace_id,
+    principal_type,
+    principal_id,
+    idempotency_key
+  );
+
+ALTER TABLE agent_registry_idempotency
+  ADD CONSTRAINT agent_registry_idempotency_owner_definition_fk
+  FOREIGN KEY (
+    definition_id,
+    tenant_id,
+    workspace_id,
+    principal_type,
+    principal_id
+  ) REFERENCES agent_definitions (
+    id,
+    tenant_id,
+    workspace_id,
+    principal_type,
+    principal_id
+  ),
+  ADD CONSTRAINT agent_registry_idempotency_owner_version_fk
+  FOREIGN KEY (
+    version_id,
+    definition_id,
+    tenant_id,
+    workspace_id,
+    principal_type,
+    principal_id
+  ) REFERENCES agent_versions (
+    id,
+    definition_id,
+    tenant_id,
+    workspace_id,
+    principal_type,
+    principal_id
+  );
+
+-- ---------------------------------------------------------------------------
 -- 2. Agent Work Catalog: one exact Coworker owner + DefinitionVersion lineage.
 -- ---------------------------------------------------------------------------
 

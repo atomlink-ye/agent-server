@@ -119,7 +119,7 @@ export class PostgresAgentRegistry implements AgentRegistry {
         [
           command.definition.id,
           command.owner.tenantId,
-          command.compatibilityWorkspaceId,
+          command.owner.workspaceId,
           command.owner.principalType,
           command.owner.principalId,
           command.definition.displayName,
@@ -175,10 +175,12 @@ export class PostgresAgentRegistry implements AgentRegistry {
       if (!version)
         throw new Error('Managed agent version could not be persisted.');
       await db.query(
-        `UPDATE agent_registry_idempotency SET definition_id=$6, version_id=$7, updated_at=GREATEST(created_at, now())
-           WHERE operation='import' AND tenant_id=$1 AND principal_type=$2 AND principal_id=$3 AND idempotency_key=$4 AND request_fingerprint=$5`,
+        `UPDATE agent_registry_idempotency SET definition_id=$7, version_id=$8, updated_at=GREATEST(created_at, now())
+           WHERE operation='import' AND tenant_id=$1 AND workspace_id=$2
+             AND principal_type=$3 AND principal_id=$4 AND idempotency_key=$5 AND request_fingerprint=$6`,
         [
           command.owner.tenantId,
+          command.owner.workspaceId,
           command.owner.principalType,
           command.owner.principalId,
           command.idempotencyKey,
@@ -259,10 +261,12 @@ export class PostgresAgentRegistry implements AgentRegistry {
         published = result.rows?.[0] ?? row;
       }
       await db.query(
-        `UPDATE agent_registry_idempotency SET definition_id=$6, version_id=$7, updated_at=now()
-          WHERE operation='publish' AND tenant_id=$1 AND principal_type=$2 AND principal_id=$3 AND idempotency_key=$4 AND request_fingerprint=$5`,
+        `UPDATE agent_registry_idempotency SET definition_id=$7, version_id=$8, updated_at=now()
+          WHERE operation='publish' AND tenant_id=$1 AND workspace_id=$2
+            AND principal_type=$3 AND principal_id=$4 AND idempotency_key=$5 AND request_fingerprint=$6`,
         [
           command.owner.tenantId,
+          command.owner.workspaceId,
           command.owner.principalType,
           command.owner.principalId,
           command.idempotencyKey,
@@ -658,11 +662,14 @@ async function claimIdempotency(
   fingerprint: string,
 ): Promise<IdempotencyRow> {
   await db.query(
-    `INSERT INTO agent_registry_idempotency (operation,tenant_id,principal_type,principal_id,idempotency_key,request_fingerprint,created_at,updated_at)
-    VALUES ($1,$2,$3,$4,$5,$6,now(),now()) ON CONFLICT (operation,tenant_id,principal_type,principal_id,idempotency_key) DO NOTHING`,
+    `INSERT INTO agent_registry_idempotency
+      (operation,tenant_id,workspace_id,principal_type,principal_id,idempotency_key,request_fingerprint,created_at,updated_at)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,now(),now())
+    ON CONFLICT (operation,tenant_id,workspace_id,principal_type,principal_id,idempotency_key) DO NOTHING`,
     [
       operation,
       owner.tenantId,
+      owner.workspaceId,
       owner.principalType,
       owner.principalId,
       key,
@@ -670,8 +677,19 @@ async function claimIdempotency(
     ],
   );
   const result = await db.query<IdempotencyRow>(
-    `SELECT request_fingerprint,definition_id,version_id FROM agent_registry_idempotency WHERE operation=$1 AND tenant_id=$2 AND principal_type=$3 AND principal_id=$4 AND idempotency_key=$5 FOR UPDATE`,
-    [operation, owner.tenantId, owner.principalType, owner.principalId, key],
+    `SELECT request_fingerprint,definition_id,version_id
+       FROM agent_registry_idempotency
+      WHERE operation=$1 AND tenant_id=$2 AND workspace_id=$3
+        AND principal_type=$4 AND principal_id=$5 AND idempotency_key=$6
+      FOR UPDATE`,
+    [
+      operation,
+      owner.tenantId,
+      owner.workspaceId,
+      owner.principalType,
+      owner.principalId,
+      key,
+    ],
   );
   if (!result.rows?.[0])
     throw new Error('Idempotency claim could not be persisted.');

@@ -22,6 +22,10 @@ const workerDefinitionA = '41000000-0000-4000-8000-000000000001';
 const workerVersionA = '42000000-0000-4000-8000-000000000001';
 const workerDefinitionB = '41000000-0000-4000-8000-000000000002';
 const workerVersionB = '42000000-0000-4000-8000-000000000002';
+const agentDefinitionA = '22000000-0000-4000-8000-000000000001';
+const agentVersionA = '23000000-0000-4000-8000-000000000001';
+const agentDefinitionB = '22000000-0000-4000-8000-000000000002';
+const agentVersionB = '23000000-0000-4000-8000-000000000002';
 const definitionB = '31000000-0000-4000-8000-000000000002';
 const definitionVersionB = '32000000-0000-4000-8000-000000000002';
 
@@ -212,6 +216,69 @@ describe('0061 semantic owner upgrade', () => {
     expect(claims.rows.map((row) => row.workspace_id)).toEqual([
       workspaceA,
       workspaceB,
+    ]);
+  });
+
+  it('backfills completed Coworker claims and allows same-principal name/key reuse per workspace', async () => {
+    db = new PGlite();
+    await migrateThrough0060(db);
+    await seedWorkspaces(db);
+
+    await db.exec(`
+      INSERT INTO agent_definitions
+        (id,tenant_id,workspace_id,principal_type,principal_id,name,managed_discriminator,normalized_name,created_at,updated_at)
+      VALUES
+        ('${agentDefinitionA}','tenant-a','${workspaceA}','service_account','service-a','Shared Coworker','managed_agent_v1','shared-coworker',now(),now());
+
+      INSERT INTO agent_versions
+        (id,definition_id,tenant_id,workspace_id,principal_type,principal_id,status,name,instructions,managed_discriminator,canonical_package,fingerprint,pattern_metadata,compiler_metadata,policy_snapshot,reference_snapshot,tool_skill_snapshot,validation_report,compiled_package,execution_snapshot,created_at,updated_at,published_at)
+      VALUES
+        ('${agentVersionA}','${agentDefinitionA}','tenant-a','${workspaceA}','service_account','service-a','published','Shared Coworker','Do work','managed_agent_v1','{"kind":"ManagedAgent","spec":{}}','${'a'.repeat(64)}','{}','{}','{}','{}','{}','{}','{}','{}',now(),now(),now());
+
+      INSERT INTO agent_registry_idempotency
+        (operation,tenant_id,principal_type,principal_id,idempotency_key,request_fingerprint,definition_id,version_id,created_at,updated_at)
+      VALUES
+        ('import','tenant-a','service_account','service-a','shared-key','request-a','${agentDefinitionA}','${agentVersionA}',now(),now());
+    `);
+
+    await db.exec(closureSql());
+
+    const upgraded = await db.query<{ workspace_id: string }>(
+      `SELECT workspace_id
+         FROM agent_registry_idempotency
+        WHERE idempotency_key='shared-key'`,
+    );
+    expect(upgraded.rows[0]?.workspace_id).toBe(workspaceA);
+
+    await db.exec(`
+      INSERT INTO agent_definitions
+        (id,tenant_id,workspace_id,principal_type,principal_id,name,managed_discriminator,normalized_name,created_at,updated_at)
+      VALUES
+        ('${agentDefinitionB}','tenant-a','${workspaceB}','service_account','service-a','Shared Coworker','managed_agent_v1','shared-coworker',now(),now());
+
+      INSERT INTO agent_versions
+        (id,definition_id,tenant_id,workspace_id,principal_type,principal_id,status,name,instructions,managed_discriminator,canonical_package,fingerprint,pattern_metadata,compiler_metadata,policy_snapshot,reference_snapshot,tool_skill_snapshot,validation_report,compiled_package,execution_snapshot,created_at,updated_at,published_at)
+      VALUES
+        ('${agentVersionB}','${agentDefinitionB}','tenant-a','${workspaceB}','service_account','service-a','published','Shared Coworker','Do work','managed_agent_v1','{"kind":"ManagedAgent","spec":{}}','${'b'.repeat(64)}','{}','{}','{}','{}','{}','{}','{}','{}',now(),now(),now());
+
+      INSERT INTO agent_registry_idempotency
+        (operation,tenant_id,workspace_id,principal_type,principal_id,idempotency_key,request_fingerprint,definition_id,version_id,created_at,updated_at)
+      VALUES
+        ('import','tenant-a','${workspaceB}','service_account','service-a','shared-key','request-b','${agentDefinitionB}','${agentVersionB}',now(),now());
+    `);
+
+    const claims = await db.query<{
+      workspace_id: string;
+      request_fingerprint: string;
+    }>(
+      `SELECT workspace_id,request_fingerprint
+         FROM agent_registry_idempotency
+        WHERE idempotency_key='shared-key'
+        ORDER BY workspace_id`,
+    );
+    expect(claims.rows).toEqual([
+      { workspace_id: workspaceA, request_fingerprint: 'request-a' },
+      { workspace_id: workspaceB, request_fingerprint: 'request-b' },
     ]);
   });
 

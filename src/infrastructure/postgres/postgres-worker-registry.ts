@@ -3,8 +3,10 @@ import type {
   PublishWorkerAtomicCommand,
   WorkerRegistry,
 } from '../../application/ports/worker-registry.js';
-import { IdempotencyConflictError } from '../../application/agents/errors.js';
-import { WorkerNotFoundError } from '../../application/workers/errors.js';
+import {
+  WorkerIdempotencyConflictError,
+  WorkerNotFoundError,
+} from '../../application/workers/errors.js';
 import type { WorkerDefinition } from '../../domain/workers/worker-definition.js';
 import type { WorkerOwner } from '../../domain/workers/worker-owner.js';
 import {
@@ -88,7 +90,7 @@ export class PostgresWorkerRegistry implements WorkerRegistry {
         command.requestFingerprint,
       );
       if (claim.request_fingerprint !== command.requestFingerprint)
-        throw new IdempotencyConflictError();
+        throw new WorkerIdempotencyConflictError();
       if (claim.definition_id && claim.version_id) {
         const replay = await loadResult(
           db,
@@ -213,7 +215,7 @@ export class PostgresWorkerRegistry implements WorkerRegistry {
         command.requestFingerprint,
       );
       if (claim.request_fingerprint !== command.requestFingerprint)
-        throw new IdempotencyConflictError();
+        throw new WorkerIdempotencyConflictError();
       if (claim.version_id) {
         const row = await loadVersion(
           db,

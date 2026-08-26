@@ -26,6 +26,8 @@ import type { ApiEnvironment } from '../entrypoints/api/http-types.js';
 import { registerAgentRoutes } from '../entrypoints/api/routes/agents.js';
 import { registerWorkerRoutes } from '../entrypoints/api/routes/workers.js';
 import { registerAgentProfileRoute } from '../entrypoints/api/routes/agent-profile.js';
+import { registerAgentWorkCatalogRoute } from '../entrypoints/api/routes/agent-work-catalog.js';
+import { registerCoworkerAuthoringRoute } from '../entrypoints/api/routes/coworker-authoring.js';
 import { registerEnvironmentRoutes } from '../entrypoints/api/routes/environments.js';
 import { registerProductWorkDefinitionRoutes } from '../entrypoints/api/routes/product-work-definitions.js';
 import { registerTeamRoutes } from '../entrypoints/api/routes/teams.js';
@@ -104,8 +106,6 @@ export async function createResourceModule(
   );
   const skillCatalog = new LocalSkillCatalog(options.config.skillRegistryRoot);
 
-  // The managed Agent registry is the only production Agent source. The legacy
-  // invokable repository remains solely for Team compatibility.
   const agentResolutionApi = new ResolveAgentVersion(
     agentRegistry,
     skillCatalog,
@@ -206,11 +206,24 @@ export async function createResourceModule(
           ? { coworkerProvisioning: configuredCoworkerProvisioning }
           : {}),
       });
+      registerCoworkerAuthoringRoute(app, {
+        config,
+        agentRegistry,
+        ...(configuredCoworkerProvisioning
+          ? { coworkerProvisioning: configuredCoworkerProvisioning }
+          : {}),
+      });
+      registerAgentWorkCatalogRoute(app, {
+        config,
+        agents: agentRegistry,
+        definitions: workDefinitionSources,
+      });
       registerWorkerRoutes(app, { config, workerRegistry });
       registerAgentProfileRoute(app, {
         config,
         agents: agentRegistry,
         resolution: agentResolutionApi,
+        definitions: workDefinitionSources,
       });
       registerTeamRoutes(app, {
         config,
@@ -225,7 +238,6 @@ export async function createResourceModule(
 
 export type ResourceCapabilities = ResourceModule;
 
-/** Creates the resource capabilities shared by the application graph. */
 export function createResourceCapabilities(
   options: CreateResourceModuleOptions,
 ): Promise<ResourceCapabilities> {

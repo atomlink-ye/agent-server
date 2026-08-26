@@ -21,6 +21,7 @@ import type {
 import { ApiTransportError } from '@/api/transport';
 
 type StartState = 'idle' | 'loading' | 'creating' | 'starting' | 'error';
+type ErrorKind = 'validation' | 'load' | 'create' | 'start' | null;
 type AuthoringState =
   'idle' | 'validating' | 'valid' | 'applying' | 'applied' | 'error';
 
@@ -47,6 +48,7 @@ export function NewWork({
   const [title, setTitle] = useState('');
   const [values, setValues] = useState<Record<string, unknown>>({});
   const [state, setState] = useState<StartState>('loading');
+  const [errorKind, setErrorKind] = useState<ErrorKind>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [selectionNotice, setSelectionNotice] = useState<string | null>(null);
   const [createdWorkId, setCreatedWorkId] = useState<string | null>(null);
@@ -83,6 +85,7 @@ export function NewWork({
       (reason: unknown) => {
         if (!active) return;
         setState('error');
+        setErrorKind('load');
         setMessage('Coworkers could not be loaded. Try again.');
       },
     );
@@ -128,6 +131,7 @@ export function NewWork({
       (reason: unknown) => {
         if (!active) return;
         setState('error');
+        setErrorKind('load');
         setMessage('This Coworker could not be loaded. Try again.');
       },
     );
@@ -149,6 +153,7 @@ export function NewWork({
     setCreatedWorkId(null);
     setMessage(null);
     setInvalidField(null);
+    setErrorKind(null);
     if (capability) {
       setSelectionNotice(null);
       setTitle(humanize(capability.name));
@@ -166,6 +171,7 @@ export function NewWork({
 
   function retryLoad(): void {
     setMessage(null);
+    setErrorKind(null);
     setSelectionNotice(null);
     setRosterAttempt((value) => value + 1);
     setProfileAttempt((value) => value + 1);
@@ -176,11 +182,13 @@ export function NewWork({
     const validation = validateFriendlyInput(capability, values, title);
     if (validation) {
       setState('error');
+      setErrorKind('validation');
       setInvalidField(validation.field);
       setMessage(validation.message);
       return;
     }
     setState('creating');
+    setErrorKind(null);
     setMessage('Creating the Work record…');
     setCreatedWorkId(null);
     let workId: string;
@@ -194,6 +202,7 @@ export function NewWork({
       setCreatedWorkId(workId);
     } catch (reason) {
       setState('error');
+      setErrorKind('create');
       setMessage(
         `Work was not created. ${reason instanceof Error ? reason.message : String(reason)}`,
       );
@@ -206,6 +215,7 @@ export function NewWork({
       await startRun(workId);
     } catch (reason) {
       setState('error');
+      setErrorKind('start');
       setMessage(
         `The Work was created, but its Run did not start. ${reason instanceof Error ? reason.message : String(reason)}`,
       );
@@ -417,7 +427,7 @@ export function NewWork({
                   </button>
                 </div>
               ) : null}
-              {state === 'error' && !createdWorkId && capability ? (
+              {state === 'error' && errorKind === 'create' && capability ? (
                 <div className="new-work-form__recovery">
                   <button type="button" onClick={() => void startWork()}>
                     Retry Work creation

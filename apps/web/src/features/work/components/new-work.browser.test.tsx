@@ -166,6 +166,7 @@ it('blocks an unselected required boolean, then starts Run in the same turn afte
     expect(host.textContent).toContain(
       'Complete the required input: Include Private.',
     );
+    expect(host.textContent).not.toContain('Retry Work creation');
     expect(document.activeElement).toBe(choice);
     expect(requests.some((request) => request.input === '/api/works')).toBe(
       false,

@@ -240,7 +240,7 @@ export function CapabilityBuilder({
       setPlan(nextPlan);
       setStatus('ready');
       setMessage(
-        'Ready to save. The preview below is resolved by the canonical WorkDefinition planner.',
+        'Ready to save. The preview below shows the resolved plan for this Capability.',
       );
       return { source, plan: nextPlan };
     } catch (reason) {
@@ -251,7 +251,7 @@ export function CapabilityBuilder({
       setStatus('error');
       setMessage(
         nextDiagnostics.length
-          ? 'Fix the highlighted Definition inputs before saving.'
+          ? 'Fix the highlighted Capability details before saving.'
           : reason instanceof Error
             ? reason.message
             : String(reason),
@@ -303,8 +303,8 @@ export function CapabilityBuilder({
         <span className="eyebrow">Teach a capability</span>
         <h1>What can {agent.displayName} formally do?</h1>
         <p>
-          A Capability is a reusable WorkDefinition. Workers remain execution
-          details behind this builder.
+          A Capability is a reusable way for this Coworker to complete a formal
+          kind of Work. The execution details stay behind this builder.
         </p>
       </header>
 
@@ -442,7 +442,7 @@ export function CapabilityBuilder({
         <div className="agents-section-heading">
           <div>
             <h2>Inputs</h2>
-            <p>These fields become the typed Work form.</p>
+            <p>These fields become the questions shown when starting Work.</p>
           </div>
           <button
             type="button"
@@ -572,7 +572,7 @@ export function CapabilityBuilder({
         <div className="agents-section-heading">
           <div>
             <h2>Preview</h2>
-            <p>Validate and resolve the real execution plan before saving.</p>
+            <p>Check how this Capability will work before saving.</p>
           </div>
           <button
             type="button"
@@ -656,8 +656,7 @@ function PlanPreview({
         <span className="eyebrow">Participants</span>
         {plan.resolved.participants.map((participant) => (
           <p key={`${participant.role}:${participant.name}`}>
-            <strong>{participant.name}</strong> · {participant.role} ·{' '}
-            {participant.source}
+            <strong>{participant.name}</strong> · {participant.role}
           </p>
         ))}
       </div>

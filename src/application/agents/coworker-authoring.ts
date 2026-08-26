@@ -27,6 +27,16 @@ const DEFAULT_COWORKER_WORK_TOOLS = Object.freeze([
 
 /** Friendly authoring projected onto the canonical immutable Agent package. */
 export function compileCoworkerDraft(draft: CoworkerAuthoringDraft): string {
+  if (!draft.name.trim()) throw new Error('Give this Coworker a name.');
+  if (!draft.role.trim()) throw new Error('Give this Coworker a role.');
+  if (!draft.summary.trim())
+    throw new Error('Describe what this Coworker should help with.');
+  if (draft.name.trim().length > 120 || draft.role.trim().length > 120)
+    throw new Error('Coworker name and role must be 120 characters or fewer.');
+  if (draft.summary.trim().length > 2_000)
+    throw new Error('Coworker summary must be 2,000 characters or fewer.');
+  if ((draft.instructions?.trim().length ?? 0) > 16_384)
+    throw new Error('Working style must be 16,384 characters or fewer.');
   const identityInstruction = `You are ${draft.name.trim()}, ${draft.role.trim()}. ${draft.summary.trim()}`;
   const instructions = draft.instructions?.trim()
     ? `${identityInstruction}\n\nWorking style:\n${draft.instructions.trim()}`

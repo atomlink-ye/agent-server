@@ -75,6 +75,53 @@ export function compileCapabilityDraft(
   );
   if (new Set(inputKeys).size !== inputKeys.length)
     throw new Error('Input field names must be unique.');
+  for (const input of draft.inputs) {
+    if (!input.label.trim()) throw new Error('Every input needs a label.');
+    if (
+      input.type === 'select' &&
+      !(input.choices ?? []).some((choice) => choice.trim())
+    )
+      throw new Error(`${input.label} needs at least one choice.`);
+    if (
+      input.type === 'text' &&
+      (input.minLength !== undefined || input.maxLength !== undefined)
+    ) {
+      if (
+        input.minLength !== undefined &&
+        (!Number.isInteger(input.minLength) || input.minLength < 0)
+      )
+        throw new Error(
+          `${input.label} needs a non-negative whole-number minimum length.`,
+        );
+      if (
+        input.maxLength !== undefined &&
+        (!Number.isInteger(input.maxLength) || input.maxLength < 0)
+      )
+        throw new Error(
+          `${input.label} needs a non-negative whole-number maximum length.`,
+        );
+      if (
+        input.minLength !== undefined &&
+        input.maxLength !== undefined &&
+        input.minLength > input.maxLength
+      )
+        throw new Error(
+          `${input.label} minimum length cannot exceed its maximum.`,
+        );
+    }
+    if (input.type === 'number' || input.type === 'integer') {
+      if (input.minimum !== undefined && !Number.isFinite(input.minimum))
+        throw new Error(`${input.label} has an invalid minimum.`);
+      if (input.maximum !== undefined && !Number.isFinite(input.maximum))
+        throw new Error(`${input.label} has an invalid maximum.`);
+      if (
+        input.minimum !== undefined &&
+        input.maximum !== undefined &&
+        input.minimum > input.maximum
+      )
+        throw new Error(`${input.label} minimum cannot exceed its maximum.`);
+    }
+  }
 
   const environment = managedEnvironmentSource(`${normalizedName}-environment`);
   const lines = [

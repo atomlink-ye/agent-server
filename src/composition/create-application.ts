@@ -24,6 +24,7 @@ import {
   createWorkCapabilities,
   createWorkExecutionFacts,
 } from './create-work-capabilities.js';
+import { createWorkOrganizationCapabilities } from './create-work-organization-capabilities.js';
 import { createWorkers } from './create-workers.js';
 import type { FileStore } from '../application/ports/file-store.js';
 import type { RuntimeExecutionProvider } from '../application/ports/runtime-execution-provider.js';
@@ -136,15 +137,18 @@ export async function createApplication(
     teamTools: { contextResolver: teamToolContextResolver },
   });
   const runtimeCapabilities = createConfiguredRuntimeCapabilities(config);
+  const workExecutionFacts = productWorkEnabled
+    ? createWorkExecutionFacts(pool)
+    : null;
   const { workModule, workChatWorker, conversationWorkLinks } =
     createWorkCapabilities({
       database: pool,
       definitions: resourceModule.definitionReadApi,
       definitionResolution: resourceModule.workDefinitionResolution,
-      ...(productWorkEnabled
+      ...(productWorkEnabled && workExecutionFacts
         ? {
             execution: createProductWorkExecutionAdmission(invokeTask),
-            executionFacts: createWorkExecutionFacts(pool),
+            executionFacts: workExecutionFacts,
             productWorkEnabled: true as const,
           }
         : { productWorkEnabled: false as const }),
@@ -155,6 +159,16 @@ export async function createApplication(
       leaseMs: leaseDurationMs,
       logger,
     });
+  const workOrganizationModule =
+    productWorkEnabled && workExecutionFacts
+      ? createWorkOrganizationCapabilities({
+          database: pool,
+          definitions: resourceModule.definitionReadApi,
+          definitionResolution: resourceModule.workDefinitionResolution,
+          executionFacts: workExecutionFacts,
+          ...(directChatEnabled && conversations ? { conversations } : {}),
+        })
+      : undefined;
   const runtimeToolCatalog = createRuntimeToolCatalog({
     memory: memoryModule.contributeRuntime,
     collaboration: {
@@ -270,6 +284,7 @@ export async function createApplication(
     memory: memoryModule,
     resources: resourceModule,
     ...(workModule ? { workModule } : {}),
+    ...(workOrganizationModule ? { workOrganizationModule } : {}),
     channels: channelComposition,
     ...(chatCapabilities.chatWorker
       ? { chatWorker: chatCapabilities.chatWorker }

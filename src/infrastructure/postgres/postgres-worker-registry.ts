@@ -3,10 +3,8 @@ import type {
   PublishWorkerAtomicCommand,
   WorkerRegistry,
 } from '../../application/ports/worker-registry.js';
-import {
-  IdempotencyConflictError,
-  AgentNotFoundError,
-} from '../../application/agents/errors.js';
+import { IdempotencyConflictError } from '../../application/agents/errors.js';
+import { WorkerNotFoundError } from '../../application/workers/errors.js';
 import type { WorkerDefinition } from '../../domain/workers/worker-definition.js';
 import type { WorkerOwner } from '../../domain/workers/worker-owner.js';
 import {
@@ -125,10 +123,11 @@ export class PostgresWorkerRegistry implements WorkerRegistry {
         (
           await db.query<DefinitionRow>(
             `SELECT * FROM worker_definitions
-             WHERE tenant_id=$1 AND principal_type=$2 AND principal_id=$3
-               AND normalized_name=$4 FOR UPDATE`,
+             WHERE tenant_id=$1 AND workspace_id=$2 AND principal_type=$3 AND principal_id=$4
+               AND normalized_name=$5 FOR UPDATE`,
             [
               command.owner.tenantId,
+              command.owner.workspaceId,
               command.owner.principalType,
               command.owner.principalId,
               command.normalizedName,
@@ -176,11 +175,12 @@ export class PostgresWorkerRegistry implements WorkerRegistry {
 
       await db.query(
         `UPDATE worker_registry_idempotency
-            SET definition_id=$6,version_id=$7,updated_at=GREATEST(created_at,now())
-          WHERE operation='import' AND tenant_id=$1 AND principal_type=$2
-            AND principal_id=$3 AND idempotency_key=$4 AND request_fingerprint=$5`,
+            SET definition_id=$7,version_id=$8,updated_at=GREATEST(created_at,now())
+          WHERE operation='import' AND tenant_id=$1 AND workspace_id=$2 AND principal_type=$3
+            AND principal_id=$4 AND idempotency_key=$5 AND request_fingerprint=$6`,
         [
           command.owner.tenantId,
+          command.owner.workspaceId,
           command.owner.principalType,
           command.owner.principalId,
           command.idempotencyKey,
@@ -221,7 +221,7 @@ export class PostgresWorkerRegistry implements WorkerRegistry {
           claim.version_id,
           false,
         );
-        if (!row) throw new AgentNotFoundError();
+        if (!row) throw new WorkerNotFoundError();
         return mapVersion(row);
       }
       const result = await db.query<VersionRow>(
@@ -237,7 +237,7 @@ export class PostgresWorkerRegistry implements WorkerRegistry {
         ],
       );
       const row = result.rows?.[0];
-      if (!row) throw new AgentNotFoundError();
+      if (!row) throw new WorkerNotFoundError();
       const published =
         row.status === 'draft'
           ? ((
@@ -251,11 +251,12 @@ export class PostgresWorkerRegistry implements WorkerRegistry {
             ).rows?.[0] ?? row)
           : row;
       await db.query(
-        `UPDATE worker_registry_idempotency SET definition_id=$6,version_id=$7,updated_at=now()
-          WHERE operation='publish' AND tenant_id=$1 AND principal_type=$2
-            AND principal_id=$3 AND idempotency_key=$4 AND request_fingerprint=$5`,
+        `UPDATE worker_registry_idempotency SET definition_id=$7,version_id=$8,updated_at=now()
+          WHERE operation='publish' AND tenant_id=$1 AND workspace_id=$2 AND principal_type=$3
+            AND principal_id=$4 AND idempotency_key=$5 AND request_fingerprint=$6`,
         [
           command.owner.tenantId,
+          command.owner.workspaceId,
           command.owner.principalType,
           command.owner.principalId,
           command.idempotencyKey,
@@ -363,11 +364,12 @@ async function claimIdempotency(
 ): Promise<IdempotencyRow> {
   await db.query(
     `INSERT INTO worker_registry_idempotency
-      (operation,tenant_id,principal_type,principal_id,idempotency_key,request_fingerprint,created_at,updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,now(),now()) ON CONFLICT DO NOTHING`,
+      (operation,tenant_id,workspace_id,principal_type,principal_id,idempotency_key,request_fingerprint,created_at,updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,now(),now()) ON CONFLICT DO NOTHING`,
     [
       operation,
       owner.tenantId,
+      owner.workspaceId,
       owner.principalType,
       owner.principalId,
       key,
@@ -376,9 +378,16 @@ async function claimIdempotency(
   );
   const result = await db.query<IdempotencyRow>(
     `SELECT request_fingerprint,definition_id,version_id FROM worker_registry_idempotency
-      WHERE operation=$1 AND tenant_id=$2 AND principal_type=$3 AND principal_id=$4
-        AND idempotency_key=$5 FOR UPDATE`,
-    [operation, owner.tenantId, owner.principalType, owner.principalId, key],
+      WHERE operation=$1 AND tenant_id=$2 AND workspace_id=$3 AND principal_type=$4 AND principal_id=$5
+        AND idempotency_key=$6 FOR UPDATE`,
+    [
+      operation,
+      owner.tenantId,
+      owner.workspaceId,
+      owner.principalType,
+      owner.principalId,
+      key,
+    ],
   );
   if (!result.rows?.[0])
     throw new Error('Worker idempotency claim could not be persisted.');
@@ -414,7 +423,7 @@ async function loadResult(
     ),
   ]);
   if (!definition.rows?.[0] || !version.rows?.[0])
-    throw new AgentNotFoundError();
+    throw new WorkerNotFoundError();
   return {
     definition: mapDefinition(definition.rows[0]),
     version: mapVersion(version.rows[0]),

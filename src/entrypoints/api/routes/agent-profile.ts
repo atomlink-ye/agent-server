@@ -5,12 +5,14 @@ import type {
   ManagedAgentDefinitionRead,
 } from '../../../application/ports/agent-registry.js';
 import type { AgentResolutionApi } from '../../../application/ports/agent-resolution-api.js';
+import type { WorkDefinitionSourceRepository } from '../../../application/ports/work-definition-source-repository.js';
 import { ServiceAccountAuthenticator } from '../../../application/control-plane/service-account-authenticator.js';
 import {
   AgentCoworkerProfileResponseSchema,
   AgentIdSchema,
 } from '../../../contracts/agents.js';
 import { HttpError } from '../../../contracts/http.js';
+import { emptyWorkInputSchema } from '../../../domain/work/work-input-schema.js';
 import type { ApiEnvironment } from '../http-types.js';
 import type { AppConfig } from '../../../shared/config.js';
 import { getAuthenticatedAccessContext } from '../access-context.js';
@@ -25,6 +27,10 @@ export function registerAgentProfileRoute(
       'listManagedDefinitionsByTenant'
     >;
     readonly resolution: AgentResolutionApi;
+    readonly definitions?: Pick<
+      WorkDefinitionSourceRepository,
+      'listAgentWorkBindings'
+    >;
   },
 ): void {
   const auth = requireServiceAccountAccess(
@@ -63,6 +69,14 @@ export function registerAgentProfileRoute(
         'The active Agent version cannot be resolved.',
       );
 
+    const bindings = dependencies.definitions?.listAgentWorkBindings
+      ? await dependencies.definitions.listAgentWorkBindings({
+          tenantId: definition.tenantId,
+          workspaceId: definition.workspaceId,
+          agentDefinitionId: definition.id,
+        })
+      : [];
+
     return c.json(
       AgentCoworkerProfileResponseSchema.parse({
         agent: {
@@ -86,6 +100,13 @@ export function registerAgentProfileRoute(
           tools: [...resolved.toolRefs].slice(0, 32),
           skills: resolved.skills.map((skill) => skill.ref).slice(0, 32),
         },
+        work_catalog: bindings.slice(0, 100).map(({ definition: work, version }) => ({
+          definition_id: work.id,
+          definition_version_id: version.id,
+          name: work.name,
+          description: work.description,
+          input_schema: version.source.inputSchema ?? emptyWorkInputSchema(),
+        })),
       }),
     );
   });

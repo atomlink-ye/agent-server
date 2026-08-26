@@ -76,7 +76,7 @@ async function postgresChecks(
       ],
     };
   }
-  const backend = await identifyDatabaseBackend(connectionString);
+  const backend = await identifyDatabaseBackend(connectionString, environment);
   const pool = new Pool({
     connectionString,
     max: 1,

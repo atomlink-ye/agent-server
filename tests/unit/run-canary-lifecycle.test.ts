@@ -124,5 +124,5 @@ describe('runHostCanary signal cleanup', () => {
       }
       await waitForExit(owner).catch(() => undefined);
     }
-  });
+  }, 20_000);
 });

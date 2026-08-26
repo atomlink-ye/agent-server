@@ -31,6 +31,7 @@ import { registerCollaborationRunRoutes } from './routes/collaboration-runs.js';
 import { ProjectAgenticTeam } from '../../application/teams/project-agentic-team.js';
 import type { TeamDriver } from '../../application/teams/team-driver.js';
 import type { WorkModule } from '../../composition/create-work-capabilities.js';
+import type { WorkOrganizationModule } from '../../composition/create-work-organization-capabilities.js';
 import type { MemoryModule } from '../../composition/create-memory-capabilities.js';
 import type { ResourceModule } from '../../composition/create-resource-capabilities.js';
 import type { ConversationRepository } from '../../application/ports/conversation-repository.js';
@@ -61,6 +62,7 @@ export interface AppDependencies {
   readonly cancelTask: CancelTask;
   readonly version?: string;
   readonly workModule?: Pick<WorkModule, 'installHttp'>;
+  readonly workOrganizationModule?: Pick<WorkOrganizationModule, 'installHttp'>;
   readonly memoryModule: Pick<MemoryModule, 'installHttp'>;
   readonly resourceModule: Pick<
     ResourceModule,
@@ -103,11 +105,13 @@ export function createHttpApp(
   });
   registerRunRoutes(app, dependencies);
   registerTaskRoutes(app, dependencies);
-  if (productWorkPlane !== 'absent')
+  if (productWorkPlane !== 'absent') {
     dependencies.workModule?.installHttp(app, dependencies.config, {
       teamDriver: dependencies.teamDriver,
       teamExecutions: dependencies.teamExecutions,
     });
+    dependencies.workOrganizationModule?.installHttp(app, dependencies.config);
+  }
   dependencies.memoryModule.installHttp(app, dependencies.config);
   dependencies.resourceModule.installHttp(app, dependencies.config);
   registerTeamRunRoutes(app, {

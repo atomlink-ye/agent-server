@@ -2,9 +2,7 @@ import type { Hono } from 'hono';
 
 import type { WorkOrganizationService } from '../../../application/work-organization/work-organization-service.js';
 import { ServiceAccountAuthenticator } from '../../../application/control-plane/service-account-authenticator.js';
-import {
-  WorkDefinitionValidationError,
-} from '../../../application/work/work-identity-api.js';
+import { WorkDefinitionValidationError } from '../../../application/work/work-identity-api.js';
 import {
   WorkIdentityConflictError,
   WorkNotFoundError,
@@ -81,82 +79,131 @@ export function registerWorkOrganizationRoutes(
     const parsed = CreateWorkItemRequestSchema.safeParse(
       await readBoundedJson(context.req.raw, 96 * 1024),
     );
-    if (!parsed.success) throw invalidRequest('A valid WorkItem request is required.');
+    if (!parsed.success)
+      throw invalidRequest('A valid WorkItem request is required.');
     const access = getAuthenticatedAccessContext(context);
     try {
       const detail = await dependencies.service.createWorkItem({
         accessContext: access,
         title: parsed.data.title,
-        description: parsed.data.description,
-        assigneeId: parsed.data.assignee_id,
-        sourceConversationId: parsed.data.source_conversation_id,
-        sourceMessageId: parsed.data.source_message_id,
-        boardId: parsed.data.board_id,
-        columnId: parsed.data.column_id,
-        position: parsed.data.position,
+        ...(parsed.data.description !== undefined
+          ? { description: parsed.data.description }
+          : {}),
+        ...(parsed.data.assignee_id !== undefined
+          ? { assigneeId: parsed.data.assignee_id }
+          : {}),
+        ...(parsed.data.source_conversation_id !== undefined
+          ? { sourceConversationId: parsed.data.source_conversation_id }
+          : {}),
+        ...(parsed.data.source_message_id !== undefined
+          ? { sourceMessageId: parsed.data.source_message_id }
+          : {}),
+        ...(parsed.data.board_id !== undefined
+          ? { boardId: parsed.data.board_id }
+          : {}),
+        ...(parsed.data.column_id !== undefined
+          ? { columnId: parsed.data.column_id }
+          : {}),
+        ...(parsed.data.position !== undefined
+          ? { position: parsed.data.position }
+          : {}),
       });
-      return context.json(WorkItemDetailSchema.parse(toWorkItemDetailResponse(detail)), 201);
+      return context.json(
+        WorkItemDetailSchema.parse(toWorkItemDetailResponse(detail)),
+        201,
+      );
     } catch (error) {
       throw mapWorkOrganizationError(error);
     }
   });
 
   app.get('/api/v1/work-items/:workItemId', async (context) => {
-    const workItemId = requireUuid(context.req.param('workItemId'), 'workItemId');
+    const workItemId = requireUuid(
+      context.req.param('workItemId'),
+      'workItemId',
+    );
     try {
       const detail = await dependencies.service.getWorkItem(
         getAuthenticatedAccessContext(context),
         workItemId,
       );
-      return context.json(WorkItemDetailSchema.parse(toWorkItemDetailResponse(detail)), 200);
+      return context.json(
+        WorkItemDetailSchema.parse(toWorkItemDetailResponse(detail)),
+        200,
+      );
     } catch (error) {
       throw mapWorkOrganizationError(error);
     }
   });
 
   app.patch('/api/v1/work-items/:workItemId', async (context) => {
-    const workItemId = requireUuid(context.req.param('workItemId'), 'workItemId');
+    const workItemId = requireUuid(
+      context.req.param('workItemId'),
+      'workItemId',
+    );
     const parsed = UpdateWorkItemRequestSchema.safeParse(
       await readBoundedJson(context.req.raw, 96 * 1024),
     );
-    if (!parsed.success) throw invalidRequest('A valid WorkItem update is required.');
+    if (!parsed.success)
+      throw invalidRequest('A valid WorkItem update is required.');
     try {
       const detail = await dependencies.service.updateWorkItem({
         accessContext: getAuthenticatedAccessContext(context),
         workItemId,
-        title: parsed.data.title,
-        description: parsed.data.description,
-        status: parsed.data.status,
-        assigneeId: parsed.data.assignee_id,
+        ...(parsed.data.title !== undefined
+          ? { title: parsed.data.title }
+          : {}),
+        ...(parsed.data.description !== undefined
+          ? { description: parsed.data.description }
+          : {}),
+        ...(parsed.data.status !== undefined
+          ? { status: parsed.data.status }
+          : {}),
+        ...(parsed.data.assignee_id !== undefined
+          ? { assigneeId: parsed.data.assignee_id }
+          : {}),
       });
-      return context.json(WorkItemDetailSchema.parse(toWorkItemDetailResponse(detail)), 200);
+      return context.json(
+        WorkItemDetailSchema.parse(toWorkItemDetailResponse(detail)),
+        200,
+      );
     } catch (error) {
       throw mapWorkOrganizationError(error);
     }
   });
 
   app.post('/api/v1/work-items/:workItemId/promote', async (context) => {
-    const workItemId = requireUuid(context.req.param('workItemId'), 'workItemId');
+    const workItemId = requireUuid(
+      context.req.param('workItemId'),
+      'workItemId',
+    );
     const parsed = PromoteWorkItemRequestSchema.safeParse(
       await readBoundedJson(context.req.raw, 64 * 1024),
     );
-    if (!parsed.success) throw invalidRequest('A valid Work promotion request is required.');
+    if (!parsed.success)
+      throw invalidRequest('A valid Work promotion request is required.');
     try {
       const detail = await dependencies.service.promoteWorkItem({
         accessContext: getAuthenticatedAccessContext(context),
         workItemId,
         definitionId: parsed.data.definition_id,
         definitionVersionId: parsed.data.definition_version_id,
-        title: parsed.data.title,
+        ...(parsed.data.title !== undefined ? { title: parsed.data.title } : {}),
       });
-      return context.json(WorkItemDetailSchema.parse(toWorkItemDetailResponse(detail)), 200);
+      return context.json(
+        WorkItemDetailSchema.parse(toWorkItemDetailResponse(detail)),
+        200,
+      );
     } catch (error) {
       throw mapWorkOrganizationError(error);
     }
   });
 
   app.get('/api/v1/work-items/:workItemId/comments', async (context) => {
-    const workItemId = requireUuid(context.req.param('workItemId'), 'workItemId');
+    const workItemId = requireUuid(
+      context.req.param('workItemId'),
+      'workItemId',
+    );
     try {
       const comments = await dependencies.service.listComments(
         getAuthenticatedAccessContext(context),
@@ -174,18 +221,25 @@ export function registerWorkOrganizationRoutes(
   });
 
   app.post('/api/v1/work-items/:workItemId/comments', async (context) => {
-    const workItemId = requireUuid(context.req.param('workItemId'), 'workItemId');
+    const workItemId = requireUuid(
+      context.req.param('workItemId'),
+      'workItemId',
+    );
     const parsed = CreateWorkItemCommentRequestSchema.safeParse(
       await readBoundedJson(context.req.raw, 32 * 1024),
     );
-    if (!parsed.success) throw invalidRequest('A valid WorkItem comment is required.');
+    if (!parsed.success)
+      throw invalidRequest('A valid WorkItem comment is required.');
     try {
       const comment = await dependencies.service.addComment({
         accessContext: getAuthenticatedAccessContext(context),
         workItemId,
         body: parsed.data.body,
       });
-      return context.json({ comment: toWorkItemCommentResponse(comment) }, 201);
+      return context.json(
+        { comment: toWorkItemCommentResponse(comment) },
+        201,
+      );
     } catch (error) {
       throw mapWorkOrganizationError(error);
     }
@@ -197,7 +251,9 @@ export function registerWorkOrganizationRoutes(
         getAuthenticatedAccessContext(context),
       );
       return context.json(
-        WorkBoardListResponseSchema.parse({ boards: boards.map(toWorkBoardResponse) }),
+        WorkBoardListResponseSchema.parse({
+          boards: boards.map(toWorkBoardResponse),
+        }),
         200,
       );
     } catch (error) {
@@ -209,12 +265,15 @@ export function registerWorkOrganizationRoutes(
     const parsed = CreateWorkBoardRequestSchema.safeParse(
       await readBoundedJson(context.req.raw, 32 * 1024),
     );
-    if (!parsed.success) throw invalidRequest('A valid Board request is required.');
+    if (!parsed.success)
+      throw invalidRequest('A valid Board request is required.');
     try {
       const board = await dependencies.service.createBoard({
         accessContext: getAuthenticatedAccessContext(context),
         title: parsed.data.title,
-        description: parsed.data.description,
+        ...(parsed.data.description !== undefined
+          ? { description: parsed.data.description }
+          : {}),
       });
       return context.json({ board: toWorkBoardResponse(board) }, 201);
     } catch (error) {
@@ -248,13 +307,18 @@ export function registerWorkOrganizationRoutes(
     const parsed = UpdateWorkBoardRequestSchema.safeParse(
       await readBoundedJson(context.req.raw, 32 * 1024),
     );
-    if (!parsed.success) throw invalidRequest('A valid Board update is required.');
+    if (!parsed.success)
+      throw invalidRequest('A valid Board update is required.');
     try {
       const board = await dependencies.service.updateBoard({
         accessContext: getAuthenticatedAccessContext(context),
         boardId,
-        title: parsed.data.title,
-        description: parsed.data.description,
+        ...(parsed.data.title !== undefined
+          ? { title: parsed.data.title }
+          : {}),
+        ...(parsed.data.description !== undefined
+          ? { description: parsed.data.description }
+          : {}),
       });
       return context.json({ board: toWorkBoardResponse(board) }, 200);
     } catch (error) {
@@ -280,71 +344,103 @@ export function registerWorkOrganizationRoutes(
     const parsed = CreateWorkBoardColumnRequestSchema.safeParse(
       await readBoundedJson(context.req.raw, 32 * 1024),
     );
-    if (!parsed.success) throw invalidRequest('A valid Board column is required.');
+    if (!parsed.success)
+      throw invalidRequest('A valid Board column is required.');
     try {
       const column = await dependencies.service.createColumn({
         accessContext: getAuthenticatedAccessContext(context),
         boardId,
         title: parsed.data.title,
-        position: parsed.data.position,
+        ...(parsed.data.position !== undefined
+          ? { position: parsed.data.position }
+          : {}),
       });
-      return context.json({ column: toWorkBoardColumnResponse(column) }, 201);
+      return context.json(
+        { column: toWorkBoardColumnResponse(column) },
+        201,
+      );
     } catch (error) {
       throw mapWorkOrganizationError(error);
     }
   });
 
-  app.patch('/api/v1/boards/:boardId/columns/:columnId', async (context) => {
-    const boardId = requireUuid(context.req.param('boardId'), 'boardId');
-    const columnId = requireUuid(context.req.param('columnId'), 'columnId');
-    const parsed = UpdateWorkBoardColumnRequestSchema.safeParse(
-      await readBoundedJson(context.req.raw, 32 * 1024),
-    );
-    if (!parsed.success) throw invalidRequest('A valid Board column update is required.');
-    try {
-      const column = await dependencies.service.updateColumn({
-        accessContext: getAuthenticatedAccessContext(context),
-        boardId,
-        columnId,
-        title: parsed.data.title,
-        position: parsed.data.position,
-      });
-      return context.json({ column: toWorkBoardColumnResponse(column) }, 200);
-    } catch (error) {
-      throw mapWorkOrganizationError(error);
-    }
-  });
+  app.patch(
+    '/api/v1/boards/:boardId/columns/:columnId',
+    async (context) => {
+      const boardId = requireUuid(context.req.param('boardId'), 'boardId');
+      const columnId = requireUuid(
+        context.req.param('columnId'),
+        'columnId',
+      );
+      const parsed = UpdateWorkBoardColumnRequestSchema.safeParse(
+        await readBoundedJson(context.req.raw, 32 * 1024),
+      );
+      if (!parsed.success)
+        throw invalidRequest('A valid Board column update is required.');
+      try {
+        const column = await dependencies.service.updateColumn({
+          accessContext: getAuthenticatedAccessContext(context),
+          boardId,
+          columnId,
+          ...(parsed.data.title !== undefined
+            ? { title: parsed.data.title }
+            : {}),
+          ...(parsed.data.position !== undefined
+            ? { position: parsed.data.position }
+            : {}),
+        });
+        return context.json(
+          { column: toWorkBoardColumnResponse(column) },
+          200,
+        );
+      } catch (error) {
+        throw mapWorkOrganizationError(error);
+      }
+    },
+  );
 
-  app.delete('/api/v1/boards/:boardId/columns/:columnId', async (context) => {
-    const boardId = requireUuid(context.req.param('boardId'), 'boardId');
-    const columnId = requireUuid(context.req.param('columnId'), 'columnId');
-    try {
-      await dependencies.service.deleteColumn({
-        accessContext: getAuthenticatedAccessContext(context),
-        boardId,
-        columnId,
-      });
-      return context.body(null, 204);
-    } catch (error) {
-      throw mapWorkOrganizationError(error);
-    }
-  });
+  app.delete(
+    '/api/v1/boards/:boardId/columns/:columnId',
+    async (context) => {
+      const boardId = requireUuid(context.req.param('boardId'), 'boardId');
+      const columnId = requireUuid(
+        context.req.param('columnId'),
+        'columnId',
+      );
+      try {
+        await dependencies.service.deleteColumn({
+          accessContext: getAuthenticatedAccessContext(context),
+          boardId,
+          columnId,
+        });
+        return context.body(null, 204);
+      } catch (error) {
+        throw mapWorkOrganizationError(error);
+      }
+    },
+  );
 
   app.put('/api/v1/boards/:boardId/placement', async (context) => {
     const boardId = requireUuid(context.req.param('boardId'), 'boardId');
     const parsed = PlaceWorkItemRequestSchema.safeParse(
       await readBoundedJson(context.req.raw, 32 * 1024),
     );
-    if (!parsed.success) throw invalidRequest('A valid WorkItem placement is required.');
+    if (!parsed.success)
+      throw invalidRequest('A valid WorkItem placement is required.');
     try {
       const placement = await dependencies.service.placeWorkItem({
         accessContext: getAuthenticatedAccessContext(context),
         boardId,
         columnId: parsed.data.column_id,
         workItemId: parsed.data.work_item_id,
-        position: parsed.data.position,
+        ...(parsed.data.position !== undefined
+          ? { position: parsed.data.position }
+          : {}),
       });
-      return context.json({ placement: toWorkBoardPlacementResponse(placement) }, 200);
+      return context.json(
+        { placement: toWorkBoardPlacementResponse(placement) },
+        200,
+      );
     } catch (error) {
       throw mapWorkOrganizationError(error);
     }
@@ -356,7 +452,11 @@ function invalidRequest(message: string): HttpError {
 }
 
 function requireUuid(value: string, field: string): string {
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value))
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(
+      value,
+    )
+  )
     throw invalidRequest(`${field} must be a UUID.`);
   return value;
 }
@@ -379,5 +479,7 @@ function mapWorkOrganizationError(error: unknown): Error {
     return new HttpError(409, 'work_identity_conflict', error.message);
   if (error instanceof WorkWorkspaceScopeUnavailableError)
     return new HttpError(409, 'workspace_scope_unavailable', error.message);
-  return error instanceof Error ? error : new Error('Unknown work organization failure.');
+  return error instanceof Error
+    ? error
+    : new Error('Unknown work organization failure.');
 }

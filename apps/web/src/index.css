@@ -1149,7 +1149,8 @@ textarea {
 }
 
 .work-card button,
-.work-status-actions button {
+.work-status-actions button,
+.work-status-actions a {
   border-color: var(--ink-200);
   border-radius: 9px;
   background: var(--cloud);
@@ -1157,6 +1158,11 @@ textarea {
   padding: 7px 10px;
   font-size: 12px;
   font-weight: 800;
+}
+
+.work-status-actions a {
+  display: inline-block;
+  text-decoration: none;
 }
 
 .work-status-actions button {

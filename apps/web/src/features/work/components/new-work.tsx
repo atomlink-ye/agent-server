@@ -417,6 +417,13 @@ export function NewWork({
                   </button>
                 </div>
               ) : null}
+              {state === 'error' && !createdWorkId && capability ? (
+                <div className="new-work-form__recovery">
+                  <button type="button" onClick={() => void startWork()}>
+                    Retry Work creation
+                  </button>
+                </div>
+              ) : null}
             </div>
           ) : null}
         </div>

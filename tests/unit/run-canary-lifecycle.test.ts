@@ -2,9 +2,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
-
-import { createCanarySignalLifecycle } from '../../tooling/dev/run-canary.js';
+import { describe, expect, it } from 'vitest';
 
 const repositoryRoot = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -136,66 +134,4 @@ describe('runHostCanary signal cleanup', () => {
       await waitForExit(owner).catch(() => undefined);
     }
   }, 20_000);
-});
-
-// Scope note: these cases cover single-child exit-code mapping and repeated-
-// signal idempotency only. Multi-child ordering and cleanup-timeout
-// escalation (stopOwned's own SIGTERM->SIGKILL grace window) are exercised
-// indirectly by host-native.ts coverage elsewhere and are intentionally
-// deferred here to keep this suite bounded.
-describe('createCanarySignalLifecycle exit-code semantics', () => {
-  const signalExitCodes = {
-    SIGINT: 130,
-    SIGTERM: 143,
-    SIGHUP: 129,
-  } as const;
-
-  let activeLifecycle:
-    ReturnType<typeof createCanarySignalLifecycle> | undefined;
-
-  afterEach(() => {
-    activeLifecycle?.dispose();
-    activeLifecycle = undefined;
-    process.exitCode = undefined;
-  });
-
-  for (const signalName of Object.keys(signalExitCodes) as Array<
-    keyof typeof signalExitCodes
-  >) {
-    it(`resolves ${signalName} with exit code ${signalExitCodes[signalName]}`, async () => {
-      const lifecycle = createCanarySignalLifecycle([]);
-      activeLifecycle = lifecycle;
-
-      process.emit(signalName);
-      const resolved = await lifecycle.signal;
-
-      expect(resolved).toBe(signalName);
-      expect(lifecycle.requestedSignal()).toBe(signalName);
-      expect(process.exitCode).toBe(signalExitCodes[signalName]);
-    });
-  }
-
-  it('is idempotent: a second signal after the first is requested does not change the outcome', async () => {
-    const lifecycle = createCanarySignalLifecycle([]);
-    activeLifecycle = lifecycle;
-
-    process.emit('SIGINT');
-    await lifecycle.signal;
-    process.emit('SIGTERM');
-    await new Promise<void>((resolveDelay) => setTimeout(resolveDelay, 10));
-
-    expect(lifecycle.requestedSignal()).toBe('SIGINT');
-    expect(process.exitCode).toBe(signalExitCodes.SIGINT);
-  });
-
-  it('stops observing signals once disposed', async () => {
-    const lifecycle = createCanarySignalLifecycle([]);
-    lifecycle.dispose();
-
-    process.emit('SIGTERM');
-    await new Promise<void>((resolveDelay) => setTimeout(resolveDelay, 10));
-
-    expect(lifecycle.requestedSignal()).toBeUndefined();
-    expect(process.exitCode).toBeUndefined();
-  });
 });

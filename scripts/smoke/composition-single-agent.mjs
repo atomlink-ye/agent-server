@@ -3,8 +3,35 @@ import pg from 'pg';
 
 const { Pool } = pg;
 
+export const COMPOSITION_ADMISSION_TIMEOUT_ENV =
+  'COMPOSITION_ADMISSION_TIMEOUT_MS';
+export const DEFAULT_COMPOSITION_ADMISSION_TIMEOUT_MS = 60_000;
+export const MAX_COMPOSITION_ADMISSION_TIMEOUT_MS = 600_000;
+const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
+
 function pause(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export function resolveCompositionAdmissionTimeoutMs(
+  environment = process.env,
+) {
+  const rawValue = environment[COMPOSITION_ADMISSION_TIMEOUT_ENV]?.trim();
+  if (!rawValue) return DEFAULT_COMPOSITION_ADMISSION_TIMEOUT_MS;
+  if (!/^\d+$/.test(rawValue))
+    throw new Error(
+      `${COMPOSITION_ADMISSION_TIMEOUT_ENV} must be a positive decimal safe integer no greater than ${MAX_COMPOSITION_ADMISSION_TIMEOUT_MS}.`,
+    );
+  const value = Number(rawValue);
+  if (
+    !Number.isSafeInteger(value) ||
+    value <= 0 ||
+    value > MAX_COMPOSITION_ADMISSION_TIMEOUT_MS
+  )
+    throw new Error(
+      `${COMPOSITION_ADMISSION_TIMEOUT_ENV} must be a positive decimal safe integer no greater than ${MAX_COMPOSITION_ADMISSION_TIMEOUT_MS}.`,
+    );
+  return value;
 }
 
 export async function runCompositionSingleWorkerSmoke({
@@ -19,10 +46,19 @@ export async function runCompositionSingleWorkerSmoke({
   const databaseUrl = process.env.DATABASE_URL?.trim();
   if (!databaseUrl)
     throw new Error('composition smoke requires a host-native DATABASE_URL');
+  const compositionAdmissionTimeoutMs = resolveCompositionAdmissionTimeoutMs();
   const scenarioId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
   const marker = `COMPOSITION_SINGLE_WORKER_OK_${scenarioId}`;
 
-  async function request(path, { method = 'GET', body, expectedStatus } = {}) {
+  async function request(
+    path,
+    {
+      method = 'GET',
+      body,
+      expectedStatus,
+      requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
+    } = {},
+  ) {
     const response = await fetch(new URL(path, baseUrl), {
       method,
       headers: {
@@ -36,7 +72,7 @@ export async function runCompositionSingleWorkerSmoke({
           : {}),
       },
       body: body === undefined ? undefined : JSON.stringify(body),
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.timeout(requestTimeoutMs),
     });
     const text = await response.text();
     const json = text ? JSON.parse(text) : {};
@@ -208,6 +244,7 @@ spec:
         input: { marker },
       },
       expectedStatus: 202,
+      requestTimeoutMs: compositionAdmissionTimeoutMs,
     });
     const workRunId = started.work_run?.id;
     const rootTaskId = started.execution_receipt?.source_refs?.task_id;
@@ -424,10 +461,19 @@ export async function runCompositionSingleWorkerInlineSmoke({
     throw new Error(
       'inline composition smoke requires a host-native DATABASE_URL',
     );
+  const compositionAdmissionTimeoutMs = resolveCompositionAdmissionTimeoutMs();
   const scenarioId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
   const marker = `COMPOSITION_SINGLE_WORKER_INLINE_OK_${scenarioId}`;
 
-  async function request(path, { method = 'GET', body, expectedStatus } = {}) {
+  async function request(
+    path,
+    {
+      method = 'GET',
+      body,
+      expectedStatus,
+      requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
+    } = {},
+  ) {
     const response = await fetch(new URL(path, baseUrl), {
       method,
       headers: {
@@ -441,7 +487,7 @@ export async function runCompositionSingleWorkerInlineSmoke({
           : {}),
       },
       body: body === undefined ? undefined : JSON.stringify(body),
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.timeout(requestTimeoutMs),
     });
     const text = await response.text();
     const json = text ? JSON.parse(text) : {};
@@ -595,6 +641,7 @@ spec:
         input: { marker },
       },
       expectedStatus: 202,
+      requestTimeoutMs: compositionAdmissionTimeoutMs,
     });
     const workRunId = started.work_run?.id;
     const rootTaskId = started.execution_receipt?.source_refs?.task_id;

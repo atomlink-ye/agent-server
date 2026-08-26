@@ -72,7 +72,7 @@ Board    = Workspace-scoped projection over WorkItems
 
 **Board baseline:** Boards have ordered columns and one explicit placement per WorkItem in the MVE. A WorkItem may exist without a Board. Board/column deletion removes the projection while retaining the WorkItem. Browser cards move through the canonical placement API; the Board does not create technical Tasks/Runs.
 
-**Conversation and Work bridge:** every persisted Conversation message exposes an editable `Create task` action. The resulting WorkItem retains source references and can navigate back to the Conversation. Promotion requires an explicit published Definition identity/version and calls canonical `WorkIdentityApi` rather than writing Work rows directly. Promotion is idempotent for the WorkItem and persists exactly one linked Work identity.
+**Conversation and Work bridge:** every persisted Conversation message exposes an editable `Create task` action. The resulting WorkItem retains source references and can navigate back to the Conversation. `New Work` remains the Work Definition authoring path. WorkItem promotion explicitly selects an existing published canonical Definition and its current published version, then calls `WorkIdentityApi` rather than writing Work rows directly. Promotion is idempotent for the WorkItem and persists exactly one linked Work identity.
 
 **Review projection:** a linked Work's canonical Product projection is the authority. Owner-scoped WorkItem reads/lists project a successful formal Work to `in_review` unless the WorkItem is already in review/done. The browser does not infer completion from transcript/runtime output. Human action is required for `done`.
 

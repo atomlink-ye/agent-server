@@ -9,6 +9,7 @@ import TitleBar from '../../app/shell/TitleBar';
 import { loadCoworkers } from '../agents/agents-gateway';
 import type { Coworker } from '../agents/contracts';
 import { workOrganizationClient } from './client';
+import type { PublishedWorkDefinition } from './client';
 import './work-organization.css';
 
 const STATUS_LABELS: Record<WorkItemStatus, string> = {
@@ -444,8 +445,13 @@ function TaskDetail({
   const [description, setDescription] = useState(item.description ?? '');
   const [assigneeId, setAssigneeId] = useState(item.assignee_id ?? '');
   const [comment, setComment] = useState('');
-  const [definitionId, setDefinitionId] = useState('');
-  const [definitionVersionId, setDefinitionVersionId] = useState('');
+  const [definitions, setDefinitions] = useState<
+    readonly PublishedWorkDefinition[]
+  >([]);
+  const [definitionsState, setDefinitionsState] = useState<
+    'loading' | 'ready' | 'error'
+  >('loading');
+  const [selectedDefinitionId, setSelectedDefinitionId] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -453,6 +459,22 @@ function TaskDetail({
     setDescription(item.description ?? '');
     setAssigneeId(item.assignee_id ?? '');
   }, [item.assignee_id, item.description, item.id, item.title]);
+
+  const loadDefinitions = useCallback(async () => {
+    setDefinitionsState('loading');
+    try {
+      setDefinitions(
+        await workOrganizationClient.listPublishedWorkDefinitions(),
+      );
+      setDefinitionsState('ready');
+    } catch {
+      setDefinitionsState('error');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!detail.linked_work) void loadDefinitions();
+  }, [detail.linked_work, loadDefinitions]);
 
   async function update(
     input: Parameters<typeof workOrganizationClient.updateWorkItem>[1],
@@ -491,13 +513,16 @@ function TaskDetail({
   }
 
   async function promote() {
-    if (!definitionId.trim() || !definitionVersionId.trim()) return;
+    const definition = definitions.find(
+      (entry) => entry.definitionId === selectedDefinitionId,
+    );
+    if (!definition) return;
     setSaving(true);
     try {
       onChanged(
         await workOrganizationClient.promoteWorkItem(item.id, {
-          definitionId: definitionId.trim(),
-          definitionVersionId: definitionVersionId.trim(),
+          definitionId: definition.definitionId,
+          definitionVersionId: definition.currentPublishedVersionId,
           title: title.trim() || item.title,
         }),
       );
@@ -604,32 +629,23 @@ function TaskDetail({
             <>
               <h2>Start Work</h2>
               <p className="work-org-muted">
-                Choose the published Work Definition identity required by the
-                canonical Work contract.
+                Select an existing published Definition to create canonical
+                Work. Create or edit a Definition from New Work.
               </p>
-              <label>
-                Definition ID
-                <input
-                  value={definitionId}
-                  onChange={(event) => setDefinitionId(event.target.value)}
-                  placeholder="UUID"
-                />
-              </label>
-              <label>
-                Definition version ID
-                <input
-                  value={definitionVersionId}
-                  onChange={(event) =>
-                    setDefinitionVersionId(event.target.value)
-                  }
-                  placeholder="UUID"
-                />
-              </label>
+              <PublishedDefinitionField
+                definitions={definitions}
+                state={definitionsState}
+                value={selectedDefinitionId}
+                onChange={setSelectedDefinitionId}
+                onRetry={() => void loadDefinitions()}
+              />
               <button
                 type="button"
                 className="work-org-primary"
                 disabled={
-                  saving || !definitionId.trim() || !definitionVersionId.trim()
+                  saving ||
+                  definitionsState !== 'ready' ||
+                  !selectedDefinitionId
                 }
                 onClick={() => void promote()}
               >
@@ -728,21 +744,76 @@ function AssigneeField({
   return (
     <label>
       Assignee
-      <input
-        list="work-item-assignees"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder="Agent or human participant ID"
-      />
-      <datalist id="work-item-assignees">
+      <select value={value} onChange={(event) => onChange(event.target.value)}>
+        <option value="">Unassigned</option>
         {agents.map((agent) => (
           <option value={agent.id} key={agent.id}>
-            {agent.displayName}
+            {coworkerOptionLabel(agent)}
           </option>
         ))}
-      </datalist>
+        {value && !agents.some((agent) => agent.id === value) ? (
+          <option value={value}>Unavailable participant</option>
+        ) : null}
+      </select>
     </label>
   );
+}
+
+function PublishedDefinitionField({
+  definitions,
+  state,
+  value,
+  onChange,
+  onRetry,
+}: {
+  readonly definitions: readonly PublishedWorkDefinition[];
+  readonly state: 'loading' | 'ready' | 'error';
+  readonly value: string;
+  readonly onChange: (value: string) => void;
+  readonly onRetry: () => void;
+}) {
+  if (state === 'loading')
+    return <p className="work-org-muted">Loading published Definitions…</p>;
+  if (state === 'error')
+    return (
+      <div className="work-org-error" role="alert">
+        <p>Published Definitions could not be loaded.</p>
+        <button type="button" onClick={onRetry}>
+          Retry
+        </button>
+      </div>
+    );
+  if (definitions.length === 0)
+    return (
+      <p className="work-org-muted">
+        No published Definitions are available. Create one from New Work first.
+      </p>
+    );
+  return (
+    <label>
+      Published Definition
+      <select
+        aria-label="Published Work Definition"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        <option value="">Choose a published Definition</option>
+        {definitions.map((definition) => (
+          <option key={definition.definitionId} value={definition.definitionId}>
+            {definition.displayName}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function coworkerOptionLabel(agent: Coworker): string {
+  return [
+    agent.displayName,
+    agent.roleLabel ?? 'Coworker',
+    agent.runtimeStatus,
+  ].join(' · ');
 }
 
 export default TasksPage;

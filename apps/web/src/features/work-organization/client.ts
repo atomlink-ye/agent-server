@@ -27,6 +27,23 @@ const placementResponseSchema = z
 const commentResponseSchema = z
   .object({ comment: WorkItemCommentSchema })
   .strict();
+const publishedWorkDefinitionsResponseSchema = z
+  .object({
+    items: z.array(
+      z
+        .object({
+          definitionId: z.string().min(1),
+          displayName: z.string().min(1),
+          currentPublishedVersionId: z.string().min(1),
+        })
+        .strict(),
+    ),
+  })
+  .strict();
+
+export type PublishedWorkDefinition = z.infer<
+  typeof publishedWorkDefinitionsResponseSchema
+>['items'][number];
 
 function parse<T>(schema: z.ZodType<T>, value: unknown): T {
   const result = schema.safeParse(value);
@@ -56,6 +73,18 @@ export interface UpdateWorkItemInput {
 }
 
 export const workOrganizationClient = {
+  async listPublishedWorkDefinitions(): Promise<
+    readonly PublishedWorkDefinition[]
+  > {
+    return parse(
+      publishedWorkDefinitionsResponseSchema,
+      await apiTransport.request('/api/work-definitions', {
+        method: 'GET',
+        cache: 'no-store',
+      }),
+    ).items;
+  },
+
   async listWorkItems(): Promise<readonly WorkItemDetailDto[]> {
     const response = parse(
       WorkItemListResponseSchema,

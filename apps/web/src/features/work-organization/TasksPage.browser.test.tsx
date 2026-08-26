@@ -1,0 +1,158 @@
+import React, { act } from 'react';
+import { createRoot } from 'react-dom/client';
+import { MemoryRouter } from 'react-router-dom';
+import { afterEach, expect, it, vi } from 'vitest';
+
+import { TasksPage } from './TasksPage';
+
+(
+  globalThis as typeof globalThis & {
+    IS_REACT_ACT_ENVIRONMENT?: boolean;
+  }
+).IS_REACT_ACT_ENVIRONMENT = true;
+
+const workItemId = '00000000-0000-4000-8000-000000000101';
+const definitionId = '00000000-0000-4000-8000-000000000102';
+const versionId = '00000000-0000-4000-8000-000000000103';
+
+afterEach(() => vi.unstubAllGlobals());
+
+it('selects a published Definition and coworker by display-safe labels while promoting canonical IDs', async () => {
+  let promotionBody: unknown = null;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (path === '/api/work-items') return json({ work_items: [task()] });
+      if (path === '/api/agents')
+        return json({
+          items: [
+            {
+              id: 'coworker-1',
+              display_name: 'Ari Analyst',
+              role_label: 'Research',
+              summary: null,
+              active_agent_version_id: 'version-1',
+              runtime_status: 'available',
+            },
+          ],
+        });
+      if (path === `/api/work-items/${workItemId}/comments`)
+        return json({ comments: [] });
+      if (path === '/api/work-definitions')
+        return json({
+          items: [
+            {
+              definitionId,
+              displayName: 'Quarterly research brief',
+              currentPublishedVersionId: versionId,
+            },
+          ],
+        });
+      if (
+        path === `/api/work-items/${workItemId}/promote` &&
+        init?.method === 'POST'
+      ) {
+        promotionBody = JSON.parse(String(init.body));
+        return json({
+          ...task(),
+          linked_work: {
+            work_id: '00000000-0000-4000-8000-000000000104',
+            title: 'Prepare brief',
+            product_state: 'running',
+            latest_work_run_id: null,
+            result_summary: null,
+          },
+        });
+      }
+      throw new Error(`Unexpected browser request: ${path}`);
+    }),
+  );
+
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(
+        <MemoryRouter initialEntries={[`/tasks/${workItemId}`]}>
+          <TasksPage selectedWorkItemId={workItemId} />
+        </MemoryRouter>,
+      );
+    });
+    await act(settle);
+    await act(settle);
+
+    expect(host.textContent).toContain('Quarterly research brief');
+    expect(host.textContent).toContain('Ari Analyst · Research · available');
+    expect(host.textContent).not.toContain(definitionId);
+    expect(host.textContent).not.toContain(versionId);
+    expect(host.textContent).not.toContain('coworker-1');
+
+    const definition = host.querySelector<HTMLSelectElement>(
+      '[aria-label="Published Work Definition"]',
+    );
+    const assignee = [
+      ...host.querySelectorAll<HTMLSelectElement>('select'),
+    ].find((select) => select.labels?.[0]?.textContent?.includes('Assignee'));
+    if (!definition || !assignee)
+      throw new Error('Expected promotion selectors.');
+
+    await act(async () => {
+      definition.value = definitionId;
+      definition.dispatchEvent(new Event('change', { bubbles: true }));
+      assignee.value = 'coworker-1';
+      assignee.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    const promote = [...host.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Create Work',
+    );
+    if (!promote) throw new Error('Expected Create Work button.');
+    await act(async () => {
+      promote.click();
+      await settle();
+    });
+
+    expect(promotionBody).toMatchObject({
+      definition_id: definitionId,
+      definition_version_id: versionId,
+    });
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+  }
+});
+
+function task() {
+  return {
+    work_item: {
+      id: workItemId,
+      workspace_id: '00000000-0000-4000-8000-000000000105',
+      title: 'Prepare brief',
+      description: null,
+      status: 'todo',
+      assignee_id: null,
+      created_by: 'principal-1',
+      source_conversation_id: null,
+      source_message_id: null,
+      linked_work_id: null,
+      created_at: '2026-08-26T00:00:00.000Z',
+      updated_at: '2026-08-26T00:00:00.000Z',
+    },
+    linked_work: null,
+  };
+}
+
+function json(body: unknown): Response {
+  return new Response(JSON.stringify(body), {
+    headers: { 'content-type': 'application/json' },
+  });
+}
+
+async function settle(): Promise<void> {
+  for (let turn = 0; turn < 4; turn += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await Promise.resolve();
+  }
+}

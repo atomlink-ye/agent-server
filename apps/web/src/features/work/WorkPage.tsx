@@ -10,6 +10,7 @@ import './work-page.css';
 
 export interface WorkPageProps {
   readonly returnConversationId?: string | null;
+  readonly returnWorkItemId?: string | null;
   readonly selectedWorkId?: string | null;
   readonly workTab?: string | null;
   readonly selectedRunId?: string | null;
@@ -18,6 +19,7 @@ export interface WorkPageProps {
 
 export function WorkPage({
   returnConversationId = null,
+  returnWorkItemId = null,
   selectedWorkId = null,
   workTab = null,
   selectedRunId = null,
@@ -43,6 +45,11 @@ export function WorkPage({
     );
   };
 
+  const returnToTask = (): void => {
+    if (!returnWorkItemId) return;
+    navigate(`/tasks/${encodeURIComponent(returnWorkItemId)}`);
+  };
+
   const isEmpty = !showNewWork && !selectedWorkId;
 
   return (
@@ -62,7 +69,14 @@ export function WorkPage({
           className="work-main-content"
           data-empty={isEmpty ? 'true' : 'false'}
         >
-          {returnConversationId ? (
+          {returnWorkItemId ? (
+            <div className="work-return-bar">
+              <button type="button" onClick={returnToTask}>
+                ← Back to Task
+              </button>
+            </div>
+          ) : null}
+          {!returnWorkItemId && returnConversationId ? (
             <div className="work-return-bar">
               <button type="button" onClick={respondInChat}>
                 ← Respond in conversation

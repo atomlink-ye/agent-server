@@ -156,6 +156,10 @@ export function defaultHostDatabaseUrl(
   return `postgresql://${encodeURIComponent(username)}@127.0.0.1:5432/agent_server_dev`;
 }
 
+function requireNativePostgres(environment: NodeJS.ProcessEnv): boolean {
+  return environment.CANARY_REQUIRE_NATIVE_POSTGRES === '1';
+}
+
 export function hostCoreEnvironment(
   base: NodeJS.ProcessEnv,
 ): NodeJS.ProcessEnv {
@@ -464,6 +468,12 @@ export async function ensureDevelopmentDatabase(
     }
   }
 
+  if (requireNativePostgres(environment)) {
+    throw new Error(
+      `CANARY_REQUIRE_NATIVE_POSTGRES=1 requires reachable native PostgreSQL. Postgres is not reachable at ${redactDatabaseUrl(connectionString)}. Start local Postgres, set DATABASE_URL to a reachable instance, or unset CANARY_REQUIRE_NATIVE_POSTGRES to allow the PGlite dev fallback.`,
+      { cause: initial.error },
+    );
+  }
   return ensurePGliteDatabase(environment);
 }
 

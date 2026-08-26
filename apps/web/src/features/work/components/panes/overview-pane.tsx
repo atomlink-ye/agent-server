@@ -32,6 +32,7 @@ export function OverviewPane({
   const run = data.run;
   const trace = data.trace;
   const outcome = run.work_run.result_summary;
+  const outcomeDocument = outcome ? outcomeBody(outcome) : '';
   const stateView = productStatePresentation(run.work_run.product_state);
   const live = run.work_run.product_state === 'running';
   return (
@@ -45,21 +46,15 @@ export function OverviewPane({
         </span>
         <div>
           <p className="work-shell-kicker">Latest recorded outcome</p>
-          {/* A Work's result is a document, not a title. Putting the whole
-              thing in the heading turned a several-thousand-character report
-              into a wall of unrendered markdown at the top of the page: the
-              heading now carries its first line, and the report itself is
-              rendered below through the same sanitized renderer the chat and
-              the session transcripts use. */}
           <h2>
             {outcome
               ? outcomeHeadline(outcome)
               : resultCaptureLabel(run.work_run.result_capture_status)}
           </h2>
           <p data-testid="attention-basis">{stateView.description}</p>
-          {outcome ? (
+          {outcomeDocument ? (
             <div className="work-overview__outcome">
-              <AssistantMarkdown text={outcomeBody(outcome)} />
+              <AssistantMarkdown text={outcomeDocument} />
             </div>
           ) : null}
           {live ? (
@@ -81,8 +76,8 @@ export function OverviewPane({
 
 const outcomeHeadlineLimit = 120;
 
-/** The report's own title line, flattened out of markdown, as the heading. */
-function outcomeHeadline(outcome: string): string {
+/** The report's own title/first meaningful line, flattened for the heading. */
+export function outcomeHeadline(outcome: string): string {
   const flat = (titleLine(outcome)?.text ?? outcome)
     .replace(/[*_`]/g, '')
     .trim();
@@ -91,10 +86,14 @@ function outcomeHeadline(outcome: string): string {
     : flat;
 }
 
-/** The report without the title the heading above it already shows. */
-function outcomeBody(outcome: string): string {
+/**
+ * The report body after the line already promoted to the heading. This applies
+ * to both explicit Markdown headings and plain/unheaded outcomes, so a result
+ * like `Done` is rendered exactly once.
+ */
+export function outcomeBody(outcome: string): string {
   const title = titleLine(outcome);
-  if (!title?.isHeading) return outcome;
+  if (!title) return '';
   const lines = outcome.split('\n');
   lines.splice(0, title.index + 1);
   return lines.join('\n').trimStart();
@@ -168,9 +167,6 @@ function RunRoleCards({
             type="button"
           >
             <strong>{session.label.name}</strong>
-            {/* Team membership is optional structure -- a lone agent has no
-                role, and inventing one ("lead") would assert a product fact
-                the domain does not hold. */}
             {session.label.role !== null ? (
               <span>{session.label.role}</span>
             ) : null}

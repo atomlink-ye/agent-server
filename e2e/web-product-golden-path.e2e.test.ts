@@ -192,20 +192,6 @@ describe('web Product Golden Path', () => {
           new URL(response.url()).origin === browserOrigin &&
           new URL(response.url()).pathname === '/api/works',
       );
-      const runRequest = page.waitForRequest(
-        (request) =>
-          request.method() === 'POST' &&
-          /\/api\/works\/[0-9a-f-]+\/runs$/iu.test(
-            new URL(request.url()).pathname,
-          ),
-      );
-      const runResponse = page.waitForResponse(
-        (response) =>
-          response.request().method() === 'POST' &&
-          /\/api\/works\/[0-9a-f-]+\/runs$/iu.test(
-            new URL(response.url()).pathname,
-          ),
-      );
       await page.getByRole('button', { name: 'Start Work' }).click();
       const createdWorkResponse = await workCreateResponse;
       if (!createdWorkResponse.ok()) {
@@ -214,12 +200,41 @@ describe('web Product Golden Path', () => {
         );
       }
       expect(createdWorkResponse.status()).toBe(201);
-      const submittedRunRequest = await runRequest;
+      const runRequest = page.waitForRequest(
+        (request) =>
+          request.method() === 'POST' &&
+          new URL(request.url()).origin === browserOrigin &&
+          /\/api\/works\/[0-9a-f-]+\/runs$/iu.test(
+            new URL(request.url()).pathname,
+          ),
+        { timeout: 60_000 },
+      );
+      const runResponse = page.waitForResponse(
+        (response) =>
+          response.request().method() === 'POST' &&
+          new URL(response.url()).origin === browserOrigin &&
+          /\/api\/works\/[0-9a-f-]+\/runs$/iu.test(
+            new URL(response.url()).pathname,
+          ),
+        { timeout: 60_000 },
+      );
+      let submittedRunRequest: import('playwright').Request;
+      let startedRunResponse: import('playwright').Response;
+      try {
+        [submittedRunRequest, startedRunResponse] = await Promise.all([
+          runRequest,
+          runResponse,
+        ]);
+      } catch (error) {
+        throw new Error(
+          `Work Run request was not sent after Work creation: ${await boundedUiStatus(page)} (${error instanceof Error ? error.message : String(error)})`,
+        );
+      }
       expect(JSON.parse(submittedRunRequest.postData() ?? '{}')).toMatchObject({
         trigger_kind: 'manual',
         input: { company: 'Acme' },
       });
-      expect((await runResponse).status()).toBe(202);
+      expect(startedRunResponse.status()).toBe(202);
       await page.waitForURL(/\/work\/[0-9a-f-]+\?run=[0-9a-f-]+/iu, {
         timeout: 60_000,
       });
@@ -348,4 +363,16 @@ function sanitizedWorkCreateRequest(
 
 function boundedRequestValue(value: unknown): string | null {
   return typeof value === 'string' ? value.slice(0, 128) : null;
+}
+
+async function boundedUiStatus(page: Page): Promise<string> {
+  const status = page.getByTestId('new-work-status');
+  try {
+    return ((await status.innerText()) || 'No Work status was rendered.').slice(
+      0,
+      512,
+    );
+  } catch {
+    return 'No Work status was rendered.';
+  }
 }

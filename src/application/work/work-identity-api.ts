@@ -435,7 +435,7 @@ export class WorkDefinitionValidationError extends Error {
   public readonly code = 'invalid_work_definition';
   public constructor(
     message = 'The definition and published version must belong to this owner scope and lineage.',
-    public readonly diagnosticPath = '$',
+    public readonly diagnosticPath?: string,
   ) {
     super(message);
     this.name = 'WorkDefinitionValidationError';

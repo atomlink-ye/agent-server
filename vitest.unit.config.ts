@@ -5,6 +5,7 @@ export default defineConfig({
     include: [
       'src/**/*.test.ts',
       'tests/unit/**/*.test.ts',
+      'tooling/dev/**/*.test.ts',
       'scripts/dev/**/*.test.mjs',
       'scripts/smoke/**/*.test.mjs',
     ],

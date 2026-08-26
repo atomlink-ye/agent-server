@@ -21,6 +21,7 @@ import {
   waitForHttp,
 } from './host-native.js';
 import { setupProviders } from './setup-providers.js';
+import { canaryReadinessTimeout } from './readiness-timeout.js';
 
 export type CanaryKind =
   | 'runtime'
@@ -168,13 +169,7 @@ function parseKind(value: string | undefined): CanaryKind {
   );
 }
 
-function canaryReadyTimeout(environment: NodeJS.ProcessEnv): number {
-  const configured =
-    environment.CANARY_READY_TIMEOUT_MS?.trim() ||
-    environment.PASEO_DAEMON_STARTUP_TIMEOUT_MS?.trim();
-  const parsed = configured ? Number.parseInt(configured, 10) : 300_000;
-  return Number.isFinite(parsed) ? Math.max(parsed, 300_000) : 300_000;
-}
+export { canaryReadinessTimeout as canaryReadyTimeout } from './readiness-timeout.js';
 
 export async function runHostCanary(
   kind: CanaryKind,
@@ -206,7 +201,7 @@ export async function runHostCanary(
       };
       const apiPort = canaryPort(runtimeEnvironment, 'PORT', 3000);
       await assertCanaryPortFree('runtime API', apiPort);
-      const readyTimeoutMs = canaryReadyTimeout(runtimeEnvironment);
+      const readyTimeoutMs = canaryReadinessTimeout(runtimeEnvironment);
       await setupProviders(runtimeEnvironment);
       throwIfCanaryInterrupted(lifecycle);
       const apiBaseUrl = `http://127.0.0.1:${apiPort}`;
@@ -270,7 +265,7 @@ export async function runHostCanary(
     await assertCanaryPortFree('golden-path API', apiPort);
     await assertCanaryPortFree('golden-path web', 3001);
     throwIfCanaryInterrupted(lifecycle);
-    const readyTimeoutMs = canaryReadyTimeout(loaded);
+    const readyTimeoutMs = canaryReadinessTimeout(loaded);
     const apiBaseUrl = `http://127.0.0.1:${apiPort}`;
     await rm(webBootstrapEnvPath, { force: true });
     throwIfCanaryInterrupted(lifecycle);
@@ -278,6 +273,7 @@ export async function runHostCanary(
       ...loaded,
       HOST_NATIVE_WATCH: '0',
       WEB_BOOTSTRAP_EMPTY_PRODUCT: '1',
+      CANARY_READY_TIMEOUT_MS: String(readyTimeoutMs),
     };
     const dev = spawnOwned(
       'node',

@@ -71,8 +71,6 @@ export function registerAgentWorkCatalogRoute(
       await dependencies.definitions.associateAgentWorkflow({
         tenantId: access.tenantId,
         workspaceId: access.workspaceId,
-        principalType: access.principalType,
-        principalId: access.principalId,
         agentDefinitionId: agent.id,
         definitionId: parsed.data.definition_id,
         definitionVersionId: parsed.data.definition_version_id,

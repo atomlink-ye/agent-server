@@ -73,8 +73,6 @@ export function registerAgentProfileRoute(
       ? await dependencies.definitions.listAgentWorkBindings({
           tenantId: definition.tenantId,
           workspaceId: definition.workspaceId,
-          principalType: definition.principalType,
-          principalId: definition.principalId,
           agentDefinitionId: definition.id,
         })
       : [];

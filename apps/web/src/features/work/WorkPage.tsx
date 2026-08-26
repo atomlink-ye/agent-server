@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 import { NewWork } from './components/new-work';
 import { WorkDetailPage } from './pages/WorkDetailPage';
-import { workPath, workRootPath } from '../../app/routes';
+import { workRootPath } from '../../app/routes';
 import { TitleBar } from '../../app/shell/TitleBar';
 import WorkPane from './WorkPane';
 import './work-page.css';
@@ -24,16 +24,21 @@ export function WorkPage({
   selectedSessionIndex = null,
 }: WorkPageProps) {
   const navigate = useNavigate();
-  const [showNewWork, setShowNewWork] = useState(false);
+  const location = useLocation();
+  const authoringRequest = useMemo(() => {
+    const query = new URLSearchParams(location.search);
+    return {
+      requested: query.get('new') === '1',
+      agentId: query.get('agent'),
+      capabilityVersionId: query.get('capability'),
+    };
+  }, [location.search]);
+  const [showNewWork, setShowNewWork] = useState(authoringRequest.requested);
 
   useEffect(() => {
     if (selectedWorkId) setShowNewWork(false);
-  }, [selectedWorkId]);
-
-  const openWork = (workId: string): void => {
-    setShowNewWork(false);
-    navigate(workPath(workId, returnConversationId));
-  };
+    else if (authoringRequest.requested) setShowNewWork(true);
+  }, [selectedWorkId, authoringRequest.requested]);
 
   const respondInChat = (): void => {
     navigate(
@@ -70,7 +75,11 @@ export function WorkPage({
             </div>
           ) : null}
           {showNewWork ? (
-            <NewWork originConversationId={returnConversationId} />
+            <NewWork
+              originConversationId={returnConversationId}
+              initialAgentId={authoringRequest.agentId}
+              initialCapabilityVersionId={authoringRequest.capabilityVersionId}
+            />
           ) : null}
           {!showNewWork && selectedWorkId ? (
             <WorkDetailPage
@@ -83,16 +92,10 @@ export function WorkPage({
           ) : null}
           {isEmpty ? (
             <div className="work-main-empty">
-              <span className="work-main-icon" aria-hidden="true">
-                ✓
-              </span>
+              <span className="work-main-icon" aria-hidden="true">✓</span>
               <h1>Choose a Work item</h1>
-              <p>
-                Select a real Work item from the pane, or create a new Work.
-              </p>
-              <button type="button" onClick={() => setShowNewWork(true)}>
-                New Work
-              </button>
+              <p>Select a real Work item from the pane, or start new Work from a Coworker Capability.</p>
+              <button type="button" onClick={() => setShowNewWork(true)}>New Work</button>
             </div>
           ) : null}
         </section>

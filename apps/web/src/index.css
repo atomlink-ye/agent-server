@@ -1273,12 +1273,70 @@ textarea {
 
 @media (max-width: 700px) {
   .app-shell {
-    grid-template-columns: 1fr;
+    display: block;
   }
 
-  .rail,
   .sidebar {
     display: none;
+  }
+
+  .rail {
+    position: fixed;
+    z-index: 20;
+    bottom: 0;
+    left: 0;
+    display: block;
+    width: 100%;
+    min-width: 0;
+    height: 68px;
+    border-top: 1px solid var(--ink-100);
+    border-right: 0;
+    background: rgb(248 251 253 / 96%);
+    padding: 5px max(6px, env(safe-area-inset-left))
+      max(5px, env(safe-area-inset-bottom));
+    backdrop-filter: blur(18px);
+  }
+
+  .rail-brand {
+    display: none;
+  }
+
+  .rail-tabs {
+    height: 100%;
+    flex-direction: row;
+    justify-content: space-around;
+    gap: 0;
+  }
+
+  .rail-tab {
+    width: auto;
+    min-width: 44px;
+    min-height: 56px;
+    flex: 1;
+    gap: 1px;
+    padding: 4px 2px;
+    font-size: 9px;
+  }
+
+  .rail-tab-icon {
+    width: 28px;
+    height: 28px;
+    font-size: 18px;
+  }
+
+  .rail-tab[data-active='true']::before {
+    top: auto;
+    bottom: -5px;
+    left: 50%;
+    width: 24px;
+    height: 3px;
+    transform: translateX(-50%);
+    border-radius: 4px 4px 0 0;
+  }
+
+  .chat-panel {
+    height: 100%;
+    padding-bottom: 68px;
   }
 
   .chat-header {

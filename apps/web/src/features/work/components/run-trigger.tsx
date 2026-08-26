@@ -1,6 +1,7 @@
 import { useState } from 'react';
 
 import { workRunClient } from '../clients/work-run-client';
+import { workRunFailureMessage } from '../clients/errors';
 import { workTabHref } from './work-presentation';
 
 export function RunTrigger({
@@ -11,20 +12,15 @@ export function RunTrigger({
   readonly originConversationId?: string | null;
 }) {
   const [state, setState] = useState<'idle' | 'starting' | 'error'>('idle');
-  const [errorDetail, setErrorDetail] = useState<string | null>(null);
 
   async function handleRun() {
     setState('starting');
-    setErrorDetail(null);
     try {
       const runId = (await workRunClient.start(workId)).work_run.id;
       window.location.assign(
         workTabHref(workId, 'overview', runId, originConversationId),
       );
-    } catch (error) {
-      setErrorDetail(
-        error instanceof Error ? error.message : 'Please try again.',
-      );
+    } catch {
       setState('error');
     }
   }
@@ -42,12 +38,7 @@ export function RunTrigger({
             ? 'Error — Retry'
             : 'Start Run'}
       </button>
-      {state === 'error' ? (
-        <p>
-          Failed to start Run
-          {errorDetail ? `: ${errorDetail}` : '. Please try again.'}
-        </p>
-      ) : null}
+      {state === 'error' ? <p role="alert">{workRunFailureMessage()}</p> : null}
     </div>
   );
 }

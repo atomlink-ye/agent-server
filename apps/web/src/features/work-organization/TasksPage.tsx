@@ -18,6 +18,11 @@ const STATUS_LABELS: Record<WorkItemStatus, string> = {
   done: 'Done',
 };
 
+const TASKS_LOAD_ERROR =
+  'Tasks could not be loaded. Check your connection and try again.';
+const TASKS_ACTION_ERROR =
+  'That Task change could not be saved. Please try again.';
+
 export interface TasksPageProps {
   readonly selectedWorkItemId?: string | null;
 }
@@ -55,8 +60,8 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
           setItems((current) => [fetched, ...current]);
         }
       }
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+    } catch {
+      setError(TASKS_LOAD_ERROR);
     } finally {
       setLoading(false);
     }
@@ -73,8 +78,8 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
     }
     void workOrganizationClient
       .listComments(selectedWorkItemId)
-      .then(setComments, (reason: unknown) => {
-        setError(reason instanceof Error ? reason.message : String(reason));
+      .then(setComments, () => {
+        setError(TASKS_LOAD_ERROR);
       });
   }, [selectedWorkItemId]);
 
@@ -148,7 +153,14 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
             <p className="pane-placeholder">Loading Tasks…</p>
           ) : null}
           {!loading && visibleItems.length === 0 ? (
-            <p className="pane-placeholder">No Tasks in this view.</p>
+            <div className="pane-placeholder">
+              <p>No Tasks in this view.</p>
+              {filter !== 'all' ? (
+                <button type="button" onClick={() => setFilter('all')}>
+                  View all Tasks
+                </button>
+              ) : null}
+            </div>
           ) : null}
           {visibleItems.map((entry) => (
             <button
@@ -181,10 +193,43 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
       <main className="chat-panel work-org-main">
         <TitleBar section="Tasks" />
         <section className="work-org-content" aria-label="Task detail">
+          <div className="work-org-mobile-picker">
+            <label>
+              <span>Task</span>
+              <select
+                aria-label="Choose a Task"
+                value={selectedWorkItemId ?? ''}
+                onChange={(event) =>
+                  navigate(
+                    event.target.value
+                      ? `/tasks/${encodeURIComponent(event.target.value)}`
+                      : '/tasks',
+                  )
+                }
+              >
+                <option value="">Choose a Task</option>
+                {visibleItems.map((entry) => (
+                  <option key={entry.work_item.id} value={entry.work_item.id}>
+                    {entry.work_item.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              className="work-org-primary"
+              onClick={() => setCreating(true)}
+            >
+              + Task
+            </button>
+          </div>
           {error ? (
-            <p className="work-org-error" role="alert">
-              {error}
-            </p>
+            <div className="work-org-error" role="alert">
+              <p>{error}</p>
+              <button type="button" onClick={() => void load()}>
+                Retry
+              </button>
+            </div>
           ) : null}
           {creating ? (
             <CreateTaskForm
@@ -276,8 +321,8 @@ function CreateTaskForm({
           : {}),
       });
       onCreated(detail);
-    } catch (reason) {
-      onError(reason instanceof Error ? reason.message : String(reason));
+    } catch {
+      onError(TASKS_ACTION_ERROR);
     } finally {
       setSaving(false);
     }
@@ -376,8 +421,8 @@ function TaskDetail({
     onError(null);
     try {
       onChanged(await workOrganizationClient.updateWorkItem(item.id, input));
-    } catch (reason) {
-      onError(reason instanceof Error ? reason.message : String(reason));
+    } catch {
+      onError(TASKS_ACTION_ERROR);
     } finally {
       setSaving(false);
     }
@@ -400,8 +445,8 @@ function TaskDetail({
       );
       onCommentsChanged([...comments, created]);
       setComment('');
-    } catch (reason) {
-      onError(reason instanceof Error ? reason.message : String(reason));
+    } catch {
+      onError(TASKS_ACTION_ERROR);
     }
   }
 
@@ -416,8 +461,8 @@ function TaskDetail({
           title: title.trim() || item.title,
         }),
       );
-    } catch (reason) {
-      onError(reason instanceof Error ? reason.message : String(reason));
+    } catch {
+      onError(TASKS_ACTION_ERROR);
     } finally {
       setSaving(false);
     }
@@ -553,6 +598,51 @@ function TaskDetail({
             </>
           )}
         </article>
+
+        {item.status === 'in_review' ? (
+          <article className="work-org-card work-org-review-card">
+            <span className="eyebrow">Human review</span>
+            <h2>Ready for your decision</h2>
+            <p className="work-org-muted">
+              Review the linked Work and conversation, then mark this Task done
+              when the coordination is complete.
+            </p>
+            <div className="work-org-actions">
+              <button
+                type="button"
+                className="work-org-primary"
+                disabled={saving}
+                onClick={() => void update({ status: 'done' })}
+              >
+                Mark Task done
+              </button>
+              {detail.linked_work ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigate(
+                      `/work/${encodeURIComponent(detail.linked_work!.work_id)}?from_task=${encodeURIComponent(item.id)}`,
+                    )
+                  }
+                >
+                  Review Work
+                </button>
+              ) : null}
+              {item.source_conversation_id ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigate(
+                      `/conversations/${encodeURIComponent(item.source_conversation_id!)}`,
+                    )
+                  }
+                >
+                  Open conversation
+                </button>
+              ) : null}
+            </div>
+          </article>
+        ) : null}
 
         <article className="work-org-card">
           <span className="eyebrow">Comments</span>

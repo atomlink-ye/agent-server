@@ -10,6 +10,11 @@ import TitleBar from '../../app/shell/TitleBar';
 import { workOrganizationClient } from './client';
 import './work-organization.css';
 
+const BOARDS_LOAD_ERROR =
+  'Boards could not be loaded. Check your connection and try again.';
+const BOARDS_ACTION_ERROR =
+  'That Board change could not be saved. Please try again.';
+
 export interface BoardsPageProps {
   readonly selectedBoardId?: string | null;
 }
@@ -34,8 +39,8 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
           replace: true,
         });
       }
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+    } catch {
+      setError(BOARDS_LOAD_ERROR);
     } finally {
       setLoading(false);
     }
@@ -48,8 +53,8 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
     }
     try {
       setSnapshot(await workOrganizationClient.getBoard(selectedBoardId));
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+    } catch {
+      setError(BOARDS_LOAD_ERROR);
       setSnapshot(null);
     }
   }, [selectedBoardId]);
@@ -72,8 +77,8 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
       setNewBoardTitle('');
       setCreatingBoard(false);
       navigate(`/boards/${encodeURIComponent(board.id)}`);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+    } catch {
+      setError(BOARDS_ACTION_ERROR);
     }
   }
 
@@ -138,10 +143,43 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
       <main className="chat-panel work-board-main">
         <TitleBar section="Boards" />
         <section className="work-org-content" aria-label="Board canvas">
+          <div className="work-org-mobile-picker">
+            <label>
+              <span>Board</span>
+              <select
+                aria-label="Choose a Board"
+                value={selectedBoardId ?? ''}
+                onChange={(event) =>
+                  navigate(
+                    event.target.value
+                      ? `/boards/${encodeURIComponent(event.target.value)}`
+                      : '/boards',
+                  )
+                }
+              >
+                <option value="">Choose a Board</option>
+                {boards.map((board) => (
+                  <option key={board.id} value={board.id}>
+                    {board.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              className="work-org-primary"
+              onClick={() => setCreatingBoard(true)}
+            >
+              + Board
+            </button>
+          </div>
           {error ? (
-            <p className="work-org-error" role="alert">
-              {error}
-            </p>
+            <div className="work-org-error" role="alert">
+              <p>{error}</p>
+              <button type="button" onClick={() => void loadBoards()}>
+                Retry
+              </button>
+            </div>
           ) : null}
           {snapshot ? (
             <BoardCanvas
@@ -225,8 +263,8 @@ function BoardCanvas({
       setNewColumnTitle('');
       setAddingColumn(false);
       await refresh();
-    } catch (reason) {
-      onError(reason instanceof Error ? reason.message : String(reason));
+    } catch {
+      onError(BOARDS_ACTION_ERROR);
     }
   }
 
@@ -236,8 +274,8 @@ function BoardCanvas({
     try {
       await workOrganizationClient.updateBoard(snapshot.board.id, { title });
       await refresh();
-    } catch (reason) {
-      onError(reason instanceof Error ? reason.message : String(reason));
+    } catch {
+      onError(BOARDS_ACTION_ERROR);
     }
   }
 
@@ -251,8 +289,8 @@ function BoardCanvas({
     try {
       await workOrganizationClient.deleteBoard(snapshot.board.id);
       await onBoardDeleted();
-    } catch (reason) {
-      onError(reason instanceof Error ? reason.message : String(reason));
+    } catch {
+      onError(BOARDS_ACTION_ERROR);
     }
   }
 
@@ -264,8 +302,8 @@ function BoardCanvas({
         title,
       });
       await refresh();
-    } catch (reason) {
-      onError(reason instanceof Error ? reason.message : String(reason));
+    } catch {
+      onError(BOARDS_ACTION_ERROR);
     }
   }
 
@@ -279,8 +317,8 @@ function BoardCanvas({
     try {
       await workOrganizationClient.deleteColumn(snapshot.board.id, columnId);
       await refresh();
-    } catch (reason) {
-      onError(reason instanceof Error ? reason.message : String(reason));
+    } catch {
+      onError(BOARDS_ACTION_ERROR);
     }
   }
 
@@ -298,8 +336,8 @@ function BoardCanvas({
       });
       await refresh();
       navigate(`/tasks/${encodeURIComponent(created.work_item.id)}`);
-    } catch (reason) {
-      onError(reason instanceof Error ? reason.message : String(reason));
+    } catch {
+      onError(BOARDS_ACTION_ERROR);
     }
   }
 
@@ -315,8 +353,8 @@ function BoardCanvas({
         position,
       });
       await refresh();
-    } catch (reason) {
-      onError(reason instanceof Error ? reason.message : String(reason));
+    } catch {
+      onError(BOARDS_ACTION_ERROR);
     }
   }
 

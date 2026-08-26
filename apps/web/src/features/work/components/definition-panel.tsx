@@ -13,6 +13,7 @@ import {
   workDefinitionClient,
 } from '@/features/work/clients/work-definition-client';
 import { workRunClient } from '@/features/work/clients/work-run-client';
+import { workRunFailureMessage } from '@/features/work/clients/errors';
 import './definition-panel.css';
 
 type AuthoringState =
@@ -180,13 +181,9 @@ export function DefinitionPanel({
       window.location.assign(
         workTabHref(workId, 'overview', runId, originConversationId),
       );
-    } catch (error) {
+    } catch {
       setState('error');
-      const errorDetail =
-        error instanceof Error ? error.message : 'Please try again.';
-      setStatusMessage(
-        `The current Definition version could not be started: ${errorDetail}`,
-      );
+      setStatusMessage(workRunFailureMessage());
     }
   }
 

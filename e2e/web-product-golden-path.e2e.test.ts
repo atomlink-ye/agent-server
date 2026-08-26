@@ -116,6 +116,9 @@ describe('web Product Golden Path', () => {
       await page
         .getByRole('heading', { name: coworkerName })
         .waitFor({ state: 'visible', timeout: 60_000 });
+      const agentId = page.url().match(/\/agents\/([^/?#]+)$/u)?.[1] ?? null;
+      if (!agentId)
+        throw new Error('Coworker profile URL did not include an id.');
       await page.getByRole('button', { name: '+ Add capability' }).click();
       await page.getByPlaceholder('Competitor Research').fill(capabilityName);
       await page
@@ -130,7 +133,21 @@ describe('web Product Golden Path', () => {
         state: 'visible',
         timeout: 60_000,
       });
+      const bindingResponse = page.waitForResponse(
+        (response) =>
+          response.request().method() === 'POST' &&
+          new URL(response.url()).origin === browserOrigin &&
+          new URL(response.url()).pathname ===
+            `/api/agents/${agentId}/capabilities`,
+      );
       await page.getByRole('button', { name: 'Save capability' }).click();
+      const savedBinding = await bindingResponse;
+      if (!savedBinding.ok()) {
+        throw new Error(
+          `Capability binding failed (${savedBinding.status()}): ${await boundedErrorBody(savedBinding)}`,
+        );
+      }
+      expect(savedBinding.status()).toBe(200);
       await page
         .getByText('Capability saved to this Coworker’s Work Catalog.')
         .waitFor({ state: 'visible', timeout: 60_000 });
@@ -252,4 +269,26 @@ async function waitForObservableResult(
     await new Promise((resolve) => setTimeout(resolve, 1_000));
   }
   throw new Error('Timed out waiting for the UI-started Work Run result.');
+}
+
+async function boundedErrorBody(
+  response: import('playwright').Response,
+): Promise<string> {
+  const raw = (await response.text()).slice(0, 4_096);
+  try {
+    const value = JSON.parse(raw) as {
+      error?: { code?: unknown; message?: unknown };
+    };
+    const code =
+      typeof value.error?.code === 'string'
+        ? value.error.code
+        : 'unknown_error';
+    const message =
+      typeof value.error?.message === 'string'
+        ? value.error.message.slice(0, 512)
+        : 'The service returned no error detail.';
+    return `${code}: ${message}`;
+  } catch {
+    return 'The service returned an invalid error response.';
+  }
 }

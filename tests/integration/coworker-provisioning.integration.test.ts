@@ -26,6 +26,66 @@ afterEach(async () => {
 });
 
 describe('Cumora-style Coworker lifecycle provisioning', () => {
+  it('lists Coworkers only in the authenticated workspace and principal scope', async () => {
+    database = new PGlite();
+    await applyDurableKernelMigrations(database);
+    const owner = {
+      tenantId,
+      workspaceId,
+      principalType: 'service_account',
+      principalId: ownerPrincipalId,
+    } as const;
+    const foreign = {
+      tenantId,
+      workspaceId: '81000000-0000-4000-8000-000000000102',
+      principalType: 'service_account',
+      principalId: sharedPrincipalId,
+    } as const;
+    const rows = [
+      {
+        id: '83000000-0000-4000-8000-000000000101',
+        owner,
+        name: 'Owner Coworker',
+      },
+      {
+        id: '83000000-0000-4000-8000-000000000102',
+        owner: foreign,
+        name: 'Foreign Coworker',
+      },
+    ];
+    for (const row of rows) {
+      await database.query(
+        `INSERT INTO agent_definitions
+           (id,tenant_id,workspace_id,principal_type,principal_id,name,managed_discriminator,normalized_name,created_at,updated_at)
+         VALUES($1,$2,$3,$4,$5,$6,'managed_agent_v1',$7,$8,$8)`,
+        [
+          row.id,
+          row.owner.tenantId,
+          row.owner.workspaceId,
+          row.owner.principalType,
+          row.owner.principalId,
+          row.name,
+          row.name.toLowerCase().replace(' ', '-'),
+          now().toISOString(),
+        ],
+      );
+      await database.query(
+        `INSERT INTO agent_chat_runtimes
+           (tenant_id,agent_definition_id,active_agent_version_id,epoch,status,created_at,updated_at)
+         VALUES($1,$2,$3,1,'available',$4,$4)`,
+        [row.owner.tenantId, row.id, row.id, now().toISOString()],
+      );
+    }
+
+    const registry = new PostgresAgentRegistry(database);
+    const page = await registry.listManagedDefinitionsForOwner({
+      owner,
+      command: { cursor: null, limit: 20 },
+    });
+
+    expect(page.items.map((item) => item.definition.id)).toEqual([rows[0]!.id]);
+  });
+
   it('keeps a migrated Work-internal Agent out of the Coworker roster', async () => {
     database = new PGlite();
     await applyDurableKernelMigrations(database);

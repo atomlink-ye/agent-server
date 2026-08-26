@@ -46,10 +46,15 @@ export interface ManagedAgentDefinitionRead {
     readonly definitionId: string;
   }): Promise<AgentDefinition | null>;
   /**
-   * Product-facing Coworker roster. Optional on narrow historical test seams;
-   * production PostgresAgentRegistry implements it and the HTTP route fails
-   * closed when a fixture does not.
+   * Product-facing Coworker roster in the authenticated owner's exact scope.
+   * Optional on narrow historical test seams; the HTTP route fails closed when
+   * a fixture does not provide it.
    */
+  listManagedDefinitionsForOwner?(input: {
+    readonly owner: ManagedAgentOwner;
+    readonly command: ListManagedAgentDefinitionsCommand;
+  }): Promise<ManagedAgentCoworkerPage>;
+  /** Internal delivery seam: tenant-scoped managed Coworker read. */
   listManagedDefinitionsByTenant?(input: {
     readonly tenantId: string;
     readonly command: ListManagedAgentDefinitionsCommand;

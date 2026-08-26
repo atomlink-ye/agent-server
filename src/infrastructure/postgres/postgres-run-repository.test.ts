@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 
 import { applyDurableKernelMigrations } from './postgres.js';
 import { PostgresRunRepository } from './postgres-run-repository.js';
+import { transitionRun } from '../../domain/runs/run.js';
+import { encodeRootTaskRunRequestSnapshotRef } from '../../application/tasks/root-task-input.js';
 
 interface SeedRunOptions {
   readonly taskId: string;
@@ -25,10 +27,14 @@ async function seedTaskWithRun(
      ) VALUES (
        $1, 'tenant-lease', $1, NULL, NULL, 0,
        'active', 'api', 'agent', 'agent@v1',
-       'ref', 'fingerprint', $2, $2,
+       $3, 'fingerprint', $2, $2,
        'workspace-lease', 'service_account', 'worker-lease', 'policy-lease'
      )`,
-    [options.taskId, now],
+    [
+      options.taskId,
+      now,
+      encodeRootTaskRunRequestSnapshotRef({ prompt: 'run prompt' }),
+    ],
   );
 
   const isRunning = options.status === 'running';
@@ -151,6 +157,41 @@ describe('PostgresRunRepository.recoverExpiredRuns', () => {
       [runId],
     );
     expect(row.rows[0]?.status).toBe('running');
+
+    await db.close();
+  });
+});
+
+describe('PostgresRunRepository run provenance', () => {
+  it('preserves immutable task and attempt provenance when reloading a Run', async () => {
+    const db = new PGlite();
+    await applyDurableKernelMigrations(db);
+
+    const taskId = '00000000-0000-4000-8000-0000000000a1';
+    const runId = '00000000-0000-4000-8000-0000000000a2';
+    await seedTaskWithRun(db, {
+      taskId,
+      runId,
+      status: 'queued',
+    });
+
+    const repository = new PostgresRunRepository(db);
+    const reloaded = await repository.findById(runId);
+
+    expect(reloaded).toMatchObject({
+      id: runId,
+      taskId,
+      attempt: 1,
+    });
+    const transitioned = reloaded
+      ? transitionRun(
+          reloaded,
+          'running',
+          {},
+          () => new Date(reloaded.updatedAt),
+        )
+      : null;
+    expect(transitioned).toMatchObject({ taskId, attempt: 1 });
 
     await db.close();
   });

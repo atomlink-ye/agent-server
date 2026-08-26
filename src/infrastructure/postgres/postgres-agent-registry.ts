@@ -333,6 +333,62 @@ export class PostgresAgentRegistry implements AgentRegistry {
     };
   }
 
+  public async listManagedDefinitionsForOwner(input: {
+    readonly owner: ManagedAgentOwner;
+    readonly command: ListManagedAgentDefinitionsCommand;
+  }): Promise<ManagedAgentCoworkerPage> {
+    const { command, owner } = input;
+    if (
+      !Number.isInteger(command.limit) ||
+      command.limit < 1 ||
+      command.limit > 100
+    )
+      throw new InvalidAgentListLimitError();
+    const cursor = command.cursor ? decodeCursor(command.cursor) : null;
+    const values: unknown[] = [
+      owner.tenantId,
+      owner.workspaceId,
+      owner.principalType,
+      owner.principalId,
+      command.limit + 1,
+    ];
+    const cursorSql = cursor
+      ? ` AND (d.created_at,d.id) > ($6::timestamptz,$7::uuid)`
+      : '';
+    if (cursor) values.push(cursor.createdAt, cursor.id);
+    const result = await this.database.query<CoworkerRow>(
+      `SELECT d.id,d.tenant_id,d.workspace_id,d.principal_type,d.principal_id,
+              d.name,d.normalized_name,d.role_label,d.summary,d.created_at,d.updated_at,
+              r.active_agent_version_id,r.status AS runtime_status
+         FROM agent_definitions d
+         JOIN agent_chat_runtimes r
+           ON r.tenant_id=d.tenant_id AND r.agent_definition_id=d.id::text
+         JOIN agent_identity_classes c
+           ON c.tenant_id=d.tenant_id AND c.agent_definition_id=d.id
+        WHERE d.tenant_id=$1 AND d.workspace_id=$2
+          AND d.principal_type=$3 AND d.principal_id=$4
+          AND d.managed_discriminator='managed_agent_v1'
+          AND c.identity_class='coworker'
+          ${cursorSql}
+        ORDER BY d.created_at ASC,d.id ASC LIMIT $5`,
+      values,
+    );
+    const rows = [...(result.rows ?? [])];
+    const hasNext = rows.length > command.limit;
+    const emitted = rows.slice(0, command.limit);
+    const items = emitted.map((row) => ({
+      definition: mapDefinition(row),
+      activeAgentVersionId: row.active_agent_version_id,
+      runtimeStatus: row.runtime_status,
+    }));
+    const last = emitted[emitted.length - 1];
+    return {
+      items,
+      nextCursor:
+        hasNext && last ? encodeCursor(iso(last.created_at), last.id) : null,
+    };
+  }
+
   public async findVersion(
     owner: ManagedAgentOwner,
     versionId: string,

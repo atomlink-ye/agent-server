@@ -287,11 +287,11 @@ if (command.length === 0) {
     port: paseoPort,
     listenHost: paseoListenHost,
     environmentVariableNames: paseoEnvironmentNames,
+    onChild: register,
   });
   process.stderr.write(
     `with-paseo phase=paseo-start elapsed_ms=${Date.now() - startedAt}\n`,
   );
-  register(paseo.child);
   if (requestedSignal) {
     await stop();
     for (const [signalName, handler] of signalHandlers) {

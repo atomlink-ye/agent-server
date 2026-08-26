@@ -132,6 +132,7 @@ describe('0061 semantic closure migration', () => {
     await migrateBefore0061(db);
     await seedPreClosure(db);
     await db.exec(closureMigration());
+    await db.exec(closureMigration());
 
     const idempotency = await db.query<{ workspace_id: string }>(
       `SELECT workspace_id
@@ -215,6 +216,7 @@ describe('0061 semantic closure migration', () => {
   it('is safe when there is no legacy state to repair', async () => {
     db = new PGlite();
     await migrateBefore0061(db);
+    await db.exec(closureMigration());
     await db.exec(closureMigration());
     const registered = await db.query<{ count: number }>(
       `SELECT count(*)::int AS count FROM worker_definitions`,

@@ -37,8 +37,7 @@ const closureSql = () =>
 async function migrateThrough0060(database: PGlite): Promise<void> {
   const files = readdirSync(migrations)
     .filter(
-      (name) =>
-        name.endsWith('.sql') && name < '0061_semantic_closure.sql',
+      (name) => name.endsWith('.sql') && name < '0061_semantic_closure.sql',
     )
     .sort();
   for (const file of files)
@@ -186,6 +185,7 @@ describe('0061 semantic owner upgrade', () => {
     await expect(db.exec(closureSql())).rejects.toThrow(
       'Cannot infer workspace for legacy Worker idempotency claim',
     );
+    await db.exec('ROLLBACK');
 
     const claims = await db.query<{ count: number }>(
       `SELECT count(*)::int AS count

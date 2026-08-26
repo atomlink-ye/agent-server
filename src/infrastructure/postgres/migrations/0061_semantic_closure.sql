@@ -39,11 +39,20 @@ WHERE i.workspace_id IS NULL
   AND i.principal_type = v.principal_type
   AND i.principal_id = v.principal_id;
 
--- Rows with no result identity represent abandoned/incomplete claims. They are
--- not durable Worker lifecycle facts and cannot be scoped safely after the
--- namespace split, so fail closed by dropping them before strengthening the key.
-DELETE FROM worker_registry_idempotency
-WHERE workspace_id IS NULL;
+-- A legacy claim without a result identity has no safe workspace inference. Do
+-- not silently delete it: abort this transactional migration so an operator can
+-- inspect the claim and the pre-migration schema remains intact.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM worker_registry_idempotency
+    WHERE workspace_id IS NULL
+  ) THEN
+    RAISE EXCEPTION 'Cannot infer workspace for legacy Worker idempotency claim';
+  END IF;
+END
+$$;
 
 ALTER TABLE worker_registry_idempotency
   ALTER COLUMN workspace_id SET NOT NULL;
@@ -147,7 +156,6 @@ WHERE a.principal_type IS NULL
   AND v.status = 'published'
   AND ad.id = a.agent_definition_id
   AND ad.tenant_id = a.tenant_id
-  AND ad.workspace_id = a.workspace_id::text
   AND ad.principal_type = v.principal_type
   AND ad.principal_id = v.principal_id
   AND ad.managed_discriminator = 'managed_agent_v1';
@@ -226,9 +234,10 @@ BEGIN
 END
 $$;
 
--- agent_definitions still stores workspace_id as text for historical reasons,
--- while Product Work uses UUID workspace identity. A trigger keeps the database
--- invariant exact without widening this closure into a global Agent migration.
+-- agent_definitions still stores workspace_id as text for historical reasons.
+-- A Coworker may be authorized in more than one Product Workspace, so the
+-- binding workspace is the Work Catalog scope; tenant and principal identity
+-- remain exact in this database invariant.
 CREATE OR REPLACE FUNCTION validate_agent_work_binding_coworker_owner()
 RETURNS trigger AS $$
 BEGIN
@@ -237,7 +246,6 @@ BEGIN
     FROM agent_definitions d
     WHERE d.id = NEW.agent_definition_id
       AND d.tenant_id = NEW.tenant_id
-      AND d.workspace_id = NEW.workspace_id::text
       AND d.principal_type = NEW.principal_type
       AND d.principal_id = NEW.principal_id
       AND d.managed_discriminator = 'managed_agent_v1'

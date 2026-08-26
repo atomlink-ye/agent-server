@@ -171,6 +171,8 @@ describe('0061 semantic closure migration', () => {
       repository.associateAgentWorkflow({
         tenantId: 'tenant-a',
         workspaceId: workspaceA,
+        principalType: 'service_account',
+        principalId: 'service-a',
         agentDefinitionId: agentA,
         definitionId: definitionA,
         definitionVersionId: definitionVersionB,
@@ -182,6 +184,8 @@ describe('0061 semantic closure migration', () => {
       repository.associateAgentWorkflow({
         tenantId: 'tenant-a',
         workspaceId: workspaceA,
+        principalType: 'service_account',
+        principalId: 'service-a',
         agentDefinitionId: agentA,
         definitionId: definitionA,
         definitionVersionId: definitionVersionA,
@@ -193,9 +197,33 @@ describe('0061 semantic closure migration', () => {
       repository.listAgentWorkBindings({
         tenantId: 'tenant-a',
         workspaceId: workspaceA,
+        principalType: 'service_account',
+        principalId: 'service-a',
         agentDefinitionId: agentA,
       }),
     ).resolves.toHaveLength(1);
+
+    await expect(
+      repository.associateAgentWorkflow({
+        tenantId: 'tenant-a',
+        workspaceId: workspaceA,
+        principalType: 'service_account',
+        principalId: 'service-b',
+        agentDefinitionId: agentA,
+        definitionId: definitionA,
+        definitionVersionId: definitionVersionA,
+        now: new Date().toISOString(),
+      }),
+    ).rejects.toThrow('agent_work_binding_not_found');
+    await expect(
+      repository.listAgentWorkBindings({
+        tenantId: 'tenant-a',
+        workspaceId: workspaceA,
+        principalType: 'service_account',
+        principalId: 'service-b',
+        agentDefinitionId: agentA,
+      }),
+    ).resolves.toHaveLength(0);
 
     await expect(
       db.exec(`

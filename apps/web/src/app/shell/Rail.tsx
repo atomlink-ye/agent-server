@@ -1,4 +1,10 @@
-export type DesktopTab = 'conversations' | 'agents' | 'work' | 'files';
+export type DesktopTab =
+  | 'conversations'
+  | 'agents'
+  | 'tasks'
+  | 'boards'
+  | 'work'
+  | 'files';
 
 export interface RailProps {
   readonly activeTab: DesktopTab;
@@ -23,6 +29,18 @@ export function Rail({ activeTab, onSelectTab }: RailProps) {
           label="Agents"
           icon="◎"
           onClick={() => onSelectTab('agents')}
+        />
+        <RailTab
+          active={activeTab === 'tasks'}
+          label="Tasks"
+          icon="☑"
+          onClick={() => onSelectTab('tasks')}
+        />
+        <RailTab
+          active={activeTab === 'boards'}
+          label="Boards"
+          icon="▦"
+          onClick={() => onSelectTab('boards')}
         />
         <RailTab
           active={activeTab === 'work'}

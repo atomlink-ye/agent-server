@@ -104,7 +104,7 @@ Work sub-selection such as tab, Run, or session transcript uses query state wher
 Canonical host-native commands remain:
 
 ```bash
-pnpm setup
+pnpm run setup
 pnpm doctor
 pnpm dev
 pnpm dev:runtime

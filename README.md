@@ -30,7 +30,7 @@ Install and prepare the development database:
 ```bash
 corepack enable
 pnpm install --frozen-lockfile
-pnpm setup
+pnpm run setup
 pnpm setup:providers   # optional; required for host-native runtime work
 pnpm doctor
 ```
@@ -41,7 +41,7 @@ When reachable, the default real database is:
 postgresql://$USER@127.0.0.1:5432/agent_server_dev
 ```
 
-Set `DATABASE_URL` when the local database uses a different user, password, host, port, or name. `pnpm setup` is idempotent: it creates local working directories, creates the database when possible, and applies durable migrations.
+Set `DATABASE_URL` when the local database uses a different user, password, host, port, or name. `pnpm run setup` is idempotent: it creates local working directories, creates the database when possible, and applies durable migrations.
 
 If no explicit `DATABASE_URL`/`POSTGRES_URL` is set and local PostgreSQL is absent, setup starts or reuses a persistent PGlite wire server at `127.0.0.1:55432` under `.local/dev-runtime` and applies the same migrations. Set `PGLITE_PORT` when that port is occupied. Explicit database URLs still require reachable real PostgreSQL.
 

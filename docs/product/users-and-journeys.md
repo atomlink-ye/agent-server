@@ -42,7 +42,7 @@ The current repository developer loop is pnpm-native and selects infrastructure 
 
 1. `corepack enable && pnpm install --frozen-lockfile` installs repository dependencies.
 2. `pnpm check` runs the deterministic repository/type boundary for ordinary development.
-3. `pnpm setup && pnpm dev` starts host-native core development without an execution plane.
+3. `pnpm run setup && pnpm dev` starts host-native core development without an execution plane.
 4. `pnpm setup:providers && pnpm dev:runtime` starts the current Paseo-backed host-native runtime when execution is required.
 5. `POST /api/v1/runs` remains a compatibility path that returns `202` and a stable Run URL; canonical product work uses Task admission.
 6. Workspace-memory proposal routes create, review, and list accepted records under authenticated owner scope.

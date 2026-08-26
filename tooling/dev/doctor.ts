@@ -109,7 +109,7 @@ async function postgresChecks(
             detail:
               missing.length === 0
                 ? `${expected.length}/${expected.length} durable migrations applied`
-                : `${applied.size}/${expected.length} applied; run pnpm setup (missing: ${missing.slice(0, 3).join(', ')}${missing.length > 3 ? ', ...' : ''})`,
+                : `${applied.size}/${expected.length} applied; run pnpm run setup (missing: ${missing.slice(0, 3).join(', ')}${missing.length > 3 ? ', ...' : ''})`,
             requiredFor: ['core', 'runtime'],
           },
         ],
@@ -122,7 +122,7 @@ async function postgresChecks(
           {
             name: 'migrations',
             status: 'fail',
-            detail: `migration registry unavailable; run pnpm setup (${error instanceof Error ? error.message : 'unknown error'})`,
+            detail: `migration registry unavailable; run pnpm run setup (${error instanceof Error ? error.message : 'unknown error'})`,
             requiredFor: ['core', 'runtime'],
           },
         ],

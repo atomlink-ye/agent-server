@@ -13,7 +13,7 @@ pnpm typecheck
 pnpm test:unit
 ```
 
-Use `pnpm setup`, `pnpm doctor`, and `pnpm dev` for host-native core work; use
+Use `pnpm run setup`, `pnpm doctor`, and `pnpm dev` for host-native core work; use
 `pnpm dev:runtime` only when a real runtime is required. Tests needing real
 PostgreSQL receive an explicit native database URL rather than a manual
 environment wrapper.

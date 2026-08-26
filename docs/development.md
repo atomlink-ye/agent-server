@@ -6,7 +6,7 @@ Agent Server treats the developer sandbox/host as the normal development boundar
 
 ```text
 pnpm install
-  -> pnpm setup
+  -> pnpm run setup
   -> pnpm doctor
   -> pnpm dev
   -> focused deterministic checks
@@ -25,7 +25,7 @@ Prerequisites:
 - `createdb` is optional and lets setup create the real default database when available.
 
 ```bash
-pnpm setup
+pnpm run setup
 ```
 
 Provider binaries are optional for core development. Prepare the pinned
@@ -37,7 +37,7 @@ pnpm setup:providers
 
 The command is idempotent and keeps its release under `.local/provider-toolchain`.
 It does not install providers globally or add a provider prerequisite to
-`pnpm setup`.
+`pnpm run setup`.
 
 The pinned provider toolchain is Linux-only and requires the `flock` utility.
 Run it in the Linux development sandbox; macOS/Windows host-native core mode

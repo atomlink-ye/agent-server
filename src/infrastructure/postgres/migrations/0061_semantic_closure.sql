@@ -226,6 +226,34 @@ BEGIN
 END
 $$;
 
+-- agent_definitions still stores workspace_id as text for historical reasons,
+-- while Product Work uses UUID workspace identity. A trigger keeps the database
+-- invariant exact without widening this closure into a global Agent migration.
+CREATE OR REPLACE FUNCTION validate_agent_work_binding_coworker_owner()
+RETURNS trigger AS $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM agent_definitions d
+    WHERE d.id = NEW.agent_definition_id
+      AND d.tenant_id = NEW.tenant_id
+      AND d.workspace_id = NEW.workspace_id::text
+      AND d.principal_type = NEW.principal_type
+      AND d.principal_id = NEW.principal_id
+      AND d.managed_discriminator = 'managed_agent_v1'
+  ) THEN
+    RAISE EXCEPTION 'Agent Work binding Coworker owner mismatch';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS agent_work_bindings_coworker_owner_before_write
+  ON agent_work_bindings;
+CREATE TRIGGER agent_work_bindings_coworker_owner_before_write
+  BEFORE INSERT OR UPDATE ON agent_work_bindings
+  FOR EACH ROW EXECUTE FUNCTION validate_agent_work_binding_coworker_owner();
+
 -- ---------------------------------------------------------------------------
 -- 3. Repair orphan wake deliveries left by legacy Direct Conversation cleanup.
 -- ---------------------------------------------------------------------------

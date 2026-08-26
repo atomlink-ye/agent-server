@@ -9,7 +9,11 @@ import { createLifecycleSupervisor } from './lifecycle-supervisor.js';
 export function createApplicationLifecycle(input: {
   readonly dispatcher: Pick<RunDispatcher, 'start' | 'stop'>;
   readonly workers: WorkerSet;
-  readonly runtimeProvider: Pick<RuntimeExecutionProvider, 'close'>;
+  readonly runtimeProvider: Pick<
+    RuntimeExecutionProvider,
+    'ensureReady' | 'health' | 'close'
+  >;
+  readonly runtimeEnabled: boolean;
   readonly runtimeMcpServer: Pick<RuntimeMcpServer, 'stop'>;
   readonly pool: Pick<Pool, 'end'>;
 }) {
@@ -17,6 +21,7 @@ export function createApplicationLifecycle(input: {
     dispatcher: input.dispatcher,
     ...input.workers,
     runtimeProvider: input.runtimeProvider,
+    runtimeEnabled: input.runtimeEnabled,
     runtimeMcpServer: input.runtimeMcpServer,
     pool: input.pool,
   });

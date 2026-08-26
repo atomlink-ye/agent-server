@@ -90,6 +90,7 @@ export async function createHostComposition(input: HostCompositionInput) {
     dispatcher: input.dispatcher,
     workers,
     runtimeProvider: input.runtime.runtimeProvider,
+    runtimeEnabled: input.config.runtime?.adapter === 'paseo',
     runtimeMcpServer: input.runtime.runtimeMcpServer,
     pool: input.pool,
   });

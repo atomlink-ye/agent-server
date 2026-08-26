@@ -202,10 +202,13 @@ describe('closeServiceResources', () => {
         }),
       },
       runtimeProvider: {
+        ensureReady: vi.fn(async () => true),
+        health: vi.fn(async () => ({ plane: 'test', ready: true, checks: [] })),
         close: vi.fn(async (): Promise<void> => {
           events.push('runtime.close');
         }),
       },
+      runtimeEnabled: false,
       pool: {
         end: vi.fn(async (): Promise<void> => {
           events.push('pool.end');
@@ -216,6 +219,7 @@ describe('closeServiceResources', () => {
     await expect(startServiceResources(resources)).rejects.toThrow(
       'service startup failed',
     );
+    expect(resources.runtimeProvider.ensureReady).not.toHaveBeenCalled();
     expect(events).toEqual([
       'dispatcher.start',
       'receiver.start',
@@ -226,6 +230,86 @@ describe('closeServiceResources', () => {
       'runtime.close',
       'pool.end',
     ]);
+  });
+
+  it('initializes enabled runtime before dispatch and exposes green readiness', async () => {
+    const events: string[] = [];
+    let runtimeReady = false;
+    const runtimeProvider = {
+      ensureReady: vi.fn(async () => {
+        events.push('runtime.ensureReady');
+        runtimeReady = true;
+        return true;
+      }),
+      health: vi.fn(async () => ({
+        plane: 'paseo',
+        ready: runtimeReady,
+        checks: [{ name: 'paseo', ready: runtimeReady }],
+      })),
+      close: vi.fn(async () => {
+        events.push('runtime.close');
+      }),
+    };
+    const resources = {
+      dispatcher: {
+        start: vi.fn(() => events.push('dispatcher.start')),
+        stop: vi.fn(async () => {
+          events.push('dispatcher.stop');
+        }),
+      },
+      runtimeProvider,
+      runtimeEnabled: true,
+      pool: {
+        end: vi.fn(async () => {
+          events.push('pool.end');
+        }),
+      },
+    };
+
+    await startServiceResources(resources);
+
+    expect(events).toEqual(['runtime.ensureReady', 'dispatcher.start']);
+    await expect(runtimeProvider.health()).resolves.toMatchObject({
+      ready: true,
+      checks: [{ name: 'paseo', ready: true }],
+    });
+
+    await closeServiceResources(resources);
+  });
+
+  it('reports failed runtime readiness without starting dispatch', async () => {
+    const dispatcherStart = vi.fn();
+    const runtimeProvider = {
+      ensureReady: vi.fn(async () => false),
+      health: vi.fn(async () => ({
+        plane: 'paseo',
+        ready: false,
+        checks: [
+          {
+            name: 'paseo_websocket',
+            ready: false,
+            detail: 'connection refused',
+          },
+        ],
+      })),
+      close: vi.fn(async () => undefined),
+    };
+
+    await expect(
+      startServiceResources({
+        dispatcher: {
+          start: dispatcherStart,
+          stop: vi.fn(async () => undefined),
+        },
+        runtimeProvider,
+        runtimeEnabled: true,
+        pool: { end: vi.fn(async () => undefined) },
+      }),
+    ).rejects.toThrow(
+      'runtime provider readiness failed (plane=paseo; checks=paseo_websocket)',
+    );
+    expect(dispatcherStart).not.toHaveBeenCalled();
+    expect(runtimeProvider.health).toHaveBeenCalled();
   });
 
   it('attempts every cleanup step and throws a safe aggregate failure', async () => {

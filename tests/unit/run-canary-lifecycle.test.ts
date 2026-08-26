@@ -54,7 +54,7 @@ describe('runHostCanary signal cleanup', () => {
 
           const children = [];
           const lifecycle = createCanarySignalLifecycle(children);
-          process.kill(process.pid, 'SIGTERM');
+          process.stdout.write('ready\\n');
           await lifecycle.signal;
           const descendant = spawnOwned(
             process.execPath,
@@ -63,7 +63,6 @@ describe('runHostCanary signal cleanup', () => {
           );
           lifecycle.register(descendant);
           process.stdout.write(String(descendant.pid) + '\\n');
-          await lifecycle.signal;
           await lifecycle.cleanup();
           lifecycle.dispose();
         `,
@@ -82,6 +81,27 @@ describe('runHostCanary signal cleanup', () => {
       output += chunk;
     });
     try {
+      await new Promise<void>((resolveReady, rejectReady) => {
+        const timer = setTimeout(
+          () =>
+            rejectReady(
+              new Error(`timed out waiting for owner readiness: ${output}`),
+            ),
+          5_000,
+        );
+        const check = () => {
+          if (!/^ready\s*$/m.test(output)) return;
+          clearTimeout(timer);
+          resolveReady();
+        };
+        owner.stdout?.on('data', check);
+        owner.once('error', (error) => {
+          clearTimeout(timer);
+          rejectReady(error);
+        });
+      });
+      owner.kill('SIGTERM');
+
       descendantPid = await new Promise<number>((resolvePid, rejectPid) => {
         const timer = setTimeout(
           () =>

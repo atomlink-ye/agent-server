@@ -1,6 +1,6 @@
 import type { ChildProcess } from 'node:child_process';
 import { rm } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
@@ -378,8 +378,9 @@ export async function runHostCanary(
       } catch {
         // Preserve the primary failure if the diagnostic log cannot be read.
       }
+      const relativeLogPath = relative(repositoryRoot, logPath);
       runError = new Error(
-        `${errorMessage}\ncanary primary child: log=${logPath}\nlog tail:\n${tail}`,
+        `${errorMessage}\ncanary primary child: log=${relativeLogPath}\nlog tail:\n${tail}`,
         { cause: error },
       );
     } else {

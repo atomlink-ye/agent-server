@@ -311,7 +311,23 @@ describe('web Product Golden Path', () => {
           'The started Work URL did not include the expected Run.',
         );
       await waitForObservableResult(page, createdWorkId, runId);
+      const completedWorkUrl = new URL(page.url());
       await page.reload({ waitUntil: 'domcontentloaded', timeout: 60_000 });
+      await page.waitForURL(
+        (url) =>
+          url.origin === browserOrigin &&
+          url.pathname === completedWorkUrl.pathname &&
+          url.searchParams.get('from_conversation') === conversationId &&
+          url.searchParams.get('run') === runId,
+        { timeout: 60_000 },
+      );
+      await page.getByTestId('work-detail-shell').waitFor({
+        state: 'visible',
+        timeout: 60_000,
+      });
+      await page
+        .getByRole('heading', { name: capabilityName })
+        .waitFor({ state: 'visible', timeout: 60_000 });
       await page
         .getByTestId('outcome-product-state')
         .waitFor({ state: 'visible', timeout: 60_000 });

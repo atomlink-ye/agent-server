@@ -21,13 +21,30 @@ describe('readiness timeout selection', () => {
       PASEO_DAEMON_STARTUP_TIMEOUT_MS: '240000',
     };
     expect(runtimeReadinessTimeout(environment)).toBe(120_000);
-    expect(canaryReadinessTimeout(environment)).toBe(120_000);
+    expect(canaryReadinessTimeout(environment)).toBe(
+      CANARY_READINESS_TIMEOUT_MS,
+    );
   });
 
   it('uses the positive Paseo timeout when no Canary timeout is set', () => {
     expect(
       runtimeReadinessTimeout({ PASEO_DAEMON_STARTUP_TIMEOUT_MS: '90000' }),
     ).toBe(90_000);
+  });
+
+  it('treats blank values as unset and preserves the Canary minimum', () => {
+    expect(
+      runtimeReadinessTimeout({
+        CANARY_READY_TIMEOUT_MS: '  ',
+        PASEO_DAEMON_STARTUP_TIMEOUT_MS: '',
+      }),
+    ).toBe(RUNTIME_READINESS_TIMEOUT_MS);
+    expect(
+      canaryReadinessTimeout({ PASEO_DAEMON_STARTUP_TIMEOUT_MS: '120000' }),
+    ).toBe(CANARY_READINESS_TIMEOUT_MS);
+    expect(canaryReadinessTimeout({ CANARY_READY_TIMEOUT_MS: '600000' })).toBe(
+      600_000,
+    );
   });
 
   it.each([

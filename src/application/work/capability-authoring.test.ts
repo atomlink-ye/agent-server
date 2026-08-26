@@ -11,7 +11,8 @@ import {
 const specialist = {
   name: 'researcher',
   role: 'Research Analyst',
-  instructions: 'Research the request, cite evidence, and return a concise comparison.',
+  instructions:
+    'Research the request, cite evidence, and return a concise comparison.',
 } as const;
 
 function parse(source: string) {
@@ -76,7 +77,9 @@ describe('CapabilityDraft canonical compilation', () => {
     if (document.spec.kind !== 'single_worker') return;
     expect(document.spec.worker_version_id).toBeUndefined();
     expect(document.spec.worker?.source).toContain('kind: Worker');
-    expect(document.spec.environment?.source).toContain('kind: ManagedEnvironment');
+    expect(document.spec.environment?.source).toContain(
+      'kind: ManagedEnvironment',
+    );
     parseWorkerForImport(document.spec.worker!.source);
     validateEnvironmentPackage(document.spec.environment!.source);
 
@@ -102,14 +105,16 @@ describe('CapabilityDraft canonical compilation', () => {
   it('round-trips bounded collaboration entirely through Worker vocabulary', () => {
     const compiled = compileCapabilityDraft({
       name: 'Investment Review',
-      description: 'Research an investment thesis and independently review its risks.',
+      description:
+        'Research an investment thesis and independently review its risks.',
       mode: 'collaboration',
       participants: [
         specialist,
         {
           name: 'reviewer',
           role: 'Risk Reviewer',
-          instructions: 'Review independently and request corrections for material gaps.',
+          instructions:
+            'Review independently and request corrections for material gaps.',
         },
       ],
       inputs: [],

@@ -92,10 +92,17 @@ export function WorkPage({
           ) : null}
           {isEmpty ? (
             <div className="work-main-empty">
-              <span className="work-main-icon" aria-hidden="true">✓</span>
+              <span className="work-main-icon" aria-hidden="true">
+                ✓
+              </span>
               <h1>Choose a Work item</h1>
-              <p>Select a real Work item from the pane, or start new Work from a Coworker Capability.</p>
-              <button type="button" onClick={() => setShowNewWork(true)}>New Work</button>
+              <p>
+                Select a real Work item from the pane, or start new Work from a
+                Coworker Capability.
+              </p>
+              <button type="button" onClick={() => setShowNewWork(true)}>
+                New Work
+              </button>
             </div>
           ) : null}
         </section>

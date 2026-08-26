@@ -35,7 +35,11 @@ export const CreateCoworkerRequestSchema = z
     summary: z.string().trim().min(1).max(2_000),
     instructions: z.string().trim().min(1).max(16_384).optional(),
     model_policy_ref: z
-      .enum(['free-only', 'claude/deepseek-v4-flash', 'codex/deepseek-v4-flash'])
+      .enum([
+        'free-only',
+        'claude/deepseek-v4-flash',
+        'codex/deepseek-v4-flash',
+      ])
       .default('free-only'),
     tools: z.array(z.string().trim().min(1).max(256)).max(32).default([]),
     skills: z.array(z.string().trim().min(1).max(256)).max(32).default([]),
@@ -65,7 +69,9 @@ const workInputNumberSchema = z
     maximum: z.number().finite().optional(),
   })
   .strict();
-const workInputBooleanSchema = z.object({ type: z.literal('boolean') }).strict();
+const workInputBooleanSchema = z
+  .object({ type: z.literal('boolean') })
+  .strict();
 const workInputPropertySchema = z.union([
   workInputStringSchema,
   workInputNumberSchema,
@@ -215,7 +221,9 @@ export type AgentCoworkerProfileResponse = z.infer<
 >;
 export type AgentWorkCatalogEntry = z.infer<typeof AgentWorkCatalogEntrySchema>;
 export type CreateCoworkerRequest = z.infer<typeof CreateCoworkerRequestSchema>;
-export type CreateCoworkerResponse = z.infer<typeof CreateCoworkerResponseSchema>;
+export type CreateCoworkerResponse = z.infer<
+  typeof CreateCoworkerResponseSchema
+>;
 export type AgentVersionResponse = z.infer<typeof AgentVersionResponseSchema>;
 export type AgentVersionListResponse = z.infer<
   typeof AgentVersionListResponseSchema

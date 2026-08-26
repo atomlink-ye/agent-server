@@ -1,9 +1,5 @@
 export type CapabilityInputType =
-  | 'text'
-  | 'number'
-  | 'integer'
-  | 'boolean'
-  | 'select';
+  'text' | 'number' | 'integer' | 'boolean' | 'select';
 
 export interface CapabilityInputDraft {
   readonly label: string;
@@ -50,9 +46,13 @@ export function compileCapabilityDraft(
   if (!draft.description.trim())
     throw new Error('Describe the outcome this Capability should deliver.');
   if (draft.mode === 'single' && draft.participants.length !== 1)
-    throw new Error('A single-specialist Capability needs exactly one participant.');
+    throw new Error(
+      'A single-specialist Capability needs exactly one participant.',
+    );
   if (draft.mode === 'collaboration' && draft.participants.length < 2)
-    throw new Error('A small-team Capability needs a lead and at least one member.');
+    throw new Error(
+      'A small-team Capability needs a lead and at least one member.',
+    );
   if (draft.participants.length > 17)
     throw new Error('A Capability can include at most 17 participants.');
 
@@ -61,14 +61,18 @@ export function compileCapabilityDraft(
     if (!participant.name.trim() || !participant.role.trim())
       throw new Error('Every participant needs a name and role.');
     if (!participant.instructions.trim())
-      throw new Error(`Add working instructions for ${participant.name || 'the participant'}.`);
+      throw new Error(
+        `Add working instructions for ${participant.name || 'the participant'}.`,
+      );
     const key = participant.name.trim().toLocaleLowerCase();
     if (participantNames.has(key))
       throw new Error('Participant names must be unique.');
     participantNames.add(key);
   }
 
-  const inputKeys = draft.inputs.map((input) => normalizeInputKey(input.key || input.label));
+  const inputKeys = draft.inputs.map((input) =>
+    normalizeInputKey(input.key || input.label),
+  );
   if (new Set(inputKeys).size !== inputKeys.length)
     throw new Error('Input field names must be unique.');
 
@@ -95,7 +99,13 @@ export function compileCapabilityDraft(
     );
   } else {
     const [lead, ...members] = draft.participants;
-    lines.push('  kind: collaboration', '  lead:', `    name: ${scalar(lead!.name.trim())}`, '    worker:', '      source: |');
+    lines.push(
+      '  kind: collaboration',
+      '  lead:',
+      `    name: ${scalar(lead!.name.trim())}`,
+      '    worker:',
+      '      source: |',
+    );
     lines.push(
       ...indent(workerSource(normalizedName, lead!, draft.description), 8),
       '  members:',
@@ -111,7 +121,12 @@ export function compileCapabilityDraft(
   }
 
   lines.push('  environment:', '    source: |', ...indent(environment, 6));
-  lines.push('  memory_version_ids: []', '  input_schema:', '    type: object', '    properties:');
+  lines.push(
+    '  memory_version_ids: []',
+    '  input_schema:',
+    '    type: object',
+    '    properties:',
+  );
   if (draft.inputs.length === 0) lines.push('      {}');
   draft.inputs.forEach((input, index) => {
     const key = inputKeys[index]!;
@@ -119,15 +134,25 @@ export function compileCapabilityDraft(
     if (input.type === 'text' || input.type === 'select') {
       lines.push('        type: string');
       if (input.minLength !== undefined)
-        lines.push(`        min_length: ${nonNegativeInteger(input.minLength, input.label)}`);
+        lines.push(
+          `        min_length: ${nonNegativeInteger(input.minLength, input.label)}`,
+        );
       if (input.maxLength !== undefined)
-        lines.push(`        max_length: ${nonNegativeInteger(input.maxLength, input.label)}`);
+        lines.push(
+          `        max_length: ${nonNegativeInteger(input.maxLength, input.label)}`,
+        );
       if (input.type === 'select') {
-        const choices = [...new Set((input.choices ?? []).map((v) => v.trim()).filter(Boolean))];
+        const choices = [
+          ...new Set(
+            (input.choices ?? []).map((v) => v.trim()).filter(Boolean),
+          ),
+        ];
         if (choices.length === 0)
           throw new Error(`${input.label || key} needs at least one choice.`);
         lines.push('        enum:');
-        choices.forEach((choice) => lines.push(`          - ${scalar(choice)}`));
+        choices.forEach((choice) =>
+          lines.push(`          - ${scalar(choice)}`),
+        );
       }
     } else if (input.type === 'number' || input.type === 'integer') {
       lines.push(`        type: ${input.type}`);
@@ -215,8 +240,11 @@ export function normalizeInputKey(value: string): string {
     .toLocaleLowerCase('en-US')
     .replace(/[^a-z0-9_]+/g, '_')
     .replace(/^_+|_+$/g, '');
-  const prefixed = /^[a-z_]/.test(normalized) ? normalized : `input_${normalized}`;
-  if (!prefixed || prefixed === 'input_') throw new Error('Input fields need a stable name.');
+  const prefixed = /^[a-z_]/.test(normalized)
+    ? normalized
+    : `input_${normalized}`;
+  if (!prefixed || prefixed === 'input_')
+    throw new Error('Input fields need a stable name.');
   return prefixed.slice(0, 64);
 }
 
@@ -249,10 +277,13 @@ function indent(value: string, spaces: number): string[] {
 }
 function nonNegativeInteger(value: number, label: string): number {
   if (!Number.isInteger(value) || value < 0)
-    throw new Error(`${label || 'Input'} needs a non-negative whole-number bound.`);
+    throw new Error(
+      `${label || 'Input'} needs a non-negative whole-number bound.`,
+    );
   return value;
 }
 function finite(value: number, label: string): number {
-  if (!Number.isFinite(value)) throw new Error(`${label || 'Input'} has an invalid numeric bound.`);
+  if (!Number.isFinite(value))
+    throw new Error(`${label || 'Input'} has an invalid numeric bound.`);
   return value;
 }

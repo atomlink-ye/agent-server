@@ -22,12 +22,7 @@ import { ApiTransportError } from '@/api/transport';
 
 type StartState = 'idle' | 'loading' | 'creating' | 'starting' | 'error';
 type AuthoringState =
-  | 'idle'
-  | 'validating'
-  | 'valid'
-  | 'applying'
-  | 'applied'
-  | 'error';
+  'idle' | 'validating' | 'valid' | 'applying' | 'applied' | 'error';
 
 export function NewWork({
   originConversationId = null,
@@ -56,9 +51,10 @@ export function NewWork({
       (items) => {
         if (!active) return;
         setCoworkers(items);
-        const selected = initialAgentId && items.some((item) => item.id === initialAgentId)
-          ? initialAgentId
-          : items[0]?.id ?? '';
+        const selected =
+          initialAgentId && items.some((item) => item.id === initialAgentId)
+            ? initialAgentId
+            : (items[0]?.id ?? '');
         setAgentId((current) => current || selected);
         setState('idle');
       },
@@ -92,7 +88,7 @@ export function NewWork({
             (item) => item.definitionVersionId === initialCapabilityVersionId,
           )
             ? initialCapabilityVersionId
-            : next.workCatalog[0]?.definitionVersionId ?? '';
+            : (next.workCatalog[0]?.definitionVersionId ?? '');
         setCapabilityVersionId(requested);
         setState('idle');
       },
@@ -123,7 +119,12 @@ export function NewWork({
   }, [capability]);
 
   async function startWork(): Promise<void> {
-    if (!capability || !title.trim() || state === 'creating' || state === 'starting')
+    if (
+      !capability ||
+      !title.trim() ||
+      state === 'creating' ||
+      state === 'starting'
+    )
       return;
     setState('creating');
     setMessage('Creating the Work record…');
@@ -148,14 +149,12 @@ export function NewWork({
     setState('starting');
     setMessage('Work created. Starting the first Run…');
     try {
-      const run = await workRunClient.start(workId, buildInput(capability, values));
+      const run = await workRunClient.start(
+        workId,
+        buildInput(capability, values),
+      );
       window.location.assign(
-        workTabHref(
-          workId,
-          'overview',
-          run.work_run.id,
-          originConversationId,
-        ),
+        workTabHref(workId, 'overview', run.work_run.id, originConversationId),
       );
     } catch (reason) {
       setState('error');
@@ -170,7 +169,10 @@ export function NewWork({
       <div className="new-work-form__heading">
         <span className="eyebrow">New Work</span>
         <h2>Start formal Work</h2>
-        <p>Choose a Coworker and one of its saved Capabilities, then fill the typed input contract.</p>
+        <p>
+          Choose a Coworker and one of its saved Capabilities, then fill the
+          typed input contract.
+        </p>
       </div>
 
       <div className="new-work-form__content">
@@ -198,18 +200,24 @@ export function NewWork({
               id="work-capability"
               value={capabilityVersionId}
               onChange={(event) => setCapabilityVersionId(event.target.value)}
-              disabled={!profile || state === 'creating' || state === 'starting'}
+              disabled={
+                !profile || state === 'creating' || state === 'starting'
+              }
             >
               <option value="">Choose what this Coworker should do…</option>
               {profile?.workCatalog.map((item) => (
-                <option key={item.definitionVersionId} value={item.definitionVersionId}>
+                <option
+                  key={item.definitionVersionId}
+                  value={item.definitionVersionId}
+                >
                   {humanize(item.name)}
                 </option>
               ))}
             </select>
             {profile && profile.workCatalog.length === 0 ? (
               <p className="new-work-form__hint">
-                This Coworker has no formal Capabilities yet. Add one from the Agents page first.
+                This Coworker has no formal Capabilities yet. Add one from the
+                Agents page first.
               </p>
             ) : null}
           </div>
@@ -243,7 +251,11 @@ export function NewWork({
                   type="button"
                   className="new-work-form__submit"
                   data-testid="new-work-submit"
-                  disabled={!title.trim() || state === 'creating' || state === 'starting'}
+                  disabled={
+                    !title.trim() ||
+                    state === 'creating' ||
+                    state === 'starting'
+                  }
                   onClick={() => void startWork()}
                 >
                   {state === 'creating'
@@ -264,7 +276,14 @@ export function NewWork({
             >
               <p>{message}</p>
               {state === 'error' && createdWorkId ? (
-                <a href={workTabHref(createdWorkId, 'overview', undefined, originConversationId)}>
+                <a
+                  href={workTabHref(
+                    createdWorkId,
+                    'overview',
+                    undefined,
+                    originConversationId,
+                  )}
+                >
                   Open the created Work
                 </a>
               ) : null}
@@ -275,7 +294,9 @@ export function NewWork({
 
       <details className="new-work-form__advanced">
         <summary>Advanced · author raw WorkDefinition source</summary>
-        <AdvancedDefinitionAuthoring originConversationId={originConversationId} />
+        <AdvancedDefinitionAuthoring
+          originConversationId={originConversationId}
+        />
       </details>
     </section>
   );
@@ -293,7 +314,10 @@ function TypedInputs({
   readonly onChange: (key: string, value: unknown) => void;
 }) {
   const entries = Object.entries(capability.inputSchema.properties);
-  if (!entries.length) return <p className="new-work-form__hint">This Capability needs no input.</p>;
+  if (!entries.length)
+    return (
+      <p className="new-work-form__hint">This Capability needs no input.</p>
+    );
   return (
     <div className="new-work-form__typed-inputs">
       <h3>Inputs</h3>
@@ -337,14 +361,18 @@ function TypedInput({
           disabled={disabled}
           onChange={(event) => onChange(event.target.checked)}
         />
-        {label}{required ? ' *' : ''}
+        {label}
+        {required ? ' *' : ''}
       </label>
     );
   }
   if (property.type === 'string' && property.choices?.length) {
     return (
       <div className="new-work-form__field">
-        <label htmlFor={`work-input-${name}`}>{label}{required ? ' *' : ''}</label>
+        <label htmlFor={`work-input-${name}`}>
+          {label}
+          {required ? ' *' : ''}
+        </label>
         <select
           id={`work-input-${name}`}
           value={typeof value === 'string' ? value : ''}
@@ -353,25 +381,40 @@ function TypedInput({
           onChange={(event) => onChange(event.target.value)}
         >
           <option value="">Choose…</option>
-          {property.choices.map((choice) => <option key={choice} value={choice}>{choice}</option>)}
+          {property.choices.map((choice) => (
+            <option key={choice} value={choice}>
+              {choice}
+            </option>
+          ))}
         </select>
       </div>
     );
   }
   return (
     <div className="new-work-form__field">
-      <label htmlFor={`work-input-${name}`}>{label}{required ? ' *' : ''}</label>
+      <label htmlFor={`work-input-${name}`}>
+        {label}
+        {required ? ' *' : ''}
+      </label>
       <input
         id={`work-input-${name}`}
         type={property.type === 'string' ? 'text' : 'number'}
-        step={property.type === 'integer' ? '1' : property.type === 'number' ? 'any' : undefined}
+        step={
+          property.type === 'integer'
+            ? '1'
+            : property.type === 'number'
+              ? 'any'
+              : undefined
+        }
         min={property.type === 'string' ? undefined : property.minimum}
         max={property.type === 'string' ? undefined : property.maximum}
         minLength={property.type === 'string' ? property.minLength : undefined}
         maxLength={property.type === 'string' ? property.maxLength : undefined}
         required={required}
         disabled={disabled}
-        value={typeof value === 'string' || typeof value === 'number' ? value : ''}
+        value={
+          typeof value === 'string' || typeof value === 'number' ? value : ''
+        }
         onChange={(event) => onChange(event.target.value)}
       />
     </div>
@@ -383,7 +426,9 @@ function buildInput(
   values: Readonly<Record<string, unknown>>,
 ): Readonly<Record<string, unknown>> {
   const input: Record<string, unknown> = {};
-  for (const [key, property] of Object.entries(capability.inputSchema.properties)) {
+  for (const [key, property] of Object.entries(
+    capability.inputSchema.properties,
+  )) {
     const raw = values[key];
     if (property.type === 'boolean') {
       if (raw !== undefined || capability.inputSchema.required.includes(key))
@@ -427,7 +472,8 @@ function AdvancedDefinitionAuthoring({
     setStatusMessage(null);
     try {
       const validation = await workDefinitionClient.validate(source);
-      if (!validation.fingerprint) throw new Error('Definition did not produce a fingerprint.');
+      if (!validation.fingerprint)
+        throw new Error('Definition did not produce a fingerprint.');
       const planned = await workDefinitionClient.plan(source);
       setPlan(planned);
       setState('valid');
@@ -463,23 +509,84 @@ function AdvancedDefinitionAuthoring({
         title,
       });
       window.location.assign(
-        workTabHref(created.work.id, 'definition', undefined, originConversationId),
+        workTabHref(
+          created.work.id,
+          'definition',
+          undefined,
+          originConversationId,
+        ),
       );
     } catch (error) {
       setState('error');
-      setStatusMessage(error instanceof Error ? error.message : 'The Definition was not applied.');
+      setStatusMessage(
+        error instanceof Error
+          ? error.message
+          : 'The Definition was not applied.',
+      );
     }
   }
 
   return (
     <div className="new-work-form__advanced-editor">
-      <p>Developer escape hatch. This still uses the exact canonical validate → plan → apply pipeline.</p>
-      <div className="new-work-form__field"><label>Work Title</label><input value={title} onChange={(event) => setTitle(event.target.value)} /></div>
-      <div className="new-work-form__field"><label>Definition YAML / JSON</label><textarea value={source} rows={14} spellCheck={false} onChange={(event) => { setSource(event.target.value); setState('idle'); setPlan(null); setDiagnostics([]); setStatusMessage(null); }} /></div>
-      {plan ? <p className="new-work-form__hint">Resolved {plan.resolved.participants.length} Worker participant(s).</p> : null}
-      {diagnostics.length ? <ul className="new-work-form__diagnostics">{diagnostics.map((diagnostic, index) => <li key={`${diagnostic.path}:${index}`}><code>{diagnostic.path}</code><strong>{diagnostic.code}</strong><span>{diagnostic.message}</span></li>)}</ul> : null}
-      {statusMessage ? <p className={`new-work-form__status new-work-form__status--${state}`}>{statusMessage}</p> : null}
-      <button type="button" disabled={!title.trim() || !source.trim() || state === 'validating' || state === 'applying'} onClick={() => void applyDefinition()}>{state === 'applying' ? 'Creating…' : 'Apply Definition & create Work'}</button>
+      <p>
+        Developer escape hatch. This still uses the exact canonical validate →
+        plan → apply pipeline.
+      </p>
+      <div className="new-work-form__field">
+        <label>Work Title</label>
+        <input
+          value={title}
+          onChange={(event) => setTitle(event.target.value)}
+        />
+      </div>
+      <div className="new-work-form__field">
+        <label>Definition YAML / JSON</label>
+        <textarea
+          value={source}
+          rows={14}
+          spellCheck={false}
+          onChange={(event) => {
+            setSource(event.target.value);
+            setState('idle');
+            setPlan(null);
+            setDiagnostics([]);
+            setStatusMessage(null);
+          }}
+        />
+      </div>
+      {plan ? (
+        <p className="new-work-form__hint">
+          Resolved {plan.resolved.participants.length} Worker participant(s).
+        </p>
+      ) : null}
+      {diagnostics.length ? (
+        <ul className="new-work-form__diagnostics">
+          {diagnostics.map((diagnostic, index) => (
+            <li key={`${diagnostic.path}:${index}`}>
+              <code>{diagnostic.path}</code>
+              <strong>{diagnostic.code}</strong>
+              <span>{diagnostic.message}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {statusMessage ? (
+        <p className={`new-work-form__status new-work-form__status--${state}`}>
+          {statusMessage}
+        </p>
+      ) : null}
+      <button
+        type="button"
+        disabled={
+          !title.trim() ||
+          !source.trim() ||
+          state === 'validating' ||
+          state === 'applying'
+        }
+        onClick={() => void applyDefinition()}
+      >
+        {state === 'applying' ? 'Creating…' : 'Apply Definition & create Work'}
+      </button>
     </div>
   );
 }

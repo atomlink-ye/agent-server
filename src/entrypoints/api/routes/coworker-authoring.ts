@@ -47,7 +47,11 @@ export function registerCoworkerAuthoringRoute(
       await readBoundedJson(c.req.raw, MAX_AGENT_REQUEST_BYTES),
     );
     if (!parsed.success)
-      throw new HttpError(400, 'invalid_request', 'The Coworker draft is invalid.');
+      throw new HttpError(
+        400,
+        'invalid_request',
+        'The Coworker draft is invalid.',
+      );
     if (!dependencies.coworkerProvisioning)
       throw new HttpError(
         503,

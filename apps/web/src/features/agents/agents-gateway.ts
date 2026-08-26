@@ -30,9 +30,7 @@ export interface CreateCoworkerDraft {
   readonly summary: string;
   readonly instructions?: string;
   readonly modelPolicyRef?:
-    | 'free-only'
-    | 'claude/deepseek-v4-flash'
-    | 'codex/deepseek-v4-flash';
+    'free-only' | 'claude/deepseek-v4-flash' | 'codex/deepseek-v4-flash';
   readonly tools?: readonly string[];
   readonly skills?: readonly string[];
 }
@@ -74,7 +72,10 @@ export async function createCoworker(
 
 export async function associateCapability(
   agentId: string,
-  input: { readonly definitionId: string; readonly definitionVersionId: string },
+  input: {
+    readonly definitionId: string;
+    readonly definitionVersionId: string;
+  },
 ): Promise<void> {
   const payload = record(
     await apiTransport.request(

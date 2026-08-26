@@ -34,6 +34,7 @@ describe('web Product Golden Path', () => {
       const coworkerName = `Golden Path ${suffix}`;
       const capabilityName = `Competitor Brief ${suffix}`;
       let conversationId: string;
+      const browserOrigin = new URL(baseUrl!).origin;
       browser = await chromium.launch({ headless: true });
       const page = await (
         await browser.newContext({ baseURL: baseUrl! })
@@ -60,6 +61,7 @@ describe('web Product Golden Path', () => {
       const createResponse = page.waitForResponse(
         (response) =>
           response.request().method() === 'POST' &&
+          new URL(response.url()).origin === browserOrigin &&
           new URL(response.url()).pathname === '/api/agents',
       );
       await page.getByRole('button', { name: 'Create & Chat' }).click();
@@ -83,6 +85,7 @@ describe('web Product Golden Path', () => {
       const messageResponse = page.waitForResponse(
         (response) =>
           response.request().method() === 'POST' &&
+          new URL(response.url()).origin === browserOrigin &&
           new URL(response.url()).pathname ===
             `/api/conversations/${conversationId}/messages`,
       );

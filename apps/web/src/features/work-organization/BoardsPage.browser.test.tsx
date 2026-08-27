@@ -264,6 +264,44 @@ it('completes every Board authoring action in-app and requires confirmed deletio
   }
 });
 
+it('disables authoring controls until a title can succeed', async () => {
+  const api = createBoardApi({ initialBoard: true });
+  const mounted = await mountRoutedBoards(api.fetch);
+  try {
+    await clickButton(mounted.host, 'Rename');
+    await expectAuthoringSubmitDisabled(mounted.host, true);
+    await setInputValueByLabel(
+      mounted.host,
+      'Board title',
+      'Changed Board title',
+    );
+    await expectAuthoringSubmitDisabled(mounted.host, false);
+    await setInputValueByLabel(mounted.host, 'Board title', '');
+    await expectAuthoringSubmitDisabled(mounted.host, true);
+    await clickButton(mounted.host, 'Cancel');
+
+    await clickButton(mounted.host, 'Rename Todo');
+    await expectAuthoringSubmitDisabled(mounted.host, true);
+    await setInputValueByLabel(
+      mounted.host,
+      'Column title',
+      'Changed Column title',
+    );
+    await expectAuthoringSubmitDisabled(mounted.host, false);
+    await setInputValueByLabel(mounted.host, 'Column title', '');
+    await expectAuthoringSubmitDisabled(mounted.host, true);
+    await clickButton(mounted.host, 'Cancel');
+
+    await clickButton(mounted.host, '+ Task');
+    await expectAuthoringSubmitDisabled(mounted.host, true);
+    await setInputValueByLabel(mounted.host, 'Task title', 'Valid Task title');
+    await expectAuthoringSubmitDisabled(mounted.host, false);
+    expectNoNativeDialogs();
+  } finally {
+    await mounted.dispose();
+  }
+});
+
 for (const failure of [
   {
     name: 'Board creation',
@@ -876,6 +914,18 @@ async function expectAlert(host: HTMLElement) {
 async function expectAuthoringAbsent(host: HTMLElement) {
   await act(settle);
   expect(host.querySelector('.work-board-authoring')).toBeNull();
+}
+
+async function expectAuthoringSubmitDisabled(
+  host: HTMLElement,
+  disabled: boolean,
+) {
+  await act(settle);
+  expect(
+    host
+      .querySelector('.work-board-authoring')
+      ?.querySelector<HTMLButtonElement>('button.work-org-primary')?.disabled,
+  ).toBe(disabled);
 }
 
 async function expectVisibleValue(host: HTMLElement, value: string) {

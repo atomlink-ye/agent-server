@@ -630,6 +630,20 @@ function BoardCanvas({
                 ? 'Add Task'
                 : 'Save'
           }
+          submitDisabled={
+            authoring.kind === 'create-card'
+              ? !authoring.title.trim()
+              : authoring.kind === 'rename-board'
+                ? !authoring.title.trim() ||
+                  authoring.title.trim() === snapshot.board.title
+                : authoring.kind === 'rename-column'
+                  ? !authoring.title.trim() ||
+                    authoring.title.trim() ===
+                      snapshot.columns.find(
+                        (column) => column.id === authoring.columnId,
+                      )?.title
+                  : false
+          }
           onCancel={() => setAuthoring(null)}
           onSubmit={submitAuthoring}
         >

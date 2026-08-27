@@ -80,6 +80,42 @@ describe('InvokeTask', () => {
     expect(second.task.latestRun?.runId).toBe(first.task.latestRun?.runId);
   });
 
+  it('replays an accepted admission after its invokable is no longer published', async () => {
+    const repository = new InMemoryAdmissionRepository();
+    const firstUseCase = new InvokeTask(
+      repository,
+      new PublishedInvokableRepository(),
+      publishedAgentResolver,
+    );
+    const first = await firstUseCase.execute({
+      idempotencyKey: 'replay-after-unpublish',
+      invokable: { kind: 'agent', versionId: publishedAgentVersion.id },
+      input: { text: 'preserve accepted admission' },
+      accessContext: primaryAccessContext,
+    });
+    const replayUseCase = new InvokeTask(
+      repository,
+      new PublishedInvokableRepository(),
+      {
+        resolvePublished: async () => {
+          throw new Error('an accepted replay must not resolve its invokable');
+        },
+      },
+    );
+
+    await expect(
+      replayUseCase.execute({
+        idempotencyKey: 'replay-after-unpublish',
+        invokable: { kind: 'agent', versionId: publishedAgentVersion.id },
+        input: { text: 'preserve accepted admission' },
+        accessContext: primaryAccessContext,
+      }),
+    ).resolves.toMatchObject({
+      reused: true,
+      task: { task: { id: first.task.task.id } },
+    });
+  });
+
   it('reloads a newly admitted task through the transaction task repository', async () => {
     const repository = new InMemoryAdmissionRepository();
     const useCase = new InvokeTask(
@@ -97,6 +133,40 @@ describe('InvokeTask', () => {
 
     expect(result.reused).toBe(false);
     expect(repository.tasksRepository.transactionScopedOwnerReads).toBe(1);
+  });
+
+  it('resolves the published invokable before opening the admission transaction', async () => {
+    const repository = new InMemoryAdmissionRepository();
+    const resolver: AgentResolutionApi = {
+      resolvePublished: async (id) => {
+        expect(repository.transactionActive).toBe(false);
+        return id === publishedAgentVersion.id
+          ? {
+              source: 'managed',
+              id,
+              instructions: 'Do the task.',
+              modelPolicyRef: 'free-only',
+              proposalLimit: 0,
+              skills: [],
+              toolRefs: [],
+            }
+          : null;
+      },
+    };
+    const useCase = new InvokeTask(
+      repository,
+      new PublishedInvokableRepository(),
+      resolver,
+    );
+
+    await expect(
+      useCase.execute({
+        idempotencyKey: 'resolve-before-admission-transaction',
+        invokable: { kind: 'agent', versionId: publishedAgentVersion.id },
+        input: { text: 'resolve before transaction' },
+        accessContext: primaryAccessContext,
+      }),
+    ).resolves.toMatchObject({ reused: false });
   });
 
   it('reloads a replayed task through the transaction task repository', async () => {
@@ -311,6 +381,10 @@ class InMemoryAdmissionRepository implements AdmissionRepository {
   );
   public readonly runsRepository = new InMemoryRunRepository();
   public readonly records: AdmissionRecord[] = [];
+
+  public get transactionActive(): boolean {
+    return this.#transactionActive;
+  }
 
   public async withTransaction<T>(
     work: (transaction: AdmissionTransaction) => Promise<T>,

@@ -314,6 +314,11 @@
   flex-direction: column;
   gap: 4px;
 }
+.agents-skill-grant {
+  margin-left: 6px;
+  opacity: 0.7;
+  font-size: 0.85em;
+}
 .agents-plan-preview {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));

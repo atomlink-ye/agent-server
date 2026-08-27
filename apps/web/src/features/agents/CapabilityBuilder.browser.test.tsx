@@ -30,6 +30,22 @@ function unavailableResponse(): Response {
   } as Response;
 }
 
+function catalogResponse(): Response {
+  return {
+    ok: true,
+    status: 200,
+    json: async () => ({
+      skills: [
+        {
+          ref: 'agent-server/memory-api',
+          name: 'agent-server/memory-api',
+          required_tool_refs: ['agent-server/memory-read'],
+        },
+      ],
+    }),
+  } as Response;
+}
+
 async function renderBuilder(host: HTMLElement) {
   const root = createRoot(host);
   await act(async () => {
@@ -75,6 +91,28 @@ it('disables authoring actions when the Skill catalog reports the surface is una
   expect(buttonNamed(host, 'Save & start Work').disabled).toBe(true);
   // `unavailable` must never offer a Retry, because a retry cannot succeed.
   expect(host.textContent?.toLowerCase()).not.toContain('retry');
+
+  await act(async () => {
+    root.unmount();
+  });
+  host.remove();
+  vi.unstubAllGlobals();
+});
+
+it('names the tools a Skill transitively grants at selection time', async () => {
+  // A Skill carries `requiredToolRefs`, so picking one widens what the
+  // compiled Worker may do. The author must be able to see what they are
+  // granting before they grant it.
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => catalogResponse()),
+  );
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = await renderBuilder(host);
+
+  expect(host.textContent).toContain('agent-server/memory-api');
+  expect(host.textContent).toContain('grants agent-server/memory-read');
 
   await act(async () => {
     root.unmount();

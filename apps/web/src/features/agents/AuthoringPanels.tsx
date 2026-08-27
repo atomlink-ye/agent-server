@@ -820,6 +820,20 @@ function SkillPicker({
               }
             />{' '}
             {skill.name}
+            {/*
+              A Skill is not an inert instruction pack: it carries
+              `requiredToolRefs`, so selecting one transitively grants those
+              tools to the compiled Worker. Naming the grant at selection time
+              is the whole point — an author must not widen what a Work may do
+              without being able to see what they widened it by.
+            */}
+            {skill.requiredToolRefs.length ? (
+              <span className="agents-skill-grant">
+                grants {skill.requiredToolRefs.join(', ')}
+              </span>
+            ) : (
+              <span className="agents-skill-grant">grants no extra tools</span>
+            )}
           </label>
         ))}
       </div>

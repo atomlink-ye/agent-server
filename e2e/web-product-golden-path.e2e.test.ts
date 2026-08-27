@@ -353,12 +353,6 @@ describe('web Product Golden Path', () => {
         input: { company: companyValue },
       });
       expect(startedRunResponse.status()).toBe(202);
-      const startedRunBody = (await startedRunResponse.json()) as {
-        work_run?: { definition_version_id?: unknown };
-      };
-      expect(startedRunBody.work_run?.definition_version_id).toBe(
-        appliedBody.version.id,
-      );
       await page.waitForURL(
         (url) =>
           url.origin === browserOrigin &&
@@ -379,6 +373,27 @@ describe('web Product Golden Path', () => {
         throw new Error(
           'The started Work URL did not include the expected Run.',
         );
+      // The started Run's definition version is asserted from DURABLE SERVER
+      // STATE, not from the in-flight browser response. run-trigger navigates
+      // away the moment the Run starts, and Chromium discards response bodies
+      // belonging to the previous navigation — reading them afterwards fails
+      // with "No resource with given identifier found". Reading the Run back
+      // also asserts something stronger: what the server actually recorded,
+      // rather than what the browser happened to observe in transit.
+      const startedRunRead = await page.request.get(
+        `/api/works/${createdWorkId}/runs/${runId}`,
+        { headers: { accept: 'application/json' } },
+      );
+      expect(startedRunRead.ok()).toBe(true);
+      const startedRunBody = (await startedRunRead.json()) as {
+        work_run?: { definition_version_id?: unknown };
+      };
+      // Closes the chain: the Skill selected in the browser produced this exact
+      // definition version, and this is the version the WorkRun is executing.
+      expect(startedRunBody.work_run?.definition_version_id).toBe(
+        appliedBody.version.id,
+      );
+
       await waitForObservableResult(page, createdWorkId, runId);
       const completedWorkUrl = new URL(page.url());
       await page.reload({ waitUntil: 'domcontentloaded', timeout: 60_000 });

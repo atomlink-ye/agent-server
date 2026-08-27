@@ -156,6 +156,31 @@ it('searches Direct Chat by the Coworker display identity shown in the list', as
   }
 });
 
+it('renders roster idle, error, and ready-empty states honestly', async () => {
+  const commands = commandsFor();
+  const appStore = createAppStore();
+  const conversationsStore = createConversationsStore({
+    selectionStore: appStore,
+  });
+  const { host, root } = renderPane(commands, appStore, conversationsStore);
+  try {
+    expect(host.textContent).toContain('Loading conversations…');
+    expect(host.textContent).not.toContain('No conversations yet.');
+
+    await act(async () =>
+      conversationsStore.fail('Unable to load conversations.'),
+    );
+    expect(host.textContent).toContain('Unable to load conversations.');
+    expect(findButton(host, 'Retry')).toBeInstanceOf(HTMLButtonElement);
+
+    await act(async () => conversationsStore.hydrate([]));
+    expect(host.textContent).toContain('No conversations yet.');
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+  }
+});
+
 function commandsFor(overrides: Partial<ChatCommands> = {}): ChatCommands {
   return {
     loadCoworkers: async () => [],

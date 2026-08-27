@@ -9,6 +9,20 @@
   overflow-y: auto;
   padding: 20px 24px;
 }
+.agents-new-coworker-cta {
+  padding: 6px 10px;
+  border-color: var(--coral);
+  border-radius: var(--radius-sm);
+  background: var(--coral-soft);
+  color: var(--ink-900);
+  font-size: var(--text-sm);
+  font-weight: 650;
+  white-space: nowrap;
+}
+.agents-new-coworker-cta:hover:not(:disabled) {
+  background: var(--coral);
+  color: var(--ink-900);
+}
 .agents-list {
   display: flex;
   flex-direction: column;
@@ -103,6 +117,19 @@
 .agents-runtime--unavailable {
   background: var(--ink-100);
   color: var(--ink-500);
+}
+.agents-save-success {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--grass);
+  border-radius: var(--radius-md);
+  background: var(--grass-soft);
+  color: var(--grass-deep);
+  font-size: var(--text-sm);
+  font-weight: 650;
 }
 .agents-detail,
 .agents-authoring {

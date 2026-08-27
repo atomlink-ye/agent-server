@@ -348,14 +348,20 @@ export function ConversationsPage({
               </h1>
             </div>
           </div>
-          <button
-            className="icon-button"
-            type="button"
-            aria-label="More options"
-            disabled
-          >
-            ···
-          </button>
+          <div className="disabled-conversation-action">
+            <button
+              className="icon-button"
+              type="button"
+              aria-label="More options"
+              aria-describedby="conversation-options-reason"
+              disabled
+            >
+              ···
+            </button>
+            <span id="conversation-options-reason" role="tooltip">
+              More conversation options aren’t available yet.
+            </span>
+          </div>
         </header>
 
         <section className="chat-content" aria-label="Conversation">

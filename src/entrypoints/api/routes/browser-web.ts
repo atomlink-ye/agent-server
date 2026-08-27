@@ -35,6 +35,8 @@ import {
   PostConversationMessageRequestSchema,
 } from '../../../contracts/conversations.js';
 import { SkillListResponseSchema } from '../../../contracts/skills.js';
+import { RuntimeCapabilitiesResponseSchema } from '../../../contracts/runtime-capabilities.js';
+import { createConfiguredRuntimeCapabilities } from '../../../composition/create-runtime-capabilities.js';
 import type { ApiEnvironment } from '../http-types.js';
 import type { AppConfig } from '../../../shared/config.js';
 import type { Logger } from '../../../shared/observability/logger.js';
@@ -91,6 +93,18 @@ export function registerBrowserWebRoutes(
   config: AppConfig,
   logger: Logger,
 ): void {
+  app.get('/api/runtime-capabilities', async () =>
+    jsonResponse(
+      RuntimeCapabilitiesResponseSchema.parse({
+        supported_runtime_capabilities: [
+          ...createConfiguredRuntimeCapabilities(config).supported,
+        ],
+      }),
+      200,
+      { 'cache-control': 'no-store' },
+    ),
+  );
+
   app.get('/api/conversations', async () =>
     readBrowserJson(
       config,

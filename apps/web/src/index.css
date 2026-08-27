@@ -629,6 +629,18 @@ textarea {
   border-color: transparent;
   color: var(--ink-500);
 }
+.disabled-conversation-action {
+  display: inline-grid;
+  justify-items: end;
+  gap: 4px;
+}
+.disabled-conversation-action [role='tooltip'] {
+  max-width: 260px;
+  color: var(--ink-500);
+  font-size: var(--text-eyebrow);
+  line-height: 1.35;
+  text-align: right;
+}
 
 .icon-button {
   padding: 7px 3px 10px 10px;

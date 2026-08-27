@@ -119,3 +119,145 @@ it('names the tools a Skill transitively grants at selection time', async () => 
   host.remove();
   vi.unstubAllGlobals();
 });
+
+it('shows and retains an affirmative save result without navigating', async () => {
+  const definitionId = '33333333-3333-4333-8333-333333333333';
+  const versionId = '44444444-4444-4444-8444-444444444444';
+  const fetchMock = vi.fn(async (path: string, init?: RequestInit) => {
+    const method = init?.method ?? 'GET';
+    if (path === '/api/skills') return catalogResponse();
+    if (method === 'POST' && path === '/api/work-definitions/validate')
+      return jsonResponse({
+        valid: true,
+        fingerprint: `sha256:${'a'.repeat(64)}`,
+        metadata: { normalized_name: 'competitor-research' },
+        diagnostics: [],
+      });
+    if (method === 'POST' && path === '/api/work-definitions/plan')
+      return jsonResponse({
+        valid: true,
+        fingerprint: `sha256:${'a'.repeat(64)}`,
+        metadata: { normalized_name: 'competitor-research' },
+        resolved: {
+          kind: 'single_worker',
+          participants: [
+            {
+              name: 'specialist',
+              role: 'primary',
+              source: 'inline',
+              worker_version_id: null,
+              skills: [],
+              tools: [],
+            },
+          ],
+          environment: { source: 'inline', environment_version_id: null },
+          memory_version_ids: [],
+          required_runtime_capabilities: ['external_workspace'],
+          platform_capabilities: [],
+          materialization: {
+            inline_workers: 1,
+            inline_environment: true,
+            internal_team: false,
+          },
+        },
+        diagnostics: [],
+      });
+    if (method === 'POST' && path === '/api/work-definitions/apply')
+      return jsonResponse({
+        result: 'created',
+        definition: {
+          id: definitionId,
+          normalized_name: 'competitor-research',
+          description: 'Research competitors.',
+          created_at: '2026-08-15T00:00:00.000Z',
+          latest_version_id: versionId,
+          links: {
+            self: '/api/v1/work-definitions/3',
+            versions: '/api/v1/work-definitions/3/versions',
+          },
+        },
+        version: {
+          id: versionId,
+          definition_id: definitionId,
+          status: 'published',
+          fingerprint: `sha256:${'a'.repeat(64)}`,
+          source: {},
+          source_yaml: 'kind: WorkDefinition',
+          resolved: {
+            resource_manifest_fingerprint: `sha256:${'b'.repeat(64)}`,
+          },
+          created_at: '2026-08-15T00:00:00.000Z',
+          published_at: '2026-08-15T00:00:00.000Z',
+          links: {
+            self: `/api/v1/work-definition-versions/${versionId}`,
+            definition: `/api/v1/work-definitions/${definitionId}`,
+          },
+        },
+        resolved: {
+          resource_manifest_fingerprint: `sha256:${'b'.repeat(64)}`,
+        },
+      });
+    if (method === 'POST' && path.includes('/api/agents/'))
+      return jsonResponse({ associated: true });
+    throw new Error(`unexpected request: ${method} ${path}`);
+  });
+  vi.stubGlobal('fetch', fetchMock);
+
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = await renderBuilder(host);
+  try {
+    const textInputs = host.querySelectorAll<HTMLInputElement>('input');
+    const setValue = (input: HTMLInputElement, value: string): void => {
+      const setter = Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        'value',
+      )?.set;
+      setter?.call(input, value);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+    await act(async () => {
+      setValue(textInputs[0]!, 'Competitor Research');
+      const description = host.querySelector('textarea')!;
+      const textareaSetter = Object.getOwnPropertyDescriptor(
+        HTMLTextAreaElement.prototype,
+        'value',
+      )?.set;
+      textareaSetter?.call(
+        description,
+        'Research competitors and compare their positioning.',
+      );
+      description.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => {
+      buttonNamed(host, 'Preview plan').click();
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    });
+    await act(async () => {
+      buttonNamed(host, 'Save capability').click();
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    });
+    expect(
+      host.querySelector('[data-testid="capability-save-success"]'),
+    ).not.toBeNull();
+    await act(async () =>
+      setValue(textInputs[0]!, 'Competitor Research Updated'),
+    );
+    expect(host.textContent).toContain(
+      'Capability saved to this Coworker’s Work Catalog.',
+    );
+    expect(window.location.pathname).not.toContain('/work');
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
+function jsonResponse(body: unknown): Response {
+  return {
+    ok: true,
+    status: 200,
+    json: async () => body,
+  } as Response;
+}

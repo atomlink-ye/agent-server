@@ -211,6 +211,7 @@ export function CapabilityBuilder({
     'idle' | 'previewing' | 'ready' | 'saving' | 'unavailable' | 'error'
   >('idle');
   const [message, setMessage] = useState<string | null>(null);
+  const [saveConfirmation, setSaveConfirmation] = useState(false);
 
   // The Skill catalog is installed by the same `productWorkSurface` fact that
   // installs the work-definition routes this builder saves through. So a
@@ -298,6 +299,7 @@ export function CapabilityBuilder({
       await onSaved();
       setStatus('ready');
       setMessage('Capability saved to this Coworker’s Work Catalog.');
+      setSaveConfirmation(true);
       if (startAfterSave) onStart(applied.versionId);
     } catch (reason) {
       if (isFeatureUnavailable(reason)) {
@@ -650,6 +652,16 @@ export function CapabilityBuilder({
           role={status === 'error' ? 'alert' : 'status'}
         >
           {message}
+        </p>
+      ) : null}
+      {saveConfirmation ? (
+        <p
+          className="agents-save-success"
+          data-testid="capability-save-success"
+          role="status"
+        >
+          <span aria-hidden="true">✓</span> Capability saved to this Coworker’s
+          Work Catalog.
         </p>
       ) : null}
       <div className="agents-form-actions">

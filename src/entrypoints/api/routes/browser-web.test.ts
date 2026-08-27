@@ -24,9 +24,10 @@ function fakeLogger(): Logger {
 
 function appWithBrowserRoutes(
   logger: Logger = fakeLogger(),
+  config: AppConfig = testConfig(),
 ): Hono<ApiEnvironment> {
   const app = new Hono<ApiEnvironment>();
-  registerBrowserWebRoutes(app, testConfig(), logger);
+  registerBrowserWebRoutes(app, config, logger);
   return app;
 }
 
@@ -37,6 +38,29 @@ afterEach(() => {
 });
 
 describe('browser-safe Vite facade', () => {
+  it('projects configured runtime capabilities without contacting an upstream service', async () => {
+    const config = {
+      ...testConfig(),
+      runtime: { adapter: 'paseo' },
+    } as AppConfig;
+    const upstream = vi.fn();
+    vi.stubGlobal('fetch', upstream);
+
+    const response = await appWithBrowserRoutes(fakeLogger(), config).request(
+      '/api/runtime-capabilities',
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(await response.json()).toMatchObject({
+      supported_runtime_capabilities: expect.arrayContaining([
+        'external_workspace',
+        'reusable_session',
+      ]),
+    });
+    expect(upstream).not.toHaveBeenCalled();
+  });
+
   it('uses the server-side service credential and strips unknown conversation fields', async () => {
     process.env.AGENT_SERVER_SERVICE_TOKEN = SERVICE_TOKEN;
     const upstream = vi.fn(

@@ -101,6 +101,44 @@ function jsonResponse(body: unknown): Response {
   } as Response;
 }
 
+function planResponse(): Response {
+  return jsonResponse({
+    valid: true,
+    fingerprint: `sha256:${'c'.repeat(64)}`,
+    metadata: { normalized_name: 'supplier-risk-review' },
+    resolved: {
+      kind: 'collaboration',
+      participants: [
+        {
+          name: 'Lead',
+          role: 'lead',
+          source: 'referenced',
+          worker_version_id: leadVersionId,
+          skills: [],
+          tools: [],
+        },
+      ],
+      environment: {
+        source: 'referenced',
+        environment_version_id: environmentVersionId,
+      },
+      memory_version_ids: [],
+      required_runtime_capabilities: [
+        'reusable_session',
+        'external_workspace',
+        'platform_mcp',
+      ],
+      platform_capabilities: ['collaboration', 'platform_mcp'],
+      materialization: {
+        inline_workers: 0,
+        inline_environment: false,
+        internal_team: true,
+      },
+    },
+    diagnostics: [],
+  });
+}
+
 function mockProductReads(
   input: {
     readonly runList?: typeof runs;
@@ -113,6 +151,20 @@ function mockProductReads(
   const runId = input.selectedRunId ?? selectedRun.id;
   const definition = input.definition ?? definitionVersion;
   const responses = new Map<string, unknown>([
+    [
+      '/api/runtime-capabilities',
+      {
+        supported_runtime_capabilities: [
+          'reusable_session',
+          'external_workspace',
+          'platform_mcp',
+        ],
+      },
+    ],
+    [
+      `/api/work-definition-versions/${work.work.definition_version_id}`,
+      { version: definitionVersion },
+    ],
     [`/api/works/${work.work.id}`, work],
     [`/api/works/${work.work.id}/runs`, runList],
     [`/api/work-definition-versions/${definition.id}`, { version: definition }],
@@ -121,6 +173,7 @@ function mockProductReads(
   ]);
   const fetchMock = vi.fn().mockImplementation(async (path: string) => {
     const body = responses.get(path);
+    if (path === '/api/work-definitions/plan') return planResponse();
     if (!body) throw new Error(`unexpected request: ${path}`);
     return jsonResponse(body);
   });
@@ -155,6 +208,8 @@ it('renders the four-tab Work shell and fixture-backed Overview through Product 
     ).toEqual(['Overview', 'Runs', 'Transcript', 'Artifacts', 'Definition']);
     expect(host.textContent).toContain('Historical Run Trace');
     expect(host.textContent).toContain('MCP-only');
+    expect(host.textContent).toContain('Start Run');
+    expect(host.textContent).not.toContain('Run unavailable');
     for (const excluded of trace.timeline_coverage.excluded_execution)
       expect(host.textContent?.toLowerCase()).toContain(
         excluded.replaceAll('_', ' '),

@@ -22,14 +22,12 @@ export function isFeatureUnavailable(reason: unknown): boolean {
  */
 export function isResourceNotFound(
   reason: unknown,
-  selectedResourcePath: string,
+  notFoundCode: string,
 ): boolean {
   return (
     typeof reason === 'object' &&
     reason !== null &&
-    'status' in reason &&
-    (reason as { status?: unknown }).status === 404 &&
-    'requestPath' in reason &&
-    (reason as { requestPath?: unknown }).requestPath === selectedResourcePath
+    'code' in reason &&
+    (reason as { code?: unknown }).code === notFoundCode
   );
 }

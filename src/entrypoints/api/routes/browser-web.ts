@@ -144,6 +144,7 @@ export function registerBrowserWebRoutes(
       logger,
       `/api/v1/conversations/${encodeURIComponent(id)}`,
       ConversationReadResponseSchema,
+      { notFoundCode: 'conversation_not_found' },
     );
   });
   app.get('/api/conversations/:conversationId/messages', async (c) => {
@@ -154,6 +155,7 @@ export function registerBrowserWebRoutes(
       logger,
       `/api/v1/conversations/${encodeURIComponent(id)}/messages`,
       ConversationMessagesResponseSchema,
+      { notFoundCode: 'conversation_not_found' },
     );
   });
   app.post('/api/conversations/:conversationId/messages', async (c) => {

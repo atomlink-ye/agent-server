@@ -239,8 +239,7 @@ it('reports a selected Conversation whose message read returns 404 without Retry
     createConversation: async () => selected,
     loadMessages: async () =>
       Promise.reject({
-        status: 404,
-        requestPath: `/api/conversations/${selected.id}/messages`,
+        code: 'conversation_not_found',
       }),
     sendMessage: async () => message(selected.id, 'message', 1, 'hello'),
   };

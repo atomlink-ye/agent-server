@@ -94,12 +94,7 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
             setSelectionStatus('ready');
           } catch (reason) {
             if (request !== selectionRequest.current) return;
-            if (
-              isResourceNotFound(
-                reason,
-                `/api/work-items/${encodeURIComponent(selectedWorkItemId)}`,
-              )
-            ) {
+            if (isResourceNotFound(reason, 'task_not_found')) {
               setSelectionStatus('not_found');
             } else {
               setSelectionStatus('error');

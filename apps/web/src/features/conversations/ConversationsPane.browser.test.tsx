@@ -181,6 +181,30 @@ it('renders roster idle, error, and ready-empty states honestly', async () => {
   }
 });
 
+it('keeps an empty roster loading while Retry is in flight', async () => {
+  const commands = commandsFor({
+    loadConversations: async () =>
+      new Promise<readonly Conversation[]>(() => {}),
+  });
+  const appStore = createAppStore();
+  const conversationsStore = createConversationsStore({
+    selectionStore: appStore,
+  });
+  conversationsStore.fail('Unable to load conversations.');
+  const { host, root } = renderPane(commands, appStore, conversationsStore);
+  try {
+    await act(async () => {
+      findButton(host, 'Retry').click();
+      await Promise.resolve();
+    });
+    expect(host.textContent).toContain('Loading conversations…');
+    expect(host.textContent).not.toContain('No conversations yet.');
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+  }
+});
+
 function commandsFor(overrides: Partial<ChatCommands> = {}): ChatCommands {
   return {
     loadCoworkers: async () => [],

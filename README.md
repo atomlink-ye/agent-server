@@ -111,11 +111,14 @@ pnpm test:scenario
 Run the normal repository gate:
 
 ```bash
+pnpm exec playwright install chromium   # once; `check` drives a real browser
 pnpm check
 pnpm verify
 ```
 
-`verify` is deterministic. Browser/real-provider/product-world checks stay explicit.
+`verify` is deterministic. `check` runs the `apps/web` component suite in a real headless
+Chromium, so the browser must be installed once locally; CI installs it in the deterministic
+lane. Real-provider and product-world checks stay explicit.
 
 ## Real PostgreSQL semantics
 

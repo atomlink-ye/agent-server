@@ -351,10 +351,14 @@ export function evaluateMemberWorkTraceFacts(projection, trace) {
     'message_send',
     'board_submit',
   ]) {
-    const invocations = activities.filter(
-      (activity) =>
-        activity.tool_name === toolName &&
-        activity.source_refs?.run_id === workRunId,
+    const toolActivities = activities.filter(
+      (activity) => activity.tool_name === toolName,
+    );
+    const hasInvalidActivityIdentity = toolActivities.some(
+      (activity) => !hasValidActivityIdentity(activity),
+    );
+    const invocations = toolActivities.filter(
+      (activity) => activity.source_refs?.run_id === workRunId,
     );
     const completedEvents = invocations.filter(
       (activity) => activity.status === 'completed',
@@ -364,21 +368,20 @@ export function evaluateMemberWorkTraceFacts(projection, trace) {
       toolName,
       workRunId,
     );
-    const hasInvalidActivityIdentity = invocations.some(
-      (activity) => !hasValidActivityIdentity(activity),
-    );
     invocationsByTool.set(toolName, invocations);
     if (!workRunId || hasInvalidActivityIdentity || !completed) {
       failures.push({
         scope: 'assertion',
         code: `member_work_${toolName}`,
         expected: `${toolName} has exactly one completed event from the member work-attempt run with non-empty string activity_id, run_id, and positive integer sequence`,
-        actual: invocations.map((activity) => ({
-          activity_id: activity.activity_id ?? null,
-          status: activity.status ?? null,
-          run_id: activity.source_refs?.run_id ?? null,
-          sequence: activity.sequence ?? null,
-        })),
+        actual: (hasInvalidActivityIdentity ? toolActivities : invocations).map(
+          (activity) => ({
+            activity_id: activity.activity_id ?? null,
+            status: activity.status ?? null,
+            run_id: activity.source_refs?.run_id ?? null,
+            sequence: activity.sequence ?? null,
+          }),
+        ),
       });
     } else {
       completedByTool.set(toolName, completed);
@@ -483,10 +486,14 @@ export function evaluateLeadTerminalFacts(projection, trace) {
     'board_accept',
     'collaboration_finish',
   ]) {
-    const invocations = activities.filter(
-      (activity) =>
-        activity.tool_name === toolName &&
-        activity.source_refs?.run_id === leadRunId,
+    const toolActivities = activities.filter(
+      (activity) => activity.tool_name === toolName,
+    );
+    const hasInvalidActivityIdentity = toolActivities.some(
+      (activity) => !hasValidActivityIdentity(activity),
+    );
+    const invocations = toolActivities.filter(
+      (activity) => activity.source_refs?.run_id === leadRunId,
     );
     const completedEvents = invocations.filter(
       (activity) => activity.status === 'completed',
@@ -496,19 +503,18 @@ export function evaluateLeadTerminalFacts(projection, trace) {
       toolName,
       leadRunId,
     );
-    const hasInvalidActivityIdentity = invocations.some(
-      (activity) => !hasValidActivityIdentity(activity),
-    );
     if (!leadRunId || hasInvalidActivityIdentity || !completed) {
       failures.push({
         scope: 'assertion',
         code: `terminal_lead_${toolName}`,
         expected: `${toolName} has exactly one completed event from the terminal lead run with non-empty string activity_id, run_id, and positive integer sequence`,
-        actual: invocations.map((activity) => ({
-          activity_id: activity.activity_id ?? null,
-          status: activity.status ?? null,
-          run_id: activity.source_refs?.run_id ?? null,
-        })),
+        actual: (hasInvalidActivityIdentity ? toolActivities : invocations).map(
+          (activity) => ({
+            activity_id: activity.activity_id ?? null,
+            status: activity.status ?? null,
+            run_id: activity.source_refs?.run_id ?? null,
+          }),
+        ),
       });
     } else if (completedEvents.length > 1) {
       failures.push({

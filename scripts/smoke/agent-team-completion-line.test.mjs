@@ -759,6 +759,116 @@ describe('agent-team smoke completion line', () => {
     );
   });
 
+  it.each([
+    [
+      'missing run ID',
+      (trace) => {
+        trace.mcp_activities.push({
+          activity_id: 'message-late',
+          sequence: 13,
+          tool_name: 'message_send',
+          status: 'failed',
+          source_refs: {},
+        });
+      },
+    ],
+    [
+      'empty run ID',
+      (trace) => {
+        trace.mcp_activities.push({
+          activity_id: 'message-late',
+          sequence: 13,
+          tool_name: 'message_send',
+          status: 'failed',
+          source_refs: { run_id: '' },
+        });
+      },
+    ],
+    [
+      'malformed run ID',
+      (trace) => {
+        trace.mcp_activities.push({
+          activity_id: 'message-late',
+          sequence: 13,
+          tool_name: 'message_send',
+          status: 'failed',
+          source_refs: { run_id: 42 },
+        });
+      },
+    ],
+  ])(
+    'rejects a member valid completion plus later failed record with %s',
+    (_label, addLateFailure) => {
+      const trace = completeMemberTrace();
+      addLateFailure(trace);
+
+      expect(
+        evaluateMemberWorkTraceFacts(successfulProjection(), trace).failures,
+      ).toContainEqual(
+        expect.objectContaining({
+          code: 'member_work_message_send',
+          expected:
+            'message_send has exactly one completed event from the member work-attempt run with non-empty string activity_id, run_id, and positive integer sequence',
+        }),
+      );
+    },
+  );
+
+  it.each([
+    [
+      'missing run ID',
+      (trace) => {
+        trace.mcp_activities.push({
+          activity_id: 'ack-late',
+          sequence: 13,
+          tool_name: 'message_ack',
+          status: 'failed',
+          source_refs: {},
+        });
+      },
+    ],
+    [
+      'empty run ID',
+      (trace) => {
+        trace.mcp_activities.push({
+          activity_id: 'ack-late',
+          sequence: 13,
+          tool_name: 'message_ack',
+          status: 'failed',
+          source_refs: { run_id: '' },
+        });
+      },
+    ],
+    [
+      'malformed run ID',
+      (trace) => {
+        trace.mcp_activities.push({
+          activity_id: 'ack-late',
+          sequence: 13,
+          tool_name: 'message_ack',
+          status: 'failed',
+          source_refs: { run_id: 42 },
+        });
+      },
+    ],
+  ])(
+    'rejects a lead valid completion plus later failed record with %s',
+    (_label, addLateFailure) => {
+      const trace = completeLeadTrace();
+      addLateFailure(trace);
+
+      expect(
+        evaluateLeadTerminalFacts(successfulProjection(), trace).failures,
+      ).toContainEqual(
+        expect.objectContaining({
+          code: 'terminal_lead_message_ack',
+          expected:
+            'message_ack has exactly one completed event from the terminal lead run with non-empty string activity_id, run_id, and positive integer sequence',
+        }),
+      );
+    },
+  );
+
   it('rejects duplicate member success events for the same activity ID', () => {
     const trace = completeMemberTrace();
     trace.mcp_activities.splice(2, 0, {

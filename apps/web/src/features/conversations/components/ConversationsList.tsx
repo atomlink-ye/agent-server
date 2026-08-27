@@ -20,7 +20,10 @@ export function ConversationsList({
 }: ConversationsListProps) {
   const conversations = visibleConversations ?? state.conversations;
 
-  if (state.status === 'loading' && state.conversations.length === 0) {
+  if (
+    (state.status === 'idle' || state.status === 'loading') &&
+    state.conversations.length === 0
+  ) {
     return <p className="conversation-placeholder">Loading conversations…</p>;
   }
 

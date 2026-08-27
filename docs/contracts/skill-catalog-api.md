@@ -39,6 +39,22 @@ Lists every Skill published in this deployment's registry.
 the server-side service credential and returns the identical body, so the
 browser never holds a credential of its own.
 
+## Errors
+
+| Status | `error.code`          | When                                                                                                                                                                                                               |
+| ------ | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `401`  | `unauthorized`        | The request carries no service-account bearer token, or one that is not enabled. Identical for a missing and a disabled token, so neither can be probed for the other.                                             |
+| `503`  | `feature_unavailable` | The Product Work surface is not composed in this deployment, so the catalog was never installed. Returned by the browser facade before any upstream call. A retry cannot succeed, and a caller must not offer one. |
+
+There is no per-item `404`: this route returns a collection, and an empty registry
+is a successful empty list, not a missing resource. "You have nothing published"
+is only ever claimed from a successful read.
+
+Every error carries `error.code` and `error.request_id`. The `code` is the
+discriminator callers match on; a client that drops it cannot tell a permanently
+unavailable surface from a transient failure, and would offer a Retry that can
+never succeed.
+
 ## What the shape deliberately omits
 
 `ResolvedSkillPackage` also carries `digest`, `objectPath`, `manifestPath` and

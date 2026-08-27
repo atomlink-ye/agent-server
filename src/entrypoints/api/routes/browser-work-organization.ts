@@ -78,8 +78,6 @@ export function registerBrowserWorkOrganizationRoutes(
       `/api/v1/work-items/${encodeURIComponent(workItemId)}`,
       { method: 'GET' },
       WorkItemDetailSchema,
-      200,
-      { notFoundCode: 'task_not_found' },
     );
   });
   app.patch('/api/work-items/:workItemId', async (context) => {
@@ -169,8 +167,6 @@ export function registerBrowserWorkOrganizationRoutes(
       `/api/v1/boards/${encodeURIComponent(boardId)}`,
       { method: 'GET' },
       WorkBoardSnapshotSchema,
-      200,
-      { notFoundCode: 'work_board_not_found' },
     );
   });
   app.patch('/api/boards/:boardId', async (context) => {
@@ -287,7 +283,6 @@ async function forward(
   init: RequestInit,
   successSchema: ZodType<unknown>,
   successStatus = 200,
-  options: { readonly notFoundCode?: string } = {},
 ): Promise<Response> {
   try {
     const upstream = await fetchAuthenticated(config, path, init);
@@ -307,13 +302,6 @@ async function forward(
     }
     if (!upstream.ok) {
       const decoded = ErrorResponseSchema.safeParse(body);
-      if (
-        upstream.status === 404 &&
-        options.notFoundCode &&
-        decoded.success &&
-        decoded.data.error.code === options.notFoundCode
-      )
-        return jsonResponse(decoded.data, 404);
       return jsonResponse(
         decoded.success
           ? decoded.data

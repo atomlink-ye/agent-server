@@ -34,6 +34,7 @@ import {
   CreateConversationRequestSchema,
   PostConversationMessageRequestSchema,
 } from '../../../contracts/conversations.js';
+import { SkillListResponseSchema } from '../../../contracts/skills.js';
 import type { ApiEnvironment } from '../http-types.js';
 import type { AppConfig } from '../../../shared/config.js';
 import type { Logger } from '../../../shared/observability/logger.js';
@@ -298,6 +299,9 @@ export function registerBrowserWebRoutes(
       GetProductWorkDefinitionVersionResponseSchema,
     );
   });
+  app.get('/api/skills', async () =>
+    readProductJson(config, logger, '/api/v1/skills', SkillListResponseSchema),
+  );
   app.get('/api/work-definitions', async () =>
     forwardDecoded(
       config,

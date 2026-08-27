@@ -17,6 +17,18 @@ export interface CapabilityParticipantDraft {
   readonly name: string;
   readonly role: string;
   readonly instructions: string;
+  readonly skills: readonly string[];
+}
+
+/**
+ * The subset of a catalog Skill this compiler needs: the ref an author
+ * selects and the tool refs that ref pulls in. Kept as a type-only import
+ * boundary against `./skills-gateway` so this module stays pure and testable
+ * without a network dependency.
+ */
+export interface SkillCatalogEntry {
+  readonly ref: string;
+  readonly requiredToolRefs: readonly string[];
 }
 
 export interface CapabilityDraft {
@@ -43,6 +55,7 @@ const CAPABILITY_COMPLETION_GUIDANCE =
  */
 export function compileCapabilityDraft(
   draft: CapabilityDraft,
+  skillCatalog: readonly SkillCatalogEntry[],
 ): CompiledCapabilityDraft {
   const normalizedName = slug(draft.name);
   if (!draft.name.trim()) throw new Error('Give this Capability a name.');
@@ -143,7 +156,12 @@ export function compileCapabilityDraft(
       '  worker:',
       '    source: |',
       ...indent(
-        workerSource(normalizedName, participant, draft.description),
+        workerSource(
+          normalizedName,
+          participant,
+          draft.description,
+          skillCatalog,
+        ),
         6,
       ),
     );
@@ -157,7 +175,10 @@ export function compileCapabilityDraft(
       '      source: |',
     );
     lines.push(
-      ...indent(workerSource(normalizedName, lead!, draft.description), 8),
+      ...indent(
+        workerSource(normalizedName, lead!, draft.description, skillCatalog),
+        8,
+      ),
       '  members:',
     );
     for (const member of members) {
@@ -165,7 +186,10 @@ export function compileCapabilityDraft(
         `    - name: ${scalar(member.name.trim())}`,
         '      worker:',
         '        source: |',
-        ...indent(workerSource(normalizedName, member, draft.description), 10),
+        ...indent(
+          workerSource(normalizedName, member, draft.description, skillCatalog),
+          10,
+        ),
       );
     }
   }
@@ -229,7 +253,26 @@ function workerSource(
   capabilityName: string,
   participant: CapabilityParticipantDraft,
   outcome: string,
+  skillCatalog: readonly SkillCatalogEntry[],
 ): string {
+  const skills = participant.skills;
+  // A selected ref that is not in the catalog cannot have its tools resolved.
+  // Emitting the Skill with none of them would under-grant in silence: the
+  // Worker would claim a Skill it lacks the tools to use, and the author would
+  // never be told. Refuse instead — a stale or unpublished selection is a fact
+  // the author needs, not one to paper over.
+  const tools = [
+    ...new Set(
+      skills.flatMap((ref) => {
+        const entry = skillCatalog.find((skill) => skill.ref === ref);
+        if (!entry)
+          throw new Error(
+            `The Skill "${ref}" is no longer published in this workspace. Deselect it, or publish it again before saving.`,
+          );
+        return entry.requiredToolRefs;
+      }),
+    ),
+  ];
   return [
     'apiVersion: agent-server/v1alpha1',
     'kind: Worker',
@@ -242,8 +285,19 @@ function workerSource(
     '    provider: paseo',
     '    modelPolicyRef: free-only',
     '    mode: isolated',
-    '  tools: []',
-    '  skills: []',
+    // A Worker package states tools and skills as reference objects, not
+    // bare strings: `tools` entries carry `ref` and an optional `kind`, and
+    // `skills` entries carry `ref`. Emitting plain scalars parses as YAML but
+    // fails Worker validation with `invalid_reference`, which would make
+    // selecting any Skill silently unsavable.
+    '  tools:',
+    ...(tools.length
+      ? tools.map((tool) => `    - ref: ${scalar(tool)}`)
+      : ['    []']),
+    '  skills:',
+    ...(skills.length
+      ? skills.map((ref) => `    - ref: ${scalar(ref)}`)
+      : ['    []']),
     '  input:',
     '    schema:',
     '      type: object',

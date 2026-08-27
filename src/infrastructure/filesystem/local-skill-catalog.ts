@@ -27,6 +27,45 @@ export class LocalSkillCatalog implements SkillCatalogPort {
     }
   }
 
+  public async list(): Promise<readonly ResolvedSkillPackage[]> {
+    try {
+      return await this.listInternal();
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        (error.message === 'Invalid Skill ref.' ||
+          error.message === 'Skill catalog data is malformed.')
+      )
+        throw error;
+      throw malformed();
+    }
+  }
+
+  private async listInternal(): Promise<readonly ResolvedSkillPackage[]> {
+    const refsRoot = resolve(this.registryRoot, 'refs');
+    let refsStat;
+    try {
+      refsStat = await lstat(refsRoot);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') return [];
+      throw malformed();
+    }
+    if (!refsStat.isDirectory() || refsStat.isSymbolicLink()) throw malformed();
+    const refs = (await enumerateRefs(refsRoot, refsRoot)).sort(
+      compareCodeUnits,
+    );
+    const packages: ResolvedSkillPackage[] = [];
+    for (const ref of refs) {
+      // Reuse `resolve()`'s exact hardening (symlink/mode/digest checks and
+      // malformed-data surfacing) for every listed ref, rather than
+      // re-deriving a parallel, and potentially weaker, set of checks here.
+      const resolved = await this.resolveInternal(ref);
+      if (!resolved) throw malformed();
+      packages.push(resolved);
+    }
+    return Object.freeze(packages);
+  }
+
   private async resolveInternal(
     ref: string,
   ): Promise<ResolvedSkillPackage | null> {
@@ -278,6 +317,54 @@ async function enumerate(
   }
   await visit(root);
   return result;
+}
+
+/**
+ * Walks the `refs/` tree and returns every ref it finds (path minus the
+ * `.json` suffix), without following symlinks. Entries that are not `.json`
+ * files are skipped rather than treated as corruption. It intentionally does not
+ * validate manifest contents, digests, or object trees -- that hardening
+ * belongs to `resolveInternal` alone, and every ref discovered here is
+ * re-resolved through it so the two paths cannot drift apart.
+ */
+async function enumerateRefs(
+  directory: string,
+  refsRoot: string,
+): Promise<string[]> {
+  const refs: string[] = [];
+  for (const entry of (await readdir(directory, { withFileTypes: true })).sort(
+    (a, b) => compareCodeUnits(a.name, b.name),
+  )) {
+    const entryPath = join(directory, entry.name);
+    const stat = await lstat(entryPath);
+    if (stat.isSymbolicLink()) throw malformed();
+    if (stat.isDirectory()) {
+      refs.push(...(await enumerateRefs(entryPath, refsRoot)));
+    } else if (stat.isFile()) {
+      // `registerSkill` stages its atomic rename as `.ref-<time>-<rand>`
+      // inside this very directory, so failing the walk on THAT name would
+      // make the catalog unreadable during any concurrent registration, and
+      // permanently if a registration were killed between write and rename.
+      // Skip exactly that shape and nothing else: any other unexpected entry
+      // still means the catalog is malformed, and staying fail-closed there is
+      // what keeps this from becoming a blanket "ignore what you don't
+      // recognise" rule.
+      if (isRegistrationStagingName(entry.name)) continue;
+      if (!entry.name.endsWith('.json')) throw malformed();
+      const ref = relative(refsRoot, entryPath).split(sep).join('/');
+      refs.push(ref.slice(0, -'.json'.length));
+    } else throw malformed();
+  }
+  return refs;
+}
+
+/**
+ * The transient name `registerSkill` writes before its atomic rename:
+ * `.ref-<epoch-ms>-<base16>`. Matching it exactly keeps enumeration
+ * fail-closed for every other unexpected entry.
+ */
+function isRegistrationStagingName(name: string): boolean {
+  return /^\.ref-\d+-[0-9a-f]+$/u.test(name);
 }
 
 function validRef(ref: string): boolean {

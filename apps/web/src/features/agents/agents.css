@@ -309,6 +309,16 @@
 .agents-inline-check input {
   width: auto;
 }
+.agents-skill-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.agents-skill-grant {
+  margin-left: 6px;
+  opacity: 0.7;
+  font-size: 0.85em;
+}
 .agents-plan-preview {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -326,6 +336,15 @@
   display: block;
   margin: 4px 0 0;
   font-size: 12px;
+  word-break: break-word;
+}
+.agents-runtime-requirements {
+  margin: 4px 0 0;
+  padding-left: 16px;
+  font-size: 12px;
+}
+.agents-runtime-requirements li {
+  margin-top: 2px;
   word-break: break-word;
 }
 .agents-advanced {

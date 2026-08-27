@@ -10,12 +10,13 @@ import { registerBrowserWebRoutes } from './routes/browser-web.js';
 import { registerBrowserWorkOrganizationRoutes } from './routes/browser-work-organization.js';
 import { shutdownService } from './shutdown.js';
 
-// Work, Work Organization, and Work Definition authoring are only reachable
-// when the Product Work surface is composed (see
-// src/entrypoints/api/app.ts, the single owner of that gate). When it is
-// absent, guard their browser BFF surfaces from configuration rather than
-// letting the browser see a bare control-plane route_not_found -- the BFF
-// cannot tell an uninstalled route apart from a typo that way.
+// Work, Work Organization, Work Definition authoring, and the Skill catalog
+// Work authoring selects from are only reachable when the Product Work
+// surface is composed (see src/entrypoints/api/app.ts, the single owner of
+// that gate). When it is absent, guard their browser BFF surfaces from
+// configuration rather than letting the browser see a bare control-plane
+// route_not_found -- the BFF cannot tell an uninstalled route apart from a
+// typo that way.
 //
 // /api/agents is deliberately NOT included here: the Coworker roster and
 // profile stay reachable regardless of Product Work availability, so the
@@ -26,6 +27,7 @@ const PRODUCT_WORK_BROWSER_ROUTE_PREFIXES = [
   '/api/work-items',
   '/api/boards',
   '/api/work-definitions',
+  '/api/skills',
 ] as const;
 
 const config = loadConfig();

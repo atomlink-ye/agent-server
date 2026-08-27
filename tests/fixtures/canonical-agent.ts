@@ -59,7 +59,10 @@ export async function seedCanonicalPublishedAgent(
 
 export function canonicalAgentResolver(database: PostgresQueryable) {
   const registry = new PostgresAgentRegistry(database);
-  return new ResolveAgentVersion(registry, { resolve: async () => null });
+  return new ResolveAgentVersion(registry, {
+    resolve: async () => null,
+    list: async () => [],
+  });
 }
 
 export function canonicalAgentSource(input: {

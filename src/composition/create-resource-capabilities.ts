@@ -30,6 +30,7 @@ import { registerAgentWorkCatalogRoute } from '../entrypoints/api/routes/agent-w
 import { registerCoworkerAuthoringRoute } from '../entrypoints/api/routes/coworker-authoring.js';
 import { registerEnvironmentRoutes } from '../entrypoints/api/routes/environments.js';
 import { registerProductWorkDefinitionRoutes } from '../entrypoints/api/routes/product-work-definitions.js';
+import { registerSkillRoutes } from '../entrypoints/api/routes/skills.js';
 import { registerTeamRoutes } from '../entrypoints/api/routes/teams.js';
 import { LocalSkillCatalog } from '../infrastructure/filesystem/local-skill-catalog.js';
 import { PostgresAgentRegistry } from '../infrastructure/postgres/postgres-agent-registry.js';
@@ -73,9 +74,10 @@ export interface ResourceModule {
   ): void;
   /**
    * Installs the Product-Work-shaped routes this module owns (Work
-   * Definition authoring and the Capability-binding route). The resource
-   * module does not decide when these are reachable -- app.ts is the single
-   * owner of that surface gate, and calls this only when it is composed.
+   * Definition authoring, the Capability-binding route, and the Skill
+   * catalog Work authoring selects from). The resource module does not
+   * decide when these are reachable -- app.ts is the single owner of that
+   * surface gate, and calls this only when it is composed.
    */
   installProductWorkHttp(app: Hono<ApiEnvironment>, config: AppConfig): void;
 }
@@ -246,6 +248,10 @@ export async function createResourceModule(
         agents: agentRegistry,
         definitions: workDefinitionSources,
       });
+      // The Skill catalog exists to serve Work authoring (Skill selection),
+      // so it is Product-Work-shaped and belongs beside its siblings under
+      // this same gate rather than being registered unconditionally.
+      registerSkillRoutes(app, { config, skillCatalog });
     },
   };
 }

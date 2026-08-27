@@ -366,7 +366,7 @@ describe('ExecuteRun', () => {
           },
         })) as never,
       },
-      { resolve: catalogResolve },
+      { resolve: catalogResolve, list: vi.fn(async () => []) },
     );
     const events = {
       bind: vi.fn(async () => undefined),
@@ -959,7 +959,7 @@ describe('ExecuteRun', () => {
     );
     const resolver = new ResolveAgentVersion(
       { findVersion, findVersionByTenant },
-      { resolve: vi.fn(async () => null) },
+      { resolve: vi.fn(async () => null), list: vi.fn(async () => []) },
     );
     const runtime = createRuntime();
     const completeRun = {
@@ -1042,7 +1042,7 @@ describe('ExecuteRun', () => {
           },
         })) as never,
       },
-      { resolve: vi.fn(async () => null) },
+      { resolve: vi.fn(async () => null), list: vi.fn(async () => []) },
     );
     const runtime = createRuntimeWithCandidates();
     const completeRun = {
@@ -1087,7 +1087,7 @@ describe('ExecuteRun', () => {
           },
         })) as never,
       },
-      { resolve: vi.fn(async () => null) },
+      { resolve: vi.fn(async () => null), list: vi.fn(async () => []) },
     );
     const runtime = createRuntime();
     const completeRun = {
@@ -1414,7 +1414,7 @@ describe('ExecuteRun', () => {
           },
         })) as never,
       },
-      { resolve: vi.fn(async () => null) },
+      { resolve: vi.fn(async () => null), list: vi.fn(async () => []) },
     );
     const executeBatch = vi.fn(async () => {
       throw new Error('control plane down');
@@ -1485,7 +1485,7 @@ describe('ExecuteRun', () => {
           },
         })) as never,
       },
-      { resolve: vi.fn(async () => null) },
+      { resolve: vi.fn(async () => null), list: vi.fn(async () => []) },
     );
     await new ExecuteRun({
       completeRun,
@@ -1573,7 +1573,7 @@ describe('ExecuteRun', () => {
           }),
         ) as never,
       },
-      { resolve: vi.fn(async () => null) },
+      { resolve: vi.fn(async () => null), list: vi.fn(async () => []) },
     );
     const executeRun = new ExecuteRun({
       completeRun: {
@@ -1644,7 +1644,7 @@ describe('ExecuteRun', () => {
             findVersion: vi.fn(async () => null),
             findVersionByTenant: vi.fn(async () => null),
           } as never,
-          { resolve: vi.fn(async () => null) },
+          { resolve: vi.fn(async () => null), list: vi.fn(async () => []) },
         ),
         events: events as never,
       });

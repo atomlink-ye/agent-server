@@ -194,7 +194,7 @@ describeRealPostgres('Phase C session lanes on PostgreSQL', () => {
                 },
               }) as never,
           },
-          { resolve: async () => null },
+          { resolve: async () => null, list: async () => [] },
         ),
         createMemoryProposal: new CreateMemoryProposal(
           new PostgresWorkspaceMemoryRepository(pool),

@@ -14,6 +14,7 @@ export interface WorkPaneProps {
   readonly selectedWorkId?: string | null;
   readonly originConversationId?: string | null;
   readonly onStatusChange?: (status: WorkListQuery['status']) => void;
+  readonly onRefreshReady?: (refresh: () => void) => void;
 }
 
 export function WorkPane({
@@ -21,6 +22,7 @@ export function WorkPane({
   selectedWorkId = null,
   originConversationId = null,
   onStatusChange,
+  onRefreshReady,
 }: WorkPaneProps) {
   const { status, works, refresh } = useWorkList();
 
@@ -31,6 +33,14 @@ export function WorkPane({
   useEffect(() => {
     onStatusChange?.(status);
   }, [status, onStatusChange]);
+
+  // A successful Work create happens in a sibling (NewWork), not here.
+  // Hand the same `refresh` this pane already uses back up to WorkPage so
+  // that create path can invalidate this list instead of leaving the nav
+  // stuck on a pre-create "Nothing is available yet" read.
+  useEffect(() => {
+    onRefreshReady?.(refresh);
+  }, [refresh, onRefreshReady]);
 
   const controlsDisabled = status === 'unavailable' || status === 'error';
 

@@ -120,7 +120,7 @@ it('names the tools a Skill transitively grants at selection time', async () => 
   vi.unstubAllGlobals();
 });
 
-it('shows and retains an affirmative save result without navigating', async () => {
+it('shows an affirmative save result and clears it on the next edit', async () => {
   const definitionId = '33333333-3333-4333-8333-333333333333';
   const versionId = '44444444-4444-4444-8444-444444444444';
   const fetchMock = vi.fn(async (path: string, init?: RequestInit) => {
@@ -243,9 +243,9 @@ it('shows and retains an affirmative save result without navigating', async () =
     await act(async () =>
       setValue(textInputs[0]!, 'Competitor Research Updated'),
     );
-    expect(host.textContent).toContain(
-      'Capability saved to this Coworker’s Work Catalog.',
-    );
+    expect(
+      host.querySelector('[data-testid="capability-save-success"]'),
+    ).toBeNull();
     expect(window.location.pathname).not.toContain('/work');
   } finally {
     await act(async () => root.unmount());

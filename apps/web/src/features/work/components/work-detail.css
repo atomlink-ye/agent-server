@@ -188,6 +188,17 @@
   font-size: var(--text-sm);
   margin: 0;
 }
+.work-run-availability-error {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+.work-run-availability-error p {
+  margin: 0;
+  color: var(--ink-500);
+  font-size: var(--text-sm);
+}
 .work-run-unavailable {
   max-width: 620px;
   padding: var(--space-4);

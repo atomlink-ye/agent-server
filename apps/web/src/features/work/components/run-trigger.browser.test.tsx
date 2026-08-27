@@ -4,6 +4,10 @@ import { expect, it, vi } from 'vitest';
 import { ProductWorkDefinitionVersionSchema } from '@atomlink-ye/agent-server/product-contract';
 
 import { RunTrigger } from '@/features/work/components/run-trigger';
+import {
+  workDefinitionClient,
+  type DefinitionPlan,
+} from '@/features/work/clients/work-definition-client';
 
 (
   globalThis as typeof globalThis & {
@@ -210,6 +214,68 @@ it('projects an incompatible pinned Work before the user clicks Start Run', asyn
   } finally {
     await act(async () => root.unmount());
     host.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
+it('exposes a bounded projection error and retries only that read', async () => {
+  let capabilityReads = 0;
+  const fetchMock = vi.fn(async () => {
+    capabilityReads += 1;
+    return capabilityReads === 1
+      ? errorResponse(502, 'upstream_unavailable', 'temporary')
+      : ({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            supported_runtime_capabilities: ['external_workspace'],
+          }),
+        } as Response);
+  });
+  const plan = {
+    fingerprint: `sha256:${'c'.repeat(64)}`,
+    resolved: { requiredRuntimeCapabilities: ['external_workspace'] },
+  } as DefinitionPlan;
+  const planSpy = vi
+    .spyOn(workDefinitionClient, 'plan')
+    .mockResolvedValue(plan);
+  vi.stubGlobal('fetch', fetchMock);
+
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  await act(async () => {
+    root.render(
+      <RunTrigger workId={workId} definitionVersion={definitionVersion} />,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  try {
+    expect(host.textContent).toContain(
+      'We couldn’t check whether this Work can run here.',
+    );
+    expect(host.textContent).toContain('Retry availability check');
+    expect(host.textContent).toContain('Start Run');
+
+    await act(async () => {
+      const retry = [
+        ...host.querySelectorAll<HTMLButtonElement>('button'),
+      ].find((button) =>
+        button.textContent?.includes('Retry availability check'),
+      );
+      retry?.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(host.textContent).not.toContain(
+      'We couldn’t check whether this Work can run here.',
+    );
+    expect(host.textContent).toContain('Start Run');
+    expect(capabilityReads).toBe(2);
+    expect(planSpy).toHaveBeenCalledTimes(2);
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    planSpy.mockRestore();
     vi.unstubAllGlobals();
   }
 });

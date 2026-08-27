@@ -238,6 +238,7 @@ export function CapabilityBuilder({
     setDiagnostics([]);
     setGeneratedSource('');
     setMessage(null);
+    setSaveConfirmation(false);
     setStatus('idle');
   }
 
@@ -245,6 +246,7 @@ export function CapabilityBuilder({
     source: string;
     plan: DefinitionPlan;
   } | null> {
+    setSaveConfirmation(false);
     setStatus('previewing');
     setDiagnostics([]);
     setMessage(null);
@@ -648,20 +650,18 @@ export function CapabilityBuilder({
 
       {message ? (
         <p
-          className={status === 'error' ? 'agents-error' : 'agents-status'}
+          className={
+            status === 'error'
+              ? 'agents-error'
+              : saveConfirmation
+                ? 'agents-save-success'
+                : 'agents-status'
+          }
+          data-testid={saveConfirmation ? 'capability-save-success' : undefined}
           role={status === 'error' ? 'alert' : 'status'}
         >
+          {saveConfirmation ? <span aria-hidden="true">✓</span> : null}
           {message}
-        </p>
-      ) : null}
-      {saveConfirmation ? (
-        <p
-          className="agents-save-success"
-          data-testid="capability-save-success"
-          role="status"
-        >
-          <span aria-hidden="true">✓</span> Capability saved to this Coworker’s
-          Work Catalog.
         </p>
       ) : null}
       <div className="agents-form-actions">

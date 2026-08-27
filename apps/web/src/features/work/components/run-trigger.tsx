@@ -93,6 +93,14 @@ export function RunTrigger({
       {availability.status === 'loading' ? (
         <p role="status">Checking whether this Work can run here…</p>
       ) : null}
+      {availability.status === 'error' ? (
+        <div className="work-run-availability-error">
+          <p role="alert">We couldn’t check whether this Work can run here.</p>
+          <button type="button" onClick={availability.retry}>
+            Retry availability check
+          </button>
+        </div>
+      ) : null}
       {blockedByCapability && friendlyCapability ? (
         <section className="work-run-unavailable" role="status">
           <p className="work-run-unavailable__eyebrow">Run unavailable</p>

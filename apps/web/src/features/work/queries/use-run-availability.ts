@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { isFeatureUnavailable } from '../../../api/feature-availability';
 import { loadRuntimeCapabilities } from '../clients/runtime-capabilities-client';
@@ -13,7 +13,11 @@ export type RunAvailabilityQuery =
 
 export function useRunAvailability(
   version: ProductWorkDefinitionVersionResponse | null,
-): RunAvailabilityQuery {
+): RunAvailabilityQuery & { readonly retry: () => void } {
+  const [refreshToken, setRefreshToken] = useState(0);
+  const retry = useCallback(() => {
+    setRefreshToken((current) => current + 1);
+  }, []);
   const [state, setState] = useState<RunAvailabilityQuery>(() =>
     version
       ? { status: 'loading' }
@@ -55,7 +59,7 @@ export function useRunAvailability(
     return () => {
       active = false;
     };
-  }, [version?.id, version?.source_yaml]);
+  }, [refreshToken, retry, version?.id, version?.source_yaml]);
 
-  return state;
+  return { ...state, retry };
 }

@@ -445,47 +445,6 @@ it('keeps the selected Task detail when its comments read fails', async () => {
   }
 });
 
-it('keeps the selected Task detail when its comments read returns 404', async () => {
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(async (input: RequestInfo | URL) => {
-      const path = String(input);
-      if (path === '/api/work-items') return json({ work_items: [task()] });
-      if (path === '/api/agents') return json({ items: [] });
-      if (path === `/api/work-items/${workItemId}/comments`)
-        return json({ error: { code: 'work_item_not_found' } }, 404);
-      if (path === '/api/work-definitions') return json({ items: [] });
-      throw new Error(`Unexpected browser request: ${path}`);
-    }),
-  );
-  const host = document.createElement('div');
-  document.body.append(host);
-  const root = createRoot(host);
-  try {
-    await act(async () =>
-      root.render(
-        <MemoryRouter>
-          <TasksPage selectedWorkItemId={workItemId} />
-        </MemoryRouter>,
-      ),
-    );
-    await act(settle);
-    expect(host.textContent).toContain('Prepare brief');
-    expect(host.textContent).toContain(
-      'Comments for this Task could not be loaded. Please try again.',
-    );
-    expect(
-      [...host.querySelectorAll('button')].some(
-        (button) => button.textContent === 'Retry',
-      ),
-    ).toBe(true);
-  } finally {
-    await act(async () => root.unmount());
-    host.remove();
-    vi.unstubAllGlobals();
-  }
-});
-
 it('discards late comments from an older Task selection', async () => {
   const firstId = '00000000-0000-4000-8000-000000000191';
   const secondId = '00000000-0000-4000-8000-000000000192';

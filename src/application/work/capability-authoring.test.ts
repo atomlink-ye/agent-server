@@ -25,51 +25,54 @@ function parse(source: string) {
 
 describe('CapabilityDraft canonical compilation', () => {
   it('round-trips a single specialist and every supported input shape', () => {
-    const compiled = compileCapabilityDraft({
-      name: 'Competitor Research',
-      description: 'Compare one company with its market competitors.',
-      mode: 'single',
-      participants: [specialist],
-      inputs: [
-        {
-          label: 'Company',
-          key: 'company',
-          type: 'text',
-          required: true,
-          minLength: 1,
-          maxLength: 80,
-        },
-        {
-          label: 'Depth',
-          key: 'depth',
-          type: 'integer',
-          required: false,
-          minimum: 1,
-          maximum: 5,
-        },
-        {
-          label: 'Confidence',
-          key: 'confidence',
-          type: 'number',
-          required: false,
-          minimum: 0,
-          maximum: 1,
-        },
-        {
-          label: 'Region',
-          key: 'region',
-          type: 'select',
-          required: false,
-          choices: ['Global', 'APAC'],
-        },
-        {
-          label: 'Include private companies',
-          key: 'include_private',
-          type: 'boolean',
-          required: true,
-        },
-      ],
-    });
+    const compiled = compileCapabilityDraft(
+      {
+        name: 'Competitor Research',
+        description: 'Compare one company with its market competitors.',
+        mode: 'single',
+        participants: [specialist],
+        inputs: [
+          {
+            label: 'Company',
+            key: 'company',
+            type: 'text',
+            required: true,
+            minLength: 1,
+            maxLength: 80,
+          },
+          {
+            label: 'Depth',
+            key: 'depth',
+            type: 'integer',
+            required: false,
+            minimum: 1,
+            maximum: 5,
+          },
+          {
+            label: 'Confidence',
+            key: 'confidence',
+            type: 'number',
+            required: false,
+            minimum: 0,
+            maximum: 1,
+          },
+          {
+            label: 'Region',
+            key: 'region',
+            type: 'select',
+            required: false,
+            choices: ['Global', 'APAC'],
+          },
+          {
+            label: 'Include private companies',
+            key: 'include_private',
+            type: 'boolean',
+            required: true,
+          },
+        ],
+      },
+      [],
+    );
 
     expect(compiled.source).toContain('kind: single_worker');
     expect(compiled.source).not.toContain('single_agent');
@@ -114,23 +117,26 @@ describe('CapabilityDraft canonical compilation', () => {
   });
 
   it('round-trips bounded collaboration entirely through Worker vocabulary', () => {
-    const compiled = compileCapabilityDraft({
-      name: 'Investment Review',
-      description:
-        'Research an investment thesis and independently review its risks.',
-      mode: 'collaboration',
-      participants: [
-        specialist,
-        {
-          name: 'reviewer',
-          role: 'Risk Reviewer',
-          instructions:
-            'Review independently and request corrections for material gaps.',
-          skills: [],
-        },
-      ],
-      inputs: [],
-    });
+    const compiled = compileCapabilityDraft(
+      {
+        name: 'Investment Review',
+        description:
+          'Research an investment thesis and independently review its risks.',
+        mode: 'collaboration',
+        participants: [
+          specialist,
+          {
+            name: 'reviewer',
+            role: 'Risk Reviewer',
+            instructions:
+              'Review independently and request corrections for material gaps.',
+            skills: [],
+          },
+        ],
+        inputs: [],
+      },
+      [],
+    );
 
     const document = parse(compiled.source);
     expect(document.spec.kind).toBe('collaboration');
@@ -157,8 +163,8 @@ describe('CapabilityDraft canonical compilation', () => {
       participants: [specialist],
       inputs: [],
     };
-    expect(compileCapabilityDraft(draft).source).toBe(
-      compileCapabilityDraft(draft).source,
+    expect(compileCapabilityDraft(draft, []).source).toBe(
+      compileCapabilityDraft(draft, []).source,
     );
   });
 });

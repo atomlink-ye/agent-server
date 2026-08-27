@@ -95,4 +95,21 @@ describe('compileCapabilityDraft skill/tool emission', () => {
     expect(source).toContain('network: read_only');
     expect(source).toContain('filesystem: workspace_read');
   });
+  it('refuses a selected Skill that is no longer in the catalog', () => {
+    // Silently emitting the Skill without its tools would under-grant: the
+    // Worker would claim a Skill it cannot use and the author would never be
+    // told.
+    const draft: CapabilityDraft = {
+      ...baseDraft,
+      participants: [
+        {
+          ...baseDraft.participants[0]!,
+          skills: ['agent-server/was-unpublished'],
+        },
+      ],
+    };
+    expect(() => compileCapabilityDraft(draft, catalog)).toThrow(
+      /no longer published/i,
+    );
+  });
 });

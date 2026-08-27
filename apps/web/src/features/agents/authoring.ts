@@ -55,7 +55,7 @@ const CAPABILITY_COMPLETION_GUIDANCE =
  */
 export function compileCapabilityDraft(
   draft: CapabilityDraft,
-  skillCatalog: readonly SkillCatalogEntry[] = [],
+  skillCatalog: readonly SkillCatalogEntry[],
 ): CompiledCapabilityDraft {
   const normalizedName = slug(draft.name);
   if (!draft.name.trim()) throw new Error('Give this Capability a name.');
@@ -255,14 +255,22 @@ function workerSource(
   outcome: string,
   skillCatalog: readonly SkillCatalogEntry[],
 ): string {
-  const skills = participant.skills ?? [];
+  const skills = participant.skills;
+  // A selected ref that is not in the catalog cannot have its tools resolved.
+  // Emitting the Skill with none of them would under-grant in silence: the
+  // Worker would claim a Skill it lacks the tools to use, and the author would
+  // never be told. Refuse instead — a stale or unpublished selection is a fact
+  // the author needs, not one to paper over.
   const tools = [
     ...new Set(
-      skills.flatMap(
-        (ref) =>
-          skillCatalog.find((skill) => skill.ref === ref)?.requiredToolRefs ??
-          [],
-      ),
+      skills.flatMap((ref) => {
+        const entry = skillCatalog.find((skill) => skill.ref === ref);
+        if (!entry)
+          throw new Error(
+            `The Skill "${ref}" is no longer published in this workspace. Deselect it, or publish it again before saving.`,
+          );
+        return entry.requiredToolRefs;
+      }),
     ),
   ];
   return [

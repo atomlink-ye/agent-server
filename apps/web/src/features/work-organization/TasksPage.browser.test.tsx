@@ -261,6 +261,65 @@ it('keeps the newer Task selection when an older selected read finishes late', a
   }
 });
 
+it('keeps the newer Task list when an older list read finishes late', async () => {
+  const firstId = '00000000-0000-4000-8000-000000000193';
+  const secondId = '00000000-0000-4000-8000-000000000194';
+  let listCall = 0;
+  let resolveFirstList: ((response: Response) => void) | undefined;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path === '/api/work-items') {
+        listCall += 1;
+        if (listCall === 1)
+          return new Promise<Response>((resolve) => {
+            resolveFirstList = resolve;
+          });
+        return Promise.resolve(
+          json({ work_items: [taskFor(secondId, 'Second list Task')] }),
+        );
+      }
+      if (path === '/api/agents') return Promise.resolve(json({ items: [] }));
+      if (path.endsWith('/comments'))
+        return Promise.resolve(json({ comments: [] }));
+      throw new Error(`Unexpected browser request: ${path}`);
+    }),
+  );
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () =>
+      root.render(
+        <MemoryRouter>
+          <TasksPage selectedWorkItemId={firstId} />
+        </MemoryRouter>,
+      ),
+    );
+    await act(async () =>
+      root.render(
+        <MemoryRouter>
+          <TasksPage selectedWorkItemId={secondId} />
+        </MemoryRouter>,
+      ),
+    );
+    await act(settle);
+    await act(async () =>
+      resolveFirstList?.(
+        json({ work_items: [taskFor(firstId, 'First list Task')] }),
+      ),
+    );
+    await act(settle);
+    expect(host.textContent).toContain('Second list Task');
+    expect(host.textContent).not.toContain('First list Task');
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
 it('shows selected Task loading instead of an empty state', async () => {
   const loadingId = '00000000-0000-4000-8000-000000000195';
   vi.stubGlobal(

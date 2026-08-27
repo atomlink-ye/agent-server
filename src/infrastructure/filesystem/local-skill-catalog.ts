@@ -341,19 +341,30 @@ async function enumerateRefs(
     if (stat.isDirectory()) {
       refs.push(...(await enumerateRefs(entryPath, refsRoot)));
     } else if (stat.isFile()) {
-      // Anything that is not a `.json` ref is SKIPPED, never fatal.
       // `registerSkill` stages its atomic rename as `.ref-<time>-<rand>`
-      // inside this very directory, so failing the walk on an unrecognised
-      // file would make the whole catalog unreadable for the duration of any
-      // concurrent registration -- and permanently, if a registration were
-      // killed between writing that file and renaming it. One stray dotfile
-      // must not brick Skill selection for everyone.
-      if (!entry.name.endsWith('.json')) continue;
+      // inside this very directory, so failing the walk on THAT name would
+      // make the catalog unreadable during any concurrent registration, and
+      // permanently if a registration were killed between write and rename.
+      // Skip exactly that shape and nothing else: any other unexpected entry
+      // still means the catalog is malformed, and staying fail-closed there is
+      // what keeps this from becoming a blanket "ignore what you don't
+      // recognise" rule.
+      if (isRegistrationStagingName(entry.name)) continue;
+      if (!entry.name.endsWith('.json')) throw malformed();
       const ref = relative(refsRoot, entryPath).split(sep).join('/');
       refs.push(ref.slice(0, -'.json'.length));
-    } else continue;
+    } else throw malformed();
   }
   return refs;
+}
+
+/**
+ * The transient name `registerSkill` writes before its atomic rename:
+ * `.ref-<epoch-ms>-<base16>`. Matching it exactly keeps enumeration
+ * fail-closed for every other unexpected entry.
+ */
+function isRegistrationStagingName(name: string): boolean {
+  return /^\.ref-\d+-[0-9a-f]+$/u.test(name);
 }
 
 function validRef(ref: string): boolean {

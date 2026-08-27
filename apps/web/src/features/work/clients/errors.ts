@@ -97,6 +97,16 @@ export function workRunFailureMessage(error: unknown): string {
     error.code === 'unsupported_runtime_capability'
   )
     return error.message;
+  // Every code classified permanent needs prose that does not invite a retry.
+  // "Try again" beside a disabled control is a contradiction, and the control
+  // is disabled precisely because trying again cannot work.
+  if (
+    error instanceof ProductMutationError &&
+    error.code === 'input_validation_failed'
+  )
+    return 'This Run’s input does not match what the Work Definition asks for. Start the Work again with input that satisfies its fields.';
+  if (error instanceof ProductMutationError && error.code === 'work_not_found')
+    return 'This Work no longer exists, so there is nothing to run.';
   return 'We couldn’t start this Run. Check that Work is ready, then try again.';
 }
 

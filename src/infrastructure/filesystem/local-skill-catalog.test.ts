@@ -88,6 +88,32 @@ describe('LocalSkillCatalog.list', () => {
     expect(skills.map((skill) => skill.ref)).toEqual(['test/example-skill']);
   });
 
+  it('still reports a malformed catalog for an entry that is not a staging file', async () => {
+    // Skipping the known `.ref-<time>-<rand>` staging name must not become a
+    // blanket "ignore anything unrecognised" rule: real corruption has to stay
+    // loud.
+    const registryRoot = await tempDir('agent-server-skill-registry-');
+    const sourceRoot = await tempDir('agent-server-skill-source-');
+    await writeFile(
+      join(sourceRoot, 'SKILL.md'),
+      '---\nname: test/example-skill\ndescription: A minimal test skill.\n---\nBody.\n',
+    );
+    await registerSkill({
+      registryRoot,
+      ref: 'test/example-skill',
+      name: 'test/example-skill',
+      sourceRoot,
+      requiredToolRefs: ['agent-server/memory-read'],
+    });
+    const namespace = join(registryRoot, 'refs', 'test');
+    await chmod(namespace, 0o755);
+    await writeFile(join(namespace, 'unexpected.txt'), 'not a ref');
+
+    await expect(new LocalSkillCatalog(registryRoot).list()).rejects.toThrow(
+      /malformed/i,
+    );
+  });
+
   it('returns an empty catalog when the refs/ tree is absent', async () => {
     const registryRoot = await tempDir('agent-server-skill-registry-');
 

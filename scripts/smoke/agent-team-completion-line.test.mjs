@@ -92,6 +92,62 @@ function codes(projection) {
   );
 }
 
+function completeMemberTrace() {
+  return {
+    mcp_activities: [
+      {
+        activity_id: 'stock-1',
+        sequence: 10,
+        tool_name: 'synthetic_stock_snapshot',
+        status: 'completed',
+        source_refs: { run_id: 'member-run-1' },
+      },
+      {
+        activity_id: 'message-1',
+        sequence: 11,
+        tool_name: 'message_send',
+        status: 'completed',
+        source_refs: { run_id: 'member-run-1' },
+      },
+      {
+        activity_id: 'submit-1',
+        sequence: 12,
+        tool_name: 'board_submit',
+        status: 'completed',
+        source_refs: { run_id: 'member-run-1' },
+      },
+    ],
+  };
+}
+
+function completeLeadTrace() {
+  return {
+    mcp_activities: [
+      {
+        activity_id: 'ack-1',
+        sequence: 10,
+        tool_name: 'message_ack',
+        status: 'completed',
+        source_refs: { run_id: 'lead-run-1' },
+      },
+      {
+        activity_id: 'accept-1',
+        sequence: 11,
+        tool_name: 'board_accept',
+        status: 'completed',
+        source_refs: { run_id: 'lead-run-1' },
+      },
+      {
+        activity_id: 'finish-1',
+        sequence: 12,
+        tool_name: 'collaboration_finish',
+        status: 'completed',
+        source_refs: { run_id: 'lead-run-1' },
+      },
+    ],
+  };
+}
+
 describe('agent-team smoke completion line', () => {
   it('accepts an acknowledged direct message that wakes any participant', () => {
     const result = evaluateCompletionFacts(successfulProjection());
@@ -471,29 +527,22 @@ describe('agent-team smoke completion line', () => {
           source_refs: { run_id: 'member-run-1' },
         },
         {
-          activity_id: 'activity-1',
-          sequence: 11,
-          tool_name: 'message_send',
-          status: 'completed',
-          source_refs: { run_id: 'member-run-1' },
-        },
-        {
           activity_id: 'activity-2',
-          sequence: 12,
+          sequence: 11,
           tool_name: 'message_send',
           status: 'failed',
           source_refs: { run_id: 'member-run-1' },
         },
         {
           activity_id: 'activity-3',
-          sequence: 13,
+          sequence: 12,
           tool_name: 'message_send',
           status: 'completed',
           source_refs: { run_id: 'member-run-1' },
         },
         {
           activity_id: 'submit-1',
-          sequence: 14,
+          sequence: 13,
           tool_name: 'board_submit',
           status: 'completed',
           source_refs: { run_id: 'member-run-1' },
@@ -560,6 +609,134 @@ describe('agent-team smoke completion line', () => {
         {
           activity_id: 'submit-1',
           sequence: 12,
+          tool_name: 'board_submit',
+          status: 'completed',
+          source_refs: { run_id: 'member-run-1' },
+        },
+      ],
+    };
+
+    expect(
+      evaluateMemberWorkTraceFacts(successfulProjection(), trace).failures.map(
+        (failure) => failure.code,
+      ),
+    ).toContain('member_work_message_send');
+  });
+
+  it.each([
+    ['missing', 'missing'],
+    ['malformed', 42],
+  ])('rejects a %s member activity ID', (_label, activityId) => {
+    const trace = completeMemberTrace();
+    if (activityId === 'missing') {
+      delete trace.mcp_activities[1].activity_id;
+    } else {
+      trace.mcp_activities[1].activity_id = activityId;
+    }
+
+    expect(
+      evaluateMemberWorkTraceFacts(successfulProjection(), trace).failures.map(
+        (failure) => failure.code,
+      ),
+    ).toContain('member_work_message_send');
+  });
+
+  it.each([
+    ['missing', 'missing'],
+    ['malformed', 42],
+  ])('rejects a %s lead activity ID', (_label, activityId) => {
+    const trace = completeLeadTrace();
+    if (activityId === 'missing') {
+      delete trace.mcp_activities[0].activity_id;
+    } else {
+      trace.mcp_activities[0].activity_id = activityId;
+    }
+
+    expect(
+      evaluateLeadTerminalFacts(successfulProjection(), trace).failures.map(
+        (failure) => failure.code,
+      ),
+    ).toContain('terminal_lead_message_ack');
+  });
+
+  it('rejects duplicate member success events for the same activity ID', () => {
+    const trace = completeMemberTrace();
+    trace.mcp_activities.splice(2, 0, {
+      activity_id: 'message-1',
+      sequence: 12,
+      tool_name: 'message_send',
+      status: 'completed',
+      source_refs: { run_id: 'member-run-1' },
+    });
+
+    expect(
+      evaluateMemberWorkTraceFacts(successfulProjection(), trace).failures.map(
+        (failure) => failure.code,
+      ),
+    ).toContain('member_work_message_send');
+  });
+
+  it('rejects duplicate lead success events for the same activity ID', () => {
+    const trace = completeLeadTrace();
+    trace.mcp_activities.splice(1, 0, {
+      activity_id: 'ack-1',
+      sequence: 11,
+      tool_name: 'message_ack',
+      status: 'completed',
+      source_refs: { run_id: 'lead-run-1' },
+    });
+
+    expect(
+      evaluateLeadTerminalFacts(successfulProjection(), trace).failures.map(
+        (failure) => failure.code,
+      ),
+    ).toContain('terminal_lead_message_ack');
+  });
+
+  it('rejects a member logical step completing twice with distinct activity IDs', () => {
+    const trace = completeMemberTrace();
+    trace.mcp_activities.splice(2, 0, {
+      activity_id: 'message-2',
+      sequence: 12,
+      tool_name: 'message_send',
+      status: 'completed',
+      source_refs: { run_id: 'member-run-1' },
+    });
+
+    expect(
+      evaluateMemberWorkTraceFacts(successfulProjection(), trace).failures.map(
+        (failure) => failure.code,
+      ),
+    ).toContain('member_work_message_send');
+  });
+
+  it('rejects a masking trace with two completed message steps', () => {
+    const trace = {
+      mcp_activities: [
+        {
+          activity_id: 'stock-1',
+          sequence: 20,
+          tool_name: 'synthetic_stock_snapshot',
+          status: 'completed',
+          source_refs: { run_id: 'member-run-1' },
+        },
+        {
+          activity_id: 'message-1',
+          sequence: 10,
+          tool_name: 'message_send',
+          status: 'completed',
+          source_refs: { run_id: 'member-run-1' },
+        },
+        {
+          activity_id: 'message-2',
+          sequence: 30,
+          tool_name: 'message_send',
+          status: 'completed',
+          source_refs: { run_id: 'member-run-1' },
+        },
+        {
+          activity_id: 'submit-1',
+          sequence: 40,
           tool_name: 'board_submit',
           status: 'completed',
           source_refs: { run_id: 'member-run-1' },

@@ -20,6 +20,8 @@ jobs:
           node-version-file: .nvmrc
       - run: corepack enable
       - run: pnpm install --frozen-lockfile
+      # `pnpm check` runs the web-dom project, which drives a real Chromium.
+      - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm run verify
 
   scenario:

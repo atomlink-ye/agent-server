@@ -17,11 +17,7 @@ export interface CapabilityParticipantDraft {
   readonly name: string;
   readonly role: string;
   readonly instructions: string;
-  // Optional so existing single-argument compileCapabilityDraft() callers
-  // (e.g. src/application/work/capability-authoring.test.ts, owned by a
-  // parallel worker) keep compiling unchanged. An absent list means "no
-  // Skill selected", identical to an empty one.
-  readonly skills?: readonly string[];
+  readonly skills: readonly string[];
 }
 
 /**

@@ -933,10 +933,9 @@ function unique(values: readonly string[]): string[] {
   return [...new Set(values)];
 }
 
-// The compiler attaches these runtime capability tokens unconditionally
-// (see `docs/frontend.md` — this is raw internal vocabulary, not
-// user-facing copy). Translate before the author ever commits to creating
-// a Work: some deployments do not support every token, and finding that out
+// The compiler attaches these runtime capability tokens unconditionally, and
+// they are internal vocabulary rather than user-facing copy. Translate before
+// the author ever commits to creating a Work: some deployments do not support every token, and finding that out
 // only after Run start is the exact gap this preview closes.
 const RUNTIME_CAPABILITY_EXPLANATIONS: Readonly<Record<string, string>> = {
   external_workspace:

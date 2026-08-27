@@ -321,7 +321,8 @@ async function enumerate(
 
 /**
  * Walks the `refs/` tree and returns every ref it finds (path minus the
- * `.json` suffix), without following symlinks. It intentionally does not
+ * `.json` suffix), without following symlinks. Entries that are not `.json`
+ * files are skipped rather than treated as corruption. It intentionally does not
  * validate manifest contents, digests, or object trees -- that hardening
  * belongs to `resolveInternal` alone, and every ref discovered here is
  * re-resolved through it so the two paths cannot drift apart.
@@ -340,10 +341,17 @@ async function enumerateRefs(
     if (stat.isDirectory()) {
       refs.push(...(await enumerateRefs(entryPath, refsRoot)));
     } else if (stat.isFile()) {
-      if (!entry.name.endsWith('.json')) throw malformed();
+      // Anything that is not a `.json` ref is SKIPPED, never fatal.
+      // `registerSkill` stages its atomic rename as `.ref-<time>-<rand>`
+      // inside this very directory, so failing the walk on an unrecognised
+      // file would make the whole catalog unreadable for the duration of any
+      // concurrent registration -- and permanently, if a registration were
+      // killed between writing that file and renaming it. One stray dotfile
+      // must not brick Skill selection for everyone.
+      if (!entry.name.endsWith('.json')) continue;
       const ref = relative(refsRoot, entryPath).split(sep).join('/');
       refs.push(ref.slice(0, -'.json'.length));
-    } else throw malformed();
+    } else continue;
   }
   return refs;
 }

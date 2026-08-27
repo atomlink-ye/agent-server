@@ -19,6 +19,7 @@ import type {
   CoworkerCapability,
 } from '@/features/agents/contracts';
 import { ApiTransportError } from '@/api/transport';
+import { workRunFailureMessage } from '@/features/work/clients/errors';
 import { isFeatureUnavailable } from '@/api/feature-availability';
 
 type StartState = 'idle' | 'loading' | 'creating' | 'starting' | 'error';
@@ -218,9 +219,7 @@ export function NewWork({
         return;
       }
       setErrorKind('create');
-      setMessage(
-        `Work was not created. ${reason instanceof Error ? reason.message : String(reason)}`,
-      );
+      setMessage(`Work was not created. ${workRunFailureMessage(reason)}`);
       return;
     }
 
@@ -232,7 +231,7 @@ export function NewWork({
       setState('error');
       setErrorKind('start');
       setMessage(
-        `The Work was created, but its Run did not start. ${reason instanceof Error ? reason.message : String(reason)}`,
+        `The Work was created, but its Run did not start. ${workRunFailureMessage(reason)}`,
       );
     }
   }
@@ -251,7 +250,7 @@ export function NewWork({
     } catch (reason) {
       setState('error');
       setMessage(
-        `The Work was created, but its Run did not start. ${reason instanceof Error ? reason.message : String(reason)}`,
+        `The Work was created, but its Run did not start. ${workRunFailureMessage(reason)}`,
       );
     }
   }
@@ -764,7 +763,6 @@ function AdvancedDefinitionAuthoring({
         definitionVersionId: applied.versionId,
         title,
       });
-      onWorkCreated?.();
       window.location.assign(
         workTabHref(
           created.work.id,

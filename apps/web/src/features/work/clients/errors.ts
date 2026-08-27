@@ -56,8 +56,16 @@ export function productMutationError(error: unknown): never {
 // offers no Retry, because a retry cannot succeed" and "Controls that
 // cannot succeed in the current state are disabled rather than offered."
 const PERMANENT_RUN_FAILURE_CODES = new Set([
+  // This Work's composition needs a runtime capability this deployment does
+  // not have. Fixed for the process lifetime.
   'unsupported_runtime_capability',
+  // The Product Work surface is not composed here at all.
   'feature_unavailable',
+  // The input this Run was started with does not satisfy the Definition's
+  // contract. Sending the identical request again cannot change that.
+  'input_validation_failed',
+  // There is no such Work to run.
+  'work_not_found',
 ]);
 
 /**

@@ -3,7 +3,6 @@ import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';
 
 import { CapabilityBuilder } from '@/features/agents/AuthoringPanels';
-import type { Coworker } from '@/features/agents/agents-gateway';
 
 (
   globalThis as typeof globalThis & {
@@ -15,7 +14,7 @@ const agent = {
   id: '00000000-0000-4000-8000-000000000001',
   displayName: 'Coworker',
   roleLabel: 'Specialist',
-} as unknown as Coworker;
+} as unknown as Parameters<typeof CapabilityBuilder>[0]['agent'];
 
 function unavailableResponse(): Response {
   return {

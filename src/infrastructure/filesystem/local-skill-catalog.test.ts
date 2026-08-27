@@ -60,6 +60,34 @@ describe('LocalSkillCatalog.list', () => {
     });
   });
 
+  it('ignores a leftover registration staging file instead of failing the catalog', async () => {
+    // registerSkill() stages its atomic rename as `.ref-<time>-<rand>` INSIDE
+    // refs/<namespace>/. If enumeration treated an unrecognised entry as
+    // corruption, every concurrent registration would 500 the whole catalog,
+    // and a registration killed mid-write would brick Skill selection until
+    // someone deleted the file by hand.
+    const registryRoot = await tempDir('agent-server-skill-registry-');
+    const sourceRoot = await tempDir('agent-server-skill-source-');
+    await writeFile(
+      join(sourceRoot, 'SKILL.md'),
+      '---\nname: test/example-skill\ndescription: A minimal test skill.\n---\nBody.\n',
+    );
+    await registerSkill({
+      registryRoot,
+      ref: 'test/example-skill',
+      name: 'test/example-skill',
+      sourceRoot,
+      requiredToolRefs: ['agent-server/memory-read'],
+    });
+    const namespace = join(registryRoot, 'refs', 'test');
+    await chmod(namespace, 0o755);
+    await writeFile(join(namespace, '.ref-1787000000000-abc123'), '{}');
+
+    const skills = await new LocalSkillCatalog(registryRoot).list();
+
+    expect(skills.map((skill) => skill.ref)).toEqual(['test/example-skill']);
+  });
+
   it('returns an empty catalog when the refs/ tree is absent', async () => {
     const registryRoot = await tempDir('agent-server-skill-registry-');
 

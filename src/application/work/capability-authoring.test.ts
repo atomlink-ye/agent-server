@@ -13,6 +13,7 @@ const specialist = {
   role: 'Research Analyst',
   instructions:
     'Research the request, cite evidence, and return a concise comparison.',
+  skills: [],
 } as const;
 
 function parse(source: string) {
@@ -125,6 +126,7 @@ describe('CapabilityDraft canonical compilation', () => {
           role: 'Risk Reviewer',
           instructions:
             'Review independently and request corrections for material gaps.',
+          skills: [],
         },
       ],
       inputs: [],

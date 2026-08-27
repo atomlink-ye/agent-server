@@ -13,7 +13,10 @@ import {
   workDefinitionClient,
 } from '@/features/work/clients/work-definition-client';
 import { workRunClient } from '@/features/work/clients/work-run-client';
-import { workRunFailureMessage } from '@/features/work/clients/errors';
+import {
+  isPermanentRunFailure,
+  workRunFailureMessage,
+} from '@/features/work/clients/errors';
 import './definition-panel.css';
 
 type AuthoringState =
@@ -48,6 +51,10 @@ export function DefinitionPanel({
   );
   const [source, setSource] = useState(normalizedSource);
   const [state, setState] = useState<AuthoringState>('idle');
+  // A Run that cannot start in this deployment cannot be started from here
+  // either. This surface offers the same action as the Work detail page, so it
+  // owes the user the same answer instead of a Run button that keeps failing.
+  const [runBlocked, setRunBlocked] = useState(false);
   const [diagnostics, setDiagnostics] = useState<DefinitionDiagnostics>([]);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -181,9 +188,10 @@ export function DefinitionPanel({
       window.location.assign(
         workTabHref(workId, 'overview', runId, originConversationId),
       );
-    } catch {
+    } catch (reason) {
       setState('error');
-      setStatusMessage(workRunFailureMessage());
+      setRunBlocked(isPermanentRunFailure(reason));
+      setStatusMessage(workRunFailureMessage(reason));
     }
   }
 
@@ -263,12 +271,17 @@ export function DefinitionPanel({
                 disabled={
                   !isCurrentVersion ||
                   state === 'running' ||
-                  state === 'applying'
+                  state === 'applying' ||
+                  runBlocked
                 }
                 onClick={() => void runCurrentVersion()}
                 type="button"
               >
-                {state === 'running' ? 'Starting…' : 'Run current version'}
+                {state === 'running'
+                  ? 'Starting…'
+                  : runBlocked
+                    ? 'Can’t start Run'
+                    : 'Run current version'}
               </button>
             </div>
             {statusMessage ? (

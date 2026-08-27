@@ -673,7 +673,7 @@ describe('agent-team smoke completion line', () => {
       evaluateMemberWorkTraceFacts(successfulProjection(), trace).failures.map(
         (failure) => failure.code,
       ),
-    ).toContain('member_work_message_send');
+    ).toContain('member_work_message_send_multiple_completions');
   });
 
   it('rejects duplicate lead success events for the same activity ID', () => {
@@ -690,7 +690,7 @@ describe('agent-team smoke completion line', () => {
       evaluateLeadTerminalFacts(successfulProjection(), trace).failures.map(
         (failure) => failure.code,
       ),
-    ).toContain('terminal_lead_message_ack');
+    ).toContain('terminal_lead_message_ack_multiple_completions');
   });
 
   it('rejects a member logical step completing twice with distinct activity IDs', () => {
@@ -707,7 +707,25 @@ describe('agent-team smoke completion line', () => {
       evaluateMemberWorkTraceFacts(successfulProjection(), trace).failures.map(
         (failure) => failure.code,
       ),
-    ).toContain('member_work_message_send');
+    ).toContain('member_work_message_send_multiple_completions');
+  });
+
+  it('rejects a lead completion whose activity ID was not invoked by the terminal run', () => {
+    const trace = completeLeadTrace();
+    trace.mcp_activities[0].status = 'failed';
+    trace.mcp_activities.push({
+      activity_id: 'ack-not-invoked',
+      sequence: 13,
+      tool_name: 'message_ack',
+      status: 'completed',
+      source_refs: { run_id: 'other-lead-run' },
+    });
+
+    expect(
+      evaluateLeadTerminalFacts(successfulProjection(), trace).failures.map(
+        (failure) => failure.code,
+      ),
+    ).toContain('terminal_lead_message_ack');
   });
 
   it('rejects a masking trace with two completed message steps', () => {
@@ -748,6 +766,50 @@ describe('agent-team smoke completion line', () => {
       evaluateMemberWorkTraceFacts(successfulProjection(), trace).failures.map(
         (failure) => failure.code,
       ),
-    ).toContain('member_work_message_send');
+    ).toContain('member_work_message_send_multiple_completions');
+  });
+
+  it('reports a late member attempt separately from completed-step ordering', () => {
+    const trace = {
+      mcp_activities: [
+        {
+          activity_id: 'stock-1',
+          sequence: 10,
+          tool_name: 'synthetic_stock_snapshot',
+          status: 'completed',
+          source_refs: { run_id: 'member-run-1' },
+        },
+        {
+          activity_id: 'message-1',
+          sequence: 11,
+          tool_name: 'message_send',
+          status: 'completed',
+          source_refs: { run_id: 'member-run-1' },
+        },
+        {
+          activity_id: 'submit-1',
+          sequence: 12,
+          tool_name: 'board_submit',
+          status: 'completed',
+          source_refs: { run_id: 'member-run-1' },
+        },
+        {
+          activity_id: 'message-2',
+          sequence: 13,
+          tool_name: 'message_send',
+          status: 'failed',
+          source_refs: { run_id: 'member-run-1' },
+        },
+      ],
+    };
+
+    const failureCodes = evaluateMemberWorkTraceFacts(
+      successfulProjection(),
+      trace,
+    ).failures.map((failure) => failure.code);
+    expect(failureCodes).toContain(
+      'member_work_message_send_attempt_after_later_step',
+    );
+    expect(failureCodes).not.toContain('member_work_tool_order');
   });
 });

@@ -334,6 +334,7 @@ export function evaluateMemberWorkTraceFacts(projection, trace) {
     ? trace.mcp_activities
     : [];
   const completedByTool = new Map();
+  const invocationsByTool = new Map();
   for (const toolName of [
     'synthetic_stock_snapshot',
     'message_send',
@@ -355,12 +356,8 @@ export function evaluateMemberWorkTraceFacts(projection, trace) {
     const hasMalformedActivityId = invocations.some(
       (activity) => typeof activity.activity_id !== 'string',
     );
-    if (
-      !workRunId ||
-      hasMalformedActivityId ||
-      completedEvents.length !== 1 ||
-      !completed
-    ) {
+    invocationsByTool.set(toolName, invocations);
+    if (!workRunId || hasMalformedActivityId || !completed) {
       failures.push({
         scope: 'assertion',
         code: `member_work_${toolName}`,
@@ -374,6 +371,17 @@ export function evaluateMemberWorkTraceFacts(projection, trace) {
       });
     } else {
       completedByTool.set(toolName, completed);
+      if (completedEvents.length > 1) {
+        failures.push({
+          scope: 'assertion',
+          code: `member_work_${toolName}_multiple_completions`,
+          expected: `${toolName} has exactly one completed event from the member work-attempt run`,
+          actual: completedEvents.map((activity) => ({
+            activity_id: activity.activity_id,
+            sequence: activity.sequence ?? null,
+          })),
+        });
+      }
     }
   }
   const orderedTools = [
@@ -397,6 +405,32 @@ export function evaluateMemberWorkTraceFacts(projection, trace) {
         'synthetic_stock_snapshot completed before message_send, then board_submit',
       actual: sequences,
     });
+  }
+  for (let index = 0; index < orderedTools.length - 1; index += 1) {
+    const toolName = orderedTools[index];
+    const laterCompletedSequences = orderedTools
+      .slice(index + 1)
+      .map((laterToolName) => completedByTool.get(laterToolName)?.sequence)
+      .filter((sequence) => Number.isInteger(sequence));
+    const lateAttempts = (invocationsByTool.get(toolName) ?? []).filter(
+      (activity) =>
+        Number.isInteger(activity.sequence) &&
+        laterCompletedSequences.some(
+          (laterSequence) => activity.sequence > laterSequence,
+        ),
+    );
+    if (lateAttempts.length) {
+      failures.push({
+        scope: 'assertion',
+        code: `member_work_${toolName}_attempt_after_later_step`,
+        expected: `${toolName} has no attempt after a later ordered step completed`,
+        actual: lateAttempts.map((activity) => ({
+          activity_id: activity.activity_id ?? null,
+          status: activity.status ?? null,
+          sequence: activity.sequence ?? null,
+        })),
+      });
+    }
   }
   return { ok: failures.length === 0, failures };
 }
@@ -464,7 +498,6 @@ export function evaluateLeadTerminalFacts(projection, trace) {
     if (
       !leadRunId ||
       hasMalformedActivityId ||
-      completedEvents.length !== 1 ||
       !completed ||
       !completionWasInvoked
     ) {
@@ -476,6 +509,16 @@ export function evaluateLeadTerminalFacts(projection, trace) {
           activity_id: activity.activity_id ?? null,
           status: activity.status ?? null,
           run_id: activity.source_refs?.run_id ?? null,
+        })),
+      });
+    } else if (completedEvents.length > 1) {
+      failures.push({
+        scope: 'assertion',
+        code: `terminal_lead_${toolName}_multiple_completions`,
+        expected: `${toolName} has exactly one completed event from the terminal lead run`,
+        actual: completedEvents.map((activity) => ({
+          activity_id: activity.activity_id,
+          sequence: activity.sequence ?? null,
         })),
       });
     }

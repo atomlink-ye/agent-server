@@ -659,6 +659,106 @@ describe('agent-team smoke completion line', () => {
     ).toContain('terminal_lead_message_ack');
   });
 
+  it.each([
+    [
+      'empty activity ID',
+      (projection, trace) => {
+        trace.mcp_activities[1].activity_id = '';
+      },
+    ],
+    [
+      'invalid run ID',
+      (projection, trace) => {
+        projection.sessions[0].turns[1].run_id = 42;
+        for (const activity of trace.mcp_activities) {
+          activity.source_refs.run_id = 42;
+        }
+      },
+    ],
+    [
+      'missing run ID',
+      (_projection, trace) => {
+        delete trace.mcp_activities[1].source_refs.run_id;
+      },
+    ],
+    [
+      'invalid sequence',
+      (_projection, trace) => {
+        trace.mcp_activities[1].sequence = 'not-a-sequence';
+      },
+    ],
+    [
+      'missing sequence',
+      (_projection, trace) => {
+        delete trace.mcp_activities[1].sequence;
+      },
+    ],
+  ])('rejects a member status record with %s', (_label, mutate) => {
+    const projection = successfulProjection();
+    const trace = completeMemberTrace();
+    mutate(projection, trace);
+
+    expect(
+      evaluateMemberWorkTraceFacts(projection, trace).failures,
+    ).toContainEqual(
+      expect.objectContaining({
+        code: 'member_work_message_send',
+        expected:
+          'message_send has exactly one completed event from the member work-attempt run with non-empty string activity_id, run_id, and positive integer sequence',
+      }),
+    );
+  });
+
+  it.each([
+    [
+      'empty activity ID',
+      (_projection, trace) => {
+        trace.mcp_activities[0].activity_id = '';
+      },
+    ],
+    [
+      'invalid run ID',
+      (projection, trace) => {
+        projection.sessions[1].turns[0].run_id = 42;
+        for (const activity of trace.mcp_activities) {
+          activity.source_refs.run_id = 42;
+        }
+      },
+    ],
+    [
+      'missing run ID',
+      (_projection, trace) => {
+        delete trace.mcp_activities[0].source_refs.run_id;
+      },
+    ],
+    [
+      'invalid sequence',
+      (_projection, trace) => {
+        trace.mcp_activities[0].sequence = 'not-a-sequence';
+      },
+    ],
+    [
+      'missing sequence',
+      (_projection, trace) => {
+        delete trace.mcp_activities[0].sequence;
+      },
+    ],
+  ])('rejects a lead status record with %s', (_label, mutate) => {
+    const projection = successfulProjection();
+    const trace = completeLeadTrace();
+    mutate(projection, trace);
+
+    expect(
+      evaluateLeadTerminalFacts(projection, trace).failures,
+    ).toContainEqual(
+      expect.objectContaining({
+        code: 'terminal_lead_message_ack',
+        expected:
+          'message_ack has exactly one completed event from the terminal lead run with non-empty string activity_id, run_id, and positive integer sequence',
+      }),
+    );
+  });
+
   it('rejects duplicate member success events for the same activity ID', () => {
     const trace = completeMemberTrace();
     trace.mcp_activities.splice(2, 0, {

@@ -32,6 +32,17 @@ function selectLatestCompletedActivity(activities, toolName, runId) {
     .at(-1)?.activity;
 }
 
+function hasValidActivityIdentity(activity) {
+  return (
+    typeof activity.activity_id === 'string' &&
+    activity.activity_id.length > 0 &&
+    typeof activity.source_refs?.run_id === 'string' &&
+    activity.source_refs.run_id.length > 0 &&
+    Number.isInteger(activity.sequence) &&
+    activity.sequence > 0
+  );
+}
+
 export function acknowledgedMessagesWithoutActivation(value) {
   const messages = Array.isArray(value?.direct_messages)
     ? value.direct_messages
@@ -353,15 +364,15 @@ export function evaluateMemberWorkTraceFacts(projection, trace) {
       toolName,
       workRunId,
     );
-    const hasMalformedActivityId = invocations.some(
-      (activity) => typeof activity.activity_id !== 'string',
+    const hasInvalidActivityIdentity = invocations.some(
+      (activity) => !hasValidActivityIdentity(activity),
     );
     invocationsByTool.set(toolName, invocations);
-    if (!workRunId || hasMalformedActivityId || !completed) {
+    if (!workRunId || hasInvalidActivityIdentity || !completed) {
       failures.push({
         scope: 'assertion',
         code: `member_work_${toolName}`,
-        expected: `${toolName} has exactly one completed event from the member work-attempt run and string activity IDs`,
+        expected: `${toolName} has exactly one completed event from the member work-attempt run with non-empty string activity_id, run_id, and positive integer sequence`,
         actual: invocations.map((activity) => ({
           activity_id: activity.activity_id ?? null,
           status: activity.status ?? null,
@@ -485,14 +496,14 @@ export function evaluateLeadTerminalFacts(projection, trace) {
       toolName,
       leadRunId,
     );
-    const hasMalformedActivityId = invocations.some(
-      (activity) => typeof activity.activity_id !== 'string',
+    const hasInvalidActivityIdentity = invocations.some(
+      (activity) => !hasValidActivityIdentity(activity),
     );
-    if (!leadRunId || hasMalformedActivityId || !completed) {
+    if (!leadRunId || hasInvalidActivityIdentity || !completed) {
       failures.push({
         scope: 'assertion',
         code: `terminal_lead_${toolName}`,
-        expected: `${toolName} has exactly one completed event from the terminal lead run with string activity IDs`,
+        expected: `${toolName} has exactly one completed event from the terminal lead run with non-empty string activity_id, run_id, and positive integer sequence`,
         actual: invocations.map((activity) => ({
           activity_id: activity.activity_id ?? null,
           status: activity.status ?? null,

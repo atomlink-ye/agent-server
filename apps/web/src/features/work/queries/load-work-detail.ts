@@ -20,6 +20,7 @@ export type WorkDetailData = {
   readonly trace: NormalizedTrace | null;
   readonly selectedDefinitionVersionId: string;
   readonly definitionVersion: ProductWorkDefinitionVersionResponse | null;
+  readonly currentDefinitionVersion: ProductWorkDefinitionVersionResponse | null;
 };
 
 export async function loadWorkDetail(
@@ -46,7 +47,12 @@ export async function loadWorkDetail(
   const definitionPromise = workDefinitionClient.getVersion(
     selectedDefinitionVersionId,
   );
+  const currentDefinitionPromise =
+    selectedDefinitionVersionId === work.definition_version_id
+      ? definitionPromise
+      : workDefinitionClient.getVersion(work.definition_version_id);
   if (!selectedSummary) {
+    const currentDefinitionVersion = await currentDefinitionPromise;
     return {
       work,
       runs,
@@ -54,11 +60,13 @@ export async function loadWorkDetail(
       trace: null,
       selectedDefinitionVersionId,
       definitionVersion: await definitionPromise,
+      currentDefinitionVersion,
     };
   }
 
   const run = await workRunClient.get(workId, selectedSummary.id);
   const definitionVersion = await definitionPromise;
+  const currentDefinitionVersion = await currentDefinitionPromise;
   if (
     !('projection_status' in run) ||
     run.projection_status !== 'internally_anchored'
@@ -73,6 +81,7 @@ export async function loadWorkDetail(
       trace: null,
       selectedDefinitionVersionId,
       definitionVersion,
+      currentDefinitionVersion,
     };
   }
 
@@ -84,6 +93,7 @@ export async function loadWorkDetail(
     trace,
     selectedDefinitionVersionId,
     definitionVersion,
+    currentDefinitionVersion,
   };
 }
 

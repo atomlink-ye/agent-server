@@ -102,6 +102,7 @@ export function WorkDetailPage({
           <RunTrigger
             workId={detail.work.id}
             originConversationId={originConversationId}
+            definitionVersion={detail.currentDefinitionVersion}
           />
           <WorkTabs
             activeTab={activeTab}

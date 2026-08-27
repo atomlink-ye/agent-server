@@ -4,14 +4,15 @@ import { createApplication } from '../../bootstrap.js';
 import { loadConfig } from '../../shared/config.js';
 import { createLogger } from '../../shared/observability/logger.js';
 import { createBrowserFeatureAvailabilityGuard } from './routes/browser-feature-availability.js';
+import { PRODUCT_WORK_BROWSER_ROUTE_PREFIXES } from './routes/browser-route-prefixes.js';
 import { registerBrowserContextRoutes } from './routes/browser-context.js';
 import { registerBrowserCoworkerRoutes } from './routes/browser-coworkers.js';
 import { registerBrowserWebRoutes } from './routes/browser-web.js';
 import { registerBrowserWorkOrganizationRoutes } from './routes/browser-work-organization.js';
 import { shutdownService } from './shutdown.js';
 
-// Work, Work Organization, Work Definition authoring, and the Skill catalog
-// Work authoring selects from are only reachable when the Product Work
+// Work, Work Organization, Work Definition authoring, the Skill catalog, and
+// the runtime capability projection are only reachable when the Product Work
 // surface is composed (see src/entrypoints/api/app.ts, the single owner of
 // that gate). When it is absent, guard their browser BFF surfaces from
 // configuration rather than letting the browser see a bare control-plane
@@ -22,14 +23,6 @@ import { shutdownService } from './shutdown.js';
 // profile stay reachable regardless of Product Work availability, so the
 // Capability-binding route (POST /api/agents/:agentId/capabilities) asserts
 // availability explicitly inside its own handler instead.
-const PRODUCT_WORK_BROWSER_ROUTE_PREFIXES = [
-  '/api/works',
-  '/api/work-items',
-  '/api/boards',
-  '/api/work-definitions',
-  '/api/skills',
-] as const;
-
 const config = loadConfig();
 const logger = createLogger({
   service: config.serviceName,

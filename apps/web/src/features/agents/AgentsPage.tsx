@@ -100,7 +100,7 @@ export function AgentsPage() {
             <h1>Agents</h1>
           </div>
           <button
-            className="pane-refresh"
+            className="agents-new-coworker-cta"
             type="button"
             aria-label="New Coworker"
             data-testid="new-coworker-cta"
@@ -109,7 +109,7 @@ export function AgentsPage() {
               setError(null);
             }}
           >
-            +
+            + New Coworker
           </button>
         </div>
         <div className="agents-list">

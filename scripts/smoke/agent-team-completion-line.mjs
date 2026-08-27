@@ -1,5 +1,48 @@
 const terminalTaskStatuses = new Set(['completed', 'failed', 'cancelled']);
 
+function compareActivityOrder(left, right) {
+  const leftSequence = Number.isInteger(left.sequence) ? left.sequence : null;
+  const rightSequence = Number.isInteger(right.sequence)
+    ? right.sequence
+    : null;
+  if (leftSequence !== rightSequence) {
+    if (leftSequence === null) return -1;
+    if (rightSequence === null) return 1;
+    return leftSequence - rightSequence;
+  }
+  return String(left.activity_id ?? '').localeCompare(
+    String(right.activity_id ?? ''),
+  );
+}
+
+function selectLatestCompletedActivity(activities, toolName, runId) {
+  return activities
+    .filter(
+      (activity) =>
+        activity.tool_name === toolName &&
+        activity.status === 'completed' &&
+        (!runId || activity.source_refs?.run_id === runId),
+    )
+    .map((activity, index) => ({ activity, index }))
+    .sort(
+      (left, right) =>
+        compareActivityOrder(left.activity, right.activity) ||
+        left.index - right.index,
+    )
+    .at(-1)?.activity;
+}
+
+function hasValidActivityIdentity(activity) {
+  return (
+    typeof activity.activity_id === 'string' &&
+    activity.activity_id.length > 0 &&
+    typeof activity.source_refs?.run_id === 'string' &&
+    activity.source_refs.run_id.length > 0 &&
+    Number.isInteger(activity.sequence) &&
+    activity.sequence > 0
+  );
+}
+
 export function acknowledgedMessagesWithoutActivation(value) {
   const messages = Array.isArray(value?.direct_messages)
     ? value.direct_messages
@@ -265,26 +308,14 @@ export function evaluateTraceFacts(value) {
   const stockActivities = activities.filter(
     (activity) => activity.tool_name === 'synthetic_stock_snapshot',
   );
-  const stockActivityIds = new Set(
-    stockActivities.map(
-      (activity) =>
-        activity.activity_id ?? `sequence:${activity.sequence ?? 'unknown'}`,
-    ),
-  );
-  if (stockActivityIds.size !== 1) {
-    failures.push({
-      scope: 'assertion',
-      code: 'synthetic_stock_snapshot_activity_count',
-      expected: 'exactly one synthetic_stock_snapshot invocation',
-      actual: stockActivityIds.size,
-    });
-  }
-  if (!stockActivities.some((activity) => activity.status === 'completed')) {
+  if (
+    !selectLatestCompletedActivity(stockActivities, 'synthetic_stock_snapshot')
+  ) {
     failures.push({
       scope: 'assertion',
       code: 'synthetic_stock_snapshot_activity_status',
       expected:
-        'synthetic_stock_snapshot mcp_activity includes status === "completed"',
+        'synthetic_stock_snapshot has at least one completed mcp_activity',
       actual: stockActivities.map((activity) => activity.status),
     });
   }
@@ -314,45 +345,57 @@ export function evaluateMemberWorkTraceFacts(projection, trace) {
     ? trace.mcp_activities
     : [];
   const completedByTool = new Map();
+  const invocationsByTool = new Map();
   for (const toolName of [
     'synthetic_stock_snapshot',
     'message_send',
     'board_submit',
   ]) {
-    const invocations = activities.filter(
+    const toolActivities = activities.filter(
       (activity) => activity.tool_name === toolName,
     );
-    const invocationIds = new Set(
-      invocations
-        .map((activity) => activity.activity_id)
-        .filter((activityId) => typeof activityId === 'string'),
+    const hasInvalidActivityIdentity = toolActivities.some(
+      (activity) => !hasValidActivityIdentity(activity),
     );
-    const completed = invocations.filter(
-      (activity) =>
-        activity.status === 'completed' &&
-        activity.source_refs?.run_id === workRunId,
+    const invocations = toolActivities.filter(
+      (activity) => activity.source_refs?.run_id === workRunId,
     );
-    if (
-      !workRunId ||
-      invocationIds.size !== 1 ||
-      invocations.some(
-        (activity) => typeof activity.activity_id !== 'string',
-      ) ||
-      completed.length !== 1
-    ) {
+    const completedEvents = invocations.filter(
+      (activity) => activity.status === 'completed',
+    );
+    const completed = selectLatestCompletedActivity(
+      invocations,
+      toolName,
+      workRunId,
+    );
+    invocationsByTool.set(toolName, invocations);
+    if (!workRunId || hasInvalidActivityIdentity || !completed) {
       failures.push({
         scope: 'assertion',
         code: `member_work_${toolName}`,
-        expected: `${toolName} has exactly one activity ID with a completed event from the member work-attempt run`,
-        actual: invocations.map((activity) => ({
-          activity_id: activity.activity_id ?? null,
-          status: activity.status ?? null,
-          run_id: activity.source_refs?.run_id ?? null,
-          sequence: activity.sequence ?? null,
-        })),
+        expected: `${toolName} has exactly one completed event from the member work-attempt run with non-empty string activity_id, run_id, and positive integer sequence`,
+        actual: (hasInvalidActivityIdentity ? toolActivities : invocations).map(
+          (activity) => ({
+            activity_id: activity.activity_id ?? null,
+            status: activity.status ?? null,
+            run_id: activity.source_refs?.run_id ?? null,
+            sequence: activity.sequence ?? null,
+          }),
+        ),
       });
     } else {
-      completedByTool.set(toolName, completed[0]);
+      completedByTool.set(toolName, completed);
+      if (completedEvents.length > 1) {
+        failures.push({
+          scope: 'assertion',
+          code: `member_work_${toolName}_multiple_completions`,
+          expected: `${toolName} has exactly one completed event from the member work-attempt run`,
+          actual: completedEvents.map((activity) => ({
+            activity_id: activity.activity_id,
+            sequence: activity.sequence ?? null,
+          })),
+        });
+      }
     }
   }
   const orderedTools = [
@@ -376,6 +419,32 @@ export function evaluateMemberWorkTraceFacts(projection, trace) {
         'synthetic_stock_snapshot completed before message_send, then board_submit',
       actual: sequences,
     });
+  }
+  for (let index = 0; index < orderedTools.length - 1; index += 1) {
+    const toolName = orderedTools[index];
+    const laterCompletedSequences = orderedTools
+      .slice(index + 1)
+      .map((laterToolName) => completedByTool.get(laterToolName)?.sequence)
+      .filter((sequence) => Number.isInteger(sequence));
+    const lateAttempts = (invocationsByTool.get(toolName) ?? []).filter(
+      (activity) =>
+        Number.isInteger(activity.sequence) &&
+        laterCompletedSequences.some(
+          (laterSequence) => activity.sequence > laterSequence,
+        ),
+    );
+    if (lateAttempts.length) {
+      failures.push({
+        scope: 'assertion',
+        code: `member_work_${toolName}_attempt_after_later_step`,
+        expected: `${toolName} has no attempt after a later ordered step completed`,
+        actual: lateAttempts.map((activity) => ({
+          activity_id: activity.activity_id ?? null,
+          status: activity.status ?? null,
+          sequence: activity.sequence ?? null,
+        })),
+      });
+    }
   }
   return { ok: failures.length === 0, failures };
 }
@@ -417,37 +486,44 @@ export function evaluateLeadTerminalFacts(projection, trace) {
     'board_accept',
     'collaboration_finish',
   ]) {
-    const invocations = activities.filter(
+    const toolActivities = activities.filter(
       (activity) => activity.tool_name === toolName,
     );
-    const invocationIds = new Set(
-      invocations
-        .map((activity) => activity.activity_id)
-        .filter((activityId) => typeof activityId === 'string'),
+    const hasInvalidActivityIdentity = toolActivities.some(
+      (activity) => !hasValidActivityIdentity(activity),
     );
-    const hasMissingActivityId = invocations.some(
-      (activity) => typeof activity.activity_id !== 'string',
+    const invocations = toolActivities.filter(
+      (activity) => activity.source_refs?.run_id === leadRunId,
     );
-    const completed = invocations.filter(
-      (activity) =>
-        activity.status === 'completed' &&
-        activity.source_refs?.run_id === leadRunId,
+    const completedEvents = invocations.filter(
+      (activity) => activity.status === 'completed',
     );
-    if (
-      !leadRunId ||
-      invocationIds.size !== 1 ||
-      hasMissingActivityId ||
-      completed.length !== 1 ||
-      completed[0]?.activity_id !== [...invocationIds][0]
-    ) {
+    const completed = selectLatestCompletedActivity(
+      invocations,
+      toolName,
+      leadRunId,
+    );
+    if (!leadRunId || hasInvalidActivityIdentity || !completed) {
       failures.push({
         scope: 'assertion',
         code: `terminal_lead_${toolName}`,
-        expected: `${toolName} has exactly one activity ID with a completed event from the terminal lead run`,
-        actual: invocations.map((activity) => ({
-          activity_id: activity.activity_id ?? null,
-          status: activity.status ?? null,
-          run_id: activity.source_refs?.run_id ?? null,
+        expected: `${toolName} has exactly one completed event from the terminal lead run with non-empty string activity_id, run_id, and positive integer sequence`,
+        actual: (hasInvalidActivityIdentity ? toolActivities : invocations).map(
+          (activity) => ({
+            activity_id: activity.activity_id ?? null,
+            status: activity.status ?? null,
+            run_id: activity.source_refs?.run_id ?? null,
+          }),
+        ),
+      });
+    } else if (completedEvents.length > 1) {
+      failures.push({
+        scope: 'assertion',
+        code: `terminal_lead_${toolName}_multiple_completions`,
+        expected: `${toolName} has exactly one completed event from the terminal lead run`,
+        actual: completedEvents.map((activity) => ({
+          activity_id: activity.activity_id,
+          sequence: activity.sequence ?? null,
         })),
       });
     }

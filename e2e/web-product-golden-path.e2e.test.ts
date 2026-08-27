@@ -167,7 +167,34 @@ describe('web Product Golden Path', () => {
         .fill(
           'Use only the supplied Company input. Do not use tools, browse, access files, or wait or retry. Return exactly two lines: Bounded brief and Prepared bounded brief for the supplied Company value. End the turn.',
         );
+      const selectedSkill = page
+        .locator('.agents-skill-list input[type="checkbox"]')
+        .first();
+      await selectedSkill.waitFor({ state: 'visible', timeout: 60_000 });
+      await selectedSkill.check();
+      await page
+        .getByText(/grants agent-server\/memory-read/u)
+        .waitFor({ state: 'visible', timeout: 60_000 });
+      const planResponse = page.waitForResponse(
+        (response) =>
+          response.request().method() === 'POST' &&
+          new URL(response.url()).origin === browserOrigin &&
+          new URL(response.url()).pathname === '/api/work-definitions/plan',
+      );
       await page.getByRole('button', { name: 'Preview plan' }).click();
+      const planned = await planResponse;
+      expect(planned.status()).toBe(200);
+      const plannedBody = (await planned.json()) as {
+        fingerprint?: unknown;
+        resolved?: {
+          required_runtime_capabilities?: unknown;
+        };
+      };
+      expect(plannedBody.fingerprint).toMatch(/^sha256:[0-9a-f]{64}$/u);
+      expect(plannedBody.resolved?.required_runtime_capabilities).toEqual([
+        'external_workspace',
+        'platform_mcp',
+      ]);
       await page.getByText(/Ready to save/u).waitFor({
         state: 'visible',
         timeout: 60_000,
@@ -179,7 +206,36 @@ describe('web Product Golden Path', () => {
           new URL(response.url()).pathname ===
             `/api/agents/${agentId}/capabilities`,
       );
+      const applyResponse = page.waitForResponse(
+        (response) =>
+          response.request().method() === 'POST' &&
+          new URL(response.url()).origin === browserOrigin &&
+          new URL(response.url()).pathname === '/api/work-definitions/apply',
+      );
       await page.getByRole('button', { name: 'Save capability' }).click();
+      const applied = await applyResponse;
+      expect(applied.status()).toBe(201);
+      const appliedBody = (await applied.json()) as {
+        version?: {
+          id?: unknown;
+          fingerprint?: unknown;
+          source_yaml?: unknown;
+        };
+      };
+      expect(appliedBody.version?.fingerprint).toBe(plannedBody.fingerprint);
+      expect(appliedBody.version?.source_yaml).toContain(
+        '- ref: "agent-server/memory-api"',
+      );
+      expect(appliedBody.version?.source_yaml).toContain(
+        '- ref: "agent-server/memory-read"',
+      );
+      if (
+        typeof appliedBody.version?.id !== 'string' ||
+        typeof appliedBody.version?.fingerprint !== 'string'
+      )
+        throw new Error(
+          'Definition apply did not return an exact version SHA.',
+        );
       const savedBinding = await bindingResponse;
       if (!savedBinding.ok()) {
         throw new Error(
@@ -187,6 +243,12 @@ describe('web Product Golden Path', () => {
         );
       }
       expect(savedBinding.status()).toBe(200);
+      const savedBindingRequest = JSON.parse(
+        savedBinding.request().postData() ?? '{}',
+      ) as { definition_version_id?: unknown };
+      expect(savedBindingRequest.definition_version_id).toBe(
+        appliedBody.version.id,
+      );
       await page
         .getByText('Capability saved to this Coworker’s Work Catalog.')
         .waitFor({ state: 'visible', timeout: 60_000 });
@@ -261,6 +323,12 @@ describe('web Product Golden Path', () => {
         throw new Error(
           `Work creation returned a malformed Work id: ${sanitizedWorkCreateRequest(createdWorkResponse)}`,
         );
+      const createdWorkRequest = JSON.parse(
+        createdWorkResponse.request().postData() ?? '{}',
+      ) as { definition_version_id?: unknown };
+      expect(createdWorkRequest.definition_version_id).toBe(
+        appliedBody.version.id,
+      );
       const expectedRunPath = `/api/works/${createdWorkId}/runs`;
       let submittedRunRequest: import('playwright').Request;
       let startedRunResponse: import('playwright').Response;
@@ -285,6 +353,12 @@ describe('web Product Golden Path', () => {
         input: { company: companyValue },
       });
       expect(startedRunResponse.status()).toBe(202);
+      const startedRunBody = (await startedRunResponse.json()) as {
+        work_run?: { definition_version_id?: unknown };
+      };
+      expect(startedRunBody.work_run?.definition_version_id).toBe(
+        appliedBody.version.id,
+      );
       await page.waitForURL(
         (url) =>
           url.origin === browserOrigin &&

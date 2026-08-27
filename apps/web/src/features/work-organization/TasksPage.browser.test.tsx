@@ -359,6 +359,47 @@ it('shows selected Task loading instead of an empty state', async () => {
   }
 });
 
+it('keeps the selected Task detail when its comments read fails', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path === '/api/work-items') return json({ work_items: [task()] });
+      if (path === '/api/agents') return json({ items: [] });
+      if (path === `/api/work-items/${workItemId}/comments`)
+        return json({ error: { code: 'request_failed' } }, 500);
+      if (path === '/api/work-definitions') return json({ items: [] });
+      throw new Error(`Unexpected browser request: ${path}`);
+    }),
+  );
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () =>
+      root.render(
+        <MemoryRouter>
+          <TasksPage selectedWorkItemId={workItemId} />
+        </MemoryRouter>,
+      ),
+    );
+    await act(settle);
+    expect(host.textContent).toContain('Prepare brief');
+    expect(host.textContent).toContain(
+      'Comments for this Task could not be loaded. Please try again.',
+    );
+    expect(
+      [...host.querySelectorAll('button')].some(
+        (button) => button.textContent === 'Retry',
+      ),
+    ).toBe(true);
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
 function task() {
   return taskFor(workItemId, 'Prepare brief');
 }

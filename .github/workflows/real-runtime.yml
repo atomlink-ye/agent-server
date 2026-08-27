@@ -100,7 +100,7 @@ jobs:
           fi
 
           changed="$(git diff --name-only "origin/${BASE_REF}...HEAD")"
-          if printf '%s\n' "$changed" | grep -qE '^(src/|scripts/dev/|scripts/smoke/|tooling/dev/|config/real-provider-defaults\.env|\.github/workflows/real-runtime\.yml|\.nvmrc|Dockerfile|package\.json|pnpm-lock\.yaml)'; then
+          if printf '%s\n' "$changed" | grep -qE '^(src/|apps/|e2e/|scripts/dev/|scripts/smoke/|tooling/dev/|config/real-provider-defaults\.env|\.github/workflows/real-runtime\.yml|\.nvmrc|Dockerfile|package\.json|pnpm-lock\.yaml)'; then
             echo "eligible=true" >> "$GITHUB_OUTPUT"
           else
             skip "No runtime-relevant paths changed, so a real provider cannot observe this diff."
@@ -273,7 +273,7 @@ jobs:
             exit 0
           fi
           changed="$(git diff --name-only "origin/${BASE_REF}...HEAD")"
-          if printf '%s\n' "$changed" | grep -qE '^(src/|scripts/dev/|scripts/smoke/|tooling/dev/|config/real-provider-defaults\.env|\.github/workflows/real-runtime\.yml|\.nvmrc|Dockerfile|package\.json|pnpm-lock\.yaml)'; then
+          if printf '%s\n' "$changed" | grep -qE '^(src/|apps/|e2e/|scripts/dev/|scripts/smoke/|tooling/dev/|config/real-provider-defaults\.env|\.github/workflows/real-runtime\.yml|\.nvmrc|Dockerfile|package\.json|pnpm-lock\.yaml)'; then
             echo "eligible=true" >> "$GITHUB_OUTPUT"
           else
             skip "No runtime-relevant paths changed, so a real provider cannot observe this diff."
@@ -434,7 +434,7 @@ jobs:
             exit 0
           fi
           changed="$(git diff --name-only "origin/${BASE_REF}...HEAD")"
-          if printf '%s\n' "$changed" | grep -qE '^(src/|scripts/dev/|scripts/smoke/|tooling/dev/|config/real-provider-defaults\.env|\.github/workflows/real-runtime\.yml|\.nvmrc|Dockerfile|package\.json|pnpm-lock\.yaml)'; then
+          if printf '%s\n' "$changed" | grep -qE '^(src/|apps/|e2e/|scripts/dev/|scripts/smoke/|tooling/dev/|config/real-provider-defaults\.env|\.github/workflows/real-runtime\.yml|\.nvmrc|Dockerfile|package\.json|pnpm-lock\.yaml)'; then
             echo "eligible=true" >> "$GITHUB_OUTPUT"
           else
             skip "No runtime-relevant paths changed, so a real provider cannot observe this diff."

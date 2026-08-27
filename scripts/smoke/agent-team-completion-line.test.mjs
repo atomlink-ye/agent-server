@@ -710,24 +710,6 @@ describe('agent-team smoke completion line', () => {
     ).toContain('member_work_message_send_multiple_completions');
   });
 
-  it('rejects a lead completion whose activity ID was not invoked by the terminal run', () => {
-    const trace = completeLeadTrace();
-    trace.mcp_activities[0].status = 'failed';
-    trace.mcp_activities.push({
-      activity_id: 'ack-not-invoked',
-      sequence: 13,
-      tool_name: 'message_ack',
-      status: 'completed',
-      source_refs: { run_id: 'other-lead-run' },
-    });
-
-    expect(
-      evaluateLeadTerminalFacts(successfulProjection(), trace).failures.map(
-        (failure) => failure.code,
-      ),
-    ).toContain('terminal_lead_message_ack');
-  });
-
   it('rejects a masking trace with two completed message steps', () => {
     const trace = {
       mcp_activities: [

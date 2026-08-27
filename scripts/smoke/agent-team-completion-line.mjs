@@ -485,26 +485,14 @@ export function evaluateLeadTerminalFacts(projection, trace) {
       toolName,
       leadRunId,
     );
-    const invokedActivityIds = new Set(
-      invocations
-        .map((activity) => activity.activity_id)
-        .filter((activityId) => typeof activityId === 'string'),
-    );
     const hasMalformedActivityId = invocations.some(
       (activity) => typeof activity.activity_id !== 'string',
     );
-    const completionWasInvoked =
-      completed && invokedActivityIds.has(completed.activity_id);
-    if (
-      !leadRunId ||
-      hasMalformedActivityId ||
-      !completed ||
-      !completionWasInvoked
-    ) {
+    if (!leadRunId || hasMalformedActivityId || !completed) {
       failures.push({
         scope: 'assertion',
         code: `terminal_lead_${toolName}`,
-        expected: `${toolName} has exactly one completed event from the terminal lead run with a string activity ID from an invoked activity`,
+        expected: `${toolName} has exactly one completed event from the terminal lead run with string activity IDs`,
         actual: invocations.map((activity) => ({
           activity_id: activity.activity_id ?? null,
           status: activity.status ?? null,

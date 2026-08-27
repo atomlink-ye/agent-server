@@ -371,7 +371,8 @@ export function ConversationsPage({
         </header>
 
         <section className="chat-content" aria-label="Conversation">
-          {conversationState.status === 'loading' &&
+          {(conversationState.status === 'idle' ||
+            conversationState.status === 'loading') &&
           conversationState.conversations.length === 0 ? (
             <div className="empty-chat" role="status">
               <p>Loading conversations…</p>

@@ -339,6 +339,49 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
   );
 }
 
+function BoardAuthoringForm({
+  className,
+  eyebrow,
+  heading,
+  submitLabel,
+  submitDisabled = false,
+  onCancel,
+  onSubmit,
+  children,
+}: {
+  readonly className: string;
+  readonly eyebrow: string;
+  readonly heading: string;
+  readonly submitLabel: string;
+  readonly submitDisabled?: boolean;
+  readonly onCancel: () => void;
+  readonly onSubmit: (event: React.FormEvent) => Promise<void>;
+  readonly children: React.ReactNode;
+}) {
+  return (
+    <form
+      className={`work-org-card work-org-board-create work-org-form ${className}`}
+      onSubmit={(event) => void onSubmit(event)}
+    >
+      <span className="eyebrow">{eyebrow}</span>
+      <h2>{heading}</h2>
+      {children}
+      <div className="work-org-actions">
+        <button
+          type="submit"
+          className="work-org-primary"
+          disabled={submitDisabled}
+        >
+          {submitLabel}
+        </button>
+        <button type="button" onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+}
+
 function BoardCreationForm({
   className,
   title,
@@ -353,12 +396,15 @@ function BoardCreationForm({
   readonly onSubmit: (event: React.FormEvent) => Promise<void>;
 }) {
   return (
-    <form
-      className={`work-org-card work-org-board-create ${className}`}
-      onSubmit={(event) => void onSubmit(event)}
+    <BoardAuthoringForm
+      className={className}
+      eyebrow="New Board"
+      heading="Name this Board"
+      submitLabel="Create Board"
+      submitDisabled={!title.trim()}
+      onCancel={onCancel}
+      onSubmit={onSubmit}
     >
-      <span className="eyebrow">New Board</span>
-      <h2>Name this Board</h2>
       <label>
         Board title
         <input
@@ -368,19 +414,7 @@ function BoardCreationForm({
           placeholder="Board title"
         />
       </label>
-      <div className="work-org-actions">
-        <button
-          type="submit"
-          className="work-org-primary"
-          disabled={!title.trim()}
-        >
-          Create Board
-        </button>
-        <button type="button" onClick={onCancel}>
-          Cancel
-        </button>
-      </div>
-    </form>
+    </BoardAuthoringForm>
   );
 }
 
@@ -398,6 +432,33 @@ function BoardCanvas({
   const navigate = useNavigate();
   const [newColumnTitle, setNewColumnTitle] = useState('');
   const [addingColumn, setAddingColumn] = useState(false);
+  const [authoring, setAuthoring] = useState<
+    | {
+        readonly kind: 'rename-board';
+        readonly title: string;
+      }
+    | {
+        readonly kind: 'rename-column';
+        readonly columnId: string;
+        readonly title: string;
+      }
+    | {
+        readonly kind: 'create-card';
+        readonly columnId: string;
+        readonly position: number;
+        readonly title: string;
+        readonly description: string;
+      }
+    | {
+        readonly kind: 'delete-board';
+      }
+    | {
+        readonly kind: 'delete-column';
+        readonly columnId: string;
+        readonly title: string;
+      }
+    | null
+  >(null);
   const [dragOverColumnId, setDragOverColumnId] = useState<string | null>(null);
 
   const placementsByColumn = useMemo(() => {
@@ -439,73 +500,49 @@ function BoardCanvas({
     }
   }
 
-  async function renameBoard() {
-    const title = window.prompt('Board title', snapshot.board.title)?.trim();
-    if (!title || title === snapshot.board.title) return;
+  async function submitAuthoring(event: React.FormEvent) {
+    event.preventDefault();
+    if (!authoring) return;
     try {
-      await workOrganizationClient.updateBoard(snapshot.board.id, { title });
-      await refresh();
-    } catch {
-      onError(BOARDS_ACTION_ERROR);
-    }
-  }
-
-  async function deleteBoard() {
-    if (
-      !window.confirm(
-        `Delete “${snapshot.board.title}”? WorkItems are kept; only this Board projection is removed.`,
-      )
-    )
-      return;
-    try {
-      await workOrganizationClient.deleteBoard(snapshot.board.id);
-      await onBoardDeleted();
-    } catch {
-      onError(BOARDS_ACTION_ERROR);
-    }
-  }
-
-  async function renameColumn(columnId: string, current: string) {
-    const title = window.prompt('Column title', current)?.trim();
-    if (!title || title === current) return;
-    try {
-      await workOrganizationClient.updateColumn(snapshot.board.id, columnId, {
-        title,
-      });
-      await refresh();
-    } catch {
-      onError(BOARDS_ACTION_ERROR);
-    }
-  }
-
-  async function deleteColumn(columnId: string, title: string) {
-    if (
-      !window.confirm(
-        `Delete column “${title}”? Cards remain as Tasks but leave this Board.`,
-      )
-    )
-      return;
-    try {
-      await workOrganizationClient.deleteColumn(snapshot.board.id, columnId);
-      await refresh();
-    } catch {
-      onError(BOARDS_ACTION_ERROR);
-    }
-  }
-
-  async function addCard(columnId: string, position: number) {
-    const title = window.prompt('Task title')?.trim();
-    if (!title) return;
-    const description = window.prompt('Description (optional)')?.trim() ?? '';
-    try {
-      await workOrganizationClient.createWorkItem({
-        title,
-        description: description || null,
-        boardId: snapshot.board.id,
-        columnId,
-        position,
-      });
-      await refresh();
+      if (authoring.kind === 'rename-board') {
+        const title = authoring.title.trim();
+        if (!title || title === snapshot.board.title) return;
+        await workOrganizationClient.updateBoard(snapshot.board.id, { title });
+        await refresh();
+      } else if (authoring.kind === 'delete-board') {
+        await workOrganizationClient.deleteBoard(snapshot.board.id);
+        await onBoardDeleted();
+      } else if (authoring.kind === 'rename-column') {
+        const title = authoring.title.trim();
+        const column = snapshot.columns.find(
+          (entry) => entry.id === authoring.columnId,
+        );
+        if (!title || title === column?.title) return;
+        await workOrganizationClient.updateColumn(
+          snapshot.board.id,
+          authoring.columnId,
+          { title },
+        );
+        await refresh();
+      } else if (authoring.kind === 'delete-column') {
+        await workOrganizationClient.deleteColumn(
+          snapshot.board.id,
+          authoring.columnId,
+        );
+        await refresh();
+      } else {
+        const title = authoring.title.trim();
+        if (!title) return;
+        await workOrganizationClient.createWorkItem({
+          title,
+          description: authoring.description.trim() || null,
+          boardId: snapshot.board.id,
+          columnId: authoring.columnId,
+          position: authoring.position,
+        });
+        await refresh();
+      }
+      setAuthoring(null);
     } catch {
       onError(BOARDS_ACTION_ERROR);
     }
@@ -539,10 +576,21 @@ function BoardCanvas({
           ) : null}
         </div>
         <div className="work-org-actions">
-          <button type="button" onClick={() => void renameBoard()}>
+          <button
+            type="button"
+            onClick={() =>
+              setAuthoring({
+                kind: 'rename-board',
+                title: snapshot.board.title,
+              })
+            }
+          >
             Rename
           </button>
-          <button type="button" onClick={() => void deleteBoard()}>
+          <button
+            type="button"
+            onClick={() => setAuthoring({ kind: 'delete-board' })}
+          >
             Delete
           </button>
           <button
@@ -554,6 +602,98 @@ function BoardCanvas({
           </button>
         </div>
       </header>
+      {authoring ? (
+        <BoardAuthoringForm
+          className="work-board-authoring"
+          eyebrow={
+            authoring.kind === 'create-card'
+              ? 'New Task'
+              : authoring.kind.startsWith('delete')
+                ? 'Confirm deletion'
+                : 'Edit Board'
+          }
+          heading={
+            authoring.kind === 'rename-board'
+              ? 'Rename this Board'
+              : authoring.kind === 'rename-column'
+                ? 'Rename this Column'
+                : authoring.kind === 'create-card'
+                  ? 'Add a Task card'
+                  : authoring.kind === 'delete-board'
+                    ? `Delete “${snapshot.board.title}”?`
+                    : `Delete column “${authoring.title}”?`
+          }
+          submitLabel={
+            authoring.kind.startsWith('delete')
+              ? 'Delete'
+              : authoring.kind === 'create-card'
+                ? 'Add Task'
+                : 'Save'
+          }
+          onCancel={() => setAuthoring(null)}
+          onSubmit={submitAuthoring}
+        >
+          {authoring.kind === 'rename-board' ||
+          authoring.kind === 'rename-column' ? (
+            <label>
+              {authoring.kind === 'rename-board'
+                ? 'Board title'
+                : 'Column title'}
+              <input
+                autoFocus
+                value={authoring.title}
+                onChange={(event) =>
+                  setAuthoring((current) =>
+                    current &&
+                    (current.kind === 'rename-board' ||
+                      current.kind === 'rename-column')
+                      ? { ...current, title: event.target.value }
+                      : current,
+                  )
+                }
+              />
+            </label>
+          ) : authoring.kind === 'create-card' ? (
+            <>
+              <label>
+                Task title
+                <input
+                  autoFocus
+                  value={authoring.title}
+                  onChange={(event) =>
+                    setAuthoring((current) =>
+                      current?.kind === 'create-card'
+                        ? { ...current, title: event.target.value }
+                        : current,
+                    )
+                  }
+                  placeholder="Task title"
+                />
+              </label>
+              <label>
+                Description (optional)
+                <textarea
+                  value={authoring.description}
+                  onChange={(event) =>
+                    setAuthoring((current) =>
+                      current?.kind === 'create-card'
+                        ? { ...current, description: event.target.value }
+                        : current,
+                    )
+                  }
+                  placeholder="Describe this Task"
+                />
+              </label>
+            </>
+          ) : (
+            <p>
+              {authoring.kind === 'delete-board'
+                ? 'WorkItems are kept; only this Board projection is removed.'
+                : 'Cards remain as Tasks but leave this Board.'}
+            </p>
+          )}
+        </BoardAuthoringForm>
+      ) : null}
       <div className="work-board-canvas">
         {snapshot.columns.map((column) => {
           const cards = placementsByColumn.get(column.id) ?? [];
@@ -585,14 +725,26 @@ function BoardCanvas({
                   <button
                     type="button"
                     aria-label={`Rename ${column.title}`}
-                    onClick={() => void renameColumn(column.id, column.title)}
+                    onClick={() =>
+                      setAuthoring({
+                        kind: 'rename-column',
+                        columnId: column.id,
+                        title: column.title,
+                      })
+                    }
                   >
                     ✎
                   </button>
                   <button
                     type="button"
                     aria-label={`Delete ${column.title}`}
-                    onClick={() => void deleteColumn(column.id, column.title)}
+                    onClick={() =>
+                      setAuthoring({
+                        kind: 'delete-column',
+                        columnId: column.id,
+                        title: column.title,
+                      })
+                    }
                   >
                     ×
                   </button>
@@ -668,7 +820,15 @@ function BoardCanvas({
               <button
                 type="button"
                 className="work-board-add-card"
-                onClick={() => void addCard(column.id, cards.length)}
+                onClick={() =>
+                  setAuthoring({
+                    kind: 'create-card',
+                    columnId: column.id,
+                    position: cards.length,
+                    title: '',
+                    description: '',
+                  })
+                }
               >
                 + Task
               </button>

@@ -18,13 +18,8 @@ const newWorkItemId = '00000000-0000-4000-8000-000000000203';
 
 afterEach(() => vi.unstubAllGlobals());
 
-it('stays on the Board and shows the new card after "+ Task" instead of jumping to the Task detail page', async () => {
+it('adds a Task card through the in-app form instead of a native dialog', async () => {
   let cardCreated = false;
-  const promptValues = ['New card title', ''];
-  vi.stubGlobal(
-    'prompt',
-    vi.fn(() => promptValues.shift() ?? null),
-  );
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -78,8 +73,85 @@ it('stays on the Board and shows the new card after "+ Task" instead of jumping 
       await settle();
     });
 
+    expect(host.textContent).toContain('Add a Task card');
+    const title = host.querySelector<HTMLInputElement>(
+      'input[placeholder="Task title"]',
+    );
+    if (!title) throw new Error('Expected an in-app Task title input.');
+    await act(async () => {
+      setInputValue(title, 'New card title');
+      await settle();
+    });
+    const addTaskButton = [
+      ...host.querySelectorAll<HTMLButtonElement>('button'),
+    ].find((button) => button.textContent === 'Add Task');
+    if (!addTaskButton) throw new Error('Expected an "Add Task" button.');
+    await act(async () => {
+      addTaskButton.click();
+      await settle();
+    });
+
     expect(host.textContent).not.toContain('Task detail page');
     expect(host.textContent).toContain('New card title');
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+  }
+});
+
+it('keeps a failed Board mutation visible to the user', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (path === '/api/boards' && (init?.method ?? 'GET') === 'GET')
+        return json({ boards: [board()] });
+      if (path === `/api/boards/${boardId}` && init?.method === 'PATCH')
+        return json({ error: { code: 'request_failed' } }, 500);
+      if (path === `/api/boards/${boardId}`) return json(snapshot(false));
+      throw new Error(`Unexpected browser request: ${path}`);
+    }),
+  );
+
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <BoardsPage selectedBoardId={boardId} />
+        </MemoryRouter>,
+      );
+    });
+    await act(settle);
+    const renameButton = [
+      ...host.querySelectorAll<HTMLButtonElement>('button'),
+    ].find((button) => button.textContent === 'Rename');
+    if (!renameButton) throw new Error('Expected a Board rename button.');
+    await act(async () => {
+      renameButton.click();
+      await settle();
+    });
+    const title = host.querySelector<HTMLInputElement>('input');
+    if (!title) throw new Error('Expected a Board title input.');
+    await act(async () => {
+      setInputValue(title, 'Rejected Board title');
+      await settle();
+    });
+    const saveButton = [
+      ...host.querySelectorAll<HTMLButtonElement>('button'),
+    ].find((button) => button.textContent === 'Save');
+    if (!saveButton) throw new Error('Expected a Save button.');
+    await act(async () => {
+      saveButton.click();
+      await settle();
+    });
+
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain(
+      'That Board change could not be saved. Please try again.',
+    );
+    expect(host.textContent).toContain('Rename this Board');
   } finally {
     await act(async () => root.unmount());
     host.remove();
@@ -266,4 +338,13 @@ async function settle(): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 0));
     await Promise.resolve();
   }
+}
+
+function setInputValue(input: HTMLInputElement, value: string): void {
+  const descriptor = Object.getOwnPropertyDescriptor(
+    HTMLInputElement.prototype,
+    'value',
+  );
+  descriptor?.set?.call(input, value);
+  input.dispatchEvent(new Event('input', { bubbles: true }));
 }

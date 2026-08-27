@@ -232,6 +232,61 @@ it('reports a missing selected Conversation without Retry or a composer', async 
   }
 });
 
+it('keeps the conversation rail and pane aligned across roster states', async () => {
+  let resolve: ((value: readonly Conversation[]) => void) | undefined;
+  let reject: ((reason?: unknown) => void) | undefined;
+  const commands: ChatCommands = {
+    loadCoworkers: async () => [],
+    loadConversations: () =>
+      new Promise<readonly Conversation[]>((next, fail) => {
+        resolve = next;
+        reject = fail;
+      }),
+    createConversation: async () => conversation('created'),
+    loadMessages: async () => [],
+    sendMessage: async () => message('created', 'message', 1, 'hello'),
+  };
+  const appStore = createAppStore();
+  const conversationsStore = createConversationsStore({
+    selectionStore: appStore,
+  });
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <ConversationsPage
+            commands={commands}
+            appStore={appStore}
+            conversationsStore={conversationsStore}
+          />
+        </MemoryRouter>,
+      );
+      await Promise.resolve();
+    });
+    expect(
+      host.textContent?.match(/Loading conversations…/g) ?? [],
+    ).toHaveLength(2);
+
+    await act(async () => reject?.(new Error('offline')));
+    expect(
+      host.textContent?.match(/Unable to load conversations\./g) ?? [],
+    ).toHaveLength(2);
+
+    await act(async () => {
+      resolve = undefined;
+      await conversationsStore.load(async () => []);
+    });
+    expect(host.textContent).toContain('No conversations yet.');
+    expect(host.textContent).toContain('No conversations are available.');
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+  }
+});
+
 it('reports a selected Conversation whose message read returns 404 without Retry or a composer', async () => {
   const selected = conversation('conversation-a');
   const commands: ChatCommands = {

@@ -1,13 +1,17 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type {
   WorkBoardDto,
   WorkBoardSnapshotDto,
   WorkItemDto,
 } from '@atomlink-ye/agent-server/product-contract';
+import { WORK_BOARD_NOT_FOUND_CODE } from '@atomlink-ye/agent-server/product-contract';
 
 import TitleBar from '../../app/shell/TitleBar';
-import { isFeatureUnavailable } from '../../api/feature-availability';
+import {
+  isFeatureUnavailable,
+  isResourceNotFound,
+} from '../../api/feature-availability';
 import { workOrganizationClient } from './client';
 import './work-organization.css';
 
@@ -28,6 +32,7 @@ type RecoverableError = {
 // user's data. It must only be reachable from a successful load, never from
 // "we could not ask" (error) or "this capability is off" (unavailable).
 type ListStatus = 'loading' | 'ready' | 'unavailable' | 'error';
+type SelectionStatus = 'idle' | 'loading' | 'ready' | 'not_found' | 'error';
 
 export interface BoardsPageProps {
   readonly selectedBoardId?: string | null;
@@ -38,6 +43,9 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
   const [boards, setBoards] = useState<readonly WorkBoardDto[]>([]);
   const [snapshot, setSnapshot] = useState<WorkBoardSnapshotDto | null>(null);
   const [listStatus, setListStatus] = useState<ListStatus>('loading');
+  const [selectionStatus, setSelectionStatus] =
+    useState<SelectionStatus>('idle');
+  const selectionRequest = useRef(0);
   const [error, setError] = useState<RecoverableError | null>(null);
   const [creatingBoard, setCreatingBoard] = useState(false);
   const [newBoardTitle, setNewBoardTitle] = useState('');
@@ -59,14 +67,28 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
   }, [navigate, selectedBoardId]);
 
   const loadSnapshot = useCallback(async () => {
+    const request = ++selectionRequest.current;
     if (!selectedBoardId) {
       setSnapshot(null);
+      setSelectionStatus('idle');
       return;
     }
+    setSnapshot(null);
+    setSelectionStatus('loading');
     try {
-      setSnapshot(await workOrganizationClient.getBoard(selectedBoardId));
+      const next = await workOrganizationClient.getBoard(selectedBoardId);
+      if (request !== selectionRequest.current) return;
+      setSnapshot(next);
+      setSelectionStatus('ready');
       setError((current) => (current?.source === 'snapshot' ? null : current));
-    } catch {
+    } catch (reason) {
+      if (request !== selectionRequest.current) return;
+      if (isResourceNotFound(reason, WORK_BOARD_NOT_FOUND_CODE)) {
+        setSelectionStatus('not_found');
+        setError(null);
+        return;
+      }
+      setSelectionStatus('error');
       setError({
         source: 'snapshot',
         message: BOARDS_LOAD_ERROR,
@@ -209,7 +231,9 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
               + Board
             </button>
           </div>
-          {error ? (
+          {error &&
+          selectionStatus !== 'not_found' &&
+          selectionStatus !== 'error' ? (
             <div className="work-org-error" role="alert">
               <p>{error.message}</p>
               {error.retry ? (
@@ -235,6 +259,43 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
               <h1>Boards could not be loaded</h1>
               <p>{BOARDS_LOAD_ERROR}</p>
               <button type="button" onClick={() => void loadBoards()}>
+                Retry
+              </button>
+            </div>
+          ) : selectionStatus === 'loading' ? (
+            <div
+              className="work-main-empty"
+              data-testid="boards-selected-loading"
+            >
+              <span className="work-main-icon" aria-hidden="true">
+                ▦
+              </span>
+              <h1>Loading selected Board…</h1>
+            </div>
+          ) : selectionStatus === 'not_found' ? (
+            <div className="work-main-empty" data-testid="boards-not-found">
+              <span className="work-main-icon" aria-hidden="true">
+                ▦
+              </span>
+              <h1>The selected Board is unavailable.</h1>
+              <p>
+                This Board may have been deleted or moved out of this workspace.
+              </p>
+              <button type="button" onClick={() => navigate('/boards')}>
+                Back to Boards
+              </button>
+            </div>
+          ) : selectionStatus === 'error' ? (
+            <div
+              className="work-main-empty"
+              data-testid="boards-selected-error"
+            >
+              <span className="work-main-icon" aria-hidden="true">
+                ▦
+              </span>
+              <h1>Board could not be loaded</h1>
+              <p>{BOARDS_LOAD_ERROR}</p>
+              <button type="button" onClick={() => void loadSnapshot()}>
                 Retry
               </button>
             </div>

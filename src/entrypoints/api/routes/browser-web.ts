@@ -212,7 +212,6 @@ export function registerBrowserWebRoutes(
       logger,
       `/api/v1/works/${encodeURIComponent(workId)}/chat-card`,
       ChatWorkCardSchema,
-      { notFoundCode: 'work_not_found' },
     );
   });
   app.get('/api/works/:workId/definition', async (c) => {
@@ -447,7 +446,6 @@ async function readBrowserJson(
   logger: Logger,
   path: string,
   schema: ZodType<unknown>,
-  options: { readonly notFoundCode?: string } = {},
 ): Promise<Response> {
   return forwardDecoded(
     config,
@@ -456,7 +454,7 @@ async function readBrowserJson(
     { method: 'GET' },
     schema,
     ErrorResponseSchema,
-    options,
+    {},
   );
 }
 
@@ -492,7 +490,6 @@ async function forwardDecoded(
   errorSchema: ZodType<unknown>,
   options: {
     readonly successStatus?: number;
-    readonly notFoundCode?: string;
     readonly transform?: (value: unknown) => unknown;
   } = {},
 ): Promise<Response> {
@@ -526,17 +523,6 @@ async function forwardDecoded(
   }
   const decoded = decodeProductResponse(body, errorSchema);
   if (!decoded.success) return invalidUpstream();
-  if (upstream.status === 404 && options.notFoundCode) {
-    return jsonResponse(
-      {
-        error: {
-          code: options.notFoundCode,
-          message: 'The requested resource was not found.',
-        },
-      },
-      404,
-    );
-  }
   return jsonResponse(decoded.data, safeStatus(upstream.status));
 }
 

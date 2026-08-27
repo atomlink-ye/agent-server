@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, expect, it, vi } from 'vitest';
 
 import { TasksPage } from './TasksPage';
+import { WORK_ITEM_NOT_FOUND_CODE } from '@atomlink-ye/agent-server/product-contract';
 
 (
   globalThis as typeof globalThis & {
@@ -124,12 +125,407 @@ it('selects a published Definition and coworker by display-safe labels while pro
   }
 });
 
+it('shows a missing selected Task without Retry, while a transport failure remains retryable', async () => {
+  const missingId = '00000000-0000-4000-8000-000000000199';
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path === '/api/work-items') return json({ work_items: [] });
+      if (path === '/api/agents') return json({ items: [] });
+      if (
+        path === `/api/work-items/${missingId}` ||
+        path === `/api/work-items/${missingId}/comments`
+      )
+        return json({ error: { code: WORK_ITEM_NOT_FOUND_CODE } }, 404);
+      throw new Error(`Unexpected browser request: ${path}`);
+    }),
+  );
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <TasksPage selectedWorkItemId={missingId} />
+        </MemoryRouter>,
+      );
+    });
+    await act(settle);
+    expect(host.textContent).toContain('The selected Task is unavailable.');
+    expect(host.textContent).toContain('Back to Tasks');
+    expect(
+      [...host.querySelectorAll('button')].some(
+        (button) => button.textContent === 'Retry',
+      ),
+    ).toBe(false);
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
+it('keeps Retry for a selected Task transport failure', async () => {
+  const failedId = '00000000-0000-4000-8000-000000000198';
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path === '/api/work-items') return json({ work_items: [] });
+      if (path === '/api/agents') return json({ items: [] });
+      if (path === `/api/work-items/${failedId}`)
+        return json({ error: { code: 'request_failed' } }, 500);
+      if (path === `/api/work-items/${failedId}/comments`)
+        return json({ comments: [] });
+      throw new Error(`Unexpected browser request: ${path}`);
+    }),
+  );
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () =>
+      root.render(
+        <MemoryRouter>
+          <TasksPage selectedWorkItemId={failedId} />
+        </MemoryRouter>,
+      ),
+    );
+    await act(settle);
+    expect(host.textContent).toContain('Task could not be loaded');
+    expect(
+      [...host.querySelectorAll('button')].some(
+        (button) => button.textContent === 'Retry',
+      ),
+    ).toBe(true);
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
+it('keeps Retry when a selected Task 500 carries its canonical not-found code', async () => {
+  const failedId = '00000000-0000-4000-8000-000000000189';
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path === '/api/work-items') return json({ work_items: [] });
+      if (path === '/api/agents') return json({ items: [] });
+      if (path === `/api/work-items/${failedId}`)
+        return json({ error: { code: WORK_ITEM_NOT_FOUND_CODE } }, 500);
+      if (path === `/api/work-items/${failedId}/comments`)
+        return json({ comments: [] });
+      throw new Error(`Unexpected browser request: ${path}`);
+    }),
+  );
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () =>
+      root.render(
+        <MemoryRouter>
+          <TasksPage selectedWorkItemId={failedId} />
+        </MemoryRouter>,
+      ),
+    );
+    await act(settle);
+    expect(host.textContent).toContain('Task could not be loaded');
+    expect(host.textContent).not.toContain('The selected Task is unavailable.');
+    expect(
+      [...host.querySelectorAll('button')].some(
+        (button) => button.textContent === 'Retry',
+      ),
+    ).toBe(true);
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
+it('keeps the newer Task selection when an older selected read finishes late', async () => {
+  const firstId = '00000000-0000-4000-8000-000000000196';
+  const secondId = '00000000-0000-4000-8000-000000000197';
+  let resolveFirst: ((response: Response) => void) | undefined;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path === '/api/work-items')
+        return Promise.resolve(json({ work_items: [] }));
+      if (path === '/api/agents') return Promise.resolve(json({ items: [] }));
+      if (path === `/api/work-items/${firstId}`)
+        return new Promise<Response>((resolve) => {
+          resolveFirst = resolve;
+        });
+      if (path === `/api/work-items/${secondId}`)
+        return Promise.resolve(json(taskFor(secondId, 'Second Task')));
+      if (path.endsWith('/comments'))
+        return Promise.resolve(json({ comments: [] }));
+      throw new Error(`Unexpected browser request: ${path}`);
+    }),
+  );
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () =>
+      root.render(
+        <MemoryRouter>
+          <TasksPage selectedWorkItemId={firstId} />
+        </MemoryRouter>,
+      ),
+    );
+    await act(settle);
+    await act(async () =>
+      root.render(
+        <MemoryRouter>
+          <TasksPage selectedWorkItemId={secondId} />
+        </MemoryRouter>,
+      ),
+    );
+    await act(settle);
+    expect(resolveFirst).toBeDefined();
+    await act(async () =>
+      resolveFirst!(json({ error: { code: WORK_ITEM_NOT_FOUND_CODE } }, 404)),
+    );
+    await act(settle);
+    expect(host.textContent).toContain('Second Task');
+    expect(host.textContent).not.toContain('The selected Task is unavailable.');
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
+it('keeps the newer Task list when an older list read finishes late', async () => {
+  const firstId = '00000000-0000-4000-8000-000000000193';
+  const secondId = '00000000-0000-4000-8000-000000000194';
+  let listCall = 0;
+  let resolveFirstList: ((response: Response) => void) | undefined;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path === '/api/work-items') {
+        listCall += 1;
+        if (listCall === 1)
+          return new Promise<Response>((resolve) => {
+            resolveFirstList = resolve;
+          });
+        return Promise.resolve(
+          json({ work_items: [taskFor(secondId, 'Second list Task')] }),
+        );
+      }
+      if (path === '/api/agents') return Promise.resolve(json({ items: [] }));
+      if (path.endsWith('/comments'))
+        return Promise.resolve(json({ comments: [] }));
+      throw new Error(`Unexpected browser request: ${path}`);
+    }),
+  );
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () =>
+      root.render(
+        <MemoryRouter>
+          <TasksPage selectedWorkItemId={firstId} />
+        </MemoryRouter>,
+      ),
+    );
+    await act(settle);
+    await act(async () =>
+      root.render(
+        <MemoryRouter>
+          <TasksPage selectedWorkItemId={secondId} />
+        </MemoryRouter>,
+      ),
+    );
+    await act(settle);
+    expect(resolveFirstList).toBeDefined();
+    await act(async () =>
+      resolveFirstList!(
+        json({ work_items: [taskFor(firstId, 'First list Task')] }),
+      ),
+    );
+    await act(settle);
+    expect(host.textContent).toContain('Second list Task');
+    expect(host.textContent).not.toContain('First list Task');
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
+it('shows selected Task loading instead of an empty state', async () => {
+  const loadingId = '00000000-0000-4000-8000-000000000195';
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path === '/api/work-items')
+        return Promise.resolve(json({ work_items: [] }));
+      if (path === '/api/agents') return Promise.resolve(json({ items: [] }));
+      if (path === `/api/work-items/${loadingId}`)
+        return new Promise<Response>(() => {});
+      if (path.endsWith('/comments'))
+        return Promise.resolve(json({ comments: [] }));
+      throw new Error(`Unexpected browser request: ${path}`);
+    }),
+  );
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () =>
+      root.render(
+        <MemoryRouter>
+          <TasksPage selectedWorkItemId={loadingId} />
+        </MemoryRouter>,
+      ),
+    );
+    await act(settle);
+    expect(host.textContent).toContain('Loading selected Task…');
+    expect(
+      host.querySelector('[data-testid="tasks-selected-loading"]'),
+    ).not.toBeNull();
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
+it('keeps the selected Task detail when its comments read fails', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path === '/api/work-items') return json({ work_items: [task()] });
+      if (path === '/api/agents') return json({ items: [] });
+      if (path === `/api/work-items/${workItemId}/comments`)
+        return json({ error: { code: 'request_failed' } }, 500);
+      if (path === '/api/work-definitions') return json({ items: [] });
+      throw new Error(`Unexpected browser request: ${path}`);
+    }),
+  );
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () =>
+      root.render(
+        <MemoryRouter>
+          <TasksPage selectedWorkItemId={workItemId} />
+        </MemoryRouter>,
+      ),
+    );
+    await act(settle);
+    expect(host.textContent).toContain('Prepare brief');
+    expect(host.textContent).toContain(
+      'Comments for this Task could not be loaded. Please try again.',
+    );
+    expect(
+      [...host.querySelectorAll('button')].some(
+        (button) => button.textContent === 'Retry',
+      ),
+    ).toBe(true);
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
+it('discards late comments from an older Task selection', async () => {
+  const firstId = '00000000-0000-4000-8000-000000000191';
+  const secondId = '00000000-0000-4000-8000-000000000192';
+  let listCall = 0;
+  let resolveFirstComments: ((response: Response) => void) | undefined;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path === '/api/work-items') {
+        listCall += 1;
+        return Promise.resolve(
+          json({
+            work_items: [
+              listCall === 1
+                ? taskFor(firstId, 'First Task')
+                : taskFor(secondId, 'Second Task'),
+            ],
+          }),
+        );
+      }
+      if (path === '/api/agents') return Promise.resolve(json({ items: [] }));
+      if (path === '/api/work-definitions')
+        return Promise.resolve(json({ items: [] }));
+      if (path === `/api/work-items/${firstId}/comments`)
+        return new Promise<Response>((resolve) => {
+          resolveFirstComments = resolve;
+        });
+      if (path === `/api/work-items/${secondId}/comments`)
+        return Promise.resolve(
+          json({ comments: [commentFor(secondId, 'Second comment')] }),
+        );
+      throw new Error(`Unexpected browser request: ${path}`);
+    }),
+  );
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () =>
+      root.render(
+        <MemoryRouter>
+          <TasksPage selectedWorkItemId={firstId} />
+        </MemoryRouter>,
+      ),
+    );
+    await act(settle);
+    await act(async () =>
+      root.render(
+        <MemoryRouter>
+          <TasksPage selectedWorkItemId={secondId} />
+        </MemoryRouter>,
+      ),
+    );
+    await act(settle);
+    expect(resolveFirstComments).toBeDefined();
+    await act(async () =>
+      resolveFirstComments!(
+        json({ comments: [commentFor(firstId, 'First comment')] }),
+      ),
+    );
+    await act(settle);
+    expect(host.textContent).toContain('Second comment');
+    expect(host.textContent).not.toContain('First comment');
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
 function task() {
+  return taskFor(workItemId, 'Prepare brief');
+}
+
+function taskFor(id: string, title: string) {
   return {
     work_item: {
-      id: workItemId,
+      id,
       workspace_id: '00000000-0000-4000-8000-000000000105',
-      title: 'Prepare brief',
+      title,
       description: null,
       status: 'todo',
       assignee_id: null,
@@ -144,8 +540,19 @@ function task() {
   };
 }
 
-function json(body: unknown): Response {
+function commentFor(workItemId: string, body: string) {
+  return {
+    id: '00000000-0000-4000-8000-000000000190',
+    work_item_id: workItemId,
+    author_id: 'principal-1',
+    body,
+    created_at: '2026-08-26T00:00:00.000Z',
+  };
+}
+
+function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
+    status,
     headers: { 'content-type': 'application/json' },
   });
 }

@@ -78,6 +78,11 @@ export function ConversationsPage({
   const selectedConversation = conversationId
     ? conversationState.conversations.find(({ id }) => id === conversationId)
     : undefined;
+  const selectedConversationMissing =
+    (routeConversationId !== null &&
+      conversationState.status === 'ready' &&
+      selectedConversation === undefined) ||
+    messageState?.status === 'not_found';
 
   useEffect(() => {
     void conversationListStore.load(commands.loadConversations);
@@ -326,6 +331,7 @@ export function ConversationsPage({
         appStore={appSelectionStore}
         conversationsStore={conversationListStore}
         onSelectConversation={handleSelect}
+        selectedConversationMissing={selectedConversationMissing}
       />
 
       <main className="chat-panel">
@@ -365,23 +371,62 @@ export function ConversationsPage({
         </header>
 
         <section className="chat-content" aria-label="Conversation">
-          <ChatTranscript
-            conversationId={conversationId}
-            hasConversations={conversationState.conversations.length > 0}
-            state={messageState}
-            onRetry={retryMessages}
-            onOpenWork={openWork}
-          />
-          <ChatComposer
-            draft={messageState?.draft ?? ''}
-            sending={messageState?.sendStatus === 'sending'}
-            disabled={conversationId === null}
-            sendError={messageState?.sendError ?? null}
-            canRetry={messageState?.sendStatus === 'failed'}
-            onDraftChange={setDraft}
-            onSend={(body) => void send(body)}
-            onRetry={retrySend}
-          />
+          {(conversationState.status === 'idle' ||
+            conversationState.status === 'loading') &&
+          conversationState.conversations.length === 0 ? (
+            <div className="empty-chat" role="status">
+              <p>Loading conversations…</p>
+            </div>
+          ) : conversationState.status === 'error' &&
+            conversationState.conversations.length === 0 ? (
+            <div className="empty-chat" role="alert">
+              <p>
+                {conversationState.error ?? 'Unable to load conversations.'}
+              </p>
+              <button
+                type="button"
+                onClick={() =>
+                  void conversationListStore.load(commands.loadConversations)
+                }
+              >
+                Retry
+              </button>
+            </div>
+          ) : selectedConversationMissing ? (
+            <div className="empty-chat" data-testid="conversation-not-found">
+              <div className="empty-chat-icon" aria-hidden="true">
+                <span>✦</span>
+              </div>
+              <h1>The selected Conversation is unavailable.</h1>
+              <p>
+                This Conversation may have been deleted or moved out of this
+                workspace.
+              </p>
+              <button type="button" onClick={() => navigate('/')}>
+                Back to Conversations
+              </button>
+            </div>
+          ) : (
+            <>
+              <ChatTranscript
+                conversationId={conversationId}
+                hasConversations={conversationState.conversations.length > 0}
+                state={messageState}
+                onRetry={retryMessages}
+                onOpenWork={openWork}
+              />
+              <ChatComposer
+                draft={messageState?.draft ?? ''}
+                sending={messageState?.sendStatus === 'sending'}
+                disabled={conversationId === null}
+                sendError={messageState?.sendError ?? null}
+                canRetry={messageState?.sendStatus === 'failed'}
+                onDraftChange={setDraft}
+                onSend={(body) => void send(body)}
+                onRetry={retrySend}
+              />
+            </>
+          )}
         </section>
       </main>
     </>

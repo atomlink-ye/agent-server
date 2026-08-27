@@ -14,3 +14,22 @@ export function isFeatureUnavailable(reason: unknown): boolean {
     (reason as { code?: unknown }).code === 'feature_unavailable'
   );
 }
+
+/**
+ * Resource reads use a safe HTTP 404 to say that a previously shareable
+ * selection is no longer available. Keep this structural for read clients
+ * that wrap ApiTransportError while preserving its status.
+ */
+export function isResourceNotFound(
+  reason: unknown,
+  notFoundCode: string,
+): boolean {
+  return (
+    typeof reason === 'object' &&
+    reason !== null &&
+    'status' in reason &&
+    (reason as { status?: unknown }).status === 404 &&
+    'code' in reason &&
+    (reason as { code?: unknown }).code === notFoundCode
+  );
+}

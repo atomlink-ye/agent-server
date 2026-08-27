@@ -170,6 +170,89 @@ describe('browser-safe Vite facade', () => {
     expect(JSON.stringify(body)).not.toMatch(/taskId|runId|provider_session/u);
   });
 
+  it('preserves a verified upstream work_not_found code for the Work chat card', async () => {
+    process.env.AGENT_SERVER_SERVICE_TOKEN = SERVICE_TOKEN;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              error: {
+                code: 'work_not_found',
+                message: 'Upstream-specific missing Work.',
+                request_id: 'upstream-request',
+              },
+            }),
+            { status: 404, headers: { 'content-type': 'application/json' } },
+          ),
+      ),
+    );
+    const response = await appWithBrowserRoutes().request(
+      `/api/works/${WORK_ID}/chat-card`,
+    );
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({
+      error: {
+        code: 'work_not_found',
+        message: 'Upstream-specific missing Work.',
+        request_id: 'upstream-request',
+      },
+    });
+  });
+
+  it('does not mint work_not_found from a different upstream 404 code', async () => {
+    process.env.AGENT_SERVER_SERVICE_TOKEN = SERVICE_TOKEN;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              error: {
+                code: 'workspace_not_found',
+                message: 'Upstream workspace missing.',
+                request_id: 'upstream-request',
+              },
+            }),
+            { status: 404, headers: { 'content-type': 'application/json' } },
+          ),
+      ),
+    );
+    const response = await appWithBrowserRoutes().request(
+      `/api/works/${WORK_ID}/chat-card`,
+    );
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({
+      error: {
+        code: 'workspace_not_found',
+        message: 'Upstream workspace missing.',
+        request_id: 'upstream-request',
+      },
+    });
+  });
+
+  it('does not treat an undecodable 404 body as terminal absence', async () => {
+    process.env.AGENT_SERVER_SERVICE_TOKEN = SERVICE_TOKEN;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response('not json', {
+            status: 404,
+            headers: { 'content-type': 'application/json' },
+          }),
+      ),
+    );
+    const response = await appWithBrowserRoutes().request(
+      `/api/works/${WORK_ID}/chat-card`,
+    );
+    expect(response.status).toBe(502);
+    expect(await response.json()).toMatchObject({
+      error: { code: 'invalid_response' },
+    });
+  });
+
   it('maps the authenticated Work Definition list to the browser selector contract', async () => {
     process.env.AGENT_SERVER_SERVICE_TOKEN = SERVICE_TOKEN;
     const upstream = vi.fn(
@@ -315,6 +398,68 @@ describe('browser-safe Vite facade', () => {
       ],
     });
   });
+
+  for (const path of [
+    '/api/conversations/11111111-1111-4111-8111-111111111111',
+    '/api/conversations/11111111-1111-4111-8111-111111111111/messages',
+  ]) {
+    it(`forwards upstream not_found for ${path}`, async () => {
+      process.env.AGENT_SERVER_SERVICE_TOKEN = SERVICE_TOKEN;
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(
+          async () =>
+            new Response(
+              JSON.stringify({
+                error: {
+                  code: 'not_found',
+                  message: 'Upstream conversation missing.',
+                  request_id: 'upstream-request',
+                },
+              }),
+              { status: 404, headers: { 'content-type': 'application/json' } },
+            ),
+        ),
+      );
+      const response = await appWithBrowserRoutes().request(path);
+      expect(response.status).toBe(404);
+      expect(await response.json()).toEqual({
+        error: {
+          code: 'not_found',
+          message: 'Upstream conversation missing.',
+          request_id: 'upstream-request',
+        },
+      });
+    });
+    it(`does not mint not_found for a different 404 from ${path}`, async () => {
+      process.env.AGENT_SERVER_SERVICE_TOKEN = SERVICE_TOKEN;
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(
+          async () =>
+            new Response(
+              JSON.stringify({
+                error: {
+                  code: 'workspace_not_found',
+                  message: 'Upstream workspace missing.',
+                  request_id: 'upstream-request',
+                },
+              }),
+              { status: 404, headers: { 'content-type': 'application/json' } },
+            ),
+        ),
+      );
+      const response = await appWithBrowserRoutes().request(path);
+      expect(response.status).toBe(404);
+      expect(await response.json()).toEqual({
+        error: {
+          code: 'workspace_not_found',
+          message: 'Upstream workspace missing.',
+          request_id: 'upstream-request',
+        },
+      });
+    });
+  }
 
   it('reports feature_unavailable -- not a bare 404 -- for /api/skills when the Product Work surface is absent', async () => {
     const upstream = vi.fn();

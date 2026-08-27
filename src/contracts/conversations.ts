@@ -1,5 +1,9 @@
 import { z } from 'zod';
 
+// Generic upstream vocabulary; its specificity comes from the Conversation
+// route that emits and consumes it, not from the token alone.
+export const CONVERSATION_NOT_FOUND_CODE = 'not_found';
+
 /**
  * Browser-safe Chat/Conversation contract.
  *

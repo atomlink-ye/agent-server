@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, expect, it, vi } from 'vitest';
 
 import { BoardsPage } from './BoardsPage';
+import { WORK_BOARD_NOT_FOUND_CODE } from '@atomlink-ye/agent-server/product-contract';
 
 (
   globalThis as typeof globalThis & {
@@ -85,6 +86,116 @@ it('stays on the Board and shows the new card after "+ Task" instead of jumping 
   }
 });
 
+it('shows a missing selected Board without Retry, while a snapshot transport failure remains retryable', async () => {
+  const missingId = '00000000-0000-4000-8000-000000000299';
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path === '/api/boards') return json({ boards: [] });
+      if (path === `/api/boards/${missingId}`)
+        return json({ error: { code: WORK_BOARD_NOT_FOUND_CODE } }, 404);
+      throw new Error(`Unexpected browser request: ${path}`);
+    }),
+  );
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <BoardsPage selectedBoardId={missingId} />
+        </MemoryRouter>,
+      );
+    });
+    await act(settle);
+    expect(host.textContent).toContain('The selected Board is unavailable.');
+    expect(host.textContent).toContain('Back to Boards');
+    expect(
+      [...host.querySelectorAll('button')].some(
+        (button) => button.textContent === 'Retry',
+      ),
+    ).toBe(false);
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
+it('keeps Retry for a selected Board transport failure', async () => {
+  const failedId = '00000000-0000-4000-8000-000000000298';
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path === '/api/boards') return json({ boards: [] });
+      if (path === `/api/boards/${failedId}`)
+        return json({ error: { code: 'request_failed' } }, 500);
+      throw new Error(`Unexpected browser request: ${path}`);
+    }),
+  );
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () =>
+      root.render(
+        <MemoryRouter>
+          <BoardsPage selectedBoardId={failedId} />
+        </MemoryRouter>,
+      ),
+    );
+    await act(settle);
+    expect(host.textContent).toContain('Board could not be loaded');
+    expect(
+      [...host.querySelectorAll('button')].some(
+        (button) => button.textContent === 'Retry',
+      ),
+    ).toBe(true);
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
+it('shows selected Board loading instead of an empty state', async () => {
+  const loadingId = '00000000-0000-4000-8000-000000000297';
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path === '/api/boards') return Promise.resolve(json({ boards: [] }));
+      if (path === `/api/boards/${loadingId}`)
+        return new Promise<Response>(() => {});
+      throw new Error(`Unexpected browser request: ${path}`);
+    }),
+  );
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () =>
+      root.render(
+        <MemoryRouter>
+          <BoardsPage selectedBoardId={loadingId} />
+        </MemoryRouter>,
+      ),
+    );
+    await act(settle);
+    expect(host.textContent).toContain('Loading selected Board…');
+    expect(
+      host.querySelector('[data-testid="boards-selected-loading"]'),
+    ).not.toBeNull();
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
 function board() {
   return {
     id: boardId,
@@ -143,8 +254,9 @@ function snapshot(withCard: boolean) {
   };
 }
 
-function json(body: unknown): Response {
+function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
+    status,
     headers: { 'content-type': 'application/json' },
   });
 }

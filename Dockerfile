@@ -19,15 +19,14 @@ WORKDIR /workspace
 # Preserve pnpm's workspace-relative links while validating copied app seeds.
 RUN corepack enable \
     && corepack install --global pnpm@11.7.0 \
-    && mkdir -p /pnpm /workspace/.local /workspace/node_modules /workspace/apps/web/node_modules /workspace/apps/web-vite/node_modules /workspace/dist /home/node/image-node_modules /home/node/image-web-node_modules /home/node/image-web-vite-node_modules /opt/playwright-browsers \
+    && mkdir -p /pnpm /workspace/.local /workspace/node_modules /workspace/apps/web/node_modules /workspace/dist /home/node/image-node_modules /home/node/image-web-node_modules /opt/playwright-browsers \
     && ln -s /home/node/image-node_modules /node_modules \
-    && chown -R node:node /pnpm /workspace /home/node/image-node_modules /home/node/image-web-node_modules /home/node/image-web-vite-node_modules
+    && chown -R node:node /pnpm /workspace /home/node/image-node_modules /home/node/image-web-node_modules
 
 USER node
 
 COPY --chown=node:node package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY --chown=node:node apps/web/package.json ./apps/web/package.json
-COPY --chown=node:node apps/web-vite/package.json ./apps/web-vite/package.json
 COPY --chown=node:node patches/ ./patches/
 RUN --mount=type=cache,id=${PNPM_CACHE_ID},target=/pnpm,uid=1000,gid=1000,sharing=locked test "$(id -u)" = 1000 \
     && test -w /pnpm \
@@ -37,20 +36,18 @@ RUN --mount=type=cache,id=${PNPM_CACHE_ID},target=/pnpm,uid=1000,gid=1000,sharin
 # cannot satisfy the dependency bootstrap check.
 RUN set -eu; \
     cp -a /workspace/node_modules/. /home/node/image-node_modules/ \
-    && cp -a /workspace/apps/web/node_modules/. /home/node/image-web-node_modules/ \
-    && cp -a /workspace/apps/web-vite/node_modules/. /home/node/image-web-vite-node_modules/
+    && cp -a /workspace/apps/web/node_modules/. /home/node/image-web-node_modules/
 # Keep the dependency seed fail-closed: the daemon and the API build both rely
 # on package-manager bin links, and a stamp alone cannot prove they survived an
 # image export/import.
 RUN test -x /home/node/image-node_modules/.bin/tsc \
     && test -x /home/node/image-web-node_modules/.bin/tsc \
-    && test -x /home/node/image-web-vite-node_modules/.bin/vite \
-    && cd /workspace/apps/web-vite \
+    && test -x /home/node/image-web-node_modules/.bin/vite \
+    && cd /workspace/apps/web \
     && node -e "require.resolve('react/jsx-dev-runtime'); require.resolve('vite')"
 COPY --chown=node:node scripts/dev/dependency-stamp.mjs ./scripts/dev/dependency-stamp.mjs
 RUN node scripts/dev/dependency-stamp.mjs /workspace > /home/node/image-node_modules/.docker-dependencies-stamp \
-    && cp /home/node/image-node_modules/.docker-dependencies-stamp /home/node/image-web-node_modules/.docker-dependencies-stamp \
-    && cp /home/node/image-node_modules/.docker-dependencies-stamp /home/node/image-web-vite-node_modules/.docker-dependencies-stamp
+    && cp /home/node/image-node_modules/.docker-dependencies-stamp /home/node/image-web-node_modules/.docker-dependencies-stamp
 
 # Two things the slim base omits that only bite at runtime, both masked for a
 # long time because the smoke suite only ever exercised the opencode provider.

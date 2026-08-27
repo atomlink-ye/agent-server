@@ -400,6 +400,75 @@ it('keeps the selected Task detail when its comments read fails', async () => {
   }
 });
 
+it('discards late comments from an older Task selection', async () => {
+  const firstId = '00000000-0000-4000-8000-000000000191';
+  const secondId = '00000000-0000-4000-8000-000000000192';
+  let listCall = 0;
+  let resolveFirstComments: ((response: Response) => void) | undefined;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path === '/api/work-items') {
+        listCall += 1;
+        return Promise.resolve(
+          json({
+            work_items: [
+              listCall === 1
+                ? taskFor(firstId, 'First Task')
+                : taskFor(secondId, 'Second Task'),
+            ],
+          }),
+        );
+      }
+      if (path === '/api/agents') return Promise.resolve(json({ items: [] }));
+      if (path === '/api/work-definitions')
+        return Promise.resolve(json({ items: [] }));
+      if (path === `/api/work-items/${firstId}/comments`)
+        return new Promise<Response>((resolve) => {
+          resolveFirstComments = resolve;
+        });
+      if (path === `/api/work-items/${secondId}/comments`)
+        return Promise.resolve(
+          json({ comments: [commentFor(secondId, 'Second comment')] }),
+        );
+      throw new Error(`Unexpected browser request: ${path}`);
+    }),
+  );
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () =>
+      root.render(
+        <MemoryRouter>
+          <TasksPage selectedWorkItemId={firstId} />
+        </MemoryRouter>,
+      ),
+    );
+    await act(async () =>
+      root.render(
+        <MemoryRouter>
+          <TasksPage selectedWorkItemId={secondId} />
+        </MemoryRouter>,
+      ),
+    );
+    await act(settle);
+    await act(async () =>
+      resolveFirstComments?.(
+        json({ comments: [commentFor(firstId, 'First comment')] }),
+      ),
+    );
+    await act(settle);
+    expect(host.textContent).toContain('Second comment');
+    expect(host.textContent).not.toContain('First comment');
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
 function task() {
   return taskFor(workItemId, 'Prepare brief');
 }
@@ -421,6 +490,16 @@ function taskFor(id: string, title: string) {
       updated_at: '2026-08-26T00:00:00.000Z',
     },
     linked_work: null,
+  };
+}
+
+function commentFor(workItemId: string, body: string) {
+  return {
+    id: '00000000-0000-4000-8000-000000000190',
+    work_item_id: workItemId,
+    author_id: 'principal-1',
+    body,
+    created_at: '2026-08-26T00:00:00.000Z',
   };
 }
 

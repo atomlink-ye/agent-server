@@ -4,6 +4,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AppConfig } from '../../../shared/config.js';
 import type { ApiEnvironment } from '../http-types.js';
 import { registerBrowserWorkOrganizationRoutes } from './browser-work-organization.js';
+import {
+  WORK_BOARD_NOT_FOUND_CODE,
+  WORK_ITEM_NOT_FOUND_CODE,
+} from '../../../contracts/work-organization.js';
 
 const SERVICE_TOKEN = 'browser-service-secret';
 const ID = '11111111-1111-4111-8111-111111111111';
@@ -33,8 +37,12 @@ afterEach(() => {
 
 describe('browser work-organization BFF', () => {
   for (const [path, code, other] of [
-    [`/api/work-items/${ID}`, 'task_not_found', 'work_board_not_found'],
-    [`/api/boards/${ID}`, 'work_board_not_found', 'task_not_found'],
+    [
+      `/api/work-items/${ID}`,
+      WORK_ITEM_NOT_FOUND_CODE,
+      WORK_BOARD_NOT_FOUND_CODE,
+    ],
+    [`/api/boards/${ID}`, WORK_BOARD_NOT_FOUND_CODE, WORK_ITEM_NOT_FOUND_CODE],
   ] as const) {
     it(`forwards ${code} from ${path}`, async () => {
       process.env.AGENT_SERVER_SERVICE_TOKEN = SERVICE_TOKEN;

@@ -4,6 +4,7 @@ import type {
   WorkItemDetailDto,
   WorkItemStatus,
 } from '@atomlink-ye/agent-server/product-contract';
+import { WORK_ITEM_NOT_FOUND_CODE } from '@atomlink-ye/agent-server/product-contract';
 
 import TitleBar from '../../app/shell/TitleBar';
 import { loadCoworkers } from '../agents/agents-gateway';
@@ -96,7 +97,7 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
             setSelectionStatus('ready');
           } catch (reason) {
             if (request !== selectionRequest.current) return;
-            if (isResourceNotFound(reason, 'task_not_found')) {
+            if (isResourceNotFound(reason, WORK_ITEM_NOT_FOUND_CODE)) {
               setSelectionStatus('not_found');
             } else {
               setSelectionStatus('error');

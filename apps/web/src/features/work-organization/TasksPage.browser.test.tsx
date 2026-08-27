@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, expect, it, vi } from 'vitest';
 
 import { TasksPage } from './TasksPage';
+import { WORK_ITEM_NOT_FOUND_CODE } from '@atomlink-ye/agent-server/product-contract';
 
 (
   globalThis as typeof globalThis & {
@@ -136,7 +137,7 @@ it('shows a missing selected Task without Retry, while a transport failure remai
         path === `/api/work-items/${missingId}` ||
         path === `/api/work-items/${missingId}/comments`
       )
-        return json({ error: { code: 'task_not_found' } }, 404);
+        return json({ error: { code: WORK_ITEM_NOT_FOUND_CODE } }, 404);
       throw new Error(`Unexpected browser request: ${path}`);
     }),
   );
@@ -248,7 +249,7 @@ it('keeps the newer Task selection when an older selected read finishes late', a
     );
     await act(settle);
     await act(async () =>
-      resolveFirst?.(json({ error: { code: 'task_not_found' } }, 404)),
+      resolveFirst?.(json({ error: { code: WORK_ITEM_NOT_FOUND_CODE } }, 404)),
     );
     await act(settle);
     expect(host.textContent).toContain('Second Task');

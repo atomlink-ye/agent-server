@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, expect, it, vi } from 'vitest';
 
 import { BoardsPage } from './BoardsPage';
+import { WORK_BOARD_NOT_FOUND_CODE } from '@atomlink-ye/agent-server/product-contract';
 
 (
   globalThis as typeof globalThis & {
@@ -93,7 +94,7 @@ it('shows a missing selected Board without Retry, while a snapshot transport fai
       const path = String(input);
       if (path === '/api/boards') return json({ boards: [] });
       if (path === `/api/boards/${missingId}`)
-        return json({ error: { code: 'work_board_not_found' } }, 404);
+        return json({ error: { code: WORK_BOARD_NOT_FOUND_CODE } }, 404);
       throw new Error(`Unexpected browser request: ${path}`);
     }),
   );

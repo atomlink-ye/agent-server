@@ -5,6 +5,7 @@ import type {
   WorkBoardSnapshotDto,
   WorkItemDto,
 } from '@atomlink-ye/agent-server/product-contract';
+import { WORK_BOARD_NOT_FOUND_CODE } from '@atomlink-ye/agent-server/product-contract';
 
 import TitleBar from '../../app/shell/TitleBar';
 import {
@@ -82,7 +83,7 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
       setError((current) => (current?.source === 'snapshot' ? null : current));
     } catch (reason) {
       if (request !== selectionRequest.current) return;
-      if (isResourceNotFound(reason, 'work_board_not_found')) {
+      if (isResourceNotFound(reason, WORK_BOARD_NOT_FOUND_CODE)) {
         setSelectionStatus('not_found');
         setError(null);
         return;

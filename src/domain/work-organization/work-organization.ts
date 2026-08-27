@@ -89,7 +89,7 @@ export function isWorkItemStatus(value: string): value is WorkItemStatus {
 }
 
 export class WorkItemNotFoundError extends Error {
-  public readonly code = 'work_item_not_found';
+  public readonly code = WORK_ITEM_NOT_FOUND_CODE;
   public constructor() {
     super('The requested WorkItem was not found.');
     this.name = 'WorkItemNotFoundError';
@@ -97,7 +97,7 @@ export class WorkItemNotFoundError extends Error {
 }
 
 export class WorkBoardNotFoundError extends Error {
-  public readonly code = 'work_board_not_found';
+  public readonly code = WORK_BOARD_NOT_FOUND_CODE;
   public constructor() {
     super('The requested Board was not found.');
     this.name = 'WorkBoardNotFoundError';
@@ -121,3 +121,7 @@ export class WorkOrganizationValidationError extends Error {
     this.name = 'WorkOrganizationValidationError';
   }
 }
+import {
+  WORK_BOARD_NOT_FOUND_CODE,
+  WORK_ITEM_NOT_FOUND_CODE,
+} from '../../contracts/work-organization.js';

@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+export const WORK_ITEM_NOT_FOUND_CODE = 'work_item_not_found';
+export const WORK_BOARD_NOT_FOUND_CODE = 'work_board_not_found';
+
 export const WorkItemStatusSchema = z.enum([
   'todo',
   'in_progress',

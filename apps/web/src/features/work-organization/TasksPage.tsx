@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import type {
   WorkItemDetailDto,
@@ -60,11 +60,13 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
   const [listStatus, setListStatus] = useState<ListStatus>('loading');
   const [selectionStatus, setSelectionStatus] =
     useState<SelectionStatus>('idle');
+  const selectionRequest = useRef(0);
   const [error, setError] = useState<RecoverableError | null>(null);
   const [creating, setCreating] = useState(false);
   const [filter, setFilter] = useState<WorkItemStatus | 'all'>('all');
 
   const load = useCallback(async () => {
+    const request = ++selectionRequest.current;
     setListStatus('loading');
     setSelectionStatus(selectedWorkItemId ? 'loading' : 'idle');
     setError(null);
@@ -81,15 +83,23 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
           (entry) => entry.work_item.id === selectedWorkItemId,
         );
         if (detail) {
+          if (request !== selectionRequest.current) return;
           setSelectionStatus('ready');
         } else {
           try {
             const fetched =
               await workOrganizationClient.getWorkItem(selectedWorkItemId);
+            if (request !== selectionRequest.current) return;
             setItems((current) => [fetched, ...current]);
             setSelectionStatus('ready');
           } catch (reason) {
-            if (isResourceNotFound(reason)) {
+            if (request !== selectionRequest.current) return;
+            if (
+              isResourceNotFound(
+                reason,
+                `/api/work-items/${encodeURIComponent(selectedWorkItemId)}`,
+              )
+            ) {
               setSelectionStatus('not_found');
             } else {
               setSelectionStatus('error');
@@ -116,13 +126,7 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
         await workOrganizationClient.listComments(selectedWorkItemId),
       );
       setError((current) => (current?.source === 'comments' ? null : current));
-    } catch (reason) {
-      if (isResourceNotFound(reason)) {
-        setComments([]);
-        setSelectionStatus('not_found');
-        setError(null);
-        return;
-      }
+    } catch {
       setError({
         source: 'comments',
         message:
@@ -321,6 +325,16 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
               <button type="button" onClick={() => void load()}>
                 Retry
               </button>
+            </div>
+          ) : selectionStatus === 'loading' ? (
+            <div
+              className="work-main-empty"
+              data-testid="tasks-selected-loading"
+            >
+              <span className="work-main-icon" aria-hidden="true">
+                ☑
+              </span>
+              <h1>Loading selected Task…</h1>
             </div>
           ) : selectionStatus === 'not_found' ? (
             <div className="work-main-empty" data-testid="tasks-not-found">

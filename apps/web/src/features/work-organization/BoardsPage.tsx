@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type {
   WorkBoardDto,
@@ -44,6 +44,7 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
   const [listStatus, setListStatus] = useState<ListStatus>('loading');
   const [selectionStatus, setSelectionStatus] =
     useState<SelectionStatus>('idle');
+  const selectionRequest = useRef(0);
   const [error, setError] = useState<RecoverableError | null>(null);
   const [creatingBoard, setCreatingBoard] = useState(false);
   const [newBoardTitle, setNewBoardTitle] = useState('');
@@ -65,6 +66,7 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
   }, [navigate, selectedBoardId]);
 
   const loadSnapshot = useCallback(async () => {
+    const request = ++selectionRequest.current;
     if (!selectedBoardId) {
       setSnapshot(null);
       setSelectionStatus('idle');
@@ -73,11 +75,19 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
     setSnapshot(null);
     setSelectionStatus('loading');
     try {
-      setSnapshot(await workOrganizationClient.getBoard(selectedBoardId));
+      const next = await workOrganizationClient.getBoard(selectedBoardId);
+      if (request !== selectionRequest.current) return;
+      setSnapshot(next);
       setSelectionStatus('ready');
       setError((current) => (current?.source === 'snapshot' ? null : current));
     } catch (reason) {
-      if (isResourceNotFound(reason)) {
+      if (request !== selectionRequest.current) return;
+      if (
+        isResourceNotFound(
+          reason,
+          `/api/boards/${encodeURIComponent(selectedBoardId)}`,
+        )
+      ) {
         setSelectionStatus('not_found');
         setError(null);
         return;
@@ -255,6 +265,16 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
               <button type="button" onClick={() => void loadBoards()}>
                 Retry
               </button>
+            </div>
+          ) : selectionStatus === 'loading' ? (
+            <div
+              className="work-main-empty"
+              data-testid="boards-selected-loading"
+            >
+              <span className="work-main-icon" aria-hidden="true">
+                ▦
+              </span>
+              <h1>Loading selected Board…</h1>
             </div>
           ) : selectionStatus === 'not_found' ? (
             <div className="work-main-empty" data-testid="boards-not-found">

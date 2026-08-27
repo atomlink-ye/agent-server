@@ -135,8 +135,18 @@ export function createMessagesStore(): MessagesStore {
         if (loadVersions.get(conversationId) !== requestVersion) return;
         update(conversationId, (current) => ({
           ...current,
-          status: isResourceNotFound(reason) ? 'not_found' : 'error',
-          error: isResourceNotFound(reason) ? null : 'Unable to load messages.',
+          status: isResourceNotFound(
+            reason,
+            `/api/conversations/${encodeURIComponent(conversationId)}/messages`,
+          )
+            ? 'not_found'
+            : 'error',
+          error: isResourceNotFound(
+            reason,
+            `/api/conversations/${encodeURIComponent(conversationId)}/messages`,
+          )
+            ? null
+            : 'Unable to load messages.',
         }));
       } finally {
         if (loadInFlightVersions.get(conversationId) === requestVersion) {
@@ -179,7 +189,12 @@ export function createMessagesStore(): MessagesStore {
         ) {
           return;
         }
-        if (isResourceNotFound(reason)) {
+        if (
+          isResourceNotFound(
+            reason,
+            `/api/conversations/${encodeURIComponent(conversationId)}/messages`,
+          )
+        ) {
           update(conversationId, (current) => ({
             ...current,
             status: 'not_found',

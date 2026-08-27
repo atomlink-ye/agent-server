@@ -20,11 +20,16 @@ export function isFeatureUnavailable(reason: unknown): boolean {
  * selection is no longer available. Keep this structural for read clients
  * that wrap ApiTransportError while preserving its status.
  */
-export function isResourceNotFound(reason: unknown): boolean {
+export function isResourceNotFound(
+  reason: unknown,
+  selectedResourcePath: string,
+): boolean {
   return (
     typeof reason === 'object' &&
     reason !== null &&
     'status' in reason &&
-    (reason as { status?: unknown }).status === 404
+    (reason as { status?: unknown }).status === 404 &&
+    'requestPath' in reason &&
+    (reason as { requestPath?: unknown }).requestPath === selectedResourcePath
   );
 }

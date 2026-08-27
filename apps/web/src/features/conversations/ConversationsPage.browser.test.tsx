@@ -237,7 +237,11 @@ it('reports a selected Conversation whose message read returns 404 without Retry
     loadCoworkers: async () => [],
     loadConversations: async () => [selected],
     createConversation: async () => selected,
-    loadMessages: async () => Promise.reject({ status: 404 }),
+    loadMessages: async () =>
+      Promise.reject({
+        status: 404,
+        requestPath: `/api/conversations/${selected.id}/messages`,
+      }),
     sendMessage: async () => message(selected.id, 'message', 1, 'hello'),
   };
   const host = document.createElement('div');
@@ -267,6 +271,79 @@ it('reports a selected Conversation whose message read returns 404 without Retry
       ),
     ).toBe(false);
     expect(host.querySelector('textarea')).toBeNull();
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+  }
+});
+
+it('keeps Retry for a selected Conversation message transport failure', async () => {
+  const selected = conversation('conversation-error');
+  const commands: ChatCommands = {
+    loadCoworkers: async () => [],
+    loadConversations: async () => [selected],
+    createConversation: async () => selected,
+    loadMessages: async () =>
+      Promise.reject({
+        status: 500,
+        requestPath: `/api/conversations/${selected.id}/messages`,
+      }),
+    sendMessage: async () => message(selected.id, 'message', 1, 'hello'),
+  };
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <ConversationsPage
+            commands={commands}
+            routeConversationId={selected.id}
+          />
+        </MemoryRouter>,
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(host.textContent).toContain('Unable to load messages.');
+    expect(
+      [...host.querySelectorAll('button')].some(
+        (button) => button.textContent === 'Retry',
+      ),
+    ).toBe(true);
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+  }
+});
+
+it('shows selected Conversation message loading', async () => {
+  const selected = conversation('conversation-loading');
+  const commands: ChatCommands = {
+    loadCoworkers: async () => [],
+    loadConversations: async () => [selected],
+    createConversation: async () => selected,
+    loadMessages: async () => new Promise<readonly ChatMessage[]>(() => {}),
+    sendMessage: async () => message(selected.id, 'message', 1, 'hello'),
+  };
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <ConversationsPage
+            commands={commands}
+            routeConversationId={selected.id}
+          />
+        </MemoryRouter>,
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(host.textContent).toContain('Loading messages…');
   } finally {
     await act(async () => root.unmount());
     host.remove();

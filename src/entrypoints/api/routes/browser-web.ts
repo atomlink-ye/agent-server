@@ -144,6 +144,8 @@ export function registerBrowserWebRoutes(
       logger,
       `/api/v1/conversations/${encodeURIComponent(id)}`,
       ConversationReadResponseSchema,
+      // `not_found` is generic upstream vocabulary, but this BFF route is
+      // scoped to one validated Conversation id, so it remains attributable.
       { notFoundCode: 'not_found' },
     );
   });
@@ -155,6 +157,7 @@ export function registerBrowserWebRoutes(
       logger,
       `/api/v1/conversations/${encodeURIComponent(id)}/messages`,
       ConversationMessagesResponseSchema,
+      // The message read has the same Conversation-scoped upstream boundary.
       { notFoundCode: 'not_found' },
     );
   });

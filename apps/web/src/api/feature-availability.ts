@@ -27,6 +27,8 @@ export function isResourceNotFound(
   return (
     typeof reason === 'object' &&
     reason !== null &&
+    'status' in reason &&
+    (reason as { status?: unknown }).status === 404 &&
     'code' in reason &&
     (reason as { code?: unknown }).code === notFoundCode
   );

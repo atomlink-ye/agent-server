@@ -207,6 +207,47 @@ it('keeps Retry for a selected Task transport failure', async () => {
   }
 });
 
+it('keeps Retry when a selected Task 500 carries its canonical not-found code', async () => {
+  const failedId = '00000000-0000-4000-8000-000000000189';
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path === '/api/work-items') return json({ work_items: [] });
+      if (path === '/api/agents') return json({ items: [] });
+      if (path === `/api/work-items/${failedId}`)
+        return json({ error: { code: WORK_ITEM_NOT_FOUND_CODE } }, 500);
+      if (path === `/api/work-items/${failedId}/comments`)
+        return json({ comments: [] });
+      throw new Error(`Unexpected browser request: ${path}`);
+    }),
+  );
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () =>
+      root.render(
+        <MemoryRouter>
+          <TasksPage selectedWorkItemId={failedId} />
+        </MemoryRouter>,
+      ),
+    );
+    await act(settle);
+    expect(host.textContent).toContain('Task could not be loaded');
+    expect(host.textContent).not.toContain('The selected Task is unavailable.');
+    expect(
+      [...host.querySelectorAll('button')].some(
+        (button) => button.textContent === 'Retry',
+      ),
+    ).toBe(true);
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
 it('keeps the newer Task selection when an older selected read finishes late', async () => {
   const firstId = '00000000-0000-4000-8000-000000000196';
   const secondId = '00000000-0000-4000-8000-000000000197';

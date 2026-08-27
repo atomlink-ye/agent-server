@@ -145,6 +145,7 @@ function mockProductReads(
     readonly selectedRunId?: string;
     readonly runBody?: unknown;
     readonly definition?: ReturnType<typeof productDefinitionVersion>;
+    readonly currentDefinitionMissing?: boolean;
   } = {},
 ) {
   const runList = input.runList ?? runs;
@@ -172,6 +173,17 @@ function mockProductReads(
     [`/api/works/${work.work.id}/runs/${runId}/trace`, trace],
   ]);
   const fetchMock = vi.fn().mockImplementation(async (path: string) => {
+    if (
+      input.currentDefinitionMissing &&
+      path ===
+        `/api/work-definition-versions/${work.work.definition_version_id}`
+    ) {
+      return {
+        ok: false,
+        status: 404,
+        json: async () => ({ error: { code: 'work_not_found' } }),
+      } as Response;
+    }
     const body = responses.get(path);
     if (path === '/api/work-definitions/plan') return planResponse();
     if (!body) throw new Error(`unexpected request: ${path}`);
@@ -317,5 +329,20 @@ it('reads an exact historical DefinitionVersion instead of falling back to Team-
     await act(async () => root.unmount());
     host.remove();
     vi.unstubAllGlobals();
+  }
+});
+
+it('does not invent a runnable Work when its current DefinitionVersion is missing', async () => {
+  mockProductReads({ currentDefinitionMissing: true });
+  const { host, root } = await renderDetail();
+  try {
+    expect(host.textContent).toContain("Couldn't load Work");
+    expect(host.textContent).toContain(
+      'The selected Work or Run is unavailable.',
+    );
+    expect(host.textContent).not.toContain('Start Run');
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
   }
 });

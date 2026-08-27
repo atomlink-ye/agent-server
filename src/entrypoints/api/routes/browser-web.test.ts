@@ -6,6 +6,7 @@ import type { AppConfig } from '../../../shared/config.js';
 import type { Logger } from '../../../shared/observability/logger.js';
 import { createBrowserFeatureAvailabilityGuard } from './browser-feature-availability.js';
 import { registerBrowserWebRoutes } from './browser-web.js';
+import { RuntimeCapabilitiesResponseSchema } from '../../../contracts/runtime-capabilities.js';
 
 const SERVICE_TOKEN = 'browser-service-secret';
 const WORK_ID = '11111111-1111-4111-8111-111111111111';
@@ -52,13 +53,22 @@ describe('browser-safe Vite facade', () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get('cache-control')).toBe('no-store');
-    expect(await response.json()).toMatchObject({
-      supported_runtime_capabilities: expect.arrayContaining([
+    expect(await response.json()).toEqual({
+      supported_runtime_capabilities: [
         'external_workspace',
         'reusable_session',
-      ]),
+        'platform_mcp',
+      ],
     });
     expect(upstream).not.toHaveBeenCalled();
+  });
+
+  it('rejects execution-plane capabilities outside the closed Work-admission vocabulary', () => {
+    expect(
+      RuntimeCapabilitiesResponseSchema.safeParse({
+        supported_runtime_capabilities: ['streaming'],
+      }).success,
+    ).toBe(false);
   });
 
   it('uses the server-side service credential and strips unknown conversation fields', async () => {

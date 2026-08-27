@@ -28,7 +28,7 @@ export function RunTrigger({
   readonly definitionVersion?: ProductWorkDefinitionVersionResponse | null;
 }) {
   const [state, setState] = useState<RunTriggerState>({ kind: 'idle' });
-  const availability = useRunAvailability(definitionVersion ?? null);
+  const availability = useRunAvailability(definitionVersion);
 
   async function handleRun() {
     setState({ kind: 'starting' });

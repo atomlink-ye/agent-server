@@ -52,6 +52,11 @@ export async function loadWorkDetail(
       ? definitionPromise
       : workDefinitionClient.getVersion(work.definition_version_id);
   if (!selectedSummary) {
+    const currentDefinitionVersion = await currentDefinitionPromise;
+    if (!currentDefinitionVersion)
+      throw new Error(
+        'The current Work Definition version could not be loaded.',
+      );
     return {
       work,
       runs,
@@ -59,13 +64,15 @@ export async function loadWorkDetail(
       trace: null,
       selectedDefinitionVersionId,
       definitionVersion: await definitionPromise,
-      currentDefinitionVersion: await currentDefinitionPromise,
+      currentDefinitionVersion,
     };
   }
 
   const run = await workRunClient.get(workId, selectedSummary.id);
   const definitionVersion = await definitionPromise;
   const currentDefinitionVersion = await currentDefinitionPromise;
+  if (!currentDefinitionVersion)
+    throw new Error('The current Work Definition version could not be loaded.');
   if (
     !('projection_status' in run) ||
     run.projection_status !== 'internally_anchored'

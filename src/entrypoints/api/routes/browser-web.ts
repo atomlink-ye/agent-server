@@ -35,7 +35,10 @@ import {
   PostConversationMessageRequestSchema,
 } from '../../../contracts/conversations.js';
 import { SkillListResponseSchema } from '../../../contracts/skills.js';
-import { RuntimeCapabilitiesResponseSchema } from '../../../contracts/runtime-capabilities.js';
+import {
+  RuntimeCapabilitiesResponseSchema,
+  WorkAdmissionCapabilitySchema,
+} from '../../../contracts/runtime-capabilities.js';
 import { createConfiguredRuntimeCapabilities } from '../../../composition/create-runtime-capabilities.js';
 import type { ApiEnvironment } from '../http-types.js';
 import type { AppConfig } from '../../../shared/config.js';
@@ -97,8 +100,14 @@ export function registerBrowserWebRoutes(
     jsonResponse(
       RuntimeCapabilitiesResponseSchema.parse({
         supported_runtime_capabilities: [
-          ...createConfiguredRuntimeCapabilities(config).supported,
-        ],
+          'external_workspace',
+          'reusable_session',
+          'platform_mcp',
+        ].filter((capability) =>
+          createConfiguredRuntimeCapabilities(config).supported.has(
+            WorkAdmissionCapabilitySchema.parse(capability),
+          ),
+        ),
       }),
       200,
       { 'cache-control': 'no-store' },

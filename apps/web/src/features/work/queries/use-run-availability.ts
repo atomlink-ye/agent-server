@@ -12,21 +12,27 @@ export type RunAvailabilityQuery =
   | { readonly status: 'error' };
 
 export function useRunAvailability(
-  version: ProductWorkDefinitionVersionResponse | null,
+  version: ProductWorkDefinitionVersionResponse | null | undefined,
 ): RunAvailabilityQuery & { readonly retry: () => void } {
   const [refreshToken, setRefreshToken] = useState(0);
   const retry = useCallback(() => {
     setRefreshToken((current) => current + 1);
   }, []);
   const [state, setState] = useState<RunAvailabilityQuery>(() =>
-    version
-      ? { status: 'loading' }
-      : { status: 'ready', missingCapability: null },
+    version === undefined
+      ? { status: 'ready', missingCapability: null }
+      : version === null
+        ? { status: 'unavailable' }
+        : { status: 'loading' },
   );
 
   useEffect(() => {
-    if (!version) {
+    if (version === undefined) {
       setState({ status: 'ready', missingCapability: null });
+      return;
+    }
+    if (version === null) {
+      setState({ status: 'unavailable' });
       return;
     }
     let active = true;

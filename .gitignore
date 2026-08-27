@@ -26,3 +26,8 @@ apps/web/node_modules
 
 apps/web/.vitest-attachments/
 apps/web/**/__screenshots__/
+
+# tsc emits these beside the source when the node-side project is built rather
+# than type-checked. They are build output, not source.
+apps/web/vite.config.js
+apps/web/vite.config.d.ts

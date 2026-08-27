@@ -6,6 +6,7 @@ Contracts are versioned boundaries that adapters and clients must test. They are
 - [Task API](contracts/task-api.md) documents the implemented canonical invoke/read/tree routes.
 - [Workspace memory API](contracts/workspace-memory-api.md) documents the implemented proposal, review, and accepted-entry governance routes.
 - [Memory Store / Memory API](contracts/memory-api.md) documents the canonical API-first Store, stable Memory, immutable Version, and built-in Skill boundary.
+- [Skill catalog API](contracts/skill-catalog-api.md) documents the Work-authoring Skill catalog, its availability gate, and why `required_tool_refs` is an authority statement.
 - [Managed Workspace memory snapshots](contracts/managed-workspace-memory-api.md) documents Product Workspace-owned immutable entries, verified local projections, snapshot reads, and rebuild behavior.
 - [Managed Environment API](contracts/managed-environment-api.md) documents the fixed authenticated Environment package, ProductSession pin, and internal RuntimeSession/Cell baseline.
 - [Self-learning Web API](contracts/self-learning-web-api.md) documents the fixed Project Lab BFF launch, bounded aggregate, root-bound review, safe errors, and local-only boundary.

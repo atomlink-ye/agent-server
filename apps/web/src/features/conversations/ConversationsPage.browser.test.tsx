@@ -10,6 +10,7 @@ import {
 import { expect, it, vi } from 'vitest';
 
 import { AppShell } from '../../app/shell/AppShell';
+import { ConversationsPage } from './ConversationsPage';
 import type {
   ChatCommands,
   ChatMessage,
@@ -183,6 +184,47 @@ it('keeps Direct Chat identity and Work origin in refresh-safe URLs', async () =
       await Promise.resolve();
     });
     expect(locationText(host)).toBe('/conversations/conversation-b');
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+  }
+});
+
+it('reports a missing selected Conversation without Retry or a composer', async () => {
+  const commands: ChatCommands = {
+    loadCoworkers: async () => [],
+    loadConversations: async () => [],
+    createConversation: async () => conversation('created'),
+    loadMessages: async () => [],
+    sendMessage: async () => message('created', 'message', 1, 'hello'),
+  };
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(
+        <MemoryRouter initialEntries={['/conversations/missing']}>
+          <ConversationsPage
+            commands={commands}
+            routeConversationId="missing"
+          />
+        </MemoryRouter>,
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(host.textContent).toContain(
+      'The selected Conversation is unavailable.',
+    );
+    expect(host.textContent).toContain('Back to Conversations');
+    expect(host.textContent).not.toContain('No conversations yet.');
+    expect(
+      [...host.querySelectorAll('button')].some(
+        (button) => button.textContent === 'Retry',
+      ),
+    ).toBe(false);
+    expect(host.querySelector('textarea')).toBeNull();
   } finally {
     await act(async () => root.unmount());
     host.remove();

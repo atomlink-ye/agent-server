@@ -85,6 +85,44 @@ it('stays on the Board and shows the new card after "+ Task" instead of jumping 
   }
 });
 
+it('shows a missing selected Board without Retry, while a snapshot transport failure remains retryable', async () => {
+  const missingId = '00000000-0000-4000-8000-000000000299';
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path === '/api/boards') return json({ boards: [] });
+      if (path === `/api/boards/${missingId}`)
+        return json({ error: { code: 'board_not_found' } }, 404);
+      throw new Error(`Unexpected browser request: ${path}`);
+    }),
+  );
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <BoardsPage selectedBoardId={missingId} />
+        </MemoryRouter>,
+      );
+    });
+    await act(settle);
+    expect(host.textContent).toContain('The selected Board is unavailable.');
+    expect(host.textContent).toContain('Back to Boards');
+    expect(
+      [...host.querySelectorAll('button')].some(
+        (button) => button.textContent === 'Retry',
+      ),
+    ).toBe(false);
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
 function board() {
   return {
     id: boardId,
@@ -143,8 +181,9 @@ function snapshot(withCard: boolean) {
   };
 }
 
-function json(body: unknown): Response {
+function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
+    status,
     headers: { 'content-type': 'application/json' },
   });
 }

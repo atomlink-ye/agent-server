@@ -1,7 +1,9 @@
 import type { ChatMessage, ConversationId } from '../contracts';
 import type { StoreListener } from './app';
+import { isResourceNotFound } from '../../../api/feature-availability';
 
-export type MessageListStatus = 'idle' | 'loading' | 'ready' | 'error';
+export type MessageListStatus =
+  'idle' | 'loading' | 'ready' | 'error' | 'not_found';
 export type MessageSendStatus = 'idle' | 'sending' | 'failed';
 
 export interface ConversationMessagesState {
@@ -129,12 +131,12 @@ export function createMessagesStore(): MessagesStore {
           messages: normalizeMessages(conversationId, messages),
           error: null,
         }));
-      } catch {
+      } catch (reason) {
         if (loadVersions.get(conversationId) !== requestVersion) return;
         update(conversationId, (current) => ({
           ...current,
-          status: 'error',
-          error: 'Unable to load messages.',
+          status: isResourceNotFound(reason) ? 'not_found' : 'error',
+          error: isResourceNotFound(reason) ? null : 'Unable to load messages.',
         }));
       } finally {
         if (loadInFlightVersions.get(conversationId) === requestVersion) {
@@ -170,11 +172,19 @@ export function createMessagesStore(): MessagesStore {
           ]),
           error: null,
         }));
-      } catch {
+      } catch (reason) {
         if (
           refreshVersions.get(conversationId) !== requestVersion ||
           !isCurrent()
         ) {
+          return;
+        }
+        if (isResourceNotFound(reason)) {
+          update(conversationId, (current) => ({
+            ...current,
+            status: 'not_found',
+            error: null,
+          }));
           return;
         }
         // Background refresh failures preserve the current transcript and retry surface.

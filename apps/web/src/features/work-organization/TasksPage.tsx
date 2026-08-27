@@ -8,7 +8,10 @@ import type {
 import TitleBar from '../../app/shell/TitleBar';
 import { loadCoworkers } from '../agents/agents-gateway';
 import type { Coworker } from '../agents/contracts';
-import { isFeatureUnavailable } from '../../api/feature-availability';
+import {
+  isFeatureUnavailable,
+  isResourceNotFound,
+} from '../../api/feature-availability';
 import { workOrganizationClient } from './client';
 import type { PublishedWorkDefinition } from './client';
 import './work-organization.css';
@@ -40,6 +43,7 @@ type RecoverableError = {
 // never from "we could not ask" (error) or "this capability is off"
 // (unavailable) — those get their own honest, mutually exclusive states.
 type ListStatus = 'loading' | 'ready' | 'unavailable' | 'error';
+type SelectionStatus = 'idle' | 'loading' | 'ready' | 'not_found' | 'error';
 
 export interface TasksPageProps {
   readonly selectedWorkItemId?: string | null;
@@ -54,12 +58,16 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
     Awaited<ReturnType<typeof workOrganizationClient.listComments>>
   >([]);
   const [listStatus, setListStatus] = useState<ListStatus>('loading');
+  const [selectionStatus, setSelectionStatus] =
+    useState<SelectionStatus>('idle');
   const [error, setError] = useState<RecoverableError | null>(null);
   const [creating, setCreating] = useState(false);
   const [filter, setFilter] = useState<WorkItemStatus | 'all'>('all');
 
   const load = useCallback(async () => {
     setListStatus('loading');
+    setSelectionStatus(selectedWorkItemId ? 'loading' : 'idle');
+    setError(null);
     try {
       const [nextItems, nextAgents] = await Promise.all([
         workOrganizationClient.listWorkItems(),
@@ -72,10 +80,21 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
         const detail = nextItems.find(
           (entry) => entry.work_item.id === selectedWorkItemId,
         );
-        if (!detail) {
-          const fetched =
-            await workOrganizationClient.getWorkItem(selectedWorkItemId);
-          setItems((current) => [fetched, ...current]);
+        if (detail) {
+          setSelectionStatus('ready');
+        } else {
+          try {
+            const fetched =
+              await workOrganizationClient.getWorkItem(selectedWorkItemId);
+            setItems((current) => [fetched, ...current]);
+            setSelectionStatus('ready');
+          } catch (reason) {
+            if (isResourceNotFound(reason)) {
+              setSelectionStatus('not_found');
+            } else {
+              setSelectionStatus('error');
+            }
+          }
         }
       }
     } catch (reason) {
@@ -97,7 +116,13 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
         await workOrganizationClient.listComments(selectedWorkItemId),
       );
       setError((current) => (current?.source === 'comments' ? null : current));
-    } catch {
+    } catch (reason) {
+      if (isResourceNotFound(reason)) {
+        setComments([]);
+        setSelectionStatus('not_found');
+        setError(null);
+        return;
+      }
       setError({
         source: 'comments',
         message:
@@ -268,7 +293,7 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
               + Task
             </button>
           </div>
-          {error ? (
+          {error && selectionStatus !== 'not_found' ? (
             <div className="work-org-error" role="alert">
               <p>{error.message}</p>
               {error.retry ? (
@@ -292,6 +317,30 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
                 ☑
               </span>
               <h1>Tasks could not be loaded</h1>
+              <p>{TASKS_LOAD_ERROR}</p>
+              <button type="button" onClick={() => void load()}>
+                Retry
+              </button>
+            </div>
+          ) : selectionStatus === 'not_found' ? (
+            <div className="work-main-empty" data-testid="tasks-not-found">
+              <span className="work-main-icon" aria-hidden="true">
+                ☑
+              </span>
+              <h1>The selected Task is unavailable.</h1>
+              <p>
+                This Task may have been deleted or moved out of this workspace.
+              </p>
+              <button type="button" onClick={() => navigate('/tasks')}>
+                Back to Tasks
+              </button>
+            </div>
+          ) : selectionStatus === 'error' ? (
+            <div className="work-main-empty" data-testid="tasks-selected-error">
+              <span className="work-main-icon" aria-hidden="true">
+                ☑
+              </span>
+              <h1>Task could not be loaded</h1>
               <p>{TASKS_LOAD_ERROR}</p>
               <button type="button" onClick={() => void load()}>
                 Retry

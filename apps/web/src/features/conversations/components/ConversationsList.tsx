@@ -5,6 +5,7 @@ export interface ConversationsListProps {
   readonly state: ConversationListState;
   readonly visibleConversations?: readonly Conversation[];
   readonly selectedConversationId: ConversationId | null;
+  readonly selectedConversationMissing?: boolean;
   readonly onSelect: (conversationId: ConversationId) => void;
   readonly onRetry: () => void;
 }
@@ -13,6 +14,7 @@ export function ConversationsList({
   state,
   visibleConversations,
   selectedConversationId,
+  selectedConversationMissing = false,
   onSelect,
   onRetry,
 }: ConversationsListProps) {
@@ -36,9 +38,11 @@ export function ConversationsList({
   if (conversations.length === 0) {
     return (
       <p className="conversation-placeholder">
-        {state.conversations.length === 0
-          ? 'No conversations yet.'
-          : 'No matching conversations.'}
+        {selectedConversationMissing
+          ? 'The selected Conversation is unavailable.'
+          : state.conversations.length === 0
+            ? 'No conversations yet.'
+            : 'No matching conversations.'}
       </p>
     );
   }

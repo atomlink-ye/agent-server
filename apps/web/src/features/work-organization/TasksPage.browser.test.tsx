@@ -124,6 +124,88 @@ it('selects a published Definition and coworker by display-safe labels while pro
   }
 });
 
+it('shows a missing selected Task without Retry, while a transport failure remains retryable', async () => {
+  const missingId = '00000000-0000-4000-8000-000000000199';
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path === '/api/work-items') return json({ work_items: [] });
+      if (path === '/api/agents') return json({ items: [] });
+      if (
+        path === `/api/work-items/${missingId}` ||
+        path === `/api/work-items/${missingId}/comments`
+      )
+        return json({ error: { code: 'work_item_not_found' } }, 404);
+      throw new Error(`Unexpected browser request: ${path}`);
+    }),
+  );
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <TasksPage selectedWorkItemId={missingId} />
+        </MemoryRouter>,
+      );
+    });
+    await act(settle);
+    expect(host.textContent).toContain('The selected Task is unavailable.');
+    expect(host.textContent).toContain('Back to Tasks');
+    expect(
+      [...host.querySelectorAll('button')].some(
+        (button) => button.textContent === 'Retry',
+      ),
+    ).toBe(false);
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
+it('keeps Retry for a selected Task transport failure', async () => {
+  const failedId = '00000000-0000-4000-8000-000000000198';
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path === '/api/work-items') return json({ work_items: [] });
+      if (path === '/api/agents') return json({ items: [] });
+      if (path === `/api/work-items/${failedId}`)
+        return json({ error: { code: 'request_failed' } }, 500);
+      if (path === `/api/work-items/${failedId}/comments`)
+        return json({ comments: [] });
+      throw new Error(`Unexpected browser request: ${path}`);
+    }),
+  );
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () =>
+      root.render(
+        <MemoryRouter>
+          <TasksPage selectedWorkItemId={failedId} />
+        </MemoryRouter>,
+      ),
+    );
+    await act(settle);
+    expect(host.textContent).toContain('Task could not be loaded');
+    expect(
+      [...host.querySelectorAll('button')].some(
+        (button) => button.textContent === 'Retry',
+      ),
+    ).toBe(true);
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
 function task() {
   return {
     work_item: {
@@ -144,8 +226,9 @@ function task() {
   };
 }
 
-function json(body: unknown): Response {
+function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
+    status,
     headers: { 'content-type': 'application/json' },
   });
 }

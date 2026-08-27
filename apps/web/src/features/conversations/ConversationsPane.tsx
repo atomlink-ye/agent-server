@@ -10,6 +10,7 @@ export interface ConversationsPaneProps {
   readonly appStore: AppStore;
   readonly conversationsStore: ConversationsStore;
   readonly onSelectConversation?: (conversationId: ConversationId) => void;
+  readonly selectedConversationMissing?: boolean;
 }
 
 type ConversationFilter = 'all' | 'recent';
@@ -20,6 +21,7 @@ export function ConversationsPane({
   appStore,
   conversationsStore,
   onSelectConversation,
+  selectedConversationMissing = false,
 }: ConversationsPaneProps) {
   const [createOpen, setCreateOpen] = useState(false);
   // The picker's open/closed intent is read back by toggleCreate in the same
@@ -259,6 +261,7 @@ export function ConversationsPane({
           state={state}
           visibleConversations={visibleConversations}
           selectedConversationId={selection.selectedConversationId}
+          selectedConversationMissing={selectedConversationMissing}
           onSelect={select}
           onRetry={() => {
             void conversationsStore.load(commands.loadConversations);

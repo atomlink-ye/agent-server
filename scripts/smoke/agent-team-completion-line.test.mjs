@@ -309,12 +309,14 @@ describe('agent-team smoke completion line', () => {
       evaluateTraceFacts({
         mcp_activities: [
           {
-            activity_id: 'stock-1',
+            activity_id: 'activity-2',
+            sequence: 2,
             tool_name: 'synthetic_stock_snapshot',
-            status: 'running',
+            status: 'failed',
           },
           {
-            activity_id: 'stock-1',
+            activity_id: 'activity-3',
+            sequence: 3,
             tool_name: 'synthetic_stock_snapshot',
             status: 'completed',
           },
@@ -325,7 +327,8 @@ describe('agent-team smoke completion line', () => {
       evaluateTraceFacts({
         mcp_activities: [
           {
-            activity_id: 'stock-1',
+            activity_id: 'activity-2',
+            sequence: 2,
             tool_name: 'synthetic_stock_snapshot',
             status: 'failed',
           },
@@ -338,25 +341,29 @@ describe('agent-team smoke completion line', () => {
     const trace = {
       mcp_activities: [
         {
-          activity_id: 'ack-1',
+          activity_id: 'activity-2',
+          sequence: 2,
           tool_name: 'message_ack',
           status: 'failed',
           source_refs: { run_id: 'lead-run-1' },
         },
         {
-          activity_id: 'ack-1',
+          activity_id: 'activity-3',
+          sequence: 3,
           tool_name: 'message_ack',
           status: 'completed',
           source_refs: { run_id: 'lead-run-1' },
         },
         {
           activity_id: 'accept-1',
+          sequence: 4,
           tool_name: 'board_accept',
           status: 'completed',
           source_refs: { run_id: 'lead-run-1' },
         },
         {
           activity_id: 'finish-1',
+          sequence: 5,
           tool_name: 'collaboration_finish',
           status: 'completed',
           source_refs: { run_id: 'lead-run-1' },
@@ -374,12 +381,41 @@ describe('agent-team smoke completion line', () => {
       ),
     ).toContain('terminal_lead_collaboration_finish');
     trace.mcp_activities[3].source_refs.run_id = 'lead-run-1';
-    trace.mcp_activities.push({
-      activity_id: 'ack-2',
-      tool_name: 'message_ack',
-      status: 'failed',
-      source_refs: { run_id: 'lead-run-1' },
-    });
+    trace.mcp_activities[1].source_refs.run_id = 'other-lead-run';
+    expect(
+      evaluateLeadTerminalFacts(successfulProjection(), trace).failures.map(
+        (failure) => failure.code,
+      ),
+    ).toContain('terminal_lead_message_ack');
+  });
+
+  it('isolates lead logical steps to the owning run', () => {
+    const trace = {
+      mcp_activities: [
+        {
+          activity_id: 'activity-2',
+          sequence: 2,
+          tool_name: 'message_ack',
+          status: 'completed',
+          source_refs: { run_id: 'other-lead-run' },
+        },
+        {
+          activity_id: 'accept-1',
+          sequence: 3,
+          tool_name: 'board_accept',
+          status: 'completed',
+          source_refs: { run_id: 'lead-run-1' },
+        },
+        {
+          activity_id: 'finish-1',
+          sequence: 4,
+          tool_name: 'collaboration_finish',
+          status: 'completed',
+          source_refs: { run_id: 'lead-run-1' },
+        },
+      ],
+    };
+
     expect(
       evaluateLeadTerminalFacts(successfulProjection(), trace).failures.map(
         (failure) => failure.code,
@@ -422,5 +458,119 @@ describe('agent-team smoke completion line', () => {
         (failure) => failure.code,
       ),
     ).toContain('member_work_tool_order');
+  });
+
+  it('accepts a member retry as one logical step using the latest completion', () => {
+    const trace = {
+      mcp_activities: [
+        {
+          activity_id: 'stock-1',
+          sequence: 10,
+          tool_name: 'synthetic_stock_snapshot',
+          status: 'completed',
+          source_refs: { run_id: 'member-run-1' },
+        },
+        {
+          activity_id: 'activity-1',
+          sequence: 11,
+          tool_name: 'message_send',
+          status: 'completed',
+          source_refs: { run_id: 'member-run-1' },
+        },
+        {
+          activity_id: 'activity-2',
+          sequence: 12,
+          tool_name: 'message_send',
+          status: 'failed',
+          source_refs: { run_id: 'member-run-1' },
+        },
+        {
+          activity_id: 'activity-3',
+          sequence: 13,
+          tool_name: 'message_send',
+          status: 'completed',
+          source_refs: { run_id: 'member-run-1' },
+        },
+        {
+          activity_id: 'submit-1',
+          sequence: 14,
+          tool_name: 'board_submit',
+          status: 'completed',
+          source_refs: { run_id: 'member-run-1' },
+        },
+      ],
+    };
+
+    expect(evaluateMemberWorkTraceFacts(successfulProjection(), trace)).toEqual(
+      { ok: true, failures: [] },
+    );
+  });
+
+  it('rejects a member logical step with no completed event', () => {
+    const trace = {
+      mcp_activities: [
+        {
+          activity_id: 'stock-1',
+          sequence: 10,
+          tool_name: 'synthetic_stock_snapshot',
+          status: 'completed',
+          source_refs: { run_id: 'member-run-1' },
+        },
+        {
+          activity_id: 'activity-2',
+          sequence: 11,
+          tool_name: 'message_send',
+          status: 'failed',
+          source_refs: { run_id: 'member-run-1' },
+        },
+        {
+          activity_id: 'submit-1',
+          sequence: 12,
+          tool_name: 'board_submit',
+          status: 'completed',
+          source_refs: { run_id: 'member-run-1' },
+        },
+      ],
+    };
+
+    expect(
+      evaluateMemberWorkTraceFacts(successfulProjection(), trace).failures.map(
+        (failure) => failure.code,
+      ),
+    ).toContain('member_work_message_send');
+  });
+
+  it('does not use a completed member tool from an unrelated run', () => {
+    const trace = {
+      mcp_activities: [
+        {
+          activity_id: 'stock-1',
+          sequence: 10,
+          tool_name: 'synthetic_stock_snapshot',
+          status: 'completed',
+          source_refs: { run_id: 'member-run-1' },
+        },
+        {
+          activity_id: 'message-other-run',
+          sequence: 11,
+          tool_name: 'message_send',
+          status: 'completed',
+          source_refs: { run_id: 'other-member-run' },
+        },
+        {
+          activity_id: 'submit-1',
+          sequence: 12,
+          tool_name: 'board_submit',
+          status: 'completed',
+          source_refs: { run_id: 'member-run-1' },
+        },
+      ],
+    };
+
+    expect(
+      evaluateMemberWorkTraceFacts(successfulProjection(), trace).failures.map(
+        (failure) => failure.code,
+      ),
+    ).toContain('member_work_message_send');
   });
 });

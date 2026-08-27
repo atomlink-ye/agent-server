@@ -1,5 +1,37 @@
 const terminalTaskStatuses = new Set(['completed', 'failed', 'cancelled']);
 
+function compareActivityOrder(left, right) {
+  const leftSequence = Number.isInteger(left.sequence) ? left.sequence : null;
+  const rightSequence = Number.isInteger(right.sequence)
+    ? right.sequence
+    : null;
+  if (leftSequence !== rightSequence) {
+    if (leftSequence === null) return -1;
+    if (rightSequence === null) return 1;
+    return leftSequence - rightSequence;
+  }
+  return String(left.activity_id ?? '').localeCompare(
+    String(right.activity_id ?? ''),
+  );
+}
+
+function selectLatestCompletedActivity(activities, toolName, runId) {
+  return activities
+    .filter(
+      (activity) =>
+        activity.tool_name === toolName &&
+        activity.status === 'completed' &&
+        (!runId || activity.source_refs?.run_id === runId),
+    )
+    .map((activity, index) => ({ activity, index }))
+    .sort(
+      (left, right) =>
+        compareActivityOrder(left.activity, right.activity) ||
+        left.index - right.index,
+    )
+    .at(-1)?.activity;
+}
+
 export function acknowledgedMessagesWithoutActivation(value) {
   const messages = Array.isArray(value?.direct_messages)
     ? value.direct_messages
@@ -265,26 +297,14 @@ export function evaluateTraceFacts(value) {
   const stockActivities = activities.filter(
     (activity) => activity.tool_name === 'synthetic_stock_snapshot',
   );
-  const stockActivityIds = new Set(
-    stockActivities.map(
-      (activity) =>
-        activity.activity_id ?? `sequence:${activity.sequence ?? 'unknown'}`,
-    ),
-  );
-  if (stockActivityIds.size !== 1) {
-    failures.push({
-      scope: 'assertion',
-      code: 'synthetic_stock_snapshot_activity_count',
-      expected: 'exactly one synthetic_stock_snapshot invocation',
-      actual: stockActivityIds.size,
-    });
-  }
-  if (!stockActivities.some((activity) => activity.status === 'completed')) {
+  if (
+    !selectLatestCompletedActivity(stockActivities, 'synthetic_stock_snapshot')
+  ) {
     failures.push({
       scope: 'assertion',
       code: 'synthetic_stock_snapshot_activity_status',
       expected:
-        'synthetic_stock_snapshot mcp_activity includes status === "completed"',
+        'synthetic_stock_snapshot has at least one completed mcp_activity',
       actual: stockActivities.map((activity) => activity.status),
     });
   }
@@ -320,30 +340,20 @@ export function evaluateMemberWorkTraceFacts(projection, trace) {
     'board_submit',
   ]) {
     const invocations = activities.filter(
-      (activity) => activity.tool_name === toolName,
-    );
-    const invocationIds = new Set(
-      invocations
-        .map((activity) => activity.activity_id)
-        .filter((activityId) => typeof activityId === 'string'),
-    );
-    const completed = invocations.filter(
       (activity) =>
-        activity.status === 'completed' &&
+        activity.tool_name === toolName &&
         activity.source_refs?.run_id === workRunId,
     );
-    if (
-      !workRunId ||
-      invocationIds.size !== 1 ||
-      invocations.some(
-        (activity) => typeof activity.activity_id !== 'string',
-      ) ||
-      completed.length !== 1
-    ) {
+    const completed = selectLatestCompletedActivity(
+      invocations,
+      toolName,
+      workRunId,
+    );
+    if (!workRunId || !completed) {
       failures.push({
         scope: 'assertion',
         code: `member_work_${toolName}`,
-        expected: `${toolName} has exactly one activity ID with a completed event from the member work-attempt run`,
+        expected: `${toolName} has at least one completed event from the member work-attempt run`,
         actual: invocations.map((activity) => ({
           activity_id: activity.activity_id ?? null,
           status: activity.status ?? null,
@@ -352,7 +362,7 @@ export function evaluateMemberWorkTraceFacts(projection, trace) {
         })),
       });
     } else {
-      completedByTool.set(toolName, completed[0]);
+      completedByTool.set(toolName, completed);
     }
   }
   const orderedTools = [
@@ -418,32 +428,20 @@ export function evaluateLeadTerminalFacts(projection, trace) {
     'collaboration_finish',
   ]) {
     const invocations = activities.filter(
-      (activity) => activity.tool_name === toolName,
-    );
-    const invocationIds = new Set(
-      invocations
-        .map((activity) => activity.activity_id)
-        .filter((activityId) => typeof activityId === 'string'),
-    );
-    const hasMissingActivityId = invocations.some(
-      (activity) => typeof activity.activity_id !== 'string',
-    );
-    const completed = invocations.filter(
       (activity) =>
-        activity.status === 'completed' &&
+        activity.tool_name === toolName &&
         activity.source_refs?.run_id === leadRunId,
     );
-    if (
-      !leadRunId ||
-      invocationIds.size !== 1 ||
-      hasMissingActivityId ||
-      completed.length !== 1 ||
-      completed[0]?.activity_id !== [...invocationIds][0]
-    ) {
+    const completed = selectLatestCompletedActivity(
+      invocations,
+      toolName,
+      leadRunId,
+    );
+    if (!leadRunId || !completed) {
       failures.push({
         scope: 'assertion',
         code: `terminal_lead_${toolName}`,
-        expected: `${toolName} has exactly one activity ID with a completed event from the terminal lead run`,
+        expected: `${toolName} has at least one completed event from the terminal lead run`,
         actual: invocations.map((activity) => ({
           activity_id: activity.activity_id ?? null,
           status: activity.status ?? null,

@@ -11,6 +11,7 @@ import {
 } from '../work/clients/work-definition-client';
 import { associateCapability, createCoworker } from './agents-gateway';
 import type { Coworker } from './contracts';
+import { useSkillCatalog } from './queries/use-skill-catalog';
 import {
   compileCapabilityDraft,
   type CapabilityDraft,
@@ -198,8 +199,10 @@ export function CapabilityBuilder({
       role: agent.roleLabel ?? 'Specialist',
       instructions:
         'Complete the requested formal Work carefully and return a concise, evidence-backed result.',
+      skills: [],
     },
   ]);
+  const skillCatalog = useSkillCatalog();
   const [inputs, setInputs] = useState<EditableInput[]>([]);
   const [plan, setPlan] = useState<DefinitionPlan | null>(null);
   const [diagnostics, setDiagnostics] = useState<DefinitionDiagnostics>([]);
@@ -237,7 +240,7 @@ export function CapabilityBuilder({
     setMessage(null);
     let source: string;
     try {
-      source = compileCapabilityDraft(draft).source;
+      source = compileCapabilityDraft(draft, skillCatalog.skills).source;
       setGeneratedSource(source);
     } catch (reason) {
       setStatus('error');
@@ -442,6 +445,11 @@ export function CapabilityBuilder({
                   }
                 />
               </Field>
+              <SkillPicker
+                catalog={skillCatalog}
+                selected={participant.skills}
+                onChange={(skills) => changeParticipant(index, { skills })}
+              />
             </article>
           ))}
         </div>
@@ -712,6 +720,18 @@ function PlanPreview({
         </p>
       </div>
       <div>
+        <span className="eyebrow">Runtime requirements</span>
+        {plan.resolved.requiredRuntimeCapabilities.length ? (
+          <ul className="agents-runtime-requirements">
+            {plan.resolved.requiredRuntimeCapabilities.map((token) => (
+              <li key={token}>{describeRuntimeCapability(token)}</li>
+            ))}
+          </ul>
+        ) : (
+          <p>This Capability needs no additional runtime capability.</p>
+        )}
+      </div>
+      <div>
         <span className="eyebrow">Inputs</span>
         <p>
           {inputs.length
@@ -732,6 +752,69 @@ function PlanPreview({
         </p>
       </div>
     </div>
+  );
+}
+
+// This is Work-layer Skill selection for an authored participant. It is
+// deliberately absent from Agent/Coworker authoring (`NewCoworkerForm`) —
+// the Owner has ruled Agent-level Skill selection out; the Coworker
+// profile's read-only Skill chips stay as the aggregate view of what its
+// saved Capabilities already selected here.
+function SkillPicker({
+  catalog,
+  selected,
+  onChange,
+}: {
+  readonly catalog: ReturnType<typeof useSkillCatalog>;
+  readonly selected: readonly string[];
+  readonly onChange: (skills: readonly string[]) => void;
+}) {
+  if (catalog.status === 'loading')
+    return <p className="agents-empty-note">Loading Skills…</p>;
+  if (catalog.status === 'unavailable')
+    // feature_unavailable means this workspace does not compose the Product
+    // Work surface, so Skill selection can never succeed here. No Retry.
+    return (
+      <p className="agents-empty-note">
+        This workspace doesn’t currently offer Skills.
+      </p>
+    );
+  if (catalog.status === 'error')
+    return (
+      <p className="agents-error" role="alert">
+        Skills could not be loaded.{' '}
+        <button type="button" onClick={catalog.refresh}>
+          Retry
+        </button>
+      </p>
+    );
+  if (catalog.skills.length === 0)
+    return (
+      <p className="agents-empty-note">
+        No Skills are published in this workspace yet.
+      </p>
+    );
+  return (
+    <Field label="Skills" hint="What this participant can formally do.">
+      <div className="agents-skill-list">
+        {catalog.skills.map((skill) => (
+          <label className="agents-inline-check" key={skill.ref}>
+            <input
+              type="checkbox"
+              checked={selected.includes(skill.ref)}
+              onChange={(event) =>
+                onChange(
+                  event.target.checked
+                    ? [...selected, skill.ref]
+                    : selected.filter((ref) => ref !== skill.ref),
+                )
+              }
+            />{' '}
+            {skill.name}
+          </label>
+        ))}
+      </div>
+    </Field>
   );
 }
 
@@ -774,6 +857,7 @@ function defaultParticipant(): CapabilityParticipantDraft {
     role: 'Specialist',
     instructions:
       'Complete the requested formal Work carefully and return a concise, evidence-backed result.',
+    skills: [],
   };
 }
 function reviewerParticipant(): CapabilityParticipantDraft {
@@ -782,6 +866,7 @@ function reviewerParticipant(): CapabilityParticipantDraft {
     role: 'Reviewer',
     instructions:
       'Review the work independently, identify material gaps, and return clear corrections or approval evidence.',
+    skills: [],
   };
 }
 function toInputDraft(input: EditableInput): CapabilityInputDraft {
@@ -823,4 +908,24 @@ function integer(value: string): number | undefined {
 }
 function unique(values: readonly string[]): string[] {
   return [...new Set(values)];
+}
+
+// The compiler attaches these runtime capability tokens unconditionally
+// (see `docs/frontend.md` — this is raw internal vocabulary, not
+// user-facing copy). Translate before the author ever commits to creating
+// a Work: some deployments do not support every token, and finding that out
+// only after Run start is the exact gap this preview closes.
+const RUNTIME_CAPABILITY_EXPLANATIONS: Readonly<Record<string, string>> = {
+  external_workspace:
+    'Needs a persistent project workspace outside the chat session. Some deployments do not provide this yet — if this one doesn’t, Runs of this Capability cannot start.',
+  reusable_session:
+    'Reuses one runtime session across the whole Work instead of starting a fresh one each time.',
+  platform_mcp:
+    'Uses this deployment’s shared platform tools during execution.',
+};
+function describeRuntimeCapability(token: string): string {
+  return (
+    RUNTIME_CAPABILITY_EXPLANATIONS[token] ??
+    `Requires the "${token}" runtime capability.`
+  );
 }

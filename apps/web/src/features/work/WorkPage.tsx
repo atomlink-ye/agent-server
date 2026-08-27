@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 import { NewWork } from './components/new-work';
@@ -42,6 +42,16 @@ export function WorkPage({
   // instead of this page racing a second, independent fetch.
   const [workListStatus, setWorkListStatus] =
     useState<WorkListQuery['status']>('loading');
+  // WorkPane owns the Work list fetch and hands its `refresh` back up here
+  // once mounted, so a successful create elsewhere in this page can
+  // invalidate the same list instead of leaving the nav stale until a full
+  // navigation re-mounts WorkPane.
+  const [refreshWorkList, setRefreshWorkList] = useState<(() => void) | null>(
+    null,
+  );
+  const handleRefreshReady = useCallback((refresh: () => void) => {
+    setRefreshWorkList(() => refresh);
+  }, []);
 
   useEffect(() => {
     if (selectedWorkId) setShowNewWork(false);
@@ -81,6 +91,7 @@ export function WorkPage({
         originConversationId={returnConversationId}
         selectedWorkId={selectedWorkId}
         onStatusChange={setWorkListStatus}
+        onRefreshReady={handleRefreshReady}
       />
       <main className="chat-panel work-main">
         <TitleBar section="Work" />
@@ -108,6 +119,7 @@ export function WorkPage({
               originConversationId={returnConversationId}
               initialAgentId={authoringRequest.agentId}
               initialCapabilityVersionId={authoringRequest.capabilityVersionId}
+              onWorkCreated={() => refreshWorkList?.()}
             />
           ) : null}
           {!workUnavailable && !showNewWork && selectedWorkId ? (

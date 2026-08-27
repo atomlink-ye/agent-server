@@ -1,4 +1,5 @@
 import { apiTransport, ApiTransportError } from '../../../api/transport';
+import { isFeatureUnavailable } from '../../../api/feature-availability';
 
 export class ProductReadError extends Error {
   constructor(
@@ -49,12 +50,45 @@ export function productMutationError(error: unknown): never {
   throw error;
 }
 
+// A Run that fails for one of these reasons cannot be retried into success:
+// the composition itself is impossible in this deployment. Offering Retry
+// for these would be a false promise — see docs/frontend.md "unavailable
+// offers no Retry, because a retry cannot succeed" and "Controls that
+// cannot succeed in the current state are disabled rather than offered."
+const PERMANENT_RUN_FAILURE_CODES = new Set([
+  'unsupported_runtime_capability',
+  'feature_unavailable',
+]);
+
+/**
+ * A permanent Run-start failure is a fact about this Work's composition or
+ * this deployment, not a transient hiccup: retrying it cannot succeed, so
+ * the caller must not offer Retry and must disable the start control.
+ */
+export function isPermanentRunFailure(error: unknown): boolean {
+  return (
+    error instanceof ProductMutationError &&
+    error.code !== null &&
+    PERMANENT_RUN_FAILURE_CODES.has(error.code)
+  );
+}
+
 /**
  * Run failures can contain provider or transport detail that is useful to an
- * operator but inappropriate for a browser surface. Keep the recovery path
- * actionable without reflecting an unbounded error message into the UI.
+ * operator but inappropriate for a browser surface. A `ProductMutationError`
+ * carrying one of the bounded, product-owned codes above is safe to show
+ * verbatim — it is deliberate product prose, not raw provider/transport
+ * detail. Anything else keeps the existing bounded, generic message so an
+ * unbounded upstream string never reaches the browser.
  */
-export function workRunFailureMessage(): string {
+export function workRunFailureMessage(error: unknown): string {
+  if (isFeatureUnavailable(error))
+    return "This workspace doesn't currently offer Work execution. This Run can't start here.";
+  if (
+    error instanceof ProductMutationError &&
+    error.code === 'unsupported_runtime_capability'
+  )
+    return error.message;
   return 'We couldn’t start this Run. Check that Work is ready, then try again.';
 }
 

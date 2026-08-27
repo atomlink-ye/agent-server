@@ -17,6 +17,22 @@ export interface CapabilityParticipantDraft {
   readonly name: string;
   readonly role: string;
   readonly instructions: string;
+  // Optional so existing single-argument compileCapabilityDraft() callers
+  // (e.g. src/application/work/capability-authoring.test.ts, owned by a
+  // parallel worker) keep compiling unchanged. An absent list means "no
+  // Skill selected", identical to an empty one.
+  readonly skills?: readonly string[];
+}
+
+/**
+ * The subset of a catalog Skill this compiler needs: the ref an author
+ * selects and the tool refs that ref pulls in. Kept as a type-only import
+ * boundary against `./skills-gateway` so this module stays pure and testable
+ * without a network dependency.
+ */
+export interface SkillCatalogEntry {
+  readonly ref: string;
+  readonly requiredToolRefs: readonly string[];
 }
 
 export interface CapabilityDraft {
@@ -43,6 +59,7 @@ const CAPABILITY_COMPLETION_GUIDANCE =
  */
 export function compileCapabilityDraft(
   draft: CapabilityDraft,
+  skillCatalog: readonly SkillCatalogEntry[] = [],
 ): CompiledCapabilityDraft {
   const normalizedName = slug(draft.name);
   if (!draft.name.trim()) throw new Error('Give this Capability a name.');
@@ -143,7 +160,12 @@ export function compileCapabilityDraft(
       '  worker:',
       '    source: |',
       ...indent(
-        workerSource(normalizedName, participant, draft.description),
+        workerSource(
+          normalizedName,
+          participant,
+          draft.description,
+          skillCatalog,
+        ),
         6,
       ),
     );
@@ -157,7 +179,10 @@ export function compileCapabilityDraft(
       '      source: |',
     );
     lines.push(
-      ...indent(workerSource(normalizedName, lead!, draft.description), 8),
+      ...indent(
+        workerSource(normalizedName, lead!, draft.description, skillCatalog),
+        8,
+      ),
       '  members:',
     );
     for (const member of members) {
@@ -165,7 +190,10 @@ export function compileCapabilityDraft(
         `    - name: ${scalar(member.name.trim())}`,
         '      worker:',
         '        source: |',
-        ...indent(workerSource(normalizedName, member, draft.description), 10),
+        ...indent(
+          workerSource(normalizedName, member, draft.description, skillCatalog),
+          10,
+        ),
       );
     }
   }
@@ -229,7 +257,18 @@ function workerSource(
   capabilityName: string,
   participant: CapabilityParticipantDraft,
   outcome: string,
+  skillCatalog: readonly SkillCatalogEntry[],
 ): string {
+  const skills = participant.skills ?? [];
+  const tools = [
+    ...new Set(
+      skills.flatMap(
+        (ref) =>
+          skillCatalog.find((skill) => skill.ref === ref)?.requiredToolRefs ??
+          [],
+      ),
+    ),
+  ];
   return [
     'apiVersion: agent-server/v1alpha1',
     'kind: Worker',
@@ -242,8 +281,14 @@ function workerSource(
     '    provider: paseo',
     '    modelPolicyRef: free-only',
     '    mode: isolated',
-    '  tools: []',
-    '  skills: []',
+    '  tools:',
+    ...(tools.length
+      ? tools.map((tool) => `    - ${scalar(tool)}`)
+      : ['    []']),
+    '  skills:',
+    ...(skills.length
+      ? skills.map((ref) => `    - ${scalar(ref)}`)
+      : ['    []']),
     '  input:',
     '    schema:',
     '      type: object',

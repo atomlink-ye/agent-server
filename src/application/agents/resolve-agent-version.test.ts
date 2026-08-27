@@ -52,7 +52,7 @@ describe('ResolveAgentVersion', () => {
     );
     const resolver = new ResolveAgentVersion(
       { findVersion, findVersionByTenant },
-      { resolve: vi.fn(async () => null) },
+      { resolve: vi.fn(async () => null), list: vi.fn(async () => []) },
     );
 
     await expect(
@@ -75,7 +75,7 @@ describe('ResolveAgentVersion', () => {
         findVersion: vi.fn(async () => managed('published', 'managed')),
         findVersionByTenant: vi.fn(async () => managed('published', 'managed')),
       },
-      { resolve: vi.fn(async () => null) },
+      { resolve: vi.fn(async () => null), list: vi.fn(async () => []) },
     );
 
     await expect(
@@ -97,7 +97,7 @@ describe('ResolveAgentVersion', () => {
         findVersion: vi.fn(async () => null),
         findVersionByTenant: vi.fn(async () => null),
       },
-      { resolve: vi.fn(async () => null) },
+      { resolve: vi.fn(async () => null), list: vi.fn(async () => []) },
     );
 
     await expect(

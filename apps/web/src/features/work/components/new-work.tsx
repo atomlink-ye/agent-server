@@ -31,10 +31,12 @@ export function NewWork({
   originConversationId = null,
   initialAgentId = null,
   initialCapabilityVersionId = null,
+  onWorkCreated,
 }: {
   readonly originConversationId?: string | null;
   readonly initialAgentId?: string | null;
   readonly initialCapabilityVersionId?: string | null;
+  readonly onWorkCreated?: () => void;
 }) {
   const navigate = (path: string): void => {
     window.location.assign(path);
@@ -202,6 +204,7 @@ export function NewWork({
       });
       workId = created.work.id;
       setCreatedWorkId(workId);
+      onWorkCreated?.();
     } catch (reason) {
       setState('error');
       if (isFeatureUnavailable(reason)) {
@@ -455,6 +458,7 @@ export function NewWork({
         <summary>Advanced · author raw WorkDefinition source</summary>
         <AdvancedDefinitionAuthoring
           originConversationId={originConversationId}
+          onWorkCreated={onWorkCreated}
         />
       </details>
     </section>
@@ -705,8 +709,10 @@ function humanize(value: string): string {
 
 function AdvancedDefinitionAuthoring({
   originConversationId,
+  onWorkCreated,
 }: {
   readonly originConversationId: string | null;
+  readonly onWorkCreated?: () => void;
 }) {
   const [source, setSource] = useState('');
   const [title, setTitle] = useState('');
@@ -758,6 +764,7 @@ function AdvancedDefinitionAuthoring({
         definitionVersionId: applied.versionId,
         title,
       });
+      onWorkCreated?.();
       window.location.assign(
         workTabHref(
           created.work.id,

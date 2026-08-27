@@ -10,4 +10,5 @@ export type ResolvedSkillPackage = Readonly<{
 
 export type SkillCatalogPort = Readonly<{
   resolve(ref: string): Promise<ResolvedSkillPackage | null>;
+  list(): Promise<readonly ResolvedSkillPackage[]>;
 }>;

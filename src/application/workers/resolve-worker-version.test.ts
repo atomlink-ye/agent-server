@@ -51,6 +51,7 @@ function publishedWorker() {
 
 const emptySkills: SkillCatalogPort = {
   resolve: async () => null,
+  list: async () => [],
 };
 
 describe('ResolveWorkerVersion exact owner scope', () => {

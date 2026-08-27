@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ApiEnvironment } from '../http-types.js';
 import type { AppConfig } from '../../../shared/config.js';
 import type { Logger } from '../../../shared/observability/logger.js';
+import { createBrowserFeatureAvailabilityGuard } from './browser-feature-availability.js';
 import { registerBrowserWebRoutes } from './browser-web.js';
 
 const SERVICE_TOKEN = 'browser-service-secret';
@@ -240,6 +241,67 @@ describe('browser-safe Vite facade', () => {
         declared_bytes: 1024 * 1024 + 1,
       }),
     );
+  });
+
+  it('forwards the authenticated Skill catalog in the browser wire shape', async () => {
+    process.env.AGENT_SERVER_SERVICE_TOKEN = SERVICE_TOKEN;
+    const upstream = vi.fn(
+      async (input: string | URL | Request, init?: RequestInit) => {
+        expect(String(input)).toContain('/api/v1/skills');
+        expect(new Headers(init?.headers).get('authorization')).toBe(
+          `Bearer ${SERVICE_TOKEN}`,
+        );
+        return new Response(
+          JSON.stringify({
+            skills: [
+              {
+                ref: 'agent-server/memory-api',
+                name: 'agent-server/memory-api',
+                required_tool_refs: ['agent-server/memory-read'],
+              },
+            ],
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      },
+    );
+    vi.stubGlobal('fetch', upstream);
+
+    const response = await appWithBrowserRoutes().request('/api/skills');
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(await response.json()).toEqual({
+      skills: [
+        {
+          ref: 'agent-server/memory-api',
+          name: 'agent-server/memory-api',
+          required_tool_refs: ['agent-server/memory-read'],
+        },
+      ],
+    });
+  });
+
+  it('reports feature_unavailable -- not a bare 404 -- for /api/skills when the Product Work surface is absent', async () => {
+    const upstream = vi.fn();
+    vi.stubGlobal('fetch', upstream);
+    const app = new Hono<ApiEnvironment>();
+    app.use(
+      '*',
+      createBrowserFeatureAvailabilityGuard(
+        ['/api/skills'],
+        'Work management is not available in this environment.',
+      ),
+    );
+    registerBrowserWebRoutes(app, testConfig(), fakeLogger());
+
+    const response = await app.request('/api/skills');
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      error: { code: 'feature_unavailable' },
+    });
+    expect(upstream).not.toHaveBeenCalled();
   });
 
   it('still returns invalid_response when the upstream body genuinely does not decode', async () => {

@@ -93,7 +93,7 @@ it('shows a missing selected Board without Retry, while a snapshot transport fai
       const path = String(input);
       if (path === '/api/boards') return json({ boards: [] });
       if (path === `/api/boards/${missingId}`)
-        return json({ error: { code: 'board_not_found' } }, 404);
+        return json({ error: { code: 'work_board_not_found' } }, 404);
       throw new Error(`Unexpected browser request: ${path}`);
     }),
   );

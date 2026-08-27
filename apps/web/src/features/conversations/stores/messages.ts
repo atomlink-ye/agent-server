@@ -135,10 +135,10 @@ export function createMessagesStore(): MessagesStore {
         if (loadVersions.get(conversationId) !== requestVersion) return;
         update(conversationId, (current) => ({
           ...current,
-          status: isResourceNotFound(reason, 'conversation_not_found')
+          status: isResourceNotFound(reason, 'not_found')
             ? 'not_found'
             : 'error',
-          error: isResourceNotFound(reason, 'conversation_not_found')
+          error: isResourceNotFound(reason, 'not_found')
             ? null
             : 'Unable to load messages.',
         }));
@@ -183,7 +183,7 @@ export function createMessagesStore(): MessagesStore {
         ) {
           return;
         }
-        if (isResourceNotFound(reason, 'conversation_not_found')) {
+        if (isResourceNotFound(reason, 'not_found')) {
           update(conversationId, (current) => ({
             ...current,
             status: 'not_found',

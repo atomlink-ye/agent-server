@@ -170,7 +170,7 @@ export function registerBrowserWorkOrganizationRoutes(
       { method: 'GET' },
       WorkBoardSnapshotSchema,
       200,
-      { notFoundCode: 'board_not_found' },
+      { notFoundCode: 'work_board_not_found' },
     );
   });
   app.patch('/api/boards/:boardId', async (context) => {

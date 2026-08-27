@@ -82,7 +82,7 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
       setError((current) => (current?.source === 'snapshot' ? null : current));
     } catch (reason) {
       if (request !== selectionRequest.current) return;
-      if (isResourceNotFound(reason, 'board_not_found')) {
+      if (isResourceNotFound(reason, 'work_board_not_found')) {
         setSelectionStatus('not_found');
         setError(null);
         return;

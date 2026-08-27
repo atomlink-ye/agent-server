@@ -239,7 +239,7 @@ it('reports a selected Conversation whose message read returns 404 without Retry
     createConversation: async () => selected,
     loadMessages: async () =>
       Promise.reject({
-        code: 'conversation_not_found',
+        code: 'not_found',
       }),
     sendMessage: async () => message(selected.id, 'message', 1, 'hello'),
   };

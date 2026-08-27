@@ -306,17 +306,14 @@ async function forward(
       );
     }
     if (!upstream.ok) {
-      if (upstream.status === 404 && options.notFoundCode)
-        return jsonResponse(
-          {
-            error: {
-              code: options.notFoundCode,
-              message: 'The requested resource was not found.',
-            },
-          },
-          404,
-        );
       const decoded = ErrorResponseSchema.safeParse(body);
+      if (
+        upstream.status === 404 &&
+        options.notFoundCode &&
+        decoded.success &&
+        decoded.data.error.code === options.notFoundCode
+      )
+        return jsonResponse(decoded.data, 404);
       return jsonResponse(
         decoded.success
           ? decoded.data

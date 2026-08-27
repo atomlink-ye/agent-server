@@ -371,7 +371,27 @@ export function ConversationsPage({
         </header>
 
         <section className="chat-content" aria-label="Conversation">
-          {selectedConversationMissing ? (
+          {conversationState.status === 'loading' &&
+          conversationState.conversations.length === 0 ? (
+            <div className="empty-chat" role="status">
+              <p>Loading conversations…</p>
+            </div>
+          ) : conversationState.status === 'error' &&
+            conversationState.conversations.length === 0 ? (
+            <div className="empty-chat" role="alert">
+              <p>
+                {conversationState.error ?? 'Unable to load conversations.'}
+              </p>
+              <button
+                type="button"
+                onClick={() =>
+                  void conversationListStore.load(commands.loadConversations)
+                }
+              >
+                Retry
+              </button>
+            </div>
+          ) : selectedConversationMissing ? (
             <div className="empty-chat" data-testid="conversation-not-found">
               <div className="empty-chat-icon" aria-hidden="true">
                 <span>✦</span>

@@ -61,6 +61,7 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
   const [selectionStatus, setSelectionStatus] =
     useState<SelectionStatus>('idle');
   const selectionRequest = useRef(0);
+  const commentsRequest = useRef(0);
   const [error, setError] = useState<RecoverableError | null>(null);
   const [creating, setCreating] = useState(false);
   const [filter, setFilter] = useState<WorkItemStatus | 'all'>('all');
@@ -75,6 +76,7 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
         workOrganizationClient.listWorkItems(),
         loadCoworkers().catch(() => [] as readonly Coworker[]),
       ]);
+      if (request !== selectionRequest.current) return;
       setItems(nextItems);
       setAgents(nextAgents);
       setListStatus('ready');
@@ -103,6 +105,7 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
         }
       }
     } catch (reason) {
+      if (request !== selectionRequest.current) return;
       setListStatus(isFeatureUnavailable(reason) ? 'unavailable' : 'error');
     }
   }, [selectedWorkItemId]);
@@ -112,16 +115,19 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
   }, [load]);
 
   const loadComments = useCallback(async () => {
+    const request = ++commentsRequest.current;
     if (!selectedWorkItemId) {
       setComments([]);
       return;
     }
     try {
-      setComments(
-        await workOrganizationClient.listComments(selectedWorkItemId),
-      );
+      const next =
+        await workOrganizationClient.listComments(selectedWorkItemId);
+      if (request !== commentsRequest.current) return;
+      setComments(next);
       setError((current) => (current?.source === 'comments' ? null : current));
     } catch {
+      if (request !== commentsRequest.current) return;
       setError({
         source: 'comments',
         message:

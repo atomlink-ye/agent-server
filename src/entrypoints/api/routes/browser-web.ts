@@ -528,17 +528,13 @@ async function forwardDecoded(
   }
   const decoded = decodeProductResponse(body, errorSchema);
   if (!decoded.success) return invalidUpstream();
-  if (upstream.status === 404 && options.notFoundCode) {
-    return jsonResponse(
-      {
-        error: {
-          code: options.notFoundCode,
-          message: 'The requested resource was not found.',
-        },
-      },
-      404,
-    );
-  }
+  if (
+    upstream.status === 404 &&
+    options.notFoundCode &&
+    (decoded.data as { error: { code: string } }).error.code ===
+      options.notFoundCode
+  )
+    return jsonResponse(decoded.data, 404);
   return jsonResponse(decoded.data, safeStatus(upstream.status));
 }
 

@@ -76,6 +76,21 @@ export class InvokeTask {
     });
     const idempotencyKey = request.idempotencyKey ?? randomUUID();
 
+    // An accepted admission remains replayable even after its invokable stops
+    // being published. Resolve only a fresh admission, and keep that
+    // pool-backed read outside its write transaction.
+    const accepted = await this.findAccepted(
+      idempotencyKey,
+      fingerprint,
+      request.accessContext,
+    );
+    if (accepted) return accepted;
+
+    // Registry resolution uses the pool-backed resource boundary. Keep it
+    // outside admission so a WorkRun cannot hold its transaction connection
+    // while waiting for that read to acquire another connection.
+    await this.assertPublishedInvokableExists(request);
+
     try {
       return await this.admissions.withTransaction(async (transaction) => {
         const existing = await this.findAcceptedInTransaction(
@@ -86,8 +101,6 @@ export class InvokeTask {
         );
 
         if (existing) return existing;
-
-        await this.assertPublishedInvokableExists(request);
 
         const admittedAt = this.now();
         const frozenNow = () => admittedAt;
@@ -136,13 +149,10 @@ export class InvokeTask {
       });
     } catch (error) {
       if (error instanceof AdmissionAlreadyExistsError) {
-        const recovered = await this.admissions.withTransaction((transaction) =>
-          this.findAcceptedInTransaction(
-            transaction,
-            idempotencyKey,
-            fingerprint,
-            request.accessContext,
-          ),
+        const recovered = await this.findAccepted(
+          idempotencyKey,
+          fingerprint,
+          request.accessContext,
         );
         if (recovered) return recovered;
         throw new Error(
@@ -151,6 +161,21 @@ export class InvokeTask {
       }
       throw error;
     }
+  }
+
+  private async findAccepted(
+    idempotencyKey: string,
+    fingerprint: string,
+    accessContext: AccessContext,
+  ): Promise<InvokeTaskResult | null> {
+    return this.admissions.withTransaction((transaction) =>
+      this.findAcceptedInTransaction(
+        transaction,
+        idempotencyKey,
+        fingerprint,
+        accessContext,
+      ),
+    );
   }
 
   private async findAcceptedInTransaction(

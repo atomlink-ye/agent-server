@@ -8,7 +8,10 @@ import type { ProductWorkDefinitionVersionResponse } from '@atomlink-ye/agent-se
 export type RunAvailabilityQuery =
   | { readonly status: 'loading' }
   | { readonly status: 'ready'; readonly missingCapability: string | null }
-  | { readonly status: 'unavailable' }
+  | {
+      readonly status: 'unavailable';
+      readonly reason: 'current_definition_missing' | 'feature_unavailable';
+    }
   | { readonly status: 'error' };
 
 export function useRunAvailability(
@@ -22,7 +25,7 @@ export function useRunAvailability(
     version === undefined
       ? { status: 'ready', missingCapability: null }
       : version === null
-        ? { status: 'unavailable' }
+        ? { status: 'unavailable', reason: 'current_definition_missing' }
         : { status: 'loading' },
   );
 
@@ -32,7 +35,7 @@ export function useRunAvailability(
       return;
     }
     if (version === null) {
-      setState({ status: 'unavailable' });
+      setState({ status: 'unavailable', reason: 'current_definition_missing' });
       return;
     }
     let active = true;
@@ -53,7 +56,7 @@ export function useRunAvailability(
       (reason: unknown) => {
         if (!active) return;
         if (isFeatureUnavailable(reason)) {
-          setState({ status: 'unavailable' });
+          setState({ status: 'unavailable', reason: 'feature_unavailable' });
           return;
         }
         // A projection read failure must not change admission semantics. Keep

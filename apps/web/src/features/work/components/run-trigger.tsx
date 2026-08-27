@@ -112,7 +112,9 @@ export function RunTrigger({
       ) : null}
       {availability.status === 'unavailable' ? (
         <p id={reasonId} role="status">
-          Work management is not available in this environment.
+          {availability.reason === 'current_definition_missing'
+            ? 'The current Work Definition version could not be loaded, so runnability cannot be determined.'
+            : 'Work management is not available in this environment.'}
         </p>
       ) : null}
       {state.kind === 'error' ? <p role="alert">{state.message}</p> : null}

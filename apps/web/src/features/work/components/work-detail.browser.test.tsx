@@ -333,14 +333,23 @@ it('reads an exact historical DefinitionVersion instead of falling back to Team-
 });
 
 it('does not invent a runnable Work when its current DefinitionVersion is missing', async () => {
-  mockProductReads({ currentDefinitionMissing: true });
+  const fetchMock = mockProductReads({ currentDefinitionMissing: true });
   const { host, root } = await renderDetail();
   try {
-    expect(host.textContent).toContain("Couldn't load Work");
+    expect(host.textContent).toContain(work.work.title);
+    expect(host.textContent).toContain('Historical Run Trace');
     expect(host.textContent).toContain(
-      'The selected Work or Run is unavailable.',
+      'The current Work Definition version could not be loaded, so runnability cannot be determined.',
     );
-    expect(host.textContent).not.toContain('Start Run');
+    const button = host.querySelector<HTMLButtonElement>(
+      '.work-run-trigger button',
+    );
+    expect(button?.textContent).toContain('Can’t start Run');
+    expect(button?.disabled).toBe(true);
+    expect(host.textContent).not.toContain('Retry availability check');
+    expect(fetchMock.mock.calls.map(([path]) => path)).toContain(
+      `/api/work-definition-versions/${work.work.definition_version_id}`,
+    );
   } finally {
     await act(async () => root.unmount());
     host.remove();

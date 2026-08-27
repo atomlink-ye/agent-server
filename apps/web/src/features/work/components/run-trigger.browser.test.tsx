@@ -279,3 +279,45 @@ it('exposes a bounded projection error and retries only that read', async () => 
     vi.unstubAllGlobals();
   }
 });
+
+it('keeps feature-unavailable distinct from a missing current DefinitionVersion', async () => {
+  const fetchMock = vi.fn(async (path: string) => {
+    if (path === '/api/runtime-capabilities')
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ supported_runtime_capabilities: [] }),
+      } as Response;
+    return errorResponse(
+      503,
+      'feature_unavailable',
+      'Work management is not available in this environment.',
+    );
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  await act(async () => {
+    root.render(
+      <RunTrigger workId={workId} definitionVersion={definitionVersion} />,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  try {
+    expect(host.textContent).toContain(
+      'Work management is not available in this environment.',
+    );
+    expect(host.textContent).not.toContain(
+      'The current Work Definition version could not be loaded',
+    );
+    expect(host.textContent).not.toContain('Retry availability check');
+    expect(host.querySelector<HTMLButtonElement>('button')?.disabled).toBe(
+      true,
+    );
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+  }
+});

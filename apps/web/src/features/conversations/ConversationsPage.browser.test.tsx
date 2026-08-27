@@ -11,6 +11,7 @@ import { expect, it, vi } from 'vitest';
 
 import { AppShell } from '../../app/shell/AppShell';
 import { ConversationsPage } from './ConversationsPage';
+import { CONVERSATION_NOT_FOUND_CODE } from '@atomlink-ye/agent-server/product-contract';
 import type {
   ChatCommands,
   ChatMessage,
@@ -239,7 +240,7 @@ it('reports a selected Conversation whose message read returns 404 without Retry
     createConversation: async () => selected,
     loadMessages: async () =>
       Promise.reject({
-        code: 'not_found',
+        code: CONVERSATION_NOT_FOUND_CODE,
       }),
     sendMessage: async () => message(selected.id, 'message', 1, 'hello'),
   };

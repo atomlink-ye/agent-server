@@ -18,6 +18,7 @@ import type { AppConfig } from '../../../shared/config.js';
 import { HttpError } from '../../../contracts/http.js';
 import {
   CreateConversationRequestSchema,
+  CONVERSATION_NOT_FOUND_CODE,
   PostConversationMessageRequestSchema,
 } from '../../../contracts/conversations.js';
 
@@ -282,7 +283,7 @@ function invalidRequest(): HttpError {
 function notFound(): HttpError {
   return new HttpError(
     404,
-    'not_found',
+    CONVERSATION_NOT_FOUND_CODE,
     'The requested conversation does not exist.',
   );
 }
@@ -307,7 +308,7 @@ async function enableConversationWorkContext(
   if (!dependencies.workEntitlements)
     throw new HttpError(
       404,
-      'not_found',
+      CONVERSATION_NOT_FOUND_CODE,
       'The requested route does not exist.',
     );
   const conversation = await requireConversation(c, dependencies);
@@ -341,7 +342,7 @@ async function revokeConversationWorkContext(
   if (!dependencies.workEntitlements)
     throw new HttpError(
       404,
-      'not_found',
+      CONVERSATION_NOT_FOUND_CODE,
       'The requested route does not exist.',
     );
   await requireConversation(c, dependencies);

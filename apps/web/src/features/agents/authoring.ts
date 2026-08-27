@@ -281,13 +281,18 @@ function workerSource(
     '    provider: paseo',
     '    modelPolicyRef: free-only',
     '    mode: isolated',
+    // A Worker package states tools and skills as reference objects, not
+    // bare strings: `tools` entries carry `ref` and an optional `kind`, and
+    // `skills` entries carry `ref`. Emitting plain scalars parses as YAML but
+    // fails Worker validation with `invalid_reference`, which would make
+    // selecting any Skill silently unsavable.
     '  tools:',
     ...(tools.length
-      ? tools.map((tool) => `    - ${scalar(tool)}`)
+      ? tools.map((tool) => `    - ref: ${scalar(tool)}`)
       : ['    []']),
     '  skills:',
     ...(skills.length
-      ? skills.map((ref) => `    - ${scalar(ref)}`)
+      ? skills.map((ref) => `    - ref: ${scalar(ref)}`)
       : ['    []']),
     '  input:',
     '    schema:',

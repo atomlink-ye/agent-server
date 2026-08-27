@@ -53,7 +53,12 @@ describe('compileCapabilityDraft skill/tool emission', () => {
     expect(source).toContain('"agent-server/memory-read"');
     expect(source).toContain('"agent-server/memory-write"');
     expect(source).toContain('"agent-server/memory-api"');
-    expect(source).toMatch(/skills:\s*\n\s*- "agent-server\/memory-api"/);
+    // Worker packages state tools and skills as reference OBJECTS. A bare
+    // scalar still parses as YAML but is rejected downstream with
+    // `invalid_reference`, so assert the `- ref:` shape rather than merely
+    // that the string appears somewhere.
+    expect(source).toMatch(/skills:\s*\n\s*- ref: "agent-server\/memory-api"/);
+    expect(source).toMatch(/tools:\s*\n\s*- ref: "agent-server\/memory-read"/);
   });
 
   it('unions required tool refs across every skill selected for a participant', () => {
@@ -71,8 +76,8 @@ describe('compileCapabilityDraft skill/tool emission', () => {
       source.indexOf('  tools:'),
       source.indexOf('  skills:'),
     );
-    expect(toolsBlock).toContain('agent-server/memory-read');
-    expect(toolsBlock).toContain('agent-server/memory-write');
+    expect(toolsBlock).toContain('- ref: "agent-server/memory-read"');
+    expect(toolsBlock).toContain('- ref: "agent-server/memory-write"');
     expect(toolsBlock.match(/agent-server\/memory-read/g)).toHaveLength(1);
   });
 

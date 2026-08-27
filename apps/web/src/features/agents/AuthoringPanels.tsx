@@ -212,6 +212,15 @@ export function CapabilityBuilder({
   >('idle');
   const [message, setMessage] = useState<string | null>(null);
 
+  // The Skill catalog is installed by the same `productWorkSurface` fact that
+  // installs the work-definition routes this builder saves through. So a
+  // `feature_unavailable` catalog is not merely "no Skills to pick" — it means
+  // authoring cannot succeed here at all. Deriving it from the load, rather
+  // than waiting for a save to fail, keeps the promise docs/frontend.md makes:
+  // controls that cannot succeed are disabled rather than offered.
+  const surfaceUnavailable =
+    status === 'unavailable' || skillCatalog.status === 'unavailable';
+
   const draft = useMemo<CapabilityDraft>(
     () => ({
       name,
@@ -279,7 +288,7 @@ export function CapabilityBuilder({
   }
 
   async function save(startAfterSave: boolean): Promise<void> {
-    if (status === 'saving' || status === 'unavailable') return;
+    if (status === 'saving' || surfaceUnavailable) return;
     const ready = await preview();
     if (!ready) return;
     setStatus('saving');
@@ -608,7 +617,7 @@ export function CapabilityBuilder({
             disabled={
               status === 'previewing' ||
               status === 'saving' ||
-              status === 'unavailable'
+              surfaceUnavailable
             }
           >
             {status === 'previewing' ? 'Resolving…' : 'Preview plan'}
@@ -650,7 +659,7 @@ export function CapabilityBuilder({
         <button
           type="button"
           onClick={() => void save(false)}
-          disabled={status === 'saving' || status === 'unavailable'}
+          disabled={status === 'saving' || surfaceUnavailable}
         >
           {status === 'saving' ? 'Saving…' : 'Save capability'}
         </button>
@@ -658,7 +667,7 @@ export function CapabilityBuilder({
           className="agents-primary"
           type="button"
           onClick={() => void save(true)}
-          disabled={status === 'saving' || status === 'unavailable'}
+          disabled={status === 'saving' || surfaceUnavailable}
         >
           Save & start Work
         </button>

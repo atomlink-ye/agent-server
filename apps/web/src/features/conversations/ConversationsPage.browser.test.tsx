@@ -231,6 +231,48 @@ it('reports a missing selected Conversation without Retry or a composer', async 
   }
 });
 
+it('reports a selected Conversation whose message read returns 404 without Retry or a composer', async () => {
+  const selected = conversation('conversation-a');
+  const commands: ChatCommands = {
+    loadCoworkers: async () => [],
+    loadConversations: async () => [selected],
+    createConversation: async () => selected,
+    loadMessages: async () => Promise.reject({ status: 404 }),
+    sendMessage: async () => message(selected.id, 'message', 1, 'hello'),
+  };
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(
+        <MemoryRouter initialEntries={[`/conversations/${selected.id}`]}>
+          <ConversationsPage
+            commands={commands}
+            routeConversationId={selected.id}
+          />
+        </MemoryRouter>,
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(host.textContent).toContain(
+      'The selected Conversation is unavailable.',
+    );
+    expect(host.textContent).toContain('Back to Conversations');
+    expect(
+      [...host.querySelectorAll('button')].some(
+        (button) => button.textContent === 'Retry',
+      ),
+    ).toBe(false);
+    expect(host.querySelector('textarea')).toBeNull();
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+  }
+});
+
 it('renders Work as a sibling tab inside the same Cumora-style shell', async () => {
   const workId = '11111111-1111-4111-8111-111111111111';
   const commands: ChatCommands = {

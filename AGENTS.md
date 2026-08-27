@@ -70,7 +70,7 @@ Select the smallest credible evidence for the outgoing diff. Report only command
 The normal development boundary is the existing host/sandbox, not Docker.
 
 ```bash
-pnpm setup
+pnpm run setup
 pnpm doctor
 pnpm dev
 pnpm dev:runtime

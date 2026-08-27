@@ -28,6 +28,18 @@ export type LarkCanaryEnabledConfig = Readonly<{
 export type LarkCanaryConfig =
   Readonly<{ enabled: false }> | LarkCanaryEnabledConfig;
 
+/**
+ * Whether this deployment composes the Product Work HTTP surface at all.
+ *
+ * Derived once from `AGENT_SERVER_PRODUCT_WORK_PLANE` so the surface gate, the
+ * browser BFF guard and composition answer "is Product Work available here?"
+ * the same way instead of re-deriving a bare string comparison at each call
+ * site. This is a statement about configuration, not about runtime
+ * reachability: a composed surface says the routes are installed, never that
+ * an execution plane is currently reachable behind them.
+ */
+export type ProductWorkSurface = 'composed' | 'absent';
+
 const OptionalConfigString = z.preprocess(
   (value) =>
     typeof value === 'string' && value.trim() === '' ? undefined : value,
@@ -283,9 +295,8 @@ export type AppConfig = Readonly<{
   directChatPlane: z.infer<
     typeof ConfigSchema
   >['AGENT_SERVER_DIRECT_CHAT_PLANE'];
-  productWorkPlane: z.infer<
-    typeof ConfigSchema
-  >['AGENT_SERVER_PRODUCT_WORK_PLANE'];
+  /** The single owned Product Work surface fact; see `ProductWorkSurface`. */
+  productWorkSurface: ProductWorkSurface;
   runtime?: {
     adapter: z.infer<typeof ConfigSchema>['RUNTIME_ADAPTER'];
   };
@@ -352,7 +363,10 @@ export function loadConfig(
     logLevel: parsed.data.LOG_LEVEL,
     serviceName: parsed.data.SERVICE_NAME,
     directChatPlane: parsed.data.AGENT_SERVER_DIRECT_CHAT_PLANE,
-    productWorkPlane: parsed.data.AGENT_SERVER_PRODUCT_WORK_PLANE,
+    productWorkSurface:
+      parsed.data.AGENT_SERVER_PRODUCT_WORK_PLANE === 'absent'
+        ? 'absent'
+        : 'composed',
     runtime: { adapter: parsed.data.RUNTIME_ADAPTER },
     runtimeMcp: {
       listenHost: parsed.data.RUNTIME_MCP_LISTEN_HOST,

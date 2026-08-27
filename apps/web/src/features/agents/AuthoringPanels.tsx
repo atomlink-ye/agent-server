@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 
+import { isFeatureUnavailable } from '../../api/feature-availability';
 import { ApiTransportError } from '../../api/transport';
 import { diagnosticsFrom } from '../work/components/definition-panel';
 import {
@@ -167,6 +168,14 @@ interface EditableInput {
   readonly maxLength: string;
 }
 
+// feature_unavailable means this workspace does not compose the Product
+// Work surface at all, so validate/plan/apply can never succeed here. This
+// message must stay product prose (not the raw upstream error string), and
+// the state must not offer Retry — see docs/frontend.md "Surface
+// availability".
+const CAPABILITY_UNAVAILABLE_MESSAGE =
+  'This workspace doesn’t currently offer Work execution. Capabilities can’t be previewed or saved here.';
+
 export function CapabilityBuilder({
   agent,
   onCancel,
@@ -196,7 +205,7 @@ export function CapabilityBuilder({
   const [diagnostics, setDiagnostics] = useState<DefinitionDiagnostics>([]);
   const [generatedSource, setGeneratedSource] = useState('');
   const [status, setStatus] = useState<
-    'idle' | 'previewing' | 'ready' | 'saving' | 'error'
+    'idle' | 'previewing' | 'ready' | 'saving' | 'unavailable' | 'error'
   >('idle');
   const [message, setMessage] = useState<string | null>(null);
 
@@ -245,6 +254,11 @@ export function CapabilityBuilder({
       );
       return { source, plan: nextPlan };
     } catch (reason) {
+      if (isFeatureUnavailable(reason)) {
+        setStatus('unavailable');
+        setMessage(CAPABILITY_UNAVAILABLE_MESSAGE);
+        return null;
+      }
       const nextDiagnostics = diagnosticsFrom(
         reason instanceof ApiTransportError ? reason.payload : undefined,
       );
@@ -262,7 +276,7 @@ export function CapabilityBuilder({
   }
 
   async function save(startAfterSave: boolean): Promise<void> {
-    if (status === 'saving') return;
+    if (status === 'saving' || status === 'unavailable') return;
     const ready = await preview();
     if (!ready) return;
     setStatus('saving');
@@ -274,6 +288,11 @@ export function CapabilityBuilder({
       setMessage('Capability saved to this Coworker’s Work Catalog.');
       if (startAfterSave) onStart(applied.versionId);
     } catch (reason) {
+      if (isFeatureUnavailable(reason)) {
+        setStatus('unavailable');
+        setMessage(CAPABILITY_UNAVAILABLE_MESSAGE);
+        return;
+      }
       setStatus('error');
       setMessage(reason instanceof Error ? reason.message : String(reason));
     }
@@ -578,7 +597,11 @@ export function CapabilityBuilder({
           <button
             type="button"
             onClick={() => void preview()}
-            disabled={status === 'previewing' || status === 'saving'}
+            disabled={
+              status === 'previewing' ||
+              status === 'saving' ||
+              status === 'unavailable'
+            }
           >
             {status === 'previewing' ? 'Resolving…' : 'Preview plan'}
           </button>
@@ -619,7 +642,7 @@ export function CapabilityBuilder({
         <button
           type="button"
           onClick={() => void save(false)}
-          disabled={status === 'saving'}
+          disabled={status === 'saving' || status === 'unavailable'}
         >
           {status === 'saving' ? 'Saving…' : 'Save capability'}
         </button>
@@ -627,7 +650,7 @@ export function CapabilityBuilder({
           className="agents-primary"
           type="button"
           onClick={() => void save(true)}
-          disabled={status === 'saving'}
+          disabled={status === 'saving' || status === 'unavailable'}
         >
           Save & start Work
         </button>

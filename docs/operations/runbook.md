@@ -4,7 +4,7 @@ This runbook covers the current Prove/MVE local and verification boundaries. It 
 
 ## API is not live
 
-1. Start host-native core development with `pnpm setup && pnpm dev`.
+1. Start host-native core development with `pnpm run setup && pnpm dev`.
 2. Run `pnpm doctor` and check `HOST`/`PORT` conflicts.
 3. Call `/health/live`; liveness does not depend on Paseo.
 4. Use `pnpm test:contract` when the question is public request/response behavior rather than local process state.

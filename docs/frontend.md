@@ -79,6 +79,42 @@ The facade must:
 
 Do not put credentials in `VITE_*` environment variables: Vite can embed them into browser assets.
 
+### Surface availability
+
+Not every deployment composes every product surface. When `AGENT_SERVER_PRODUCT_WORK_PLANE` is
+`absent`, the Product Work HTTP surfaces are never installed, so `/api/works`, `/api/work-items`,
+`/api/boards`, `/api/work-definitions` and `POST /api/agents/:agentId/capabilities` have no
+upstream to forward to. Capability binding is included because a Capability is a published Work
+Definition; the Coworker roster and profile stay reachable regardless.
+
+This is a statement about configuration, not about runtime reachability. A composed surface means
+the routes are installed, never that an execution plane is currently reachable behind them.
+
+The facade answers those paths with an explicit availability result rather than letting the
+browser see the generic control-plane 404:
+
+```json
+HTTP 503
+{ "error": { "code": "feature_unavailable", "message": "<browser-safe sentence>", "request_id": "..." } }
+```
+
+Two rules keep this honest:
+
+- **Availability is asserted from configuration at registration time**, from the same config the
+  composition root reads. The facade must never infer availability by inspecting an upstream
+  response — a 404 cannot be told apart from a mistyped URL, and treating one as the other would
+  launder real routing bugs into "feature off".
+- **The browser must distinguish four load states**, never fewer: `loading`, `ready` (which may be
+  legitimately empty), `unavailable`, and `error`. "You have nothing" may only be claimed from a
+  successful load. `unavailable` offers no Retry, because a retry cannot succeed; `error` does.
+  Controls that cannot succeed in the current state are disabled rather than offered.
+
+`ApiTransportError.code` carries the upstream `error.code` to the client, and
+`apps/web/src/api/feature-availability.ts` is the single place that recognises this condition.
+Any client wrapper that re-wraps a transport error must preserve `code`, or the signal is lost —
+this applies to mutation wrappers as well as read wrappers, and is guarded by
+`apps/web/src/features/work/clients/errors.test.ts`.
+
 ## Routing
 
 Current routes are deep links into the same workspace shell:
@@ -104,7 +140,7 @@ Work sub-selection such as tab, Run, or session transcript uses query state wher
 Canonical host-native commands remain:
 
 ```bash
-pnpm setup
+pnpm run setup
 pnpm doctor
 pnpm dev
 pnpm dev:runtime

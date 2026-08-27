@@ -3,11 +3,30 @@ import { serve } from '@hono/node-server';
 import { createApplication } from '../../bootstrap.js';
 import { loadConfig } from '../../shared/config.js';
 import { createLogger } from '../../shared/observability/logger.js';
+import { createBrowserFeatureAvailabilityGuard } from './routes/browser-feature-availability.js';
 import { registerBrowserContextRoutes } from './routes/browser-context.js';
 import { registerBrowserCoworkerRoutes } from './routes/browser-coworkers.js';
 import { registerBrowserWebRoutes } from './routes/browser-web.js';
 import { registerBrowserWorkOrganizationRoutes } from './routes/browser-work-organization.js';
 import { shutdownService } from './shutdown.js';
+
+// Work, Work Organization, and Work Definition authoring are only reachable
+// when the Product Work surface is composed (see
+// src/entrypoints/api/app.ts, the single owner of that gate). When it is
+// absent, guard their browser BFF surfaces from configuration rather than
+// letting the browser see a bare control-plane route_not_found -- the BFF
+// cannot tell an uninstalled route apart from a typo that way.
+//
+// /api/agents is deliberately NOT included here: the Coworker roster and
+// profile stay reachable regardless of Product Work availability, so the
+// Capability-binding route (POST /api/agents/:agentId/capabilities) asserts
+// availability explicitly inside its own handler instead.
+const PRODUCT_WORK_BROWSER_ROUTE_PREFIXES = [
+  '/api/works',
+  '/api/work-items',
+  '/api/boards',
+  '/api/work-definitions',
+] as const;
 
 const config = loadConfig();
 const logger = createLogger({
@@ -26,6 +45,15 @@ if (
     (account) => !account.disabled,
   );
   if (localAccount) process.env.AGENT_SERVER_SERVICE_TOKEN = localAccount.token;
+}
+if (config.productWorkSurface !== 'composed') {
+  app.use(
+    '*',
+    createBrowserFeatureAvailabilityGuard(
+      PRODUCT_WORK_BROWSER_ROUTE_PREFIXES,
+      'Work management is not available in this environment.',
+    ),
+  );
 }
 registerBrowserCoworkerRoutes(app, config);
 registerBrowserContextRoutes(app, config);

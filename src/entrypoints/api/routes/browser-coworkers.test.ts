@@ -16,6 +16,7 @@ function testConfig(): AppConfig {
   return {
     port: 3000,
     serviceAccounts: [],
+    productWorkSurface: 'composed',
   } as unknown as AppConfig;
 }
 

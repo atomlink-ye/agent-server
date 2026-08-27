@@ -9,7 +9,7 @@ Agent Server currently supports local development, deterministic verification, a
 
 ## Local environment ownership
 
-`tooling/dev/` owns host-native development. Use `pnpm setup`, `pnpm doctor`,
+`tooling/dev/` owns host-native development. Use `pnpm run setup`, `pnpm doctor`,
 and `pnpm dev` for core work, or `pnpm dev:runtime` when an execution runtime
 is required. Real PostgreSQL tests use an explicit native test database URL.
 

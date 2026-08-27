@@ -95,7 +95,7 @@ function config(): AppConfig {
     logLevel: 'error',
     serviceName: 'worker-api-test',
     directChatPlane: 'execution_runtime',
-    productWorkPlane: 'execution_runtime',
+    productWorkSurface: 'composed',
     teamCompletionApprovalRequired: false,
     skillRegistryRoot: '/tmp/worker-api-test',
     serviceAccounts: [

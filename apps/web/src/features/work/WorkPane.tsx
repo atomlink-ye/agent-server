@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import type { WorkListItem } from '@atomlink-ye/agent-server/product-contract';
 
@@ -6,20 +7,32 @@ import {
   latestRunSummary,
   productStatePresentation,
 } from './components/work-presentation';
-import { useWorkList } from './queries/use-work-list';
+import { useWorkList, type WorkListQuery } from './queries/use-work-list';
 
 export interface WorkPaneProps {
   readonly onCreateNew: () => void;
   readonly selectedWorkId?: string | null;
   readonly originConversationId?: string | null;
+  readonly onStatusChange?: (status: WorkListQuery['status']) => void;
 }
 
 export function WorkPane({
   onCreateNew,
   selectedWorkId = null,
   originConversationId = null,
+  onStatusChange,
 }: WorkPaneProps) {
-  const { status, works, error, refresh } = useWorkList();
+  const { status, works, refresh } = useWorkList();
+
+  // The list/detail split of a Work destination must read the same load
+  // state. WorkPane owns the fetch (so tests and assistive tech can treat it
+  // as the single source of truth for "is the list present?"), and reports
+  // status upward so the sibling detail pane never contradicts it.
+  useEffect(() => {
+    onStatusChange?.(status);
+  }, [status, onStatusChange]);
+
+  const controlsDisabled = status === 'unavailable' || status === 'error';
 
   return (
     <aside className="sidebar work-pane" aria-label="Work navigation">
@@ -29,17 +42,23 @@ export function WorkPane({
           <h1>Work</h1>
         </div>
         <div className="work-pane-actions">
-          <span
-            className="pane-count"
-            aria-label={`${works.length} Work items`}
-          >
-            {works.length}
-          </span>
+          {/* The count is only known once a load has actually succeeded. A
+              non-ready state must not assert "0 Work items" alongside a
+              message that says the count could not be determined. */}
+          {status === 'ready' ? (
+            <span
+              className="pane-count"
+              aria-label={`${works.length} Work items`}
+            >
+              {works.length}
+            </span>
+          ) : null}
           <button
             className="pane-refresh"
             type="button"
             data-testid="new-work-cta"
             aria-label="Create Work"
+            disabled={controlsDisabled}
             onClick={onCreateNew}
           >
             +
@@ -48,7 +67,7 @@ export function WorkPane({
             className="pane-refresh"
             type="button"
             aria-label="Refresh Work"
-            disabled={status === 'loading'}
+            disabled={status === 'loading' || controlsDisabled}
             onClick={refresh}
           >
             ↻
@@ -70,6 +89,19 @@ export function WorkPane({
           Getting your Work records…
         </p>
       ) : null}
+      {works.length === 0 && status === 'unavailable' ? (
+        <div
+          className="pane-placeholder"
+          data-testid="work-list-unavailable"
+          role="status"
+        >
+          <p className="eyebrow">Work isn&apos;t available here</p>
+          {/* feature_unavailable means this workspace does not compose the
+              Product Work surface at all. Offering Retry would be a false
+              promise, so this state has no Retry control. */}
+          <p>This workspace doesn&apos;t currently offer Work execution.</p>
+        </div>
+      ) : null}
       {works.length === 0 && status === 'error' ? (
         <div
           className="pane-placeholder"
@@ -77,10 +109,11 @@ export function WorkPane({
           role="alert"
         >
           <p className="eyebrow">Couldn&apos;t load Work</p>
-          <p>{error}</p>
           {/* A failed read must not be mistaken for a statement about any
-              Work's own state. The backend owns product state; an empty pane
-              here means "we could not ask", not "nothing needs you". */}
+              Work's own state, and must not leak the upstream error string
+              (which can be control-plane prose). The backend owns product
+              state; an empty pane here means "we could not ask", not
+              "nothing needs you". */}
           <p>
             This is a connection problem, not a statement about the status of
             any Work.

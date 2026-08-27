@@ -144,7 +144,7 @@ function config(): AppConfig {
     logLevel: 'error',
     serviceName: 'coworker-api-test',
     directChatPlane: 'execution_runtime',
-    productWorkPlane: 'execution_runtime',
+    productWorkSurface: 'composed',
     teamCompletionApprovalRequired: false,
     skillRegistryRoot: '/tmp/coworker-api-test',
     serviceAccounts: [

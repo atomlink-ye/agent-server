@@ -19,9 +19,11 @@ import type {
   CoworkerCapability,
 } from '@/features/agents/contracts';
 import { ApiTransportError } from '@/api/transport';
+import { isFeatureUnavailable } from '@/api/feature-availability';
 
 type StartState = 'idle' | 'loading' | 'creating' | 'starting' | 'error';
-type ErrorKind = 'validation' | 'load' | 'create' | 'start' | null;
+type ErrorKind =
+  'validation' | 'load' | 'create' | 'start' | 'unavailable' | null;
 type AuthoringState =
   'idle' | 'validating' | 'valid' | 'applying' | 'applied' | 'error';
 
@@ -202,6 +204,16 @@ export function NewWork({
       setCreatedWorkId(workId);
     } catch (reason) {
       setState('error');
+      if (isFeatureUnavailable(reason)) {
+        // This workspace does not compose the Product Work surface at all.
+        // Offering a Retry here would be a false promise, and the upstream
+        // reason string is control-plane prose, not user-facing copy.
+        setErrorKind('unavailable');
+        setMessage(
+          "Work was not created. This workspace doesn't currently offer Work execution.",
+        );
+        return;
+      }
       setErrorKind('create');
       setMessage(
         `Work was not created. ${reason instanceof Error ? reason.message : String(reason)}`,

@@ -19,7 +19,7 @@ pnpm install --frozen-lockfile
 Prepare the local state and start core development directly on the host:
 
 ```bash
-pnpm setup
+pnpm run setup
 pnpm doctor
 pnpm dev
 ```

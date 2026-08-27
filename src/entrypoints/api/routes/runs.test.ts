@@ -27,7 +27,7 @@ describe('run routes', () => {
         logLevel: 'error',
         serviceName: 'agent-server-test',
         directChatPlane: 'execution_runtime',
-        productWorkPlane: 'execution_runtime',
+        productWorkSurface: 'composed',
         teamCompletionApprovalRequired: false,
         skillRegistryRoot: '/tmp/agent-server-test/skill-registry',
         serviceAccounts: [
@@ -85,6 +85,7 @@ describe('run routes', () => {
       memoryModule: { installHttp() {} },
       resourceModule: {
         installHttp() {},
+        installProductWorkHttp() {},
         managedAgentDefinitions: {
           findDefinition: async () => null,
           findManagedDefinitionByTenant: async () => null,

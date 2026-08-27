@@ -66,7 +66,7 @@ export interface AppDependencies {
   readonly memoryModule: Pick<MemoryModule, 'installHttp'>;
   readonly resourceModule: Pick<
     ResourceModule,
-    'installHttp' | 'managedAgentDefinitions'
+    'installHttp' | 'installProductWorkHttp' | 'managedAgentDefinitions'
   >;
 }
 
@@ -78,7 +78,11 @@ export function createHttpApp(
   // These declarations gate only the Direct Chat/Product Work composition.
   // Generic /runs, /tasks, Sessions, and Team execution remain composed below.
   const directChatPlane = dependencies.config.directChatPlane;
-  const productWorkPlane = dependencies.config.productWorkPlane;
+  // app.ts is the single owner of the Product Work HTTP surface gate: every
+  // Product-Work-shaped route (Work, Work Organization, Work Definitions,
+  // and the Capability-binding route) is installed under this one fact.
+  const productWorkSurfaceComposed =
+    dependencies.config.productWorkSurface === 'composed';
 
   app.use('*', async (context, next) => {
     const requestId = context.req.header('x-request-id') ?? randomUUID();
@@ -105,12 +109,20 @@ export function createHttpApp(
   });
   registerRunRoutes(app, dependencies);
   registerTaskRoutes(app, dependencies);
-  if (productWorkPlane !== 'absent') {
+  if (productWorkSurfaceComposed) {
     dependencies.workModule?.installHttp(app, dependencies.config, {
       teamDriver: dependencies.teamDriver,
       teamExecutions: dependencies.teamExecutions,
     });
     dependencies.workOrganizationModule?.installHttp(app, dependencies.config);
+    // Definition authoring (Work Definitions) and Capability binding are
+    // Product-Work-shaped: a Capability is a published Work Definition, so
+    // both belong beside their siblings under the same surface gate rather
+    // than the resource module's unconditional registration.
+    dependencies.resourceModule.installProductWorkHttp(
+      app,
+      dependencies.config,
+    );
   }
   dependencies.memoryModule.installHttp(app, dependencies.config);
   dependencies.resourceModule.installHttp(app, dependencies.config);
@@ -150,7 +162,7 @@ export function createHttpApp(
       conversations: dependencies.conversations,
       dispatches: dependencies.chatDispatches,
       managedAgentDefinitions,
-      ...(productWorkPlane !== 'absent' &&
+      ...(productWorkSurfaceComposed &&
       dependencies.conversationWorkEntitlements
         ? { workEntitlements: dependencies.conversationWorkEntitlements }
         : {}),

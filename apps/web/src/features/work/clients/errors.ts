@@ -4,6 +4,7 @@ export class ProductReadError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    readonly code: string | null = null,
   ) {
     super(message);
     this.name = 'ProductReadError';
@@ -14,6 +15,13 @@ export class ProductMutationError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    // The upstream `error.code` must survive re-wrapping: a mutation that
+    // fails because the surface is not composed is `feature_unavailable`,
+    // and `isFeatureUnavailable()` matches structurally on `code`. Dropping
+    // it here would make a permanently-unavailable mutation indistinguishable
+    // from a transient failure, and the caller would offer a Retry that can
+    // never succeed.
+    readonly code: string | null = null,
   ) {
     super(message);
     this.name = 'ProductMutationError';
@@ -28,7 +36,7 @@ export async function readProductJson(
     return await apiTransport.request(path, init);
   } catch (error) {
     if (error instanceof ApiTransportError) {
-      throw new ProductReadError(error.message, error.status);
+      throw new ProductReadError(error.message, error.status, error.code);
     }
     throw error;
   }
@@ -36,7 +44,7 @@ export async function readProductJson(
 
 export function productMutationError(error: unknown): never {
   if (error instanceof ApiTransportError) {
-    throw new ProductMutationError(error.message, error.status);
+    throw new ProductMutationError(error.message, error.status, error.code);
   }
   throw error;
 }

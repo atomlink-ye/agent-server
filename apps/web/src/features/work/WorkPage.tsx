@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 
 import { NewWork } from './components/new-work';
 import { WorkDetailPage } from './pages/WorkDetailPage';
+import type { WorkListQuery } from './queries/use-work-list';
 import { workRootPath } from '../../app/routes';
 import { TitleBar } from '../../app/shell/TitleBar';
 import WorkPane from './WorkPane';
@@ -36,6 +37,11 @@ export function WorkPage({
     };
   }, [location.search]);
   const [showNewWork, setShowNewWork] = useState(authoringRequest.requested);
+  // WorkPane owns the Work list fetch; the list pane and this detail pane
+  // must read the same load state, so WorkPane reports its status here
+  // instead of this page racing a second, independent fetch.
+  const [workListStatus, setWorkListStatus] =
+    useState<WorkListQuery['status']>('loading');
 
   useEffect(() => {
     if (selectedWorkId) setShowNewWork(false);
@@ -55,7 +61,15 @@ export function WorkPage({
     navigate(`/tasks/${encodeURIComponent(returnWorkItemId)}`);
   };
 
-  const isEmpty = !showNewWork && !selectedWorkId;
+  const workUnavailable = workListStatus === 'unavailable';
+  const workListFailed = workListStatus === 'error';
+  // Unavailable must win over any requested authoring or selection state: a
+  // workspace that does not compose the Work surface cannot honor "start new
+  // Work" (including the ?new=1 golden-path deep link) or "open this Work",
+  // so the centred placeholder applies whenever Work is unavailable, not
+  // only when nothing else is selected. A transport blip (workListFailed)
+  // must NOT gate authoring the same way, since a retry there can succeed.
+  const isEmpty = workUnavailable || (!showNewWork && !selectedWorkId);
 
   return (
     <>
@@ -66,6 +80,7 @@ export function WorkPage({
         }}
         originConversationId={returnConversationId}
         selectedWorkId={selectedWorkId}
+        onStatusChange={setWorkListStatus}
       />
       <main className="chat-panel work-main">
         <TitleBar section="Work" />
@@ -88,14 +103,14 @@ export function WorkPage({
               </button>
             </div>
           ) : null}
-          {showNewWork ? (
+          {!workUnavailable && showNewWork ? (
             <NewWork
               originConversationId={returnConversationId}
               initialAgentId={authoringRequest.agentId}
               initialCapabilityVersionId={authoringRequest.capabilityVersionId}
             />
           ) : null}
-          {!showNewWork && selectedWorkId ? (
+          {!workUnavailable && !showNewWork && selectedWorkId ? (
             <WorkDetailPage
               workId={selectedWorkId}
               tab={workTab ?? undefined}
@@ -104,7 +119,29 @@ export function WorkPage({
               originConversationId={returnConversationId}
             />
           ) : null}
-          {isEmpty ? (
+          {isEmpty && workUnavailable ? (
+            <div
+              className="work-main-empty"
+              data-testid="work-page-unavailable"
+            >
+              <span className="work-main-icon" aria-hidden="true">
+                ✓
+              </span>
+              <h1>Work isn&apos;t available</h1>
+              <p>This workspace doesn&apos;t currently offer Work execution.</p>
+            </div>
+          ) : isEmpty && workListFailed ? (
+            <div className="work-main-empty" data-testid="work-page-error">
+              <span className="work-main-icon" aria-hidden="true">
+                ✓
+              </span>
+              <h1>Work could not be loaded</h1>
+              <p>
+                This is a connection problem, not a statement about the status
+                of any Work.
+              </p>
+            </div>
+          ) : isEmpty ? (
             <div className="work-main-empty">
               <span className="work-main-icon" aria-hidden="true">
                 ✓

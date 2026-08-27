@@ -71,6 +71,13 @@ export interface ResourceModule {
     config: AppConfig,
     options?: ResourceModuleHttpOptions,
   ): void;
+  /**
+   * Installs the Product-Work-shaped routes this module owns (Work
+   * Definition authoring and the Capability-binding route). The resource
+   * module does not decide when these are reachable -- app.ts is the single
+   * owner of that surface gate, and calls this only when it is composed.
+   */
+  installProductWorkHttp(app: Hono<ApiEnvironment>, config: AppConfig): void;
 }
 
 export interface CreateResourceModuleOptions {
@@ -148,7 +155,7 @@ export async function createResourceModule(
   });
 
   const directChatEnabled = options.config.directChatPlane !== 'absent';
-  const productWorkEnabled = options.config.productWorkPlane !== 'absent';
+  const productWorkEnabled = options.config.productWorkSurface === 'composed';
   const conversationRepository = directChatEnabled
     ? new PostgresConversationRepository(options.database)
     : undefined;
@@ -193,10 +200,6 @@ export async function createResourceModule(
     workDefinitionResolution,
     productWorkDefinitions,
     installHttp(app, config, httpOptions) {
-      registerProductWorkDefinitionRoutes(app, {
-        config,
-        definitions: productWorkDefinitions,
-      });
       const configuredCoworkerProvisioning =
         httpOptions?.coworkerProvisioning ?? defaultCoworkerProvisioning;
       registerAgentRoutes(app, {
@@ -213,17 +216,17 @@ export async function createResourceModule(
           ? { coworkerProvisioning: configuredCoworkerProvisioning }
           : {}),
       });
-      registerAgentWorkCatalogRoute(app, {
-        config,
-        agents: agentRegistry,
-        definitions: workDefinitionSources,
-      });
       registerWorkerRoutes(app, { config, workerRegistry });
       registerAgentProfileRoute(app, {
         config,
         agents: agentRegistry,
         resolution: agentResolutionApi,
-        definitions: workDefinitionSources,
+        // When the Product Work surface is absent, omit the definitions
+        // seam so the profile honestly reports no work bindings (the
+        // Coworker exists; it simply has no formal Capabilities here)
+        // rather than surfacing bindings the authoring surface is not
+        // installed to have produced.
+        ...(productWorkEnabled ? { definitions: workDefinitionSources } : {}),
       });
       registerTeamRoutes(app, {
         config,
@@ -232,6 +235,17 @@ export async function createResourceModule(
         environmentRegistry,
       });
       registerEnvironmentRoutes(app, { config, environmentRegistry });
+    },
+    installProductWorkHttp(app, config) {
+      registerProductWorkDefinitionRoutes(app, {
+        config,
+        definitions: productWorkDefinitions,
+      });
+      registerAgentWorkCatalogRoute(app, {
+        config,
+        agents: agentRegistry,
+        definitions: workDefinitionSources,
+      });
     },
   };
 }

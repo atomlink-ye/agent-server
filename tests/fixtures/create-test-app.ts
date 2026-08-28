@@ -81,6 +81,7 @@ export const testConfig = {
 } as const;
 
 export interface CreateTestAppOptions {
+  readonly runtimeAdapter?: 'none' | 'paseo';
   readonly startDispatcher?: boolean;
   readonly seedManagedAgent?: boolean;
   readonly seedPublishedEnvironment?: boolean;
@@ -145,18 +146,23 @@ export async function createTestApp(
     await seedPublishedEnvironment(database);
   if (options.databaseControl) options.databaseControl.database = database;
 
-  const effectiveConfig = options.workspaceId
-    ? {
-        ...testConfig,
-        serviceAccounts: testConfig.serviceAccounts.map((account) => ({
-          ...account,
-          workspaceId:
-            account.serviceAccountId === 'svc_enabled'
-              ? options.workspaceId!
-              : foreignWorkspaceId,
-        })),
-      }
-    : testConfig;
+  const effectiveConfig = {
+    ...testConfig,
+    ...(options.runtimeAdapter
+      ? { runtime: { adapter: options.runtimeAdapter } }
+      : {}),
+    ...(options.workspaceId
+      ? {
+          serviceAccounts: testConfig.serviceAccounts.map((account) => ({
+            ...account,
+            workspaceId:
+              account.serviceAccountId === 'svc_enabled'
+                ? options.workspaceId!
+                : foreignWorkspaceId,
+          })),
+        }
+      : {}),
+  };
   const fixtureWorkspaceId = options.workspaceId ?? defaultWorkspaceId;
   const now = new Date().toISOString();
   await (database as any).query(

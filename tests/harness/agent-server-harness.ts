@@ -13,6 +13,7 @@ import {
   seedGoldenPathWorld,
   seedPublishedAgentVersion,
   seedPublishedTeamVersion,
+  seedPublishedWorkerVersion,
   seedPublishedWorkDefinition,
   seedWorkEntitlement,
   seedWorkspace,
@@ -40,6 +41,7 @@ export async function createAgentServerHarness(
   // application is composed by the real createApplication inside createTestApp.
   const app = await createTestApp(undefined, {
     startDispatcher: false,
+    runtimeAdapter: 'paseo',
     runtimeProvider: provider,
     dispatcherControl,
     databaseControl,
@@ -77,6 +79,10 @@ export async function createAgentServerHarness(
         owner: Parameters<typeof seedPublishedTeamVersion>[1],
         options: Parameters<typeof seedPublishedTeamVersion>[2],
       ) => seedPublishedTeamVersion(db, owner, options),
+      workerVersion: (
+        owner: Parameters<typeof seedPublishedWorkerVersion>[1],
+        options?: Parameters<typeof seedPublishedWorkerVersion>[2],
+      ) => seedPublishedWorkerVersion(db, owner, options),
       conversation: (
         owner: Parameters<typeof seedConversation>[1],
         options?: Parameters<typeof seedConversation>[2],

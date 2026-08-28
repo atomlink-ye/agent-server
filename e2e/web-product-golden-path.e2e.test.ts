@@ -3,6 +3,9 @@ import { randomUUID } from 'node:crypto';
 import { chromium, type Browser, type Page } from 'playwright';
 import { afterEach, describe, expect, it } from 'vitest';
 
+// Local-only live canary. CI fixture successors intentionally do not claim
+// browser or provider fidelity for this flow; the real-runtime workflow owns it.
+
 const configuredBaseUrl = process.env.WEB_E2E_BASE_URL?.trim();
 if (!configuredBaseUrl)
   throw new Error(

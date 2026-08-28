@@ -8,6 +8,7 @@ import { seedEnvironmentVersion } from './environment.js';
 import { seedPublishedTeamVersion } from './team.js';
 import { seedActiveTask, seedPublishedWorkDefinition } from './work.js';
 import { seedWorkspace } from './workspace.js';
+import { seedPublishedWorkerVersion } from './worker.js';
 
 export {
   seedActiveTask,
@@ -18,6 +19,7 @@ export {
   seedPublishedTeamVersion,
   seedPublishedWorkDefinition,
   seedWorkspace,
+  seedPublishedWorkerVersion,
 };
 export type { HarnessOwner, SeedDatabase } from './types.js';
 

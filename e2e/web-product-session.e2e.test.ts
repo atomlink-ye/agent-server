@@ -8,6 +8,9 @@ import { join } from 'node:path';
 import { chromium, type Browser, type Page } from 'playwright';
 import { afterEach, describe, expect, it } from 'vitest';
 
+// Local-only live canary. CI fixture successors intentionally do not claim
+// browser or provider fidelity for this flow; the real-runtime workflow owns it.
+
 const baseUrlEnv = process.env.WEB_E2E_BASE_URL?.trim();
 const providerEnv = process.env.WEB_E2E_PROVIDER?.trim();
 const modelEnv = process.env.WEB_E2E_MODEL?.trim();

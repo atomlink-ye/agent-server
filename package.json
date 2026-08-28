@@ -51,6 +51,7 @@
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:scenario": "vitest run --config vitest.north-star.config.ts",
     "test:provider-fixtures": "vitest run --config vitest.north-star.config.ts tests/scenarios/provider-fixture-replay.scenario.test.ts",
+    "test:fixture-product": "vitest run --config vitest.north-star.config.ts tests/scenarios/fixture-product-successors.scenario.test.ts",
     "capture:provider-fixture": "node --import tsx tooling/dev/capture-provider-fixture.ts",
     "test:pg": "node --import tsx tooling/dev/run-real-pg-tests.ts",
     "test:contract": "vitest run --config vitest.contract.config.ts",

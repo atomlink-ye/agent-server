@@ -1,8 +1,16 @@
 {
   "schema_version": 1,
   "fixture_id": "baseline-completion",
-  "provenance": "hand_authored_contract_fixture",
-  "provider": { "family": "fixture", "model_class": "free-test-model" },
-  "request": { "turn": "continue" },
-  "completion": { "status": "completed", "text": "FIXTURE_REPLAY_OK" }
+  "provenance": "sanitized_live_capture",
+  "provider": {
+    "family": "normalized-provider",
+    "model_class": "normalized-model-class"
+  },
+  "request": {
+    "turn": "continue"
+  },
+  "completion": {
+    "status": "completed",
+    "text": "AGENT_SERVER_PROVIDER_SMOKE_NORMALIZED"
+  }
 }

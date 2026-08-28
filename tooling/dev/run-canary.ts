@@ -1,6 +1,13 @@
 import type { ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdir, mkdtemp, rm, unlink } from 'node:fs/promises';
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  unlink,
+} from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -51,6 +58,7 @@ const runtimeSmokeCommands: Partial<Record<CanaryKind, string[]>> = {
 };
 
 const webBootstrapEnvPath = resolve(repositoryRoot, '.local/web-bootstrap.env');
+const fixtureBrowserRootPrefix = 'fixture-browser-';
 
 async function fixtureBootstrapEnvironment(
   environment: NodeJS.ProcessEnv,
@@ -73,21 +81,21 @@ async function fixtureBootstrapEnvironment(
 }
 
 type FixturePGliteOwnership = Readonly<{
-  readonly pid: number;
+  readonly pid?: number;
   readonly statePath: string;
   readonly dataPath: string;
   readonly port: number;
   readonly ownerToken: string;
 }>;
 
-async function stopFixturePGlite(
+export async function stopFixturePGlite(
   ownership: FixturePGliteOwnership | undefined,
 ): Promise<void> {
   if (!ownership) return;
   const state = await readPGliteState(ownership.statePath);
   if (
     !state ||
-    state.pid !== ownership.pid ||
+    (ownership.pid !== undefined && state.pid !== ownership.pid) ||
     state.port !== ownership.port ||
     state.dataPath !== ownership.dataPath ||
     state.ownerToken !== ownership.ownerToken ||
@@ -110,6 +118,19 @@ async function stopFixturePGlite(
   }
   throw new Error(
     `fixture-browser PGlite child ${ownership.pid} did not stop on ${state.host}:${state.port}.`,
+  );
+}
+
+function cleanupErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+export function aggregateCleanupErrors(errors: readonly unknown[]): unknown {
+  if (errors.length === 0) return undefined;
+  if (errors.length === 1) return errors[0];
+  return new AggregateError(
+    errors,
+    `canary cleanup failed:\n${errors.map(cleanupErrorMessage).join('\n')}`,
   );
 }
 
@@ -214,6 +235,103 @@ async function fixturePGlitePort(): Promise<number> {
     if (await isPortFree(port)) return port;
   }
   throw new Error('fixture-browser could not find a free PGlite port.');
+}
+
+type TokenizedFixturePGliteState = Readonly<{
+  readonly kind: 'agent-server-pglite';
+  readonly pid: number;
+  readonly host: string;
+  readonly port: number;
+  readonly database: string;
+  readonly url: string;
+  readonly dataPath: string;
+  readonly ownerToken: string;
+}>;
+
+function parseTokenizedFixturePGliteState(
+  contents: string,
+): TokenizedFixturePGliteState | undefined {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(contents);
+  } catch {
+    return undefined;
+  }
+  if (typeof parsed !== 'object' || parsed === null) return undefined;
+  const state = parsed as Record<string, unknown>;
+  if (
+    state.kind !== 'agent-server-pglite' ||
+    typeof state.pid !== 'number' ||
+    !Number.isInteger(state.pid) ||
+    typeof state.host !== 'string' ||
+    state.host.length === 0 ||
+    typeof state.port !== 'number' ||
+    !Number.isInteger(state.port) ||
+    state.port < 1 ||
+    state.port > 65_535 ||
+    typeof state.database !== 'string' ||
+    state.database.length === 0 ||
+    typeof state.url !== 'string' ||
+    state.url.length === 0 ||
+    typeof state.dataPath !== 'string' ||
+    state.dataPath.length === 0 ||
+    typeof state.ownerToken !== 'string' ||
+    state.ownerToken.trim().length === 0
+  )
+    return undefined;
+  return state as TokenizedFixturePGliteState;
+}
+
+/**
+ * Remove abandoned fixture-browser roots without taking ownership of an
+ * ambiguous database. The raw state read is intentional: readPGliteState
+ * removes malformed state, which is unsafe during a best-effort sweep.
+ */
+export async function sweepStaleFixtureBrowserRoots(
+  runtimeDirectory = resolve(repositoryRoot, '.local/dev-runtime'),
+): Promise<void> {
+  let entries: Array<{
+    readonly name: string;
+    readonly isDirectory: () => boolean;
+  }>;
+  try {
+    entries = await readdir(runtimeDirectory, { withFileTypes: true });
+  } catch {
+    return;
+  }
+
+  for (const entry of entries) {
+    if (
+      !entry.isDirectory() ||
+      !entry.name.startsWith(fixtureBrowserRootPrefix) ||
+      entry.name.length === fixtureBrowserRootPrefix.length
+    )
+      continue;
+
+    const root = join(runtimeDirectory, entry.name);
+    const statePath = join(root, 'pglite.json');
+    const dataPath = join(root, 'pglite');
+    let stateContents: string;
+    try {
+      stateContents = await readFile(statePath, 'utf8');
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        await rm(root, { recursive: true, force: true }).catch(() => undefined);
+      }
+      continue;
+    }
+
+    const state = parseTokenizedFixturePGliteState(stateContents);
+    if (!state || state.dataPath !== dataPath) continue;
+    let hasLiveListener = false;
+    try {
+      hasLiveListener = await canConnectTcp(state.host, state.port);
+    } catch {
+      continue;
+    }
+    if (hasLiveListener) continue;
+    await rm(root, { recursive: true, force: true }).catch(() => undefined);
+  }
 }
 
 async function goldenPortsStillBusy(apiPort: number): Promise<number[]> {
@@ -376,6 +494,10 @@ export async function runHostCanary(
       await mkdir(join(repositoryRoot, '.local/dev-runtime'), {
         recursive: true,
       });
+    if (fixtureBrowser)
+      await sweepStaleFixtureBrowserRoots(
+        join(repositoryRoot, '.local/dev-runtime'),
+      );
     const fixtureRunRoot = fixtureBrowser
       ? await mkdtemp(
           join(repositoryRoot, '.local/dev-runtime/fixture-browser-'),
@@ -400,6 +522,15 @@ export async function runHostCanary(
           }
         : {}),
     };
+    if (fixtureBrowser) {
+      const paths = resolvePGlitePaths(devEnvironment);
+      fixturePGliteOwnership = {
+        statePath: paths.statePath,
+        dataPath: paths.dataPath,
+        port: fixturePort!,
+        ownerToken: fixtureOwnerToken!,
+      };
+    }
     const dev = spawnOwned(
       'node',
       [
@@ -444,11 +575,8 @@ export async function runHostCanary(
           'fixture-browser could not verify ownership of its spawned PGlite child.',
         );
       fixturePGliteOwnership = {
+        ...fixturePGliteOwnership!,
         pid: state.pid,
-        statePath: paths.statePath,
-        dataPath: paths.dataPath,
-        port,
-        ownerToken: fixtureOwnerToken!,
       };
     }
     throwIfCanaryInterrupted(lifecycle);
@@ -560,20 +688,18 @@ export async function runHostCanary(
       runError = error;
     }
   } finally {
-    let cleanupError: unknown;
+    const cleanupErrors: unknown[] = [];
     try {
       await lifecycle.cleanup();
     } catch (error) {
-      cleanupError = error;
+      cleanupErrors.push(error);
     }
     if (kind === 'golden-path' || kind === 'fixture-browser') {
       await rm(webBootstrapEnvPath, { force: true });
       const busy = await waitForGoldenPortsIdle(goldenApiPort ?? 3000);
       if (busy.length > 0) {
-        cleanupError = new Error(
-          `${kind} left ports in use: ${busy.join(', ')}${
-            cleanupError instanceof Error ? `; ${cleanupError.message}` : ''
-          }`,
+        cleanupErrors.push(
+          new Error(`${kind} left ports in use: ${busy.join(', ')}`),
         );
       }
     }
@@ -581,16 +707,17 @@ export async function runHostCanary(
       try {
         await stopFixturePGlite(fixturePGliteOwnership);
       } catch (error) {
-        cleanupError = error;
+        cleanupErrors.push(error);
       }
       try {
         if (fixturePGliteRoot)
           await rm(fixturePGliteRoot, { recursive: true, force: true });
       } catch (error) {
-        cleanupError ??= error;
+        cleanupErrors.push(error);
       }
     }
     lifecycle.dispose();
+    const cleanupError = aggregateCleanupErrors(cleanupErrors);
     const requestedSignal = lifecycle.requestedSignal();
     if (requestedSignal) {
       process.exitCode = canarySignalExitCodes[requestedSignal];

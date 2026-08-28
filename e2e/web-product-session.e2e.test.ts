@@ -9,7 +9,7 @@ import { chromium, type Browser, type Page } from 'playwright';
 import { afterEach, describe, expect, it } from 'vitest';
 
 // Live-provider/browser canary owned by the real-runtime workflow. Fixture
-// successors intentionally do not claim browser or provider fidelity for this flow.
+// successors cover browser-to-server fidelity but not provider, Paseo, or MCP fidelity.
 
 const baseUrlEnv = process.env.WEB_E2E_BASE_URL?.trim();
 const providerEnv = process.env.WEB_E2E_PROVIDER?.trim();

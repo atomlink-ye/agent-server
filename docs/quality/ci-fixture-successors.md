@@ -24,3 +24,26 @@ Coverage is intentionally bounded:
 
 These checks prove deterministic control-plane wiring and fixture replay, not
 provider, Paseo, MCP, or browser compatibility.
+
+## Live-canary contract
+
+The Release Engineer owns the local live canaries below. Run each affected
+canary before a release, when the provider SDK version changes, or when
+`src/adapters/paseo/**` changes. These are triggers, not a calendar cadence.
+
+| Canary                          | Exact command                   |
+| ------------------------------- | ------------------------------- |
+| Runtime/provider compatibility  | `pnpm canary:runtime`           |
+| Browser/API/runtime golden path | `pnpm canary:golden-path`       |
+| Agent-team collaboration flow   | `pnpm smoke:agent-team`         |
+| Team-registry Work flow         | `pnpm smoke:team-registry-work` |
+
+Record each run's date, SHA, command, exit code, and execution locus in the
+[live-provider canary receipts ledger](https://github.com/atomlink-ye/agent-server/issues/139),
+not in this repository. Those receipts are one-run evidence and must not enter
+Git; this document is the durable operating contract, not a results ledger.
+
+When `agent-team` retires from paid CI, that is an explicit coverage reduction:
+the merge gate will no longer prove provider compatibility, which no fixture
+can recover, nor collaboration-pipeline success with tool dispatch. A fixture
+must not be described as equivalent coverage for either claim.

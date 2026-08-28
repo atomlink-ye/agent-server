@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 
 import { chromium, type Browser, type Page } from 'playwright';
+
+import { outcomeHeadline } from '../apps/web/src/features/work/components/panes/outcome-headline.js';
 import { afterEach, describe, expect, it } from 'vitest';
 
 // Live-provider/browser canary. It is no longer run by any CI workflow: it is a
@@ -449,14 +451,15 @@ describe('web Product Golden Path', () => {
       expect(typeof resultSummary).toBe('string');
       expect((resultSummary as string).trim().length).toBeGreaterThan(0);
 
-      // The Overview headline is the same result, with Markdown emphasis
-      // characters stripped by outcomeHeadline. Deriving the expectation from
-      // the API response keeps this true for any provider text.
-      const headlineText = ((resultSummary as string).split('\n')[0] ?? '')
-        .replace(/[*_`]/gu, '')
-        .trim();
+      // The Overview headline is the same result, rendered through the
+      // production transform. This imports the very function the pane uses
+      // rather than re-deriving it: an earlier version of this assertion
+      // re-implemented the transform as "first line, strip emphasis", which
+      // agreed with production only for short plain text and would have failed
+      // live on a Markdown heading, a leading blank line, or a first line over
+      // the length limit.
       expect(await page.getByTestId('outcome-summary').innerText()).toContain(
-        headlineText,
+        outcomeHeadline(resultSummary as string),
       );
       // The Work produced something, so the Files surface must be able to show
       // it. This is the browser half of the run->file path: before the producer

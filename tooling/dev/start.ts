@@ -72,11 +72,22 @@ function describeRuntimeBanner(environment: NodeJS.ProcessEnv): string {
 function exitOf(
   child: ChildProcess,
 ): Promise<{ code: number; signal: string | null }> {
+  const exited = (): { code: number; signal: string | null } | undefined => {
+    if (child.exitCode === null && child.signalCode === null) return undefined;
+    return {
+      code: child.exitCode ?? (child.signalCode ? 1 : 0),
+      signal: child.signalCode,
+    };
+  };
+  const existing = exited();
+  if (existing) return Promise.resolve(existing);
   return new Promise((resolveExit) => {
     child.once('error', () => resolveExit({ code: 1, signal: null }));
     child.once('exit', (code, signal) =>
       resolveExit({ code: code ?? (signal ? 1 : 0), signal }),
     );
+    const afterSubscription = exited();
+    if (afterSubscription) resolveExit(afterSubscription);
   });
 }
 
@@ -132,15 +143,15 @@ export async function startHostDevelopment(
         : spawnOwned('node', apiArgs, { environment: applicationEnvironment });
     children.push(api);
 
-    await Promise.race([
-      waitForHttp(
-        `${apiBaseUrl}${mode === 'core' ? '/health/live' : '/health/ready'}`,
-        readinessTimeoutMs,
-      ),
-      exitOf(api).then(({ code }) => {
-        throw new Error(`Agent Server exited before readiness (${code})`);
-      }),
-    ]);
+    await waitForHttp(
+      `${apiBaseUrl}${mode === 'core' ? '/health/live' : '/health/ready'}`,
+      readinessTimeoutMs,
+      {
+        child: api,
+        environment: applicationEnvironment,
+        label: 'host-native dev API',
+      },
+    );
 
     const webBaseEnvironment = hostWebEnvironment({
       ...applicationEnvironment,

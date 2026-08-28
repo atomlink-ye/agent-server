@@ -90,29 +90,50 @@ type FixturePGliteOwnership = Readonly<{
 
 export async function stopFixturePGlite(
   ownership: FixturePGliteOwnership | undefined,
-): Promise<void> {
-  if (!ownership) return;
+): Promise<boolean> {
+  if (!ownership) return false;
   const state = await readPGliteState(ownership.statePath);
   if (
     !state ||
     (ownership.pid !== undefined && state.pid !== ownership.pid) ||
     state.port !== ownership.port ||
     state.dataPath !== ownership.dataPath ||
-    state.ownerToken !== ownership.ownerToken ||
-    !(await canConnectTcp(state.host, state.port))
+    state.ownerToken !== ownership.ownerToken
   )
-    return;
+    return false;
+
+  const processIsAlive = (pid: number): boolean => {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch (error) {
+      return (error as NodeJS.ErrnoException).code !== 'ESRCH';
+    }
+  };
+
+  const listenerIsAlive = await canConnectTcp(state.host, state.port);
+  const childIsAlive = processIsAlive(state.pid);
+  if (!childIsAlive && !listenerIsAlive) {
+    await unlink(ownership.statePath).catch((error: unknown) => {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    });
+    return true;
+  }
+  if (!childIsAlive || !listenerIsAlive) return false;
   try {
     process.kill(state.pid, 'SIGTERM');
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
   }
   for (let attempt = 0; attempt < 25; attempt += 1) {
-    if (!(await canConnectTcp(state.host, state.port))) {
+    if (
+      !processIsAlive(state.pid) &&
+      !(await canConnectTcp(state.host, state.port))
+    ) {
       await unlink(ownership.statePath).catch((error: unknown) => {
         if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
       });
-      return;
+      return true;
     }
     await new Promise<void>((resolveDelay) => setTimeout(resolveDelay, 200));
   }
@@ -263,6 +284,7 @@ function parseTokenizedFixturePGliteState(
     state.kind !== 'agent-server-pglite' ||
     typeof state.pid !== 'number' ||
     !Number.isInteger(state.pid) ||
+    state.pid < 1 ||
     typeof state.host !== 'string' ||
     state.host.length === 0 ||
     typeof state.port !== 'number' ||
@@ -314,16 +336,27 @@ export async function sweepStaleFixtureBrowserRoots(
     let stateContents: string;
     try {
       stateContents = await readFile(statePath, 'utf8');
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-        await rm(root, { recursive: true, force: true }).catch(() => undefined);
-      }
+    } catch {
+      // A PGlite server opens its listener before it publishes state. Without
+      // state, this root is ambiguous and must remain untouched.
       continue;
     }
 
     const state = parseTokenizedFixturePGliteState(stateContents);
     if (!state || state.dataPath !== dataPath) continue;
-    let hasLiveListener = false;
+    let hasLiveProcess: boolean;
+    try {
+      process.kill(state.pid, 0);
+      hasLiveProcess = true;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ESRCH') {
+        hasLiveProcess = false;
+      } else {
+        continue;
+      }
+    }
+    if (hasLiveProcess) continue;
+    let hasLiveListener: boolean;
     try {
       hasLiveListener = await canConnectTcp(state.host, state.port);
     } catch {
@@ -695,25 +728,35 @@ export async function runHostCanary(
       cleanupErrors.push(error);
     }
     if (kind === 'golden-path' || kind === 'fixture-browser') {
-      await rm(webBootstrapEnvPath, { force: true });
-      const busy = await waitForGoldenPortsIdle(goldenApiPort ?? 3000);
-      if (busy.length > 0) {
-        cleanupErrors.push(
-          new Error(`${kind} left ports in use: ${busy.join(', ')}`),
-        );
+      try {
+        await rm(webBootstrapEnvPath, { force: true });
+      } catch (error) {
+        cleanupErrors.push(error);
+      }
+      try {
+        const busy = await waitForGoldenPortsIdle(goldenApiPort ?? 3000);
+        if (busy.length > 0) {
+          cleanupErrors.push(
+            new Error(`${kind} left ports in use: ${busy.join(', ')}`),
+          );
+        }
+      } catch (error) {
+        cleanupErrors.push(error);
       }
     }
     if (kind === 'fixture-browser') {
+      let fixturePGliteStopped = false;
       try {
-        await stopFixturePGlite(fixturePGliteOwnership);
+        fixturePGliteStopped = await stopFixturePGlite(fixturePGliteOwnership);
       } catch (error) {
         cleanupErrors.push(error);
       }
-      try {
-        if (fixturePGliteRoot)
+      if (fixturePGliteStopped && fixturePGliteRoot) {
+        try {
           await rm(fixturePGliteRoot, { recursive: true, force: true });
-      } catch (error) {
-        cleanupErrors.push(error);
+        } catch (error) {
+          cleanupErrors.push(error);
+        }
       }
     }
     lifecycle.dispose();

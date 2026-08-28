@@ -6,6 +6,7 @@ import {
   rm,
   writeFile,
 } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -27,6 +28,7 @@ import {
   stopFixturePGlite,
   sweepStaleFixtureBrowserRoots,
 } from './run-canary.js';
+import { isPortFree } from './host-native.js';
 
 const temporaryDirectories: string[] = [];
 
@@ -48,10 +50,23 @@ async function createFixtureRoot(
   return root;
 }
 
-function pgliteState(root: string, port: number, ownerToken?: string) {
+async function busyFixturePorts(): Promise<number[]> {
+  const ports: number[] = [];
+  for (let port = 55_433; port <= 55_532; port += 1) {
+    if (!(await isPortFree(port))) ports.push(port);
+  }
+  return ports;
+}
+
+function pgliteState(
+  root: string,
+  port: number,
+  ownerToken?: string,
+  pid = process.pid,
+) {
   return {
     kind: 'agent-server-pglite' as const,
-    pid: process.pid,
+    pid,
     host: '127.0.0.1',
     port,
     database: 'postgres',
@@ -68,7 +83,7 @@ describe('fixture-browser stale-root sweep', () => {
     canConnectTcp.mockResolvedValue(false);
   });
 
-  it('removes roots without state or with stale matching tokenized state', async () => {
+  it('leaves state-less roots but removes a fully identified stopped root', async () => {
     const runtimeDirectory = await mkdtemp(
       join(tmpdir(), 'agent-server-fixture-sweep-'),
     );
@@ -81,20 +96,33 @@ describe('fixture-browser stale-root sweep', () => {
       runtimeDirectory,
       'fixture-browser-stale',
     );
+    const stalePid = 9_876_543;
+    const kill = vi.spyOn(process, 'kill').mockImplementation((pid, signal) => {
+      if (pid === stalePid && signal === 0) {
+        const error = new Error('no such process') as NodeJS.ErrnoException;
+        error.code = 'ESRCH';
+        throw error;
+      }
+      return true;
+    });
     await writeFile(
       join(stale, 'pglite.json'),
-      JSON.stringify(pgliteState(stale, 55_531, 'stale-owner-token')),
+      JSON.stringify(pgliteState(stale, 55_531, 'stale-owner-token', stalePid)),
     );
 
-    await sweepStaleFixtureBrowserRoots(runtimeDirectory);
+    try {
+      await sweepStaleFixtureBrowserRoots(runtimeDirectory);
+    } finally {
+      kill.mockRestore();
+    }
 
-    await expect(readFile(join(withoutState, 'missing'))).rejects.toMatchObject(
-      { code: 'ENOENT' },
-    );
+    await expect(readdir(withoutState)).resolves.toEqual([]);
     await expect(readFile(join(stale, 'missing'))).rejects.toMatchObject({
       code: 'ENOENT',
     });
-    await expect(readdir(runtimeDirectory)).resolves.toEqual([]);
+    await expect(readdir(runtimeDirectory)).resolves.toEqual([
+      'fixture-browser-no-state',
+    ]);
   });
 
   it('leaves live, malformed, tokenless, and mismatching roots untouched', async () => {
@@ -161,7 +189,18 @@ describe('fixture-browser PGlite cleanup', () => {
   });
 
   it('recovers tokenized ownership registered before readiness', async () => {
-    const kill = vi.spyOn(process, 'kill').mockReturnValue(true);
+    let terminated = false;
+    const kill = vi.spyOn(process, 'kill').mockImplementation((_, signal) => {
+      if (signal === 0) {
+        if (!terminated) return true;
+        const error = new Error('no such process') as NodeJS.ErrnoException;
+        error.code = 'ESRCH';
+        throw error;
+      }
+      terminated = true;
+      return true;
+    });
+    const { pid: _pid, ...preReadinessOwnership } = ownership;
     readPGliteState.mockResolvedValue({
       pid: ownership.pid,
       host: '127.0.0.1',
@@ -171,7 +210,7 @@ describe('fixture-browser PGlite cleanup', () => {
     });
     canConnectTcp.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
 
-    await expect(stopFixturePGlite(ownership)).resolves.toBeUndefined();
+    await expect(stopFixturePGlite(preReadinessOwnership)).resolves.toBe(true);
 
     expect(kill).toHaveBeenCalledWith(ownership.pid, 'SIGTERM');
     kill.mockRestore();
@@ -187,7 +226,7 @@ describe('fixture-browser PGlite cleanup', () => {
       ownerToken: ownership.ownerToken,
     });
 
-    await expect(stopFixturePGlite(ownership)).resolves.toBeUndefined();
+    await expect(stopFixturePGlite(ownership)).resolves.toBe(false);
 
     expect(kill).not.toHaveBeenCalled();
     kill.mockRestore();
@@ -205,4 +244,55 @@ describe('fixture-browser PGlite cleanup', () => {
     );
     expect((aggregated as Error).message).toContain('listener remained busy');
   });
+});
+
+describe('fixture-browser pre-readiness failure', () => {
+  it('exits a real canary subprocess before the bounded deadline', async () => {
+    const runtimeDirectory = join(process.cwd(), '.local/dev-runtime');
+    const rootsBefore = (await readdir(runtimeDirectory)).filter((entry) =>
+      entry.startsWith('fixture-browser-'),
+    );
+    const portsBefore = await busyFixturePorts();
+    const startedAt = Date.now();
+    const child = spawn(
+      process.execPath,
+      [
+        '--import',
+        'tsx',
+        'tooling/dev/run-canary.ts',
+        'fixture-browser',
+        'e2e/web-product-golden-path.e2e.test.ts',
+        'e2e/web-product-session.e2e.test.ts',
+      ],
+      {
+        cwd: process.cwd(),
+        env: {
+          ...process.env,
+          SERVICE_ACCOUNTS_JSON: 'not-json',
+        },
+        stdio: 'ignore',
+      },
+    );
+    let exceededDeadline = false;
+    const deadline = setTimeout(() => {
+      exceededDeadline = true;
+      child.kill('SIGTERM');
+    }, 15_000);
+    const outcome = await new Promise<{ code: number | null }>(
+      (resolveExit) => {
+        child.once('exit', (code) => resolveExit({ code }));
+      },
+    );
+    clearTimeout(deadline);
+
+    expect(exceededDeadline).toBe(false);
+    expect(outcome.code).toBe(1);
+    expect(Date.now() - startedAt).toBeLessThan(15_000);
+    await expect(
+      readdir(runtimeDirectory).then((entries) =>
+        entries.filter((entry) => entry.startsWith('fixture-browser-')),
+      ),
+    ).resolves.toEqual(rootsBefore);
+    await expect(busyFixturePorts()).resolves.toEqual(portsBefore);
+  }, 20_000);
 });

@@ -22,6 +22,8 @@ import {
   loadLocalDotEnv,
   localServiceAccountsJson,
   ownedChildLogPath,
+  processArgumentsContain,
+  processOwnsTcpListener,
   prepareHostNativeEnvironment,
   readPGliteState,
   readRuntimeLogTail,
@@ -120,6 +122,11 @@ export async function stopFixturePGlite(
     return true;
   }
   if (!childIsAlive || !listenerIsAlive) return false;
+  if (
+    !(await processOwnsTcpListener(state.pid, state.host, state.port)) ||
+    !(await processArgumentsContain(state.pid, ownership.ownerToken))
+  )
+    return false;
   try {
     process.kill(state.pid, 'SIGTERM');
   } catch (error) {

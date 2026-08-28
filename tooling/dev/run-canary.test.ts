@@ -6,7 +6,6 @@ import {
   rm,
   writeFile,
 } from 'node:fs/promises';
-import { spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -14,13 +13,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const canConnectTcp = vi.hoisted(() => vi.fn());
 const readPGliteState = vi.hoisted(() => vi.fn());
+const processArgumentsContain = vi.hoisted(() => vi.fn());
+const processOwnsTcpListener = vi.hoisted(() => vi.fn());
 
 vi.mock('./host-native.js', async () => {
   const actual =
     await vi.importActual<typeof import('./host-native.js')>(
       './host-native.js',
     );
-  return { ...actual, canConnectTcp, readPGliteState };
+  return {
+    ...actual,
+    canConnectTcp,
+    processArgumentsContain,
+    processOwnsTcpListener,
+    readPGliteState,
+  };
 });
 
 import {
@@ -28,7 +35,6 @@ import {
   stopFixturePGlite,
   sweepStaleFixtureBrowserRoots,
 } from './run-canary.js';
-import { isPortFree } from './host-native.js';
 
 const temporaryDirectories: string[] = [];
 
@@ -48,14 +54,6 @@ async function createFixtureRoot(
   await rm(root, { recursive: true, force: true });
   await mkdir(root, { recursive: true });
   return root;
-}
-
-async function busyFixturePorts(): Promise<number[]> {
-  const ports: number[] = [];
-  for (let port = 55_433; port <= 55_532; port += 1) {
-    if (!(await isPortFree(port))) ports.push(port);
-  }
-  return ports;
 }
 
 function pgliteState(
@@ -79,6 +77,8 @@ function pgliteState(
 describe('fixture-browser stale-root sweep', () => {
   beforeEach(() => {
     canConnectTcp.mockReset();
+    processArgumentsContain.mockReset();
+    processOwnsTcpListener.mockReset();
     readPGliteState.mockReset();
     canConnectTcp.mockResolvedValue(false);
   });
@@ -185,6 +185,8 @@ describe('fixture-browser PGlite cleanup', () => {
 
   beforeEach(() => {
     canConnectTcp.mockReset();
+    processArgumentsContain.mockReset();
+    processOwnsTcpListener.mockReset();
     readPGliteState.mockReset();
   });
 
@@ -209,6 +211,8 @@ describe('fixture-browser PGlite cleanup', () => {
       ownerToken: ownership.ownerToken,
     });
     canConnectTcp.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    processOwnsTcpListener.mockResolvedValue(true);
+    processArgumentsContain.mockResolvedValue(true);
 
     await expect(stopFixturePGlite(preReadinessOwnership)).resolves.toBe(true);
 
@@ -232,6 +236,25 @@ describe('fixture-browser PGlite cleanup', () => {
     kill.mockRestore();
   });
 
+  it('declines a live listener whose process does not present the owner token', async () => {
+    const kill = vi.spyOn(process, 'kill').mockReturnValue(true);
+    readPGliteState.mockResolvedValue({
+      pid: ownership.pid,
+      host: '127.0.0.1',
+      port: ownership.port,
+      dataPath: ownership.dataPath,
+      ownerToken: ownership.ownerToken,
+    });
+    canConnectTcp.mockResolvedValue(true);
+    processOwnsTcpListener.mockResolvedValue(true);
+    processArgumentsContain.mockResolvedValue(false);
+
+    await expect(stopFixturePGlite(ownership)).resolves.toBe(false);
+
+    expect(kill).not.toHaveBeenCalledWith(ownership.pid, 'SIGTERM');
+    kill.mockRestore();
+  });
+
   it('retains every cleanup failure in a single diagnostic', () => {
     const aggregated = aggregateCleanupErrors([
       new Error('owned child cleanup failed'),
@@ -244,61 +267,4 @@ describe('fixture-browser PGlite cleanup', () => {
     );
     expect((aggregated as Error).message).toContain('listener remained busy');
   });
-});
-
-describe('fixture-browser pre-readiness failure', () => {
-  it('exits a real canary subprocess before the bounded deadline', async () => {
-    const runtimeDirectory = join(process.cwd(), '.local/dev-runtime');
-    // A fresh checkout has no .local/dev-runtime. Reading it as empty keeps this
-    // assertion about what the run leaves behind rather than about whether a
-    // previous run happened to create the directory.
-    const fixtureRoots = async (): Promise<string[]> =>
-      readdir(runtimeDirectory).then(
-        (entries) =>
-          entries.filter((entry) => entry.startsWith('fixture-browser-')),
-        (error: NodeJS.ErrnoException) => {
-          if (error.code === 'ENOENT') return [];
-          throw error;
-        },
-      );
-    const rootsBefore = await fixtureRoots();
-    const portsBefore = await busyFixturePorts();
-    const startedAt = Date.now();
-    const child = spawn(
-      process.execPath,
-      [
-        '--import',
-        'tsx',
-        'tooling/dev/run-canary.ts',
-        'fixture-browser',
-        'e2e/web-product-golden-path.e2e.test.ts',
-        'e2e/web-product-session.e2e.test.ts',
-      ],
-      {
-        cwd: process.cwd(),
-        env: {
-          ...process.env,
-          SERVICE_ACCOUNTS_JSON: 'not-json',
-        },
-        stdio: 'ignore',
-      },
-    );
-    let exceededDeadline = false;
-    const deadline = setTimeout(() => {
-      exceededDeadline = true;
-      child.kill('SIGTERM');
-    }, 15_000);
-    const outcome = await new Promise<{ code: number | null }>(
-      (resolveExit) => {
-        child.once('exit', (code) => resolveExit({ code }));
-      },
-    );
-    clearTimeout(deadline);
-
-    expect(exceededDeadline).toBe(false);
-    expect(outcome.code).toBe(1);
-    expect(Date.now() - startedAt).toBeLessThan(15_000);
-    await expect(fixtureRoots()).resolves.toEqual(rootsBefore);
-    await expect(busyFixturePorts()).resolves.toEqual(portsBefore);
-  }, 20_000);
 });

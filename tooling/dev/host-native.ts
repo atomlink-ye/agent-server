@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from 'node:child_process';
+import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import {
   access,
   mkdir,
@@ -13,6 +13,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createConnection, createServer } from 'node:net';
 import { Writable, type WritableOptions } from 'node:stream';
+import { promisify } from 'node:util';
 
 import { Pool } from 'pg';
 
@@ -47,6 +48,7 @@ const MAX_LOG_TAIL_CHARACTERS = 16_384;
 const MAX_LOG_TAIL_BYTES = 64 * 1024;
 const PGLITE_STATE_READ_ATTEMPTS = 5;
 const PGLITE_STATE_READ_RETRY_MS = 25;
+const execFileAsync = promisify(execFile);
 
 type ChildLifecycle = Readonly<{
   readonly promise: Promise<ChildLifecycleOutcome>;
@@ -250,6 +252,7 @@ export function hostFixtureRuntimeEnvironment(
     // That leaves an absent database configuration visible to
     // prepareHostNativeEnvironment, which can then select its PGlite fallback.
     ...base,
+    HOST_NATIVE_FORCE_PGLITE: '1',
     NODE_ENV: base.NODE_ENV ?? 'development',
     HOST: base.HOST ?? '127.0.0.1',
     PORT: base.PORT ?? '3000',
@@ -481,6 +484,9 @@ export async function connectablePostgres(
 export async function ensureDevelopmentDatabase(
   environment: NodeJS.ProcessEnv,
 ): Promise<string> {
+  if (environment.HOST_NATIVE_FORCE_PGLITE === '1') {
+    return ensurePGliteDatabase(environment);
+  }
   const connectionString = defaultHostDatabaseUrl(environment);
   const initial = await connectablePostgres(connectionString);
   if (initial.ok) return connectionString;
@@ -696,6 +702,9 @@ async function ensurePGliteDatabase(
         '--import',
         'tsx',
         resolve(repositoryRoot, 'tooling/dev/pglite-server.ts'),
+        ...(environment.PGLITE_OWNER_TOKEN?.trim()
+          ? ['--owner-token', environment.PGLITE_OWNER_TOKEN.trim()]
+          : []),
       ],
       {
         cwd: repositoryRoot,
@@ -772,6 +781,50 @@ export async function canConnectTcp(
       resolveConnected(false);
     });
   });
+}
+
+/**
+ * Returning false is deliberately conservative: fixture teardown must not
+ * signal a process unless this host can establish its PID-to-listener binding.
+ */
+export async function processOwnsTcpListener(
+  pid: number,
+  host: string,
+  port: number,
+): Promise<boolean> {
+  try {
+    const { stdout } = await execFileAsync('lsof', [
+      '-nP',
+      '-t',
+      `-iTCP@${host}:${port}`,
+      '-sTCP:LISTEN',
+    ]);
+    const listenerPids = stdout
+      .split(/\s+/u)
+      .filter(Boolean)
+      .map((value) => Number.parseInt(value, 10));
+    return listenerPids.length === 1 && listenerPids[0] === pid;
+  } catch {
+    return false;
+  }
+}
+
+/** The owner token is passed in argv to authenticate the listener process. */
+export async function processArgumentsContain(
+  pid: number,
+  value: string,
+): Promise<boolean> {
+  try {
+    const { stdout } = await execFileAsync('ps', [
+      '-p',
+      String(pid),
+      '-o',
+      'command=',
+    ]);
+    return stdout.includes(value);
+  } catch {
+    return false;
+  }
 }
 
 function runtimeLogName(value: string): string {

@@ -60,7 +60,15 @@ const statePath = resolve(
   process.env.PGLITE_STATE_PATH?.trim() || '.local/dev-runtime/pglite.json',
 );
 const database = process.env.PGLITE_DATABASE?.trim() || 'postgres';
-const ownerToken = process.env.PGLITE_OWNER_TOKEN?.trim() || undefined;
+const ownerTokenArgument = process.argv.indexOf('--owner-token');
+const ownerTokenFromArguments =
+  ownerTokenArgument >= 0
+    ? process.argv[ownerTokenArgument + 1]?.trim()
+    : undefined;
+const ownerToken =
+  ownerTokenFromArguments ||
+  process.env.PGLITE_OWNER_TOKEN?.trim() ||
+  undefined;
 const url = `postgresql://postgres:postgres@${host}:${port}/${database}`;
 
 if (!Number.isInteger(port) || port < 1 || port > 65_535) {

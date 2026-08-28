@@ -18,6 +18,7 @@ export interface ExecutionRunFact {
   readonly provider: string | null;
   readonly model: string | null;
   readonly resultPresent: boolean;
+  readonly resultText: string | null;
   readonly errorCode: string | null;
   readonly actorId: string | null;
   readonly workItemId: string | null;

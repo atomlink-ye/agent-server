@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 
 import { chromium, type Browser, type Page } from 'playwright';
+
+import { outcomeHeadline } from '../apps/web/src/features/work/components/panes/outcome-headline.js';
 import { afterEach, describe, expect, it } from 'vitest';
 
 // Live-provider/browser canary. It is no longer run by any CI workflow: it is a
@@ -427,19 +429,37 @@ describe('web Product Golden Path', () => {
         state: 'visible',
         timeout: 60_000,
       });
-      // A single-Coworker (non-Team) Work never has a plaintext result_summary in
-      // the current implementation: ExecutionFactQuery only selects whether the
-      // Run's result is present, never its text, and singleAgentProjectionFacts
-      // hard-codes result_summary to null. Only Team runs populate final_text via
-      // completeTeamRunAtomically. So the Overview pane's outcome-summary falls
-      // back to the honest "not_present" capture-status label instead of the
-      // Coworker's plaintext output — that's a deliberate consistency choice (the
-      // Runs tab's mapRun similarly exposes only redacted/not_present, never
-      // plaintext), not a bug. Wiring plaintext capture for single-Agent Work is
-      // tracked as a Round 2 UX follow-up, so this assertion checks the capture
-      // status label rather than a company name that will not appear.
+      // Assertions here are relational, never a fixed literal: this file is the
+      // fixture-browser lane AND the named live provider canary, where the
+      // provider's text is not fixed. Pinning the fixture's own string would
+      // pass in CI and fail every live run.
+      const completedRunRead = await page.request.get(
+        `/api/works/${createdWorkId}/runs/${runId}`,
+        { headers: { accept: 'application/json' } },
+      );
+      expect(completedRunRead.ok()).toBe(true);
+      const completedRunBody = (await completedRunRead.json()) as {
+        work_run?: {
+          result_summary?: unknown;
+          result_capture_status?: unknown;
+        };
+      };
+      const resultSummary = completedRunBody.work_run?.result_summary;
+      // The capture status must describe a result that actually exists, and the
+      // summary must be real text rather than a placeholder.
+      expect(completedRunBody.work_run?.result_capture_status).toBe('present');
+      expect(typeof resultSummary).toBe('string');
+      expect((resultSummary as string).trim().length).toBeGreaterThan(0);
+
+      // The Overview headline is the same result, rendered through the
+      // production transform. This imports the very function the pane uses
+      // rather than re-deriving it: an earlier version of this assertion
+      // re-implemented the transform as "first line, strip emphasis", which
+      // agreed with production only for short plain text and would have failed
+      // live on a Markdown heading, a leading blank line, or a first line over
+      // the length limit.
       expect(await page.getByTestId('outcome-summary').innerText()).toContain(
-        'No result summary is present.',
+        outcomeHeadline(resultSummary as string),
       );
       // The Work produced something, so the Files surface must be able to show
       // it. This is the browser half of the run->file path: before the producer
@@ -474,14 +494,11 @@ describe('web Product Golden Path', () => {
       expect(await page.locator('.files-file-viewer h2').innerText()).toBe(
         `runs/${runId}/result.md`,
       );
-      // Content is asserted as non-empty rather than by value: this file is
-      // also the live canary, where the provider's text is not fixed. An
-      // empty-file assertion would pass against exactly the regression that
-      // motivated this work.
+      // Files and Overview must tell the same story about the same run. This is
+      // the round's actual outcome, and it holds for any provider text.
       expect(
-        (await page.locator('.files-file-viewer pre').innerText()).trim()
-          .length,
-      ).toBeGreaterThan(0);
+        (await page.locator('.files-file-viewer pre').innerText()).trim(),
+      ).toBe((resultSummary as string).trim());
 
       await page.goBack();
       await page.getByTestId('work-detail-shell').waitFor({

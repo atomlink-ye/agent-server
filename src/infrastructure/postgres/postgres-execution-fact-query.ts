@@ -25,6 +25,7 @@ interface RunRow {
   provider: string | null;
   model: string | null;
   result_present: boolean;
+  result_text: string | null;
   error_code: string | null;
   actor_id: string | null;
   work_item_id: string | null;
@@ -86,6 +87,7 @@ export class PostgresExecutionFactQuery implements ExecutionFactQuery {
               r.runtime->>'provider' AS provider,
               r.runtime->>'model' AS model,
               (r.result IS NOT NULL) AS result_present,
+              r.result->>'text' AS result_text,
               r.error->>'code' AS error_code,
               t.team_member_run_id AS actor_id,
               attempt.work_item_id AS work_item_id,
@@ -112,6 +114,7 @@ export class PostgresExecutionFactQuery implements ExecutionFactQuery {
       provider: row.provider ?? null,
       model: row.model ?? null,
       resultPresent: row.result_present ?? false,
+      resultText: row.result_text ?? null,
       errorCode: row.error_code ?? null,
       actorId: row.actor_id ?? null,
       workItemId: row.work_item_id ?? null,

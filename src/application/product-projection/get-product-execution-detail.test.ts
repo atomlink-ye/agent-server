@@ -83,6 +83,7 @@ function service(
         provider: 'opencode',
         model: 'model',
         resultPresent: true,
+        resultText: 'Finished research.',
         errorCode: null,
         actorId,
         workItemId,

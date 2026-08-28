@@ -286,6 +286,14 @@ function singleAgentProjectionFacts(
   );
   const complete =
     runs.length > 0 && runs.every((run) => run.status === 'succeeded');
+  const rootRun = runs.find((run) => run.taskId === rootTaskId);
+  const finalText =
+    complete &&
+    rootRun?.status === 'succeeded' &&
+    rootRun.resultText !== null &&
+    rootRun.resultText.trim().length > 0
+      ? rootRun.resultText
+      : null;
   return {
     rootTaskId,
     teamRunId: null,
@@ -299,8 +307,8 @@ function singleAgentProjectionFacts(
       completionRequestedByRunId: null,
       approvalAccepted: false,
       rejectionRecorded: false,
-      finalText: null,
-      finalTextPresent: false,
+      finalText,
+      finalTextPresent: finalText !== null,
     },
   };
 }

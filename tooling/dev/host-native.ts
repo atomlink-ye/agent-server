@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from 'node:child_process';
+import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import {
   access,
   mkdir,
@@ -13,6 +13,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createConnection, createServer } from 'node:net';
 import { Writable, type WritableOptions } from 'node:stream';
+import { promisify } from 'node:util';
 
 import { Pool } from 'pg';
 
@@ -47,6 +48,7 @@ const MAX_LOG_TAIL_CHARACTERS = 16_384;
 const MAX_LOG_TAIL_BYTES = 64 * 1024;
 const PGLITE_STATE_READ_ATTEMPTS = 5;
 const PGLITE_STATE_READ_RETRY_MS = 25;
+const execFileAsync = promisify(execFile);
 
 type ChildLifecycle = Readonly<{
   readonly promise: Promise<ChildLifecycleOutcome>;
@@ -74,6 +76,7 @@ type PGliteState = Readonly<{
   database: string;
   url: string;
   dataPath: string;
+  ownerToken?: string;
 }>;
 
 export type PGlitePaths = Readonly<{
@@ -234,6 +237,36 @@ export function hostRuntimeEnvironment(
     PASEO_AGENT_CWD: base.PASEO_AGENT_CWD?.trim() || '.local/agent-workspace',
     PASEO_RUNTIME_CELL_ROOT:
       base.PASEO_RUNTIME_CELL_ROOT?.trim() || '.local/runtime-cells',
+  };
+}
+
+/** Explicit deterministic replay mode; it never starts Paseo or a provider. */
+export function hostFixtureRuntimeEnvironment(
+  base: NodeJS.ProcessEnv,
+  fixtureId: string,
+): NodeJS.ProcessEnv {
+  if (!fixtureId.trim())
+    throw new Error('fixture runtime mode requires an explicit fixture id.');
+  return {
+    // Unlike core/runtime modes, do not synthesize a native PostgreSQL URL.
+    // That leaves an absent database configuration visible to
+    // prepareHostNativeEnvironment, which can then select its PGlite fallback.
+    ...base,
+    HOST_NATIVE_FORCE_PGLITE: '1',
+    NODE_ENV: base.NODE_ENV ?? 'development',
+    HOST: base.HOST ?? '127.0.0.1',
+    PORT: base.PORT ?? '3000',
+    SERVICE_ACCOUNTS_JSON:
+      base.SERVICE_ACCOUNTS_JSON?.trim() || localServiceAccountsJson(),
+    AGENT_SERVER_DIRECT_CHAT_PLANE: 'execution_runtime',
+    AGENT_SERVER_PRODUCT_WORK_PLANE: 'execution_runtime',
+    RUNTIME_ADAPTER: 'paseo',
+    AGENT_SERVER_SKILL_REGISTRY_ROOT:
+      base.AGENT_SERVER_SKILL_REGISTRY_ROOT?.trim() || '.local/skill-registry',
+    PASEO_AGENT_CWD: base.PASEO_AGENT_CWD?.trim() || '.local/agent-workspace',
+    PASEO_RUNTIME_CELL_ROOT:
+      base.PASEO_RUNTIME_CELL_ROOT?.trim() || '.local/runtime-cells',
+    AGENT_SERVER_FIXTURE_RUNTIME_PROVIDER: fixtureId,
   };
 }
 
@@ -451,6 +484,9 @@ export async function connectablePostgres(
 export async function ensureDevelopmentDatabase(
   environment: NodeJS.ProcessEnv,
 ): Promise<string> {
+  if (environment.HOST_NATIVE_FORCE_PGLITE === '1') {
+    return ensurePGliteDatabase(environment);
+  }
   const connectionString = defaultHostDatabaseUrl(environment);
   const initial = await connectablePostgres(connectionString);
   if (initial.ok) return connectionString;
@@ -556,7 +592,9 @@ export async function readPGliteState(
         !Number.isInteger(parsed.port) ||
         typeof parsed.database !== 'string' ||
         typeof parsed.url !== 'string' ||
-        typeof parsed.dataPath !== 'string'
+        typeof parsed.dataPath !== 'string' ||
+        (parsed.ownerToken !== undefined &&
+          typeof parsed.ownerToken !== 'string')
       ) {
         throw new Error('invalid shape');
       }
@@ -576,11 +614,9 @@ export async function readPGliteState(
       }
     }
   }
-  await clearPGliteState(statePath);
-  throw new Error(
-    `Ignoring malformed PGlite state at ${statePath}; rerun setup.`,
-    { cause: parseError },
-  );
+  throw new Error(`Malformed PGlite state at ${statePath}; rerun setup.`, {
+    cause: parseError,
+  });
 }
 
 export async function identifyDatabaseBackend(
@@ -664,6 +700,9 @@ async function ensurePGliteDatabase(
         '--import',
         'tsx',
         resolve(repositoryRoot, 'tooling/dev/pglite-server.ts'),
+        ...(environment.PGLITE_OWNER_TOKEN?.trim()
+          ? ['--owner-token', environment.PGLITE_OWNER_TOKEN.trim()]
+          : []),
       ],
       {
         cwd: repositoryRoot,
@@ -740,6 +779,52 @@ export async function canConnectTcp(
       resolveConnected(false);
     });
   });
+}
+
+/**
+ * Returning false is deliberately conservative: fixture teardown declines to
+ * signal when this host cannot authenticate the PID-to-listener binding. That
+ * authentication narrows, but cannot eliminate, the POSIX PID-reuse window
+ * before a later signal.
+ */
+export async function processOwnsTcpListener(
+  pid: number,
+  host: string,
+  port: number,
+): Promise<boolean> {
+  try {
+    const { stdout } = await execFileAsync('lsof', [
+      '-nP',
+      '-t',
+      `-iTCP@${host}:${port}`,
+      '-sTCP:LISTEN',
+    ]);
+    const listenerPids = stdout
+      .split(/\s+/u)
+      .filter(Boolean)
+      .map((value) => Number.parseInt(value, 10));
+    return listenerPids.length === 1 && listenerPids[0] === pid;
+  } catch {
+    return false;
+  }
+}
+
+/** The owner token is passed in argv to authenticate the listener process. */
+export async function processArgumentsContain(
+  pid: number,
+  value: string,
+): Promise<boolean> {
+  try {
+    const { stdout } = await execFileAsync('ps', [
+      '-p',
+      String(pid),
+      '-o',
+      'command=',
+    ]);
+    return stdout.includes(value);
+  } catch {
+    return false;
+  }
 }
 
 function runtimeLogName(value: string): string {

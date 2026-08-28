@@ -51,7 +51,7 @@ describe('host-native PGlite ownership paths', () => {
     }
   });
 
-  it('clears malformed configured state and treats stale state as Postgres', async () => {
+  it('preserves malformed configured state and treats stale state as Postgres', async () => {
     const root = await mkdtemp(join(tmpdir(), 'agent-server-pglite-test-'));
     const statePath = join(root, 'pglite.json');
     const environment = { PGLITE_STATE_PATH: statePath };
@@ -59,10 +59,8 @@ describe('host-native PGlite ownership paths', () => {
       await writeFile(statePath, '{malformed');
       await expect(
         identifyDatabaseBackend('postgresql://unused', environment),
-      ).rejects.toThrow('Ignoring malformed PGlite state');
-      await expect(readFile(statePath)).rejects.toMatchObject({
-        code: 'ENOENT',
-      });
+      ).rejects.toThrow('Malformed PGlite state');
+      await expect(readFile(statePath, 'utf8')).resolves.toBe('{malformed');
 
       await writeFile(
         statePath,

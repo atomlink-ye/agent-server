@@ -109,8 +109,11 @@ export class FixtureRuntimeProvider implements RuntimeExecutionProvider {
   ): Promise<void> {}
   public async close(): Promise<void> {}
 
-  public async completeOneShot(): Promise<ExecutionOutput> {
-    return this.output();
+  public async completeOneShot(input: {
+    readonly systemPrompt: string;
+    readonly prompt: string;
+  }): Promise<ExecutionOutput> {
+    return this.output(input.prompt);
   }
 
   private handle(desired: ProviderRuntimeSpec): ProviderSessionHandle {
@@ -123,11 +126,13 @@ export class FixtureRuntimeProvider implements RuntimeExecutionProvider {
     };
   }
 
-  private output(): ExecutionOutput {
+  private output(prompt?: string): ExecutionOutput {
     return {
       provider: this.#fixture.provider.family,
       model: this.#fixture.provider.model_class,
-      text: this.#fixture.completion.text,
+      text: prompt
+        ? fixtureCompletionFor(prompt, this.#fixture.completion.text)
+        : this.#fixture.completion.text,
     };
   }
 }
@@ -154,9 +159,22 @@ class FixtureExecutionSession implements ExecutionSession {
       output: {
         provider: this.fixture.provider.family,
         model: this.fixture.provider.model_class,
-        text: this.fixture.completion.text,
+        text: fixtureCompletionFor(_input.prompt, this.fixture.completion.text),
       },
     };
   }
   public async close(): Promise<void> {}
+}
+
+/**
+ * Browser journeys use a per-run marker to prove their reply is fresh. The
+ * fixture can reproduce that deterministic protocol without claiming a model
+ * decision: only the explicit exact-marker instruction is echoed.
+ */
+function fixtureCompletionFor(prompt: string, fallback: string): string {
+  const marker =
+    /Reply with exactly this marker and no other text:\s*([A-Za-z0-9_-]+)/u.exec(
+      prompt,
+    )?.[1];
+  return marker ?? fallback;
 }

@@ -8,14 +8,15 @@ import { join } from 'node:path';
 import { chromium, type Browser, type Page } from 'playwright';
 import { afterEach, describe, expect, it } from 'vitest';
 
-// Local-only live canary. CI fixture successors intentionally do not claim
-// browser or provider fidelity for this flow; the real-runtime workflow owns it.
+// Live-provider/browser canary owned by the real-runtime workflow. Fixture
+// successors cover browser-to-server fidelity but not provider, Paseo, or MCP fidelity.
 
 const baseUrlEnv = process.env.WEB_E2E_BASE_URL?.trim();
 const providerEnv = process.env.WEB_E2E_PROVIDER?.trim();
 const modelEnv = process.env.WEB_E2E_MODEL?.trim();
+const fixtureReplay = process.env.WEB_E2E_FIXTURE_REPLAY === '1';
 const resolveHost = process.env.WEB_E2E_RESOLVE_HOST ?? 'web';
-if (!baseUrlEnv || !providerEnv || !modelEnv) {
+if (!baseUrlEnv || (!fixtureReplay && (!providerEnv || !modelEnv))) {
   throw new Error(
     'WEB_E2E_BASE_URL, WEB_E2E_PROVIDER, and WEB_E2E_MODEL are required for the ProductSession browser canary.',
   );
@@ -229,8 +230,8 @@ describe('web ProductSession live/replay E2E', () => {
             `${JSON.stringify(
               {
                 ok: true,
-                provider: providerEnv!,
-                model: modelEnv!,
+                provider: providerEnv ?? 'fixture-replay',
+                model: modelEnv ?? 'fixture',
                 conversation_id: conversationId,
                 marker,
                 live: liveSnapshot,

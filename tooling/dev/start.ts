@@ -4,6 +4,7 @@ import type { ChildProcess } from 'node:child_process';
 
 import {
   hostCoreEnvironment,
+  hostFixtureRuntimeEnvironment,
   hostRuntimeEnvironment,
   hostWebEnvironment,
   prepareHostNativeEnvironment,
@@ -18,12 +19,15 @@ import {
   runtimeReadinessTimeout,
 } from './readiness-timeout.js';
 
-export type HostDevMode = 'core' | 'runtime';
+export type HostDevMode = 'core' | 'fixture' | 'runtime';
 
 function parseMode(value: string | undefined): HostDevMode {
   if (!value || value === 'core') return 'core';
   if (value === 'runtime' || value === 'full') return 'runtime';
-  throw new Error('usage: pnpm dev[:runtime] (supported modes: core, runtime)');
+  if (value === 'fixture') return 'fixture';
+  throw new Error(
+    'usage: pnpm dev[:runtime] (supported modes: core, fixture, runtime)',
+  );
 }
 
 async function readGeneratedWebEnv(): Promise<NodeJS.ProcessEnv> {
@@ -55,6 +59,9 @@ async function readGeneratedWebEnv(): Promise<NodeJS.ProcessEnv> {
 }
 
 function describeRuntimeBanner(environment: NodeJS.ProcessEnv): string {
+  const fixtureId = environment.AGENT_SERVER_FIXTURE_RUNTIME_PROVIDER?.trim();
+  if (fixtureId)
+    return `runtime=fixture-replay (fixture=${fixtureId}, live-provider=false)`;
   const adapter = environment.RUNTIME_ADAPTER ?? 'none';
   const directChatPlane = environment.AGENT_SERVER_DIRECT_CHAT_PLANE ?? 'mock';
   const productWorkPlane =
@@ -65,11 +72,22 @@ function describeRuntimeBanner(environment: NodeJS.ProcessEnv): string {
 function exitOf(
   child: ChildProcess,
 ): Promise<{ code: number; signal: string | null }> {
+  const exited = (): { code: number; signal: string | null } | undefined => {
+    if (child.exitCode === null && child.signalCode === null) return undefined;
+    return {
+      code: child.exitCode ?? (child.signalCode ? 1 : 0),
+      signal: child.signalCode,
+    };
+  };
+  const existing = exited();
+  if (existing) return Promise.resolve(existing);
   return new Promise((resolveExit) => {
     child.once('error', () => resolveExit({ code: 1, signal: null }));
     child.once('exit', (code, signal) =>
       resolveExit({ code: code ?? (signal ? 1 : 0), signal }),
     );
+    const afterSubscription = exited();
+    if (afterSubscription) resolveExit(afterSubscription);
   });
 }
 
@@ -81,9 +99,11 @@ export async function startHostDevelopment(
   const applicationEnvironment =
     mode === 'runtime'
       ? hostRuntimeEnvironment(prepared)
-      : hostCoreEnvironment(prepared);
+      : mode === 'fixture'
+        ? hostFixtureRuntimeEnvironment(prepared, 'baseline-completion')
+        : hostCoreEnvironment(prepared);
   const readinessTimeoutMs =
-    mode === 'runtime'
+    mode === 'runtime' || mode === 'fixture'
       ? runtimeReadinessTimeout(applicationEnvironment)
       : CORE_READINESS_TIMEOUT_MS;
   const apiPort = Number.parseInt(applicationEnvironment.PORT ?? '3000', 10);
@@ -123,15 +143,15 @@ export async function startHostDevelopment(
         : spawnOwned('node', apiArgs, { environment: applicationEnvironment });
     children.push(api);
 
-    await Promise.race([
-      waitForHttp(
-        `${apiBaseUrl}${mode === 'runtime' ? '/health/ready' : '/health/live'}`,
-        readinessTimeoutMs,
-      ),
-      exitOf(api).then(({ code }) => {
-        throw new Error(`Agent Server exited before readiness (${code})`);
-      }),
-    ]);
+    await waitForHttp(
+      `${apiBaseUrl}${mode === 'core' ? '/health/live' : '/health/ready'}`,
+      readinessTimeoutMs,
+      {
+        child: api,
+        environment: applicationEnvironment,
+        label: 'host-native dev API',
+      },
+    );
 
     const webBaseEnvironment = hostWebEnvironment({
       ...applicationEnvironment,

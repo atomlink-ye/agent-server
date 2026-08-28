@@ -22,6 +22,11 @@ A completed WorkRun now writes its own result into its Work scope at
 ContextFS read routes serve — so the file that is written is the file the surface lists,
 with no second store to drift.
 
+Publication happens **after** the run is durably persisted as succeeded, not when the
+runtime returns. Publishing from the executor would expose a canonical result file for a
+WorkRun that never durably succeeded whenever completion hit a persistence error or a
+stale-claim conflict, and the Files surface would then contradict the Run it came from.
+
 Bounded deliberately:
 
 - **Only the WorkRun's root Task publishes.** A Team Work fans out into member runs that
@@ -32,10 +37,11 @@ Bounded deliberately:
   earlier output.
 - **An empty completion is written as an empty file**, not skipped. Skipping would restore
   the exact condition this fixes: a run that succeeded and left nothing to look at.
-- **A failed write does not fail the run.** The result is already durable on the Run; this
-  file is its user-visible projection. The cost is that a persistently broken writer would
-  leave the surface empty while runs kept reporting success, so the deterministic scenario
-  and the browser assertion in `fixture-browser` are what keep the claim honest.
+- **A failed write does not fail the run.** It happens after the run is already durable,
+  so there is nothing to roll back, and the result itself is safe on the Run - this file is
+  its user-visible projection. The cost is that a persistently broken writer would leave the
+  surface empty while runs kept reporting success, so the deterministic scenario and the
+  browser assertion in `fixture-browser` are what keep the claim honest.
 
 Not addressed here: plaintext `result_summary` capture for single-Agent Work (the Overview
 pane still shows "No result summary is present."), memory convergence, promotion/admission

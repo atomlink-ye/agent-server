@@ -24,7 +24,6 @@ import type { RunRepository, ClaimedRun } from '../ports/run-repository.js';
 import type { SessionRepository } from '../ports/session-repository.js';
 import type { TaskRepository } from '../ports/task-repository.js';
 import type { TeamExecutionRepository } from '../ports/team-execution-repository.js';
-import type { PublishWorkRunResultFile } from '../work/publish-work-run-result-file.js';
 import type {
   WorkRunCompositionManifest,
   WorkRunResourceManifestRead,
@@ -65,7 +64,6 @@ export class AgentRunExecutor {
     private readonly workRunManifests?: WorkRunResourceManifestRead,
     private readonly memoryVersions?: MemoryVersionReadApi,
     private readonly now: () => Date = () => new Date(),
-    private readonly workResultFiles?: PublishWorkRunResultFile,
   ) {}
 
   public async execute(input: {
@@ -316,17 +314,6 @@ export class AgentRunExecutor {
     if (executionFailed) throw executionError;
     if (!execution) throw new Error('Runtime execution returned no result.');
 
-    // Only the WorkRun's root Task publishes the result. A Team Work fans out
-    // into several member runs that all share one workRunId, so publishing from
-    // each of them would have them overwrite one another and leave whichever
-    // finished last presented as "the" result.
-    if (
-      workManifest &&
-      this.workResultFiles &&
-      task.id === workManifest.rootTaskId
-    )
-      await this.publishWorkResultFile(workManifest, task, execution.text);
-
     if (task.invokableKind !== 'worker')
       await this.memoryWriter.write({
         claim,
@@ -349,37 +336,6 @@ export class AgentRunExecutor {
       },
       this.now,
     );
-  }
-
-  /**
-   * A WorkRun's result is already durable on the Run itself; this file is the
-   * user-visible projection of it. So a failure to write it is logged and the
-   * run stays succeeded, rather than turning a completed piece of work into a
-   * failed one because a projection write failed.
-   *
-   * The trade-off is deliberate and has a cost: a persistently broken writer
-   * would leave the Files surface empty while runs kept reporting success. The
-   * deterministic scenario covering this path is what keeps that honest.
-   */
-  private async publishWorkResultFile(
-    workManifest: WorkRunCompositionManifest,
-    task: Task,
-    text: string,
-  ): Promise<void> {
-    try {
-      await this.workResultFiles!.publish({
-        manifest: workManifest,
-        tenantId: task.tenantId,
-        workspaceId: task.workspaceId,
-        text,
-      });
-    } catch (error) {
-      this.logger.log('error', 'work.result_file_publish_failed', {
-        work_id: workManifest.workId,
-        work_run_id: workManifest.workRunId,
-        error_name: error instanceof Error ? error.name : 'UnknownError',
-      });
-    }
   }
 
   private resolveGenericConfiguration(

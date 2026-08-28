@@ -103,6 +103,9 @@ export class ExecuteRun {
   private readonly events: RunEventRepository | undefined;
   private readonly teamCoordinator: RunTeamCoordinator | undefined;
   private readonly agentRunExecutor: AgentRunExecutor;
+  private readonly workResultFiles: PublishWorkRunResultFile | undefined;
+  private readonly workRunManifestsRead:
+    WorkRunResourceManifestRead | undefined;
 
   public constructor(options: ExecuteRunOptions) {
     const {
@@ -163,6 +166,11 @@ export class ExecuteRun {
           readonly memoryVersions?: MemoryVersionReadApi;
         })
       | undefined;
+    this.workRunManifestsRead =
+      workRunManifests ?? compositionReads?.workRunManifests;
+    this.workResultFiles = contextFiles
+      ? new PublishWorkRunResultFile(contextFiles)
+      : undefined;
     this.agentRunExecutor = new AgentRunExecutor(
       runtimeTurns,
       tasks,
@@ -181,7 +189,6 @@ export class ExecuteRun {
       workRunManifests ?? compositionReads?.workRunManifests,
       memoryVersions ?? compositionReads?.memoryVersions,
       this.now,
-      contextFiles ? new PublishWorkRunResultFile(contextFiles) : undefined,
     );
   }
 
@@ -265,6 +272,13 @@ export class ExecuteRun {
         terminalRun.status === 'waiting_children'
           ? terminalRun
           : await this.completeTerminalRun(claim, terminalRun);
+      // Publication happens only after the run is durably persisted as
+      // succeeded. Publishing from the executor - before completeRun - would
+      // leave a user-visible canonical result file for a WorkRun that never
+      // durably succeeded, whenever completion hit a persistence error or a
+      // stale-claim conflict. The Files surface would then contradict the Run.
+      if (completed.status === 'succeeded')
+        await this.publishWorkResultFile(task, completed);
       if (teamContext && terminalRun.status !== 'waiting_children')
         await this.teamCoordinator!.updateTerminal({
           claimTaskId: claim.taskId,
@@ -351,6 +365,50 @@ export class ExecuteRun {
     }
     this.reportCompletedRun(claim, completed);
     return completed;
+  }
+
+  /**
+   * Writes a completed WorkRun's own result into its Work scope, from the
+   * persisted run rather than the in-flight execution output.
+   *
+   * Only the WorkRun's root Task publishes: a Team Work fans out into member
+   * runs that share one workRunId, so publishing from each would overwrite the
+   * others and present whichever finished last as "the" result.
+   *
+   * A failure here is logged and does not fail the run - the result is already
+   * durable on the Run and this file is its user-visible projection. The cost
+   * is that a persistently broken writer leaves the surface empty while runs
+   * report success, which the deterministic scenario and browser assertion
+   * exist to catch.
+   */
+  private async publishWorkResultFile(task: Task, completed: Run) {
+    if (!this.workResultFiles || !this.workRunManifestsRead) return;
+    const text = completed.result?.text;
+    if (text === undefined) return;
+    try {
+      const manifest = await this.workRunManifestsRead.findByRootTaskId(
+        task.rootTaskId,
+        {
+          tenantId: task.tenantId,
+          workspaceId: task.workspaceId,
+          principalType: task.principalType,
+          principalId: task.principalId,
+        },
+      );
+      if (!manifest || task.id !== manifest.rootTaskId) return;
+      await this.workResultFiles.publish({
+        manifest,
+        tenantId: task.tenantId,
+        workspaceId: task.workspaceId,
+        text,
+      });
+    } catch (error) {
+      this.logger.log('error', 'work.result_file_publish_failed', {
+        run_id: completed.id,
+        root_task_id: task.rootTaskId,
+        error_name: error instanceof Error ? error.name : 'UnknownError',
+      });
+    }
   }
 
   private async completeTerminalRun(claim: ClaimedRun, run: Run) {

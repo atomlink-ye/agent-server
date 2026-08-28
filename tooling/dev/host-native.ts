@@ -74,6 +74,7 @@ type PGliteState = Readonly<{
   database: string;
   url: string;
   dataPath: string;
+  ownerToken?: string;
 }>;
 
 export type PGlitePaths = Readonly<{
@@ -585,7 +586,9 @@ export async function readPGliteState(
         !Number.isInteger(parsed.port) ||
         typeof parsed.database !== 'string' ||
         typeof parsed.url !== 'string' ||
-        typeof parsed.dataPath !== 'string'
+        typeof parsed.dataPath !== 'string' ||
+        (parsed.ownerToken !== undefined &&
+          typeof parsed.ownerToken !== 'string')
       ) {
         throw new Error('invalid shape');
       }

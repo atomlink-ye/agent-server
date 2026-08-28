@@ -1,6 +1,7 @@
 import type { ChildProcess } from 'node:child_process';
-import { rm } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { mkdtemp, rm, unlink } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
@@ -9,6 +10,7 @@ import {
   hostFixtureRuntimeEnvironment,
   hostRuntimeEnvironment,
   hostWebEnvironment,
+  canConnectTcp,
   isPortFree,
   loadLocalDotEnv,
   localServiceAccountsJson,
@@ -70,17 +72,45 @@ async function fixtureBootstrapEnvironment(
   };
 }
 
+type FixturePGliteOwnership = Readonly<{
+  readonly pid: number;
+  readonly statePath: string;
+  readonly dataPath: string;
+  readonly port: number;
+  readonly ownerToken: string;
+}>;
+
 async function stopFixturePGlite(
-  environment: NodeJS.ProcessEnv,
+  ownership: FixturePGliteOwnership | undefined,
 ): Promise<void> {
-  const { statePath } = resolvePGlitePaths(environment);
-  const state = await readPGliteState(statePath);
-  if (!state) return;
+  if (!ownership) return;
+  const state = await readPGliteState(ownership.statePath);
+  if (
+    !state ||
+    state.pid !== ownership.pid ||
+    state.port !== ownership.port ||
+    state.dataPath !== ownership.dataPath ||
+    state.ownerToken !== ownership.ownerToken ||
+    !(await canConnectTcp(state.host, state.port))
+  )
+    return;
   try {
     process.kill(state.pid, 'SIGTERM');
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
   }
+  for (let attempt = 0; attempt < 25; attempt += 1) {
+    if (!(await canConnectTcp(state.host, state.port))) {
+      await unlink(ownership.statePath).catch((error: unknown) => {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      });
+      return;
+    }
+    await new Promise<void>((resolveDelay) => setTimeout(resolveDelay, 200));
+  }
+  throw new Error(
+    `fixture-browser PGlite child ${ownership.pid} did not stop on ${state.host}:${state.port}.`,
+  );
 }
 
 type CanarySignal = 'SIGINT' | 'SIGTERM' | 'SIGHUP';
@@ -179,6 +209,13 @@ async function assertCanaryPortFree(
   }
 }
 
+async function fixturePGlitePort(): Promise<number> {
+  for (let port = 55_433; port <= 55_532; port += 1) {
+    if (await isPortFree(port)) return port;
+  }
+  throw new Error('fixture-browser could not find a free PGlite port.');
+}
+
 async function goldenPortsStillBusy(apiPort: number): Promise<number[]> {
   const busy: number[] = [];
   if (!(await isPortFree(apiPort))) busy.push(apiPort);
@@ -225,6 +262,8 @@ export async function runHostCanary(
   let primaryChild: ChildProcess | undefined;
   let primaryEnvironment: NodeJS.ProcessEnv | undefined;
   let goldenApiPort: number | undefined;
+  let fixturePGliteRoot: string | undefined;
+  let fixturePGliteOwnership: FixturePGliteOwnership | undefined;
   let runError: unknown;
   try {
     loaded = await loadLocalDotEnv(environment);
@@ -331,6 +370,14 @@ export async function runHostCanary(
     const apiBaseUrl = `http://127.0.0.1:${apiPort}`;
     await rm(webBootstrapEnvPath, { force: true });
     throwIfCanaryInterrupted(lifecycle);
+    const fixtureRunRoot = fixtureBrowser
+      ? await mkdtemp(
+          join(repositoryRoot, '.local/dev-runtime/fixture-browser-'),
+        )
+      : undefined;
+    fixturePGliteRoot = fixtureRunRoot;
+    const fixtureOwnerToken = fixtureBrowser ? randomUUID() : undefined;
+    const fixturePort = fixtureBrowser ? await fixturePGlitePort() : undefined;
     const devEnvironment: NodeJS.ProcessEnv = {
       ...(fixtureBrowser
         ? hostFixtureRuntimeEnvironment(loaded, 'baseline-completion')
@@ -340,12 +387,10 @@ export async function runHostCanary(
       CANARY_READY_TIMEOUT_MS: String(readyTimeoutMs),
       ...(fixtureBrowser
         ? {
-            PGLITE_STATE_PATH:
-              loaded.PGLITE_STATE_PATH?.trim() ||
-              '.local/dev-runtime/fixture-browser-pglite.json',
-            PGLITE_DATA_PATH:
-              loaded.PGLITE_DATA_PATH?.trim() ||
-              '.local/dev-runtime/fixture-browser-pglite',
+            PGLITE_STATE_PATH: join(fixtureRunRoot!, 'pglite.json'),
+            PGLITE_DATA_PATH: join(fixtureRunRoot!, 'pglite'),
+            PGLITE_PORT: String(fixturePort),
+            PGLITE_OWNER_TOKEN: fixtureOwnerToken,
           }
         : {}),
     };
@@ -378,6 +423,28 @@ export async function runHostCanary(
       environment: devEnvironment,
       label: fixtureBrowser ? 'fixture-browser dev' : 'golden-path dev',
     });
+    if (fixtureBrowser) {
+      const paths = resolvePGlitePaths(devEnvironment);
+      const state = await readPGliteState(paths.statePath);
+      const port = fixturePort!;
+      if (
+        !state ||
+        state.dataPath !== paths.dataPath ||
+        state.port !== port ||
+        state.ownerToken !== fixtureOwnerToken ||
+        !(await canConnectTcp(state.host, state.port))
+      )
+        throw new Error(
+          'fixture-browser could not verify ownership of its spawned PGlite child.',
+        );
+      fixturePGliteOwnership = {
+        pid: state.pid,
+        statePath: paths.statePath,
+        dataPath: paths.dataPath,
+        port,
+        ownerToken: fixtureOwnerToken!,
+      };
+    }
     throwIfCanaryInterrupted(lifecycle);
     commandEnvironment = hostWebEnvironment({
       ...(fixtureBrowser ? devEnvironment : loaded),
@@ -504,8 +571,19 @@ export async function runHostCanary(
         );
       }
     }
-    if (kind === 'fixture-browser')
-      await stopFixturePGlite(primaryEnvironment ?? loaded);
+    if (kind === 'fixture-browser') {
+      try {
+        await stopFixturePGlite(fixturePGliteOwnership);
+      } catch (error) {
+        cleanupError = error;
+      }
+      try {
+        if (fixturePGliteRoot)
+          await rm(fixturePGliteRoot, { recursive: true, force: true });
+      } catch (error) {
+        cleanupError ??= error;
+      }
+    }
     lifecycle.dispose();
     const requestedSignal = lifecycle.requestedSignal();
     if (requestedSignal) {

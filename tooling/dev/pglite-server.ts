@@ -28,6 +28,7 @@ export type PGliteState = Readonly<{
   database: string;
   url: string;
   dataPath: string;
+  ownerToken?: string;
 }>;
 
 export async function writePGliteState(
@@ -59,6 +60,7 @@ const statePath = resolve(
   process.env.PGLITE_STATE_PATH?.trim() || '.local/dev-runtime/pglite.json',
 );
 const database = process.env.PGLITE_DATABASE?.trim() || 'postgres';
+const ownerToken = process.env.PGLITE_OWNER_TOKEN?.trim() || undefined;
 const url = `postgresql://postgres:postgres@${host}:${port}/${database}`;
 
 if (!Number.isInteger(port) || port < 1 || port > 65_535) {
@@ -102,6 +104,7 @@ async function start(): Promise<void> {
     database,
     url,
     dataPath,
+    ...(ownerToken ? { ownerToken } : {}),
   };
   await writePGliteState(statePath, state);
   process.stdout.write(`host-native PGlite ready at ${url}\n`);

@@ -81,6 +81,9 @@ export const testConfig = {
 } as const;
 
 export interface CreateTestAppOptions {
+  // Fixture harnesses retain `paseo` only to advertise required runtime
+  // capabilities; an explicit runtimeProvider bypasses the Paseo adapter and
+  // does not exercise MCP traversal.
   readonly runtimeAdapter?: 'none' | 'paseo';
   readonly startDispatcher?: boolean;
   readonly seedManagedAgent?: boolean;

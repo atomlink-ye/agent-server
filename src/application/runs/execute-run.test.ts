@@ -17,6 +17,8 @@ import {
   type ClaimedRun,
 } from '../ports/run-repository.js';
 import type { TaskRepository } from '../ports/task-repository.js';
+import type { LogicalFileStore } from '../ports/logical-file-store.js';
+import type { WorkRunResourceManifestRead } from '../ports/work-run-resource-manifest-read.js';
 import type { Logger } from '../../shared/observability/logger.js';
 import type { EnvironmentVersion } from '../ports/environment-registry.js';
 import { ResolveAgentVersion } from '../agents/resolve-agent-version.js';
@@ -1656,6 +1658,89 @@ describe('ExecuteRun', () => {
       ).toEqual(['started']);
     },
   );
+
+  it('publishes a WorkRun result file only after the run is durably persisted', async () => {
+    const claim = createClaim();
+    const task = createTask('agent', 'managed-version-1');
+    const calls: string[] = [];
+    const files = {
+      list: vi.fn(async () => []),
+      read: vi.fn(async () => null),
+      write: vi.fn(async (input: { readonly path: string }) => {
+        calls.push('write');
+        return { path: input.path } as never;
+      }),
+    } as unknown as LogicalFileStore;
+    const completeRun = {
+      execute: vi.fn(async ({ run }: { run: Run }) => {
+        calls.push('completeRun');
+        return run;
+      }),
+    } as unknown as CompleteRun;
+    const executeRun = createDirectExecuteRun({
+      completeRun,
+      runtime: createRuntime(),
+      task,
+      resolver: createManagedResolver(),
+      contextFiles: files,
+      workRunManifests: createWorkManifests(task.rootTaskId),
+    });
+
+    await executeRun.execute(claim);
+
+    // Ordering is the assertion. Publishing before completion would expose a
+    // canonical result file for a WorkRun that had not durably succeeded.
+    expect(calls).toEqual(['completeRun', 'write']);
+    expect(files.write).toHaveBeenCalledWith(
+      expect.objectContaining({
+        path: 'runs/work-run-1/result.md',
+        content: 'safe result',
+      }),
+    );
+  });
+
+  it('writes no WorkRun result file when durable completion fails', async () => {
+    const claim = createClaim();
+    const task = createTask('agent', 'managed-version-1');
+    const files = {
+      list: vi.fn(async () => []),
+      read: vi.fn(async () => null),
+      write: vi.fn(async () => ({}) as never),
+    } as unknown as LogicalFileStore;
+    // Record what was being persisted. Without this the test would also pass
+    // if the runtime had failed, because completion is attempted on that path
+    // too - it would prove nothing about the ordering it claims to cover.
+    const persisted: string[] = [];
+    const completeRun = {
+      execute: vi.fn(async ({ run }: { run: Run }) => {
+        persisted.push(run.status);
+        throw new RunCompletionPersistenceError({
+          runId: claim.run.id,
+          terminalStatus: 'succeeded',
+          resultAvailable: true,
+        } as never);
+      }),
+    } as unknown as CompleteRun;
+    const executeRun = createDirectExecuteRun({
+      completeRun,
+      runtime: createRuntime(),
+      task,
+      resolver: createManagedResolver(),
+      contextFiles: files,
+      workRunManifests: createWorkManifests(task.rootTaskId),
+    });
+
+    await expect(executeRun.execute(claim)).rejects.toBeInstanceOf(
+      RunCompletionPersistenceError,
+    );
+
+    // The first persistence attempt carried a succeeded run: the runtime did
+    // its work and only the durable write failed. That is the case at issue.
+    expect(persisted[0]).toBe('succeeded');
+    // The Run never became durably succeeded, so no file may exist. One here
+    // would make the Files surface contradict the Run it came from.
+    expect(files.write).not.toHaveBeenCalled();
+  });
 });
 
 function createExecuteRun(input: {
@@ -1803,6 +1888,8 @@ function createDirectExecuteRun(input: {
   readonly task: Task;
   readonly resolver: ResolveAgentVersion;
   readonly createMemoryProposal?: CreateMemoryProposal;
+  readonly contextFiles?: LogicalFileStore;
+  readonly workRunManifests?: WorkRunResourceManifestRead;
 }): ExecuteRun {
   const tasks = {
     findById: vi.fn(async () => input.task),
@@ -1822,6 +1909,10 @@ function createDirectExecuteRun(input: {
     resolver: input.resolver,
     ...(input.createMemoryProposal
       ? { createMemoryProposal: input.createMemoryProposal }
+      : {}),
+    ...(input.contextFiles ? { contextFiles: input.contextFiles } : {}),
+    ...(input.workRunManifests
+      ? { workRunManifests: input.workRunManifests }
       : {}),
   });
 }
@@ -1927,4 +2018,60 @@ function createTask(
     sourceMessageId,
     now: () => new Date('2026-07-23T00:00:00.000Z'),
   });
+}
+
+function createManagedResolver(): ResolveAgentVersion {
+  const findVersion = vi.fn(async (_owner: unknown, _versionId: string) => ({
+    id: 'managed-version-1',
+    status: 'published',
+    package: {
+      spec: {
+        instructions: 'managed instructions',
+        tools: [],
+        skills: [],
+        runtime: { modelPolicyRef: 'free-only' },
+      },
+    },
+  })) as unknown as (owner: unknown, versionId: string) => Promise<never>;
+  const findVersionByTenant = vi.fn(
+    async (input: { readonly tenantId: string; readonly versionId: string }) =>
+      findVersion(
+        {
+          tenantId: input.tenantId,
+          workspaceId: 'workspace-1',
+          principalType: 'user',
+          principalId: 'user-1',
+        },
+        input.versionId,
+      ),
+  );
+  return new ResolveAgentVersion(
+    { findVersion, findVersionByTenant },
+    { resolve: vi.fn(async () => null), list: vi.fn(async () => []) },
+  );
+}
+
+function createWorkManifests(rootTaskId: string): WorkRunResourceManifestRead {
+  return {
+    findByRootTaskId: vi.fn(async () => ({
+      workId: 'work-1',
+      workRunId: 'work-run-1',
+      definitionVersionId: 'definition-version-1',
+      rootTaskId,
+      // The manifest must actually authorize the resolved participant, or
+      // AgentRunExecutor rejects the run before it ever executes. An empty
+      // manifest would make these tests pass through the failure path instead
+      // of the one they claim to cover.
+      entries: [
+        {
+          slot: 'participant:main:worker',
+          resourceKind: 'worker' as const,
+          requestedRef: 'worker:main',
+          resolvedVersionId: 'managed-version-1',
+          resolvedFingerprint: 'sha256:worker',
+          resolvedAt: '2026-07-23T00:00:00.000Z',
+        },
+      ],
+    })),
+  };
 }

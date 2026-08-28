@@ -177,6 +177,35 @@ describe('fixture-backed successors for live runtime lanes', () => {
         live_provider: false,
         fixture_id: fixtureId,
       });
+
+      // The run must leave something a user can open. Before this producer
+      // existed every canonical scope stayed empty after a successful run, so
+      // the Files surface truthfully showed nothing at all.
+      const resultPath = `runs/${workRunId}/result.md`;
+      const files = await harness.app.request(
+        `/api/v1/context/files?scope=work&work_id=${work.id}`,
+        { headers: { authorization } },
+      );
+      expect(files.status).toBe(200);
+      const listing = (await files.json()) as {
+        entries: readonly { path: string }[];
+      };
+      expect(listing.entries.map((entry) => entry.path)).toEqual([resultPath]);
+
+      // ...and it holds this run's actual result, read back through the same
+      // route the browser calls. Asserting only that a file exists would pass
+      // for an empty placeholder.
+      const detail = await harness.app.request(
+        `/api/v1/context/file?scope=work&work_id=${work.id}&path=${encodeURIComponent(
+          resultPath,
+        )}`,
+        { headers: { authorization } },
+      );
+      expect(detail.status).toBe(200);
+      expect((await detail.json()).entry).toMatchObject({
+        path: resultPath,
+        content: fixtureText,
+      });
     });
   });
 

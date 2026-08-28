@@ -249,9 +249,19 @@ describe('fixture-browser PGlite cleanup', () => {
 describe('fixture-browser pre-readiness failure', () => {
   it('exits a real canary subprocess before the bounded deadline', async () => {
     const runtimeDirectory = join(process.cwd(), '.local/dev-runtime');
-    const rootsBefore = (await readdir(runtimeDirectory)).filter((entry) =>
-      entry.startsWith('fixture-browser-'),
-    );
+    // A fresh checkout has no .local/dev-runtime. Reading it as empty keeps this
+    // assertion about what the run leaves behind rather than about whether a
+    // previous run happened to create the directory.
+    const fixtureRoots = async (): Promise<string[]> =>
+      readdir(runtimeDirectory).then(
+        (entries) =>
+          entries.filter((entry) => entry.startsWith('fixture-browser-')),
+        (error: NodeJS.ErrnoException) => {
+          if (error.code === 'ENOENT') return [];
+          throw error;
+        },
+      );
+    const rootsBefore = await fixtureRoots();
     const portsBefore = await busyFixturePorts();
     const startedAt = Date.now();
     const child = spawn(
@@ -288,11 +298,7 @@ describe('fixture-browser pre-readiness failure', () => {
     expect(exceededDeadline).toBe(false);
     expect(outcome.code).toBe(1);
     expect(Date.now() - startedAt).toBeLessThan(15_000);
-    await expect(
-      readdir(runtimeDirectory).then((entries) =>
-        entries.filter((entry) => entry.startsWith('fixture-browser-')),
-      ),
-    ).resolves.toEqual(rootsBefore);
+    await expect(fixtureRoots()).resolves.toEqual(rootsBefore);
     await expect(busyFixturePorts()).resolves.toEqual(portsBefore);
   }, 20_000);
 });

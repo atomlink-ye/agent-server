@@ -7,6 +7,11 @@ import { describe, expect, it } from 'vitest';
 
 import { isPortFree } from '../../tooling/dev/host-native.js';
 
+// This is the only integration test that spawns a host process and binds TCP.
+// AGENTS.md and docs/agents/repository-orientation.md place that behavior nearer
+// to e2e, but `test:e2e` is not a CI gate. Keep this regression in integration
+// until CI wires the e2e lane, so fixture cleanup failures continue to gate.
+
 const fixtureRootPrefix = 'fixture-browser-';
 const execFileAsync = promisify(execFile);
 

@@ -127,6 +127,15 @@ export async function stopFixturePGlite(
     !(await processArgumentsContain(state.pid, ownership.ownerToken))
   )
     return false;
+  // A process may exit and its PID may be reused after the first
+  // authentication. Re-authenticate directly before signalling to narrow that
+  // unavoidable POSIX window; no portable non-reusable process handle exists
+  // on every supported host.
+  if (
+    !(await processOwnsTcpListener(state.pid, state.host, state.port)) ||
+    !(await processArgumentsContain(state.pid, ownership.ownerToken))
+  )
+    return false;
   try {
     process.kill(state.pid, 'SIGTERM');
   } catch (error) {
@@ -314,7 +323,7 @@ function parseTokenizedFixturePGliteState(
 /**
  * Remove abandoned fixture-browser roots without taking ownership of an
  * ambiguous database. The raw state read is intentional: readPGliteState
- * removes malformed state, which is unsafe during a best-effort sweep.
+ * preserves malformed state, which makes the sweep decline ambiguous ownership.
  */
 export async function sweepStaleFixtureBrowserRoots(
   runtimeDirectory = resolve(repositoryRoot, '.local/dev-runtime'),
@@ -757,6 +766,13 @@ export async function runHostCanary(
         fixturePGliteStopped = await stopFixturePGlite(fixturePGliteOwnership);
       } catch (error) {
         cleanupErrors.push(error);
+      }
+      if (!fixturePGliteStopped && fixturePGliteOwnership) {
+        cleanupErrors.push(
+          new Error(
+            `fixture-browser could not clean up an unauthenticated PGlite candidate (pid=${fixturePGliteOwnership.pid ?? 'unknown'}, port=${fixturePGliteOwnership.port}, root=${fixturePGliteRoot ?? 'unknown'}). The run may have leaked it; PID-reuse protection declined to signal.`,
+          ),
+        );
       }
       if (fixturePGliteStopped && fixturePGliteRoot) {
         try {

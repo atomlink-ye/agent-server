@@ -217,10 +217,12 @@ describe('fixture-browser PGlite cleanup', () => {
     await expect(stopFixturePGlite(preReadinessOwnership)).resolves.toBe(true);
 
     expect(kill).toHaveBeenCalledWith(ownership.pid, 'SIGTERM');
+    expect(processOwnsTcpListener).toHaveBeenCalledTimes(2);
+    expect(processArgumentsContain).toHaveBeenCalledTimes(2);
     kill.mockRestore();
   });
 
-  it('never signals state that does not exactly match its run ownership', async () => {
+  it('declines to signal state that does not match its run ownership', async () => {
     const kill = vi.spyOn(process, 'kill').mockReturnValue(true);
     readPGliteState.mockResolvedValue({
       pid: ownership.pid + 1,

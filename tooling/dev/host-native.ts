@@ -614,11 +614,9 @@ export async function readPGliteState(
       }
     }
   }
-  await clearPGliteState(statePath);
-  throw new Error(
-    `Ignoring malformed PGlite state at ${statePath}; rerun setup.`,
-    { cause: parseError },
-  );
+  throw new Error(`Malformed PGlite state at ${statePath}; rerun setup.`, {
+    cause: parseError,
+  });
 }
 
 export async function identifyDatabaseBackend(
@@ -784,8 +782,10 @@ export async function canConnectTcp(
 }
 
 /**
- * Returning false is deliberately conservative: fixture teardown must not
- * signal a process unless this host can establish its PID-to-listener binding.
+ * Returning false is deliberately conservative: fixture teardown declines to
+ * signal when this host cannot authenticate the PID-to-listener binding. That
+ * authentication narrows, but cannot eliminate, the POSIX PID-reuse window
+ * before a later signal.
  */
 export async function processOwnsTcpListener(
   pid: number,

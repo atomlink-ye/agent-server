@@ -16,14 +16,15 @@ Coverage is intentionally bounded:
   wiring and deterministic replay, including per-turn markers. It does not
   prove provider compatibility, MCP traversal, or the Paseo adapter. Marker
   echo is limited to the fixture marker protocol and is not evidence that a
-  provider follows an instruction. The untouched `real-runtime` workflow
-  continues to execute both as its separate live CI canary.
+  provider follows an instruction. The separate `real-runtime` workflow owns
+  the live canaries when its eligibility and credential gates allow them to
+  run; fixture coverage does not replace those canaries.
 - The same scenario covers team registry reads and Product Work creation and
   projection through the composed application.
-- The `agent-team` successor proves team admission reaches a durable terminal
-  failed state with the fixture provider. Because the fixture provider does
-  not traverse collaboration MCP tools, it cannot prove autonomous
-  collaboration; that coverage remains owned by the live `agent-team` canary.
+- The `agent-team` successor proves only that team admission reaches a durable
+  terminal failed state with the fixture provider. Because the fixture provider
+  does not traverse collaboration MCP tools, it cannot prove autonomous
+  collaboration or replace the live `agent-team` canary.
 
 These checks prove deterministic control-plane wiring, fixture replay, and the
 bounded browser journeys above; they do not prove provider, Paseo, or MCP
@@ -55,5 +56,5 @@ must not be described as equivalent coverage for any of those claims.
 When `team-product` retires from paid CI, that is also an explicit coverage
 reduction: registry/read/create/projection fixture coverage does not replace
 the real-provider user-defined Team Work execution or compatibility coverage
-that the retained `team-product` lane owns. It remains explicit live-canary
-scope until a later authority decision.
+owned by the `team-product` live canary. It remains explicit live-canary scope
+until a later authority decision.

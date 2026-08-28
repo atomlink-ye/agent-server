@@ -6,6 +6,7 @@ import {
 } from '../../src/contracts/runs.js';
 import { primaryServiceAccountToken } from '../fixtures/create-test-app.js';
 import { withAgentServerHarness } from '../harness/scenario.js';
+import { loadProviderFixture } from '../fixtures/provider/load-provider-fixture.js';
 
 /**
  * PROVIDER_FIXTURE_ID selects which canonical fixture the replay uses. It exists
@@ -13,8 +14,28 @@ import { withAgentServerHarness } from '../harness/scenario.js';
  * without editing source or deleting a committed fixture.
  */
 const fixtureId = process.env.PROVIDER_FIXTURE_ID ?? 'baseline-completion';
+// Expect the fixture's own completion text rather than a literal, so refreshing
+// a fixture never requires editing an assertion. The proof is unchanged: that
+// text still has to travel admission -> persistence -> execution -> read model
+// to arrive in the HTTP response.
+//
+// Deriving both sides of that comparison from the fixture would, on its own,
+// pass for ANY value the fixture happened to hold - including an empty string a
+// faulty sanitiser produced. Since the content is captured rather than
+// author-chosen, the shape is pinned separately below so a degraded fixture
+// fails instead of quietly satisfying the test.
+const expectedText = loadProviderFixture(fixtureId).completion.text;
+const CAPTURED_MARKER = /^AGENT_SERVER_PROVIDER_SMOKE_[A-Z0-9_]+$/;
 
 describe('fixture-backed runtime replay', () => {
+  it('has a fixture whose captured completion text is intact', () => {
+    // Guards the fixture itself, independently of the journey: a truncated,
+    // emptied or malformed capture must fail here rather than silently become
+    // the expectation the journey then trivially satisfies.
+    expect(expectedText).not.toHaveLength(0);
+    expect(expectedText).toMatch(CAPTURED_MARKER);
+  });
+
   it('admits and completes a run through the composed application', async () => {
     await withAgentServerHarness(
       async (harness) => {
@@ -40,7 +61,7 @@ describe('fixture-backed runtime replay', () => {
         });
         const run = GetRunResponseSchema.parse(await terminal.json());
         expect(run.status).toBe('succeeded');
-        expect(run.result?.text).toBe('FIXTURE_REPLAY_OK');
+        expect(run.result?.text).toBe(expectedText);
         expect(harness.trace.map((entry) => entry.module)).toEqual([
           'createApplication',
           'SubmitRun',

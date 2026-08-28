@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import {
   LOCAL_SERVICE_TOKEN,
   LOCAL_WORKSPACE_ID,
+  hostFixtureRuntimeEnvironment,
   hostRuntimeEnvironment,
   hostWebEnvironment,
   isPortFree,
@@ -13,8 +14,10 @@ import {
   localServiceAccountsJson,
   ownedChildLogPath,
   prepareHostNativeEnvironment,
+  readPGliteState,
   readRuntimeLogTail,
   repositoryRoot,
+  resolvePGlitePaths,
   runCommand,
   spawnOwned,
   stopOwned,
@@ -23,9 +26,15 @@ import {
 import { setupProviders } from './setup-providers.js';
 import { canaryReadinessTimeout } from './readiness-timeout.js';
 
+const fixtureBrowserFiles = [
+  'e2e/web-product-golden-path.e2e.test.ts',
+  'e2e/web-product-session.e2e.test.ts',
+] as const;
+
 export type CanaryKind =
   | 'runtime'
   | 'golden-path'
+  | 'fixture-browser'
   | 'agent-team'
   | 'team-registry-work'
   | 'user-defined-team-work';
@@ -40,6 +49,39 @@ const runtimeSmokeCommands: Partial<Record<CanaryKind, string[]>> = {
 };
 
 const webBootstrapEnvPath = resolve(repositoryRoot, '.local/web-bootstrap.env');
+
+async function fixtureBootstrapEnvironment(
+  environment: NodeJS.ProcessEnv,
+): Promise<NodeJS.ProcessEnv> {
+  const configuredUrl =
+    environment.DATABASE_URL?.trim() || environment.POSTGRES_URL?.trim();
+  if (configuredUrl) return environment;
+  const { statePath } = resolvePGlitePaths(environment);
+  const state = await readPGliteState(statePath);
+  if (!state)
+    throw new Error(
+      'fixture-browser could not find the resolved PGlite database for web bootstrap.',
+    );
+  return {
+    ...environment,
+    DATABASE_URL: state.url,
+    POSTGRES_URL: state.url,
+    POSTGRES_ADMIN_URL: state.url,
+  };
+}
+
+async function stopFixturePGlite(
+  environment: NodeJS.ProcessEnv,
+): Promise<void> {
+  const { statePath } = resolvePGlitePaths(environment);
+  const state = await readPGliteState(statePath);
+  if (!state) return;
+  try {
+    process.kill(state.pid, 'SIGTERM');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
+  }
+}
 
 type CanarySignal = 'SIGINT' | 'SIGTERM' | 'SIGHUP';
 
@@ -159,13 +201,14 @@ function parseKind(value: string | undefined): CanaryKind {
   if (
     value === 'runtime' ||
     value === 'golden-path' ||
+    value === 'fixture-browser' ||
     value === 'agent-team' ||
     value === 'team-registry-work' ||
     value === 'user-defined-team-work'
   )
     return value;
   throw new Error(
-    'usage: run-canary.ts <runtime|golden-path|agent-team|team-registry-work|user-defined-team-work>',
+    'usage: run-canary.ts <runtime|golden-path|fixture-browser|agent-team|team-registry-work|user-defined-team-work>',
   );
 }
 
@@ -174,6 +217,7 @@ export { canaryReadinessTimeout as canaryReadyTimeout } from './readiness-timeou
 export async function runHostCanary(
   kind: CanaryKind,
   environment: NodeJS.ProcessEnv = process.env,
+  requestedBrowserFiles?: readonly string[],
 ): Promise<void> {
   const children: ChildProcess[] = [];
   const lifecycle = createCanarySignalLifecycle(children);
@@ -260,27 +304,64 @@ export async function runHostCanary(
       return;
     }
 
+    const fixtureBrowser = kind === 'fixture-browser';
+    if (
+      fixtureBrowser &&
+      (requestedBrowserFiles === undefined ||
+        requestedBrowserFiles.length !== fixtureBrowserFiles.length ||
+        requestedBrowserFiles.some(
+          (file, index) => file !== fixtureBrowserFiles[index],
+        ))
+    )
+      throw new Error(
+        `fixture-browser requires both browser journeys: ${fixtureBrowserFiles.join(', ')}`,
+      );
     const apiPort = canaryPort(loaded, 'PORT', 3000);
     goldenApiPort = apiPort;
-    await assertCanaryPortFree('golden-path API', apiPort);
-    await assertCanaryPortFree('golden-path web', 3001);
+    await assertCanaryPortFree(
+      fixtureBrowser ? 'fixture-browser API' : 'golden-path API',
+      apiPort,
+    );
+    await assertCanaryPortFree(
+      fixtureBrowser ? 'fixture-browser web' : 'golden-path web',
+      3001,
+    );
     throwIfCanaryInterrupted(lifecycle);
     const readyTimeoutMs = canaryReadinessTimeout(loaded);
     const apiBaseUrl = `http://127.0.0.1:${apiPort}`;
     await rm(webBootstrapEnvPath, { force: true });
     throwIfCanaryInterrupted(lifecycle);
     const devEnvironment: NodeJS.ProcessEnv = {
-      ...loaded,
+      ...(fixtureBrowser
+        ? hostFixtureRuntimeEnvironment(loaded, 'baseline-completion')
+        : loaded),
       HOST_NATIVE_WATCH: '0',
       WEB_BOOTSTRAP_EMPTY_PRODUCT: '1',
       CANARY_READY_TIMEOUT_MS: String(readyTimeoutMs),
+      ...(fixtureBrowser
+        ? {
+            PGLITE_STATE_PATH:
+              loaded.PGLITE_STATE_PATH?.trim() ||
+              '.local/dev-runtime/fixture-browser-pglite.json',
+            PGLITE_DATA_PATH:
+              loaded.PGLITE_DATA_PATH?.trim() ||
+              '.local/dev-runtime/fixture-browser-pglite',
+          }
+        : {}),
     };
     const dev = spawnOwned(
       'node',
-      ['--import', 'tsx', 'tooling/dev/start.ts', 'runtime'],
+      [
+        '--import',
+        'tsx',
+        'tooling/dev/start.ts',
+        fixtureBrowser ? 'fixture' : 'runtime',
+      ],
       {
         environment: devEnvironment,
-        logName: 'canary-golden-path-dev',
+        logName: fixtureBrowser
+          ? 'fixture-browser-dev'
+          : 'canary-golden-path-dev',
       },
     );
     lifecycle.register(dev);
@@ -289,17 +370,17 @@ export async function runHostCanary(
     await waitForHttp(`${apiBaseUrl}/health/ready`, readyTimeoutMs, {
       child: dev,
       environment: devEnvironment,
-      label: 'golden-path dev',
+      label: fixtureBrowser ? 'fixture-browser dev' : 'golden-path dev',
     });
     throwIfCanaryInterrupted(lifecycle);
     await waitForHttp('http://127.0.0.1:3001', readyTimeoutMs, {
       child: dev,
       environment: devEnvironment,
-      label: 'golden-path dev',
+      label: fixtureBrowser ? 'fixture-browser dev' : 'golden-path dev',
     });
     throwIfCanaryInterrupted(lifecycle);
     commandEnvironment = hostWebEnvironment({
-      ...loaded,
+      ...(fixtureBrowser ? devEnvironment : loaded),
       AGENT_SERVER_BASE_URL: apiBaseUrl,
       AGENT_SERVER_SERVICE_TOKEN:
         loaded.AGENT_SERVER_SERVICE_TOKEN?.trim() || LOCAL_SERVICE_TOKEN,
@@ -309,14 +390,18 @@ export async function runHostCanary(
         loaded.WEB_E2E_BASE_URL?.trim() || 'http://web.localhost:3001',
       WEB_BOOTSTRAP_EMPTY_PRODUCT: '1',
       WEB_E2E_RESOLVE_HOST: loaded.WEB_E2E_RESOLVE_HOST?.trim() || '127.0.0.1',
-      WEB_E2E_PROVIDER:
-        loaded.WEB_E2E_PROVIDER?.trim() ||
-        loaded.PASEO_PROVIDER?.trim() ||
-        'claude',
-      WEB_E2E_MODEL:
-        loaded.WEB_E2E_MODEL?.trim() ||
-        loaded.PASEO_MODEL?.trim() ||
-        'opencode-go/deepseek-v4-flash',
+      ...(fixtureBrowser
+        ? { WEB_E2E_FIXTURE_REPLAY: '1' }
+        : {
+            WEB_E2E_PROVIDER:
+              loaded.WEB_E2E_PROVIDER?.trim() ||
+              loaded.PASEO_PROVIDER?.trim() ||
+              'claude',
+            WEB_E2E_MODEL:
+              loaded.WEB_E2E_MODEL?.trim() ||
+              loaded.PASEO_MODEL?.trim() ||
+              'opencode-go/deepseek-v4-flash',
+          }),
     });
     await runCommand(
       'pnpm',
@@ -334,7 +419,7 @@ export async function runHostCanary(
         abortOn: {
           child: dev,
           environment: devEnvironment,
-          label: 'golden-path dev',
+          label: fixtureBrowser ? 'fixture-browser dev' : 'golden-path dev',
           healthUrl: `${apiBaseUrl}/health/ready`,
         },
       },
@@ -342,9 +427,12 @@ export async function runHostCanary(
     throwIfCanaryInterrupted(lifecycle);
     // Keep the same runtime alive while switching from the empty authoring
     // surface to the normal seeded ProductSession fixture world.
+    const bootstrapEnvironment = fixtureBrowser
+      ? await fixtureBootstrapEnvironment(devEnvironment)
+      : devEnvironment;
     await runCommand('node', ['scripts/dev/web-bootstrap.mjs'], {
       environment: {
-        ...devEnvironment,
+        ...bootstrapEnvironment,
         AGENT_SERVER_BASE_URL: apiBaseUrl,
         WEB_BOOTSTRAP_EMPTY_PRODUCT: '0',
         WEB_BOOTSTRAP_SKIP_WORK: '0',
@@ -353,7 +441,7 @@ export async function runHostCanary(
       abortOn: {
         child: dev,
         environment: devEnvironment,
-        label: 'golden-path dev',
+        label: fixtureBrowser ? 'fixture-browser dev' : 'golden-path dev',
         healthUrl: `${apiBaseUrl}/health/ready`,
       },
     });
@@ -376,7 +464,7 @@ export async function runHostCanary(
         abortOn: {
           child: dev,
           environment: devEnvironment,
-          label: 'golden-path dev',
+          label: fixtureBrowser ? 'fixture-browser dev' : 'golden-path dev',
           healthUrl: `${apiBaseUrl}/health/ready`,
         },
       },
@@ -405,17 +493,19 @@ export async function runHostCanary(
     } catch (error) {
       cleanupError = error;
     }
-    if (kind === 'golden-path') {
+    if (kind === 'golden-path' || kind === 'fixture-browser') {
       await rm(webBootstrapEnvPath, { force: true });
       const busy = await waitForGoldenPortsIdle(goldenApiPort ?? 3000);
       if (busy.length > 0) {
         cleanupError = new Error(
-          `golden-path left ports in use: ${busy.join(', ')}${
+          `${kind} left ports in use: ${busy.join(', ')}${
             cleanupError instanceof Error ? `; ${cleanupError.message}` : ''
           }`,
         );
       }
     }
+    if (kind === 'fixture-browser')
+      await stopFixturePGlite(primaryEnvironment ?? loaded);
     lifecycle.dispose();
     const requestedSignal = lifecycle.requestedSignal();
     if (requestedSignal) {
@@ -452,7 +542,11 @@ function isEntrypoint(): boolean {
 }
 
 if (isEntrypoint()) {
-  runHostCanary(parseKind(process.argv[2])).catch((error: unknown) => {
+  runHostCanary(
+    parseKind(process.argv[2]),
+    process.env,
+    process.argv.slice(3),
+  ).catch((error: unknown) => {
     process.stderr.write(
       `canary failed: ${error instanceof Error ? error.message : String(error)}\n`,
     );

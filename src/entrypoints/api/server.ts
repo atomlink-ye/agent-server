@@ -11,6 +11,9 @@ import { registerBrowserWebRoutes } from './routes/browser-web.js';
 import { registerBrowserWorkOrganizationRoutes } from './routes/browser-work-organization.js';
 import { shutdownService } from './shutdown.js';
 
+const fixtureRuntimeProviderId =
+  process.env.AGENT_SERVER_FIXTURE_RUNTIME_PROVIDER?.trim();
+
 // Work, Work Organization, Work Definition authoring, the Skill catalog, and
 // the runtime capability projection are only reachable when the Product Work
 // surface is composed (see src/entrypoints/api/app.ts, the single owner of
@@ -28,7 +31,33 @@ const logger = createLogger({
   service: config.serviceName,
   minimumLevel: config.logLevel,
 });
-const { app, close } = await createApplication(config, logger);
+if (fixtureRuntimeProviderId && config.nodeEnv !== 'development')
+  throw new Error(
+    'AGENT_SERVER_FIXTURE_RUNTIME_PROVIDER is allowed only in development.',
+  );
+
+// This is deliberately an opt-in development entrypoint seam. The provider
+// remains test-owned so production builds cannot acquire a fixture fallback.
+const fixtureRuntimeProvider = fixtureRuntimeProviderId
+  ? await (async () => {
+      const fixtureModule = await import(
+        // Keep tests/ outside the rootDir build program; this loses compile-time move/rename checking for this development-only path.
+        '../../../tests/fixtures/provider/fixture-runtime-provider.js' as string
+      );
+      return new fixtureModule.FixtureRuntimeProvider(fixtureRuntimeProviderId);
+    })()
+  : undefined;
+if (fixtureRuntimeProvider)
+  logger.log('warn', 'service.fixture_runtime_replay.enabled', {
+    fixture_id: fixtureRuntimeProvider.replayReport.fixture_id,
+    live_provider: false,
+    mode: fixtureRuntimeProvider.replayReport.mode,
+  });
+const { app, close } = await createApplication(config, logger, {
+  ...(fixtureRuntimeProvider
+    ? { runtimeProvider: fixtureRuntimeProvider }
+    : {}),
+});
 
 // The canonical frontend is a pure Vite client. Browser-facing BFF routes live
 // on Agent Server so service-account credentials never enter browser code.

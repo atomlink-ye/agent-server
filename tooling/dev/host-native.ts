@@ -237,6 +237,35 @@ export function hostRuntimeEnvironment(
   };
 }
 
+/** Explicit deterministic replay mode; it never starts Paseo or a provider. */
+export function hostFixtureRuntimeEnvironment(
+  base: NodeJS.ProcessEnv,
+  fixtureId: string,
+): NodeJS.ProcessEnv {
+  if (!fixtureId.trim())
+    throw new Error('fixture runtime mode requires an explicit fixture id.');
+  return {
+    // Unlike core/runtime modes, do not synthesize a native PostgreSQL URL.
+    // That leaves an absent database configuration visible to
+    // prepareHostNativeEnvironment, which can then select its PGlite fallback.
+    ...base,
+    NODE_ENV: base.NODE_ENV ?? 'development',
+    HOST: base.HOST ?? '127.0.0.1',
+    PORT: base.PORT ?? '3000',
+    SERVICE_ACCOUNTS_JSON:
+      base.SERVICE_ACCOUNTS_JSON?.trim() || localServiceAccountsJson(),
+    AGENT_SERVER_DIRECT_CHAT_PLANE: 'execution_runtime',
+    AGENT_SERVER_PRODUCT_WORK_PLANE: 'execution_runtime',
+    RUNTIME_ADAPTER: 'paseo',
+    AGENT_SERVER_SKILL_REGISTRY_ROOT:
+      base.AGENT_SERVER_SKILL_REGISTRY_ROOT?.trim() || '.local/skill-registry',
+    PASEO_AGENT_CWD: base.PASEO_AGENT_CWD?.trim() || '.local/agent-workspace',
+    PASEO_RUNTIME_CELL_ROOT:
+      base.PASEO_RUNTIME_CELL_ROOT?.trim() || '.local/runtime-cells',
+    AGENT_SERVER_FIXTURE_RUNTIME_PROVIDER: fixtureId,
+  };
+}
+
 export function hostWebEnvironment(base: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   return {
     ...base,

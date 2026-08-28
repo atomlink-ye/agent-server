@@ -9,12 +9,14 @@ Coverage is intentionally bounded:
 
 - `tests/scenarios/fixture-product-successors.scenario.test.ts` covers the
   `runtime-browser` successor as a fixture-backed API/runtime journey only.
-  It does not cover browser fidelity. The browser files are explicitly
-  local-only live canaries for fixture-successor coverage:
-  `e2e/web-product-golden-path.e2e.test.ts` covers the product golden path,
-  and `e2e/web-product-session.e2e.test.ts` covers ProductSession live/replay.
-  The untouched `real-runtime` workflow continues to execute both as its
-  separate live CI canary.
+  The additive `fixture-browser` job also runs
+  `e2e/web-product-golden-path.e2e.test.ts` (Coworker/capability/Work UI) and
+  `e2e/web-product-session.e2e.test.ts` (ProductSession live/replay) against
+  the explicitly fixture-backed dev server. It proves browser-to-server
+  wiring and deterministic replay, including per-turn markers. It does not
+  prove provider compatibility, MCP traversal, or the Paseo adapter. The
+  untouched `real-runtime` workflow continues to execute both as its separate
+  live CI canary.
 - The same scenario covers team registry reads and Product Work creation and
   projection through the composed application.
 - The `agent-team` successor proves team admission reaches a durable terminal
@@ -22,8 +24,9 @@ Coverage is intentionally bounded:
   not traverse collaboration MCP tools, it cannot prove autonomous
   collaboration; that coverage remains owned by the live `agent-team` canary.
 
-These checks prove deterministic control-plane wiring and fixture replay, not
-provider, Paseo, MCP, or browser compatibility.
+These checks prove deterministic control-plane wiring, fixture replay, and the
+bounded browser journeys above; they do not prove provider, Paseo, or MCP
+compatibility.
 
 ## Live-canary contract
 

@@ -245,7 +245,7 @@ Focused evidence added by this feature includes:
   - Capability binding;
   - fail-closed behavior without a service credential.
 
-Existing scenario, real-Postgres, Work Card, Work projection, Chat, and real-runtime lanes remain the broader regression authority. Final PR validation must be green on the PR head before this document is marked Validated.
+Existing scenario, real-Postgres, Work Card, Work projection, and Chat lanes remain the broader regression authority in CI. Real-provider coverage is no longer a CI lane; it is a named Sandbox/local live canary (see `docs/quality/ci-fixture-successors.md`). Final PR validation must be green on the PR head before this document is marked Validated.
 
 ## Acceptance matrix
 

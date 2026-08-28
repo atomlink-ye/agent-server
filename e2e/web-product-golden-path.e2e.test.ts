@@ -3,8 +3,10 @@ import { randomUUID } from 'node:crypto';
 import { chromium, type Browser, type Page } from 'playwright';
 import { afterEach, describe, expect, it } from 'vitest';
 
-// Live-provider/browser canary owned by the real-runtime workflow. Fixture
-// successors cover browser-to-server fidelity but not provider, Paseo, or MCP fidelity.
+// Live-provider/browser canary. It is no longer run by any CI workflow: it is a
+// named Sandbox/local canary owned by the Release Engineer, with receipts in
+// issue #139. Fixture successors cover browser-to-server fidelity but not
+// provider, Paseo, or MCP fidelity, so this file is not redundant with them.
 
 const configuredBaseUrl = process.env.WEB_E2E_BASE_URL?.trim();
 if (!configuredBaseUrl)

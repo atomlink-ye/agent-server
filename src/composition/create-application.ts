@@ -33,6 +33,7 @@ import { createRuntimeToolCatalog } from '../entrypoints/mcp/runtime-tool-compos
 import { createRuntimeOwner } from './create-runtime-owner.js';
 import { createRunExecutionComposition } from './create-run-execution-composition.js';
 import { createHostComposition } from './create-host-composition.js';
+import { recordExecutionTrace } from '../shared/observability/execution-trace.js';
 
 export interface SingleRunDebugControl {
   claimAndExecute(runId: string): Promise<{
@@ -71,6 +72,7 @@ export async function createApplication(
   logger: Logger,
   options: CreateServiceOptions = {},
 ) {
+  recordExecutionTrace({ module: 'createApplication' });
   if (options.deferTeamWakeReconcile && !options.singleRunDebug)
     throw new Error('Debug service options require singleRunDebug.');
   const workerId = `agent-server:${process.pid}:${randomUUID()}`;

@@ -204,6 +204,43 @@ Canaries are not replacements for deterministic tests:
 - golden-path canary answers whether a representative host-native browser/API/runtime journey works now;
 - scenario tests answer whether Agent Server's own deterministic product wiring is correct.
 
+## Provider fixtures
+
+`pnpm test:provider-fixtures` replays a versioned, sanitized provider decision
+through the normal application composition with PGlite. It makes no provider
+network call and is the CI runtime-fixture lane. Live compatibility remains in
+the explicit local canaries above.
+
+`PROVIDER_FIXTURE_ID` selects which canonical fixture the lane replays. A
+missing fixture must fail deterministically rather than reach for a provider, so
+that behaviour is checked through the same command:
+
+```bash
+PROVIDER_FIXTURE_ID=does-not-exist pnpm test:provider-fixtures
+```
+
+This exits non-zero and prints refresh instructions without deleting or editing
+any committed fixture.
+
+To refresh a fixture, first make an explicitly authorized live capture outside
+CI, reduce it to the bounded completion text, then run:
+
+```bash
+pnpm capture:provider-fixture -- --input sanitized-capture.json --fixture-id example --from-live-run
+```
+
+`--from-live-run` is required because the command stamps
+`provenance: sanitized_live_capture`. Without it the command refuses, so that
+claim cannot be attached to material no provider ever produced. The command also
+carries across only the bounded completion text and rejects text still holding
+credentials, UUIDs, absolute paths, database URLs, timestamps, or long opaque
+blobs.
+
+Never commit raw provider payloads, prompts, credentials, identities, paths,
+timestamps, or diagnostics. The committed fixture must state truthful
+provenance; an authored fixture is `hand_authored_contract_fixture`, not a live
+capture.
+
 ## Generated state
 
 Local runtime/process/test state belongs under `.local/`. Do not commit database dumps, provider transcripts, screenshots, evidence bundles, or task-specific debug scripts. Milestone/release evidence belongs to CI/acceptance artifacts, not the ordinary inner-loop test source.

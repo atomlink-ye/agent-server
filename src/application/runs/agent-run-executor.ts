@@ -34,6 +34,7 @@ import type { RunTeamContext } from './run-team-coordinator.js';
 import { RunPromptContext } from './run-prompt-context.js';
 import { RuntimeMemoryProposalWriter } from './runtime-memory-proposal-writer.js';
 import { createDesiredRuntimeSystemPrompt } from '../../domain/runtime/desired-runtime-system-prompt.js';
+import { recordExecutionTrace } from '../../shared/observability/execution-trace.js';
 
 /**
  * Executes one leaf Agent Run after ExecuteRun has established durable Task/Run
@@ -72,6 +73,10 @@ export class AgentRunExecutor {
     readonly task: Task;
     readonly teamContext: RunTeamContext | null;
   }) {
+    recordExecutionTrace({
+      module: 'AgentRunExecutor',
+      runId: input.claim.run.id,
+    });
     const { claim, ownerScope, invokableVersionId, task } = input;
     const collaborativeTeam =
       input.teamContext?.team ??

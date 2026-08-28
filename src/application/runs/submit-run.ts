@@ -5,6 +5,7 @@ import type { Run } from '../../domain/runs/run.js';
 import type { AccessContext } from '../../domain/access-context.js';
 import { AdmitRootTask } from '../tasks/admit-root-task.js';
 import type { RunRepository } from '../ports/run-repository.js';
+import { recordExecutionTrace } from '../../shared/observability/execution-trace.js';
 
 export interface SubmitRunResult {
   readonly run: Run;
@@ -49,10 +50,12 @@ export class SubmitRun {
       accessContext,
     });
 
-    return {
+    const result = {
       run: await this.loadRun(admission.runId, accessContext),
       reused: admission.reused,
     };
+    recordExecutionTrace({ module: 'SubmitRun', runId: result.run.id });
+    return result;
   }
 
   private async loadRun(

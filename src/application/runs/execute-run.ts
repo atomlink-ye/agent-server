@@ -26,6 +26,7 @@ import type { CreateMemoryProposal } from '../memory/create-memory-proposal.js';
 import { RuntimeTimedOutError } from '../runtime/execution-runtime-errors.js';
 import { RuntimeTurnExecutionError } from '../runtime/execute-runtime-turn.js';
 import type { RuntimeExecutionProvider } from '../ports/runtime-execution-provider.js';
+import { recordExecutionTrace } from '../../shared/observability/execution-trace.js';
 import type { RuntimeSessionStore } from '../ports/runtime-session-store.js';
 import type { EnsureDesiredRuntimeSpec } from '../ports/ensure-desired-runtime-spec.js';
 import { RuntimeSessionSpecResolutionError } from '../runtime/resolve-runtime-session-spec.js';
@@ -187,6 +188,7 @@ export class ExecuteRun {
   }
 
   public async execute(claim: ClaimedRun) {
+    recordExecutionTrace({ module: 'ExecuteRun', runId: claim.run.id });
     if (this.teamCoordinator) {
       const task = await this.tasks.findById(claim.taskId);
       const memberId = task?.teamMemberRunId;

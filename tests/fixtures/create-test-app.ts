@@ -11,6 +11,7 @@ import {
   type SingleRunDebugControl,
 } from '../../src/composition/create-application.js';
 import type { FakeAgentRuntime } from './fake-agent-runtime.js';
+import type { RuntimeExecutionProvider } from '../../src/application/ports/runtime-execution-provider.js';
 import type { FileStore } from '../../src/application/ports/file-store.js';
 import { applyDurableKernelMigrations } from '../../src/infrastructure/postgres/postgres.js';
 import type { PostgresRunDispatcher } from '../../src/infrastructure/postgres/postgres-run-dispatcher.js';
@@ -110,6 +111,8 @@ export interface CreateTestAppOptions {
   };
   readonly memoryReviewNotifier?: Pick<PublishMemoryReviewSurface, 'execute'>;
   readonly loggerControl?: { lines?: string[] };
+  readonly runtimeProvider?: RuntimeExecutionProvider;
+  readonly applicationControl?: { close?: () => Promise<void> };
 }
 
 export type TestDatabase = {
@@ -123,9 +126,17 @@ export type TestDatabase = {
 };
 
 export async function createTestApp(
-  runtime: FakeAgentRuntime,
+  // Optional: callers that inject an explicit runtimeProvider (for example the
+  // fixture-backed harness) have no FakeAgentRuntime to supply.
+  runtime: FakeAgentRuntime | undefined,
   options: CreateTestAppOptions = {},
 ) {
+  const resolvedRuntimeProvider =
+    options.runtimeProvider ?? runtime?.asRuntimeProvider();
+  if (!resolvedRuntimeProvider)
+    throw new Error(
+      'createTestApp requires either a FakeAgentRuntime or options.runtimeProvider.',
+    );
   const database = withTransactionClient(
     (options.database ?? new PGlite()) as TestDatabase,
   );
@@ -202,13 +213,15 @@ export async function createTestApp(
       singleRunDebug: true,
       database: database as any,
       fileStore,
-      runtimeProvider: runtime.asRuntimeProvider(),
+      runtimeProvider: resolvedRuntimeProvider,
       ...(options.memoryReviewNotifier
         ? { memoryReviewNotifier: options.memoryReviewNotifier }
         : {}),
     },
   );
   const controls = application.controls as ApplicationControls;
+  if (options.applicationControl)
+    options.applicationControl.close = application.close;
   if (options.dispatcherControl)
     options.dispatcherControl.dispatcher = controls.dispatcher;
   if (options.runControl && application.singleRunDebug)
@@ -276,10 +289,19 @@ function withTransactionClient(database: TestDatabase): TestDatabase {
     );
     return { ...result, rowCount: result.affectedRows };
   };
-  const close = database.close.bind(database);
+  // PGlite closes with close(); the production lifecycle shuts a pool down with
+  // end(). Expose both, and make them idempotent so a lifecycle shutdown
+  // followed by an explicit teardown does not close the database twice.
+  let closed = false;
+  const close = async () => {
+    if (closed) return;
+    closed = true;
+    await database.close();
+  };
   return {
     query,
     close,
+    end: close,
     exec: database.exec.bind(database),
     async connect() {
       return {

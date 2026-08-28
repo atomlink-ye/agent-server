@@ -16,6 +16,7 @@ import type {
 import type { RuntimeSessionId } from '../../domain/runtime/runtime-session.js';
 import type { DesiredRuntimeSystemPrompt } from '../../domain/runtime/desired-runtime-system-prompt.js';
 import type { ReleaseRuntimeGrant } from '../ports/release-runtime-grant.js';
+import { recordExecutionTrace } from '../../shared/observability/execution-trace.js';
 
 export interface ExecuteRuntimeTurnInput {
   readonly runtimeSessionId: RuntimeSessionId;
@@ -47,6 +48,12 @@ export class ExecuteRuntimeTurn {
   public async execute(
     input: ExecuteRuntimeTurnInput,
   ): Promise<ExecutionOutput> {
+    recordExecutionTrace({
+      module: 'ExecuteRuntimeTurn',
+      // Only a run-sourced turn carries the product Run identity. Team-member
+      // turns are sourced differently and legitimately have none.
+      ...(input.source.kind === 'run' ? { runId: input.source.runId } : {}),
+    });
     const created = await this.turns.createPending({
       ...(input.turnId ? { id: input.turnId } : {}),
       runtimeSessionId: input.runtimeSessionId,

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import type { ClaimedRun, RunRepository } from '../ports/run-repository.js';
+import { recordExecutionTrace } from '../../shared/observability/execution-trace.js';
 
 export interface ClaimNextRunOptions {
   readonly workerId: string;
@@ -24,7 +25,7 @@ export class ClaimNextRun {
   public async execute(): Promise<ClaimedRun | null> {
     const claimedAt = this.#now();
 
-    return this.repository.claimNextQueued({
+    const claim = await this.repository.claimNextQueued({
       workerId: this.options.workerId,
       activationId: this.#activationIdFactory(),
       claimedAt: claimedAt.toISOString(),
@@ -32,5 +33,8 @@ export class ClaimNextRun {
         claimedAt.getTime() + this.options.leaseDurationMs,
       ).toISOString(),
     });
+    if (claim)
+      recordExecutionTrace({ module: 'ClaimNextRun', runId: claim.run.id });
+    return claim;
   }
 }

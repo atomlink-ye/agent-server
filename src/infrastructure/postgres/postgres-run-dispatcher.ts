@@ -1,4 +1,8 @@
 import type { RunDispatcher } from '../../application/ports/run-dispatcher.js';
+import type {
+  StepWorker,
+  WorkerStepResult,
+} from '../../shared/workers/step-worker.js';
 import { ClaimNextRun } from '../../application/runs/claim-next-run.js';
 import { ExecuteRun } from '../../application/runs/execute-run.js';
 import type { Logger } from '../../shared/observability/logger.js';
@@ -13,7 +17,9 @@ export interface PostgresRunDispatcherOptions {
 const DEFAULT_POLL_INTERVAL_MS = 50;
 const DEFAULT_IDLE_MAINTENANCE_INTERVAL_MS = 5_000;
 
-export class PostgresRunDispatcher implements RunDispatcher {
+export class PostgresRunDispatcher
+  implements RunDispatcher, StepWorker<boolean>
+{
   readonly #pollIntervalMs: number;
   readonly #concurrency: number;
   readonly #idleMaintenanceIntervalMs: number;
@@ -117,19 +123,18 @@ export class PostgresRunDispatcher implements RunDispatcher {
     }
   }
 
+  public async step(): Promise<WorkerStepResult<boolean>> {
+    if (!(await this.executeRun.ensureRuntimeReady())) return { kind: 'idle' };
+    const claim = await this.claimNextRun.execute();
+    if (!claim) return { kind: 'idle' };
+    await this.executeRun.execute(claim);
+    return { kind: 'processed', value: true };
+  }
+
   private async dispatchOnce(): Promise<boolean> {
     try {
-      if (!(await this.executeRun.ensureRuntimeReady())) {
-        return false;
-      }
-
-      const claim = await this.claimNextRun.execute();
-      if (!claim) {
-        return false;
-      }
-
-      await this.executeRun.execute(claim);
-      return true;
+      const result = await this.step();
+      return result.kind === 'processed';
     } catch (error) {
       this.logger.log('error', 'run.dispatch.failed', {
         error_name: error instanceof Error ? error.name : 'UnknownError',

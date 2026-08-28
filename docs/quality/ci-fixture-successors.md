@@ -19,12 +19,19 @@ Coverage is intentionally bounded:
   provider follows an instruction. The separate `real-runtime` workflow owns
   the live canaries when its eligibility and credential gates allow them to
   run; fixture coverage does not replace those canaries.
-- The same scenario covers team registry reads and Product Work creation and
-  projection through the composed application.
-- The `agent-team` successor proves only that team admission reaches a durable
-  terminal failed state with the fixture provider. Because the fixture provider
-  does not traverse collaboration MCP tools, it cannot prove autonomous
-  collaboration or replace the live `agent-team` canary.
+- The same scenario covers the `team-product` successor: team registry reads,
+  Product Work creation and projection, and a Product WorkRun started through
+  `POST /api/v1/works/:workId/runs` and executed through the dispatcher to the
+  fixture provider, reaching product state `complete` with a `succeeded` run in
+  its trace. This covers the deterministic half of the paid lane's two halves
+  (registry/projection reachability, and the Work execution lifecycle). It does
+  not cover real-provider execution.
+- The `agent-team` successor proves that team admission executes a lead run
+  through the fixture provider and the Team then reaches a durable terminal
+  state with stop reason `lead_no_progress`. Because the fixture provider does
+  not traverse collaboration MCP tools, the lead makes no protocol progress; the
+  successor therefore cannot prove autonomous collaboration or replace the live
+  `agent-team` canary.
 
 These checks prove deterministic control-plane wiring, fixture replay, and the
 bounded browser journeys above; they do not prove provider, Paseo, or MCP
@@ -54,7 +61,27 @@ compatibility, or collaboration-pipeline success with tool dispatch. A fixture
 must not be described as equivalent coverage for any of those claims.
 
 When `team-product` retires from paid CI, that is also an explicit coverage
-reduction: registry/read/create/projection fixture coverage does not replace
-the real-provider user-defined Team Work execution or compatibility coverage
-owned by the `team-product` live canary. It remains explicit live-canary scope
-until a later authority decision.
+reduction. The fixture successor now executes a Product WorkRun deterministically
+rather than only creating and reading one, so the control-plane execution
+lifecycle is covered. It still does not replace real-provider execution or
+provider/tool compatibility for that lane, which remain explicit live-canary
+scope under the contract above until a later authority decision.
+
+## A fixture that could not fail
+
+Until this round the harness seeded an Environment whose canonical package was
+`{}`. Such a row reads back correctly through the registry, so registry and
+projection assertions passed, but `AgentRunExecutor` rejects it before execution
+("Work runtime Environment is not supported"). Two consequences followed:
+
+- no Product WorkRun could execute deterministically at all, which is why the
+  `team-product` successor previously stopped at create/read; and
+- the `agent-team` successor's terminal `lead_run_failed` was produced by that
+  invalid seed rather than by Team behaviour — it asserted an artefact of a
+  broken fixture.
+
+The seed now writes a real supported `ManagedEnvironment` package. Both
+successors execute through the provider seam, and the `agent-team` terminal
+state is one the Team actually decided. This is recorded because a passing
+assertion whose cause is a defective fixture is worse than a missing one: it
+reports coverage that does not exist.

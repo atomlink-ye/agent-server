@@ -54,7 +54,7 @@ describe('fixture-backed successors for live runtime lanes', () => {
     });
   });
 
-  it('covers team registry and Product Work creation/projection through the composed application', async () => {
+  it('covers the team-product successor: registry, Work projection, and a WorkRun executed through the fixture provider', async () => {
     await withAgentServerHarness(async (harness) => {
       const owner = await harness.seed.workspace({
         tenantId: 'tenant_alpha',
@@ -105,10 +105,82 @@ describe('fixture-backed successors for live runtime lanes', () => {
         definition_version_id: definition.versionId,
         title: 'Fixture Product Work',
       });
+
+      // The paid team-product lane has two halves: registry/projection
+      // reachability (above) and a user-defined Team Work execution lifecycle.
+      // Creating and reading a Work does not exercise the second half at all,
+      // so the rest of this test runs the WorkRun through the dispatcher and
+      // the fixture provider.
+      const started = await harness.app.request(
+        `/api/v1/works/${work.id}/runs`,
+        {
+          method: 'POST',
+          headers: jsonHeaders,
+          body: JSON.stringify({ trigger_kind: 'manual' }),
+        },
+      );
+      expect(started.status).toBe(202);
+      const startedBody = (await started.json()) as {
+        work_run: { id: string };
+        execution_receipt: { reused: boolean };
+      };
+      // A fresh admission, not a reused root task: otherwise the step below
+      // could pass without this journey having admitted anything.
+      expect(startedBody.execution_receipt.reused).toBe(false);
+      const workRunId = startedBody.work_run.id;
+
+      expect((await harness.dispatcher.step()).kind).toBe('processed');
+
+      const ran = await harness.app.request(
+        `/api/v1/works/${work.id}/runs/${workRunId}`,
+        { headers: { authorization } },
+      );
+      expect(ran.status).toBe(200);
+      expect((await ran.json()).work_run).toMatchObject({
+        id: workRunId,
+        product_state: 'complete',
+        problem_kind: null,
+      });
+
+      const traced = await harness.app.request(
+        `/api/v1/works/${work.id}/runs/${workRunId}/trace`,
+        { headers: { authorization } },
+      );
+      expect(traced.status).toBe(200);
+      const runs = (await traced.json()).runs as readonly {
+        status: string;
+        provider: string | null;
+        error_code: string | null;
+      }[];
+      expect(runs).toHaveLength(1);
+      expect(runs[0]).toMatchObject({
+        status: 'succeeded',
+        error_code: null,
+        // The fixture's own normalized provider label reaches the product
+        // projection, so this asserts real execution metadata rather than a
+        // default. It is deliberately not a real provider name.
+        provider: 'normalized-provider',
+      });
+
+      // The WorkRun must actually reach the provider seam. Asserting the
+      // terminal product state alone would still pass if a future change
+      // completed the run without executing it.
+      expect(harness.trace.map((entry) => entry.module)).toEqual(
+        expect.arrayContaining([
+          'ExecuteRuntimeTurn',
+          'FixtureRuntimeProvider',
+          'ExecutionSession.run',
+        ]),
+      );
+      expect(harness.replayReport).toMatchObject({
+        mode: 'fixture_replay',
+        live_provider: false,
+        fixture_id: fixtureId,
+      });
     });
   });
 
-  it('records the strongest honest agent-team fixture successor: team admission reaches a terminal failed state', async () => {
+  it('records the strongest honest agent-team fixture successor: the lead run executes and the Team reaches a terminal no-progress state', async () => {
     await withAgentServerHarness(async (harness) => {
       const owner = await harness.seed.workspace({
         tenantId: 'tenant_alpha',
@@ -147,10 +219,27 @@ describe('fixture-backed successors for live runtime lanes', () => {
         { headers: { authorization } },
       );
       expect(teamRun.status).toBe(200);
+      // The lead run now executes through the fixture provider and the Team
+      // stops because that lead made no protocol progress. The earlier
+      // expectation here was `lead_run_failed`, which the Team only reported
+      // because the seeded Environment was an empty package the runtime
+      // rejected before execution — a seed defect, not Team behaviour. This
+      // asserts a terminal state the Team actually decided.
       expect(await teamRun.json()).toMatchObject({
         status: 'failed',
-        stop_reason: 'lead_run_failed',
+        phase: 'done',
+        control_state: 'terminal',
+        stop_reason: 'lead_no_progress',
+        lead_turn_count: 1,
       });
+      // ...and the lead genuinely reached the provider seam to get there.
+      expect(harness.trace.map((entry) => entry.module)).toEqual(
+        expect.arrayContaining([
+          'ExecuteRuntimeTurn',
+          'FixtureRuntimeProvider',
+          'ExecutionSession.run',
+        ]),
+      );
     });
   });
 });

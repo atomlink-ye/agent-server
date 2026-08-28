@@ -1,6 +1,6 @@
 import type { ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, rm, unlink } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, unlink } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -370,6 +370,12 @@ export async function runHostCanary(
     const apiBaseUrl = `http://127.0.0.1:${apiPort}`;
     await rm(webBootstrapEnvPath, { force: true });
     throwIfCanaryInterrupted(lifecycle);
+    // mkdtemp requires its parent to exist. A developer host usually has
+    // .local/dev-runtime from an earlier run; a fresh CI checkout does not.
+    if (fixtureBrowser)
+      await mkdir(join(repositoryRoot, '.local/dev-runtime'), {
+        recursive: true,
+      });
     const fixtureRunRoot = fixtureBrowser
       ? await mkdtemp(
           join(repositoryRoot, '.local/dev-runtime/fixture-browser-'),

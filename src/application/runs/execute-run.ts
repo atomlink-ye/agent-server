@@ -21,6 +21,8 @@ import type { SessionRepository } from '../ports/session-repository.js';
 import type { TaskRepository } from '../ports/task-repository.js';
 import type { EnvironmentReadApi } from '../ports/environment-read-api.js';
 import type { TeamExecutionRepository } from '../ports/team-execution-repository.js';
+import { PublishWorkRunResultFile } from '../work/publish-work-run-result-file.js';
+import type { LogicalFileStore } from '../ports/logical-file-store.js';
 import type { WorkRunResourceManifestRead } from '../ports/work-run-resource-manifest-read.js';
 import type { CreateMemoryProposal } from '../memory/create-memory-proposal.js';
 import { RuntimeTimedOutError } from '../runtime/execution-runtime-errors.js';
@@ -80,6 +82,11 @@ export interface ExecuteRunOptions {
     'reconcileForRootTask'
   >;
   readonly workRunManifests?: WorkRunResourceManifestRead;
+  /**
+   * ContextFS store used to publish a completed WorkRun's result into its Work
+   * scope. Optional so compositions without ContextFS behave exactly as before.
+   */
+  readonly contextFiles?: LogicalFileStore;
   readonly memoryVersions?: MemoryVersionReadApi;
 }
 
@@ -122,6 +129,7 @@ export class ExecuteRun {
       activationReconciler,
       workRunManifests,
       memoryVersions,
+      contextFiles,
     } = options;
     this.completeRun = completeRun;
     this.tasks = tasks;
@@ -173,6 +181,7 @@ export class ExecuteRun {
       workRunManifests ?? compositionReads?.workRunManifests,
       memoryVersions ?? compositionReads?.memoryVersions,
       this.now,
+      contextFiles ? new PublishWorkRunResultFile(contextFiles) : undefined,
     );
   }
 

@@ -441,6 +441,53 @@ describe('web Product Golden Path', () => {
       expect(await page.getByTestId('outcome-summary').innerText()).toContain(
         'No result summary is present.',
       );
+      // The Work produced something, so the Files surface must be able to show
+      // it. This is the browser half of the run->file path: before the producer
+      // existed this scope was empty after every successful run, and the page
+      // said so honestly.
+      const workRead = await page.request.get(`/api/works/${createdWorkId}`, {
+        headers: { accept: 'application/json' },
+      });
+      expect(workRead.ok()).toBe(true);
+      const workTitle = (
+        (await workRead.json()) as { work?: { title?: unknown } }
+      ).work?.title;
+      if (typeof workTitle !== 'string' || workTitle.length === 0)
+        throw new Error('Work read did not return a title to select in Files.');
+
+      await page.goto('/files');
+      // The scope button renders <small>kind</small><strong>label</strong> with
+      // no separator, so its accessible name is "WorkBounded Brief ...". Match
+      // on the label text instead of reconstructing that concatenation.
+      await page
+        .locator('.files-scope-list button')
+        .filter({ hasText: workTitle })
+        .click({ timeout: 60_000 });
+      const resultFile = page
+        .locator('.files-file-list button')
+        .filter({ hasText: `runs/${runId}/result.md` });
+      await resultFile.waitFor({ state: 'visible', timeout: 60_000 });
+      await resultFile.click();
+      await page
+        .locator('.files-file-viewer h2')
+        .waitFor({ state: 'visible', timeout: 60_000 });
+      expect(await page.locator('.files-file-viewer h2').innerText()).toBe(
+        `runs/${runId}/result.md`,
+      );
+      // Content is asserted as non-empty rather than by value: this file is
+      // also the live canary, where the provider's text is not fixed. An
+      // empty-file assertion would pass against exactly the regression that
+      // motivated this work.
+      expect(
+        (await page.locator('.files-file-viewer pre').innerText()).trim()
+          .length,
+      ).toBeGreaterThan(0);
+
+      await page.goBack();
+      await page.getByTestId('work-detail-shell').waitFor({
+        state: 'visible',
+        timeout: 60_000,
+      });
       await page.getByRole('tab', { name: 'MCP Activity' }).click();
       await page.getByTestId('trace-events').waitFor({
         state: 'visible',

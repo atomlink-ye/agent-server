@@ -42,7 +42,12 @@ export function createRunExecutionComposition(input: {
     | 'ensureDesiredRuntimeSpec'
     | 'chatRuntime'
   >;
-  readonly memory: Pick<MemoryModule, 'fileStore' | 'createMemoryProposal'>;
+  readonly memory: Pick<
+    MemoryModule,
+    // `logicalFiles` is the same store the ContextFS read routes serve, so a
+    // WorkRun result written here is the file the Files surface then lists.
+    'fileStore' | 'createMemoryProposal' | 'logicalFiles'
+  >;
   readonly memoryReviewSurface?: Pick<PublishMemoryReviewSurface, 'execute'>;
   readonly memoryReviewNotifier?: Pick<PublishMemoryReviewSurface, 'execute'>;
   readonly terminalActivationReconciler?: TeamCapabilities['activationReconciler'];
@@ -96,6 +101,7 @@ export function createRunExecutionComposition(input: {
     workerResolver: input.resources.workerResolutionApi,
     events: input.kernel.events,
     fileStore: input.memory.fileStore,
+    contextFiles: input.memory.logicalFiles,
     createMemoryProposal: input.memory.createMemoryProposal,
     sessions: input.kernel.sessions,
     runtimeSessions: input.runtime.runtimeSessions,

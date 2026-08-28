@@ -407,7 +407,10 @@ deadline, then report the deadline as an unavailable projection rather than
 assuming the Work failed. Once a `200` projection is available,
 `needs_you` indicates a completion-approval attention state; `complete`,
 `problem`, and `not_captured` are terminal product outcomes for this
-projection. The response also includes bounded `work_items`, `actors`, and
+projection. For a successful single-Coworker Work, `result_summary` is the
+persisted succeeded root Run text and `result_capture_status` is `present`.
+Failed, incomplete, or empty-result root Runs retain a null summary with a
+non-present capture status. The response also includes bounded `work_items`, `actors`, and
 `messages` identity collections; it does not expose prompts, credentials,
 local paths, or raw provider payloads.
 

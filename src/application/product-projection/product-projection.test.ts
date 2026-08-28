@@ -15,6 +15,7 @@ const run = (overrides: Partial<ExecutionRunFact> = {}) =>
     provider: null,
     model: null,
     resultPresent: false,
+    resultText: null,
     errorCode: null,
     actorId: null,
     workItemId: null,
@@ -84,7 +85,9 @@ describe('Product Work list projection', () => {
         }),
       },
       executionFacts: {
-        listRunsByRootTask: async () => [run({ rootTaskId })],
+        listRunsByRootTask: async () => [
+          run({ rootTaskId, resultPresent: true, resultText: 'Wrong source' }),
+        ],
         listRunEvents: async () => [],
       },
     });

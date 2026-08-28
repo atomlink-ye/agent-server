@@ -430,6 +430,7 @@ describe('Composition-first Work on real PostgreSQL', () => {
             provider: null,
             model: null,
             resultPresent: true,
+            resultText: 'Completed root result.',
             errorCode: null,
             actorId: null,
             workItemId: null,

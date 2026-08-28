@@ -201,6 +201,7 @@ export class PostgresSessionTranscriptFactsQuery implements ProductSessionTransc
           provider: row.provider ?? null,
           model: row.model ?? null,
           resultPresent: row.result_present ?? false,
+          resultText: null,
           errorCode: row.error_code ?? null,
           actorId: row.actor_id ?? null,
           workItemId: row.work_item_id ?? null,

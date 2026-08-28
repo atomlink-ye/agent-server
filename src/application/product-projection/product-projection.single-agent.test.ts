@@ -64,6 +64,7 @@ describe('ProductProjection single-Agent Work', () => {
             provider: 'opencode',
             model: 'free-model',
             resultPresent: true,
+            resultText: 'The persisted root result.',
             errorCode: null,
             actorId: null,
             workItemId: null,
@@ -132,6 +133,8 @@ describe('ProductProjection single-Agent Work', () => {
       throw new Error('expected captured single-Agent WorkRun projection');
     expect(detail.projection_status).toBe('internally_anchored');
     expect(detail.work_run.product_state).toBe('complete');
+    expect(detail.work_run.result_summary).toBe('The persisted root result.');
+    expect(detail.work_run.result_capture_status).toBe('present');
     expect(detail.work_items).toEqual([]);
     expect(detail.actors).toEqual([]);
     expect(detail.messages).toEqual([]);
@@ -145,6 +148,8 @@ describe('ProductProjection single-Agent Work', () => {
     if (!('projection_status' in trace) || trace.work_run === null)
       throw new Error('expected captured single-Agent Run Trace projection');
     expect(trace.work_run.product_state).toBe('complete');
+    expect(trace.work_run.result_summary).toBe('The persisted root result.');
+    expect(trace.work_run.result_capture_status).toBe('present');
     expect(trace.runs).toHaveLength(1);
     expect(trace.runs[0]?.source_refs).toMatchObject({
       root_task_id: rootTaskId,
@@ -182,5 +187,52 @@ describe('ProductProjection single-Agent Work', () => {
     if (!('projection_status' in rejected) || rejected.work_run === null)
       throw new Error('expected captured single-Agent Run Trace projection');
     expect(rejected.mcp_activities).toEqual([]);
+  });
+
+  it('claims no result when a succeeded root Run carries only blank text', async () => {
+    // The projection may surface a result only when one actually exists. A
+    // succeeded Run whose text is blank must not be dressed up as a summary:
+    // that is the failure mode this round exists to remove, in reverse.
+    const projection = createProductProjection({
+      workIdentity: {
+        findWorkById: async () => work,
+        findWorkRunById: async () => workRun,
+        findLatestVisibleWorkRun: async () => workRun,
+      },
+      workFacts: { getByRootTask: async () => null },
+      executionFacts: {
+        listRunsByRootTask: async () => [
+          {
+            runId,
+            taskId: rootTaskId,
+            rootTaskId,
+            status: 'succeeded' as const,
+            provider: 'opencode',
+            model: 'free-model',
+            resultPresent: true,
+            resultText: '   \n  ',
+            errorCode: null,
+            actorId: null,
+            workItemId: null,
+            startedAt: at,
+            endedAt: '2026-08-16T00:00:01.000Z',
+            createdAt: at,
+            updatedAt: '2026-08-16T00:00:01.000Z',
+          },
+        ],
+        listRunEvents: async () => [],
+      },
+    });
+
+    const detail = await projection.getWorkRun({
+      tenantId,
+      workspaceId,
+      workId,
+      workRunId,
+    });
+    if (!('projection_status' in detail) || detail.work_run === null)
+      throw new Error('expected a captured single-Agent WorkRun projection');
+    expect(detail.work_run.result_summary).toBeNull();
+    expect(detail.work_run.result_capture_status).not.toBe('present');
   });
 });

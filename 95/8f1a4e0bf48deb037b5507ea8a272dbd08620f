@@ -1,0 +1,85 @@
+src/application/ports/work-organization-repository.ts
+  06e38b2f31ab5f29 1,19,32,36-63,77,91-105,126,163,166-169
+tests/support/environment/real-postgres-suites.ts
+  06e38b2f31ab5f29 26
+src/adapters/work-organization/managed-agent-mention-roster.ts
+  06e38b2f31ab5f29 1-51
+src/infrastructure/postgres/migrations/0064_work_item_mentions_and_column_kinds.sql
+  06e38b2f31ab5f29 1-64
+src/domain/work-organization/board-column-kinds.test.ts
+  06e38b2f31ab5f29 1-80
+src/entrypoints/mcp/runtime-tool-composition.ts
+  06e38b2f31ab5f29 22,38-39,86-91
+src/contracts/work-organization.ts
+  06e38b2f31ab5f29 6-7,15-24,49,122,159,210,218,225-243,260-273,283,321,336,351,359,389,398
+src/domain/work-organization/work-item-mention-brief.ts
+  06e38b2f31ab5f29 1-91
+src/entrypoints/mcp/work-organization-mcp-tools.test.ts
+  06e38b2f31ab5f29 1-149
+src/application/agents/built-in-skills.ts
+  06e38b2f31ab5f29 18-23,44
+src/domain/work-organization/work-item-mentions.test.ts
+  06e38b2f31ab5f29 1-116
+src/infrastructure/postgres/postgres-work-organization-repository.ts
+  06e38b2f31ab5f29 2-3,8,11-14,43,59,81,107,109,119,163-164,177,185-279,337,342-343,354,467-468,479,494,501-502,512-513,521-533,643,661,666-687,709
+src/domain/work-organization/work-item-mention-brief.test.ts
+  06e38b2f31ab5f29 1-103
+src/domain/work-organization/board-column-kinds.ts
+  06e38b2f31ab5f29 1-77
+src/application/work-organization/wake-mentioned-agents.test.ts
+  06e38b2f31ab5f29 1-216
+src/entrypoints/api/routes/work-organization.ts
+  06e38b2f31ab5f29 14,19-20,35,179-203,385,412,484-485
+src/application/work-organization/conversation-agent-identity.ts
+  06e38b2f31ab5f29 1-14
+src/infrastructure/postgres/postgres-conversation-agent-identity-resolver.ts
+  06e38b2f31ab5f29 1-37
+CONTRACT.md
+  06e38b2f31ab5f29 1-20,22-37,39-114,117-119,121-165,167-246
+tests/scenarios/coworker-work-organization.scenario.test.ts
+  06e38b2f31ab5f29 4-5,10,18-21,64,105,112-177,211,223,320,328-338,346,360,505,514,519,525,531-532,548,600,638,645-782,784-844
+src/domain/work-organization/work-item-mentions.ts
+  06e38b2f31ab5f29 1-113
+src/composition/create-work-organization-capabilities.ts
+  06e38b2f31ab5f29 4-7,9,13-14,17,23,33-48,59-65,71-85,87-89,96-101
+src/entrypoints/mcp/work-organization-mcp-tools.ts
+  06e38b2f31ab5f29 1-114
+docs/contracts/work-organization-api.md
+  06e38b2f31ab5f29 35,43-50,55-64,84-85,97-98,110-115,118
+src/domain/work-organization/work-organization.ts
+  06e38b2f31ab5f29 1-2,23-24,38-39,59-60,123-139
+src/application/work-organization/work-organization-service.ts
+  06e38b2f31ab5f29 5-12,16,33-52,61-64,115-116,124-125,164-170,174-175,177-178,195-208,240-264,266,276,280-305,352-356,358,362-363,367-386,390-433,527,536,549,560,599-665
+src/infrastructure/postgres/postgres.ts
+  06e38b2f31ab5f29 98
+tests/integration/work-item-claim-race-real-pg.integration.test.ts
+  06e38b2f31ab5f29 1-170
+src/application/work-organization/wake-mentioned-agents.ts
+  06e38b2f31ab5f29 1-257
+src/composition/create-application.ts
+  06e38b2f31ab5f29 168,170-180,192-194
+src/entrypoints/api/routes/browser-work-organization.ts
+  06e38b2f31ab5f29 5-6,100-116
+src/application/chat/enqueue-chat-dispatch.ts
+  06e38b2f31ab5f29 7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2-bit.10+672fbf0",
+  "base_commit_sha": "958f1a4e0bf48deb037b5507ea8a272dbd08620f",
+  "prompts": {
+    "06e38b2f31ab5f29": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c7f5e323-f9e0-468a-920a-98b9a10344e6",
+        "model": "claude-opus-5"
+      },
+      "human_author": "link.ye",
+      "messages": [],
+      "total_additions": 3304,
+      "total_deletions": 169,
+      "accepted_lines": 3167,
+      "overriden_lines": 6
+    }
+  }
+}

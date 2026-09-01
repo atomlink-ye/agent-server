@@ -1,20 +1,27 @@
 import {
+  WORK_ITEM_NOT_FOUND_CODE,
   WorkBoardListResponseSchema,
   WorkBoardSnapshotSchema,
   WorkItemCommentSchema,
   WorkItemCommentsResponseSchema,
   WorkItemDetailSchema,
   WorkItemListResponseSchema,
+  WorkItemSchema,
   WorkBoardSchema,
   WorkBoardColumnSchema,
   WorkBoardPlacementSchema,
   type WorkBoardDto,
   type WorkBoardSnapshotDto,
   type WorkItemDetailDto,
+  type WorkItemDto,
   type WorkItemStatus,
 } from '@atomlink-ye/agent-server/product-contract';
 import { z } from 'zod';
 
+import {
+  isFeatureUnavailable,
+  isResourceNotFound,
+} from '../../api/feature-availability';
 import { apiTransport } from '../../api/transport';
 
 const boardResponseSchema = z.object({ board: WorkBoardSchema }).strict();
@@ -45,13 +52,56 @@ export type PublishedWorkDefinition = z.infer<
   typeof publishedWorkDefinitionsResponseSchema
 >['items'][number];
 
+/**
+ * The shared work-organization schemas are `.strict()`, so a response that
+ * carries a field this build has never heard of is a hard parse failure. That
+ * is the right default for a contract the browser owns, but it also means the
+ * next backend field (`mentions`, column `kind`, the claim bookkeeping) would
+ * black out Tasks and Boards on deploy-skew rather than simply going
+ * unrendered.
+ *
+ * So an unrecognized key is tolerated and nothing else is: the response is
+ * re-validated with the unknown keys removed, and only if that passes does the
+ * caller get the value back — unpruned, so the forward-compatible readers in
+ * `work-item-extensions.ts` can still see the new fields. A genuinely wrong
+ * shape (missing field, wrong type) still fails exactly as before.
+ */
 function parse<T>(schema: z.ZodType<T>, value: unknown): T {
-  const result = schema.safeParse(value);
-  if (!result.success)
+  const parsed = tolerantParse(schema, value);
+  if (parsed === null)
     throw new Error(
       'The work-organization response did not match the browser contract.',
     );
-  return result.data;
+  return parsed;
+}
+
+/** `parse` without the throw — null means "this is not that shape". */
+function tolerantParse<T>(schema: z.ZodType<T>, value: unknown): T | null {
+  const result = schema.safeParse(value);
+  if (result.success) return result.data;
+
+  const unrecognized = result.error.issues.filter(
+    (issue) => issue.code === 'unrecognized_keys',
+  );
+  if (unrecognized.length !== result.error.issues.length) return null;
+
+  const pruned = structuredClone(value);
+  for (const issue of unrecognized) deleteKeys(pruned, issue.path, issue.keys);
+  return schema.safeParse(pruned).success ? (value as T) : null;
+}
+
+function deleteKeys(
+  root: unknown,
+  path: readonly PropertyKey[],
+  keys: readonly string[],
+): void {
+  let target: unknown = root;
+  for (const segment of path) {
+    if (target === null || typeof target !== 'object') return;
+    target = (target as Record<PropertyKey, unknown>)[segment];
+  }
+  if (target === null || typeof target !== 'object') return;
+  for (const key of keys) delete (target as Record<string, unknown>)[key];
 }
 
 export interface CreateWorkItemInput {
@@ -63,6 +113,41 @@ export interface CreateWorkItemInput {
   readonly boardId?: string | null;
   readonly columnId?: string | null;
   readonly position?: number;
+}
+
+export interface ClaimResult {
+  /** False when this deployment has no claim endpoint yet. */
+  readonly supported: boolean;
+  /** The claimed WorkItem, when the response carried a recognizable one. */
+  readonly workItem: WorkItemDto | null;
+}
+
+/**
+ * A 404 from the claim route means one of two very different things: the route
+ * does not exist in this deployment, or the WorkItem does not. Only the first
+ * is "claim unsupported" — the second is a real error the user must see.
+ */
+function isMissingRoute(reason: unknown): boolean {
+  if (isResourceNotFound(reason, WORK_ITEM_NOT_FOUND_CODE)) return false;
+  return (
+    typeof reason === 'object' &&
+    reason !== null &&
+    'status' in reason &&
+    (reason as { status?: unknown }).status === 404
+  );
+}
+
+function readClaimedWorkItem(payload: unknown): WorkItemDto | null {
+  const detail = tolerantParse(WorkItemDetailSchema, payload);
+  if (detail) return detail.work_item;
+  const bare = tolerantParse(WorkItemSchema, payload);
+  if (bare) return bare;
+  if (payload !== null && typeof payload === 'object')
+    return tolerantParse(
+      WorkItemSchema,
+      (payload as Record<string, unknown>).work_item,
+    );
+  return null;
 }
 
 export interface UpdateWorkItemInput {
@@ -214,6 +299,31 @@ export const workOrganizationClient = {
       ),
     );
     return response.comment;
+  },
+
+  /**
+   * Claim a WorkItem through the backend's atomic claim primitive.
+   *
+   * The endpoint is still being built by the backend Worker, so this call is
+   * deliberately shape-tolerant: it accepts a `{ work_item }`, a
+   * `{ work_item, linked_work }` detail, or a bare acknowledgement, and it
+   * reports `supported: false` — rather than a fake success — when the route
+   * is absent or the surface is not composed. The caller refetches either way,
+   * so a claim that succeeded with an unfamiliar body is still reflected.
+   */
+  async claimWorkItem(workItemId: string): Promise<ClaimResult> {
+    let payload: unknown;
+    try {
+      payload = await apiTransport.request(
+        `/api/work-items/${encodeURIComponent(workItemId)}/claim`,
+        { method: 'POST', cache: 'no-store' },
+      );
+    } catch (reason) {
+      if (isFeatureUnavailable(reason) || isMissingRoute(reason))
+        return { supported: false, workItem: null };
+      throw reason;
+    }
+    return { supported: true, workItem: readClaimedWorkItem(payload) };
   },
 
   async listBoards(): Promise<readonly WorkBoardDto[]> {

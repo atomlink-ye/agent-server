@@ -238,12 +238,20 @@
   margin-bottom: 16px;
 }
 
+.work-board-shell {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  min-height: calc(100% - 48px);
+}
+
 .work-board-canvas {
   display: flex;
   align-items: flex-start;
   gap: 14px;
   overflow-x: auto;
-  min-height: calc(100% - 48px);
+  flex: 1;
+  min-width: 0;
   padding-bottom: 12px;
 }
 
@@ -309,6 +317,322 @@
   width: 100%;
   margin-top: 9px;
   border-style: dashed;
+}
+
+/* Shared card signals: avatars, assignee chips, mentions, comment counts. */
+
+.work-org-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.work-org-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: rgba(31, 111, 235, 0.12);
+  color: var(--accent, #1f6feb);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  flex: 0 0 auto;
+}
+
+.work-org-avatar--agent {
+  background: rgba(126, 87, 194, 0.14);
+  color: #6a3fb5;
+}
+
+.work-org-assignee {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--muted, #667085);
+  min-width: 0;
+}
+
+.work-org-assignee--empty {
+  font-size: 12px;
+  color: var(--muted, #667085);
+}
+
+.work-org-mention-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.work-org-mention {
+  border-radius: 999px;
+  background: rgba(31, 111, 235, 0.1);
+  color: var(--accent, #1f6feb);
+  padding: 1px 7px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.work-org-mention--unknown {
+  background: rgba(102, 112, 133, 0.12);
+  color: var(--muted, #667085);
+}
+
+.work-org-mention--more {
+  background: transparent;
+  color: var(--muted, #667085);
+}
+
+.work-org-comment-count,
+.work-org-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--muted, #667085);
+}
+
+.work-org-chip {
+  border: 1px solid var(--line, #d8dee8);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+
+/* The @-mention field and its suggestion list. */
+
+.work-org-mention-field {
+  position: relative;
+  display: grid;
+  gap: 4px;
+}
+
+.work-org-mention-suggestions {
+  position: absolute;
+  z-index: 20;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin: 4px 0 0;
+  padding: 4px;
+  list-style: none;
+  max-height: 216px;
+  overflow-y: auto;
+  border: 1px solid var(--line, #d8dee8);
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 12px 28px rgba(16, 24, 40, 0.14);
+}
+
+.work-org-mention-option {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  padding: 6px 7px;
+}
+
+.work-org-mention-option[data-active='true'] {
+  background: rgba(31, 111, 235, 0.08);
+  border-color: rgba(31, 111, 235, 0.2);
+}
+
+.work-org-mention-option-text {
+  display: grid;
+  min-width: 0;
+}
+
+.work-org-mention-option-text strong {
+  font-size: 13px;
+}
+
+.work-org-mention-option-text small {
+  font-size: 11px;
+  color: var(--muted, #667085);
+}
+
+/* The richer Task list row and detail header. */
+
+.work-org-list-item--rich {
+  gap: 5px;
+}
+
+.work-org-list-item-top,
+.work-org-list-item-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.work-org-list-item-footer {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+.work-org-list-item-preview {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.work-org-detail-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+.work-org-comment-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.work-org-comment-head strong {
+  font-size: 12px;
+}
+
+.work-board-column[data-column-drop-over='true'] {
+  outline: 2px dashed rgba(31, 111, 235, 0.45);
+}
+
+.work-board-column[data-dragging='true'] {
+  opacity: 0.55;
+}
+
+.work-board-column-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  color: var(--muted, #667085);
+  cursor: grab;
+  flex: 0 0 auto;
+}
+
+.work-board-column-handle:active {
+  cursor: grabbing;
+}
+
+.work-board-column-handle:focus-visible {
+  outline: 2px solid rgba(31, 111, 235, 0.45);
+}
+
+.work-board-slot {
+  display: grid;
+}
+
+.work-board-dropzone {
+  height: 6px;
+  border-radius: 999px;
+  margin: -1px 0;
+}
+
+.work-board-dropzone[data-active='true'] {
+  height: 18px;
+  margin: 2px 0;
+  background: rgba(31, 111, 235, 0.16);
+  outline: 1px dashed rgba(31, 111, 235, 0.45);
+}
+
+.work-board-card-top,
+.work-board-card-footer,
+.work-board-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.work-board-card-top {
+  justify-content: space-between;
+}
+
+.work-board-card-footer {
+  flex-wrap: wrap;
+}
+
+.work-board-card-preview {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.work-board-card-actions button {
+  font-size: 11px;
+  padding: 3px 8px;
+}
+
+/* The card detail peek beside the canvas. */
+
+.work-board-peek {
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  width: 330px;
+  min-width: 330px;
+  display: grid;
+  gap: 9px;
+  align-content: start;
+  padding: 13px;
+  border: 1px solid var(--line, #d8dee8);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 12px 28px rgba(16, 24, 40, 0.1);
+}
+
+.work-board-peek-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.work-board-peek h2 {
+  font-size: 15px;
+  margin: 0;
+}
+
+.work-board-peek-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.work-board-peek-description {
+  white-space: pre-wrap;
+  font-size: 13px;
+}
+
+.work-board-peek-comments {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid var(--line, #d8dee8);
+  padding-top: 9px;
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+.work-board-peek-comments-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .chat-message-with-actions {

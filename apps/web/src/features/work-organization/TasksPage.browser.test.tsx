@@ -85,7 +85,7 @@ it('selects a published Definition and coworker by display-safe labels while pro
     await act(settle);
 
     expect(host.textContent).toContain('Quarterly research brief');
-    expect(host.textContent).toContain('Ari Analyst · Research · available');
+    expect(host.textContent).toContain('Ari Analyst · Research · 可用');
     expect(host.textContent).not.toContain(definitionId);
     expect(host.textContent).not.toContain(versionId);
     expect(host.textContent).not.toContain('coworker-1');
@@ -95,7 +95,7 @@ it('selects a published Definition and coworker by display-safe labels while pro
     );
     const assignee = [
       ...host.querySelectorAll<HTMLSelectElement>('select'),
-    ].find((select) => select.labels?.[0]?.textContent?.includes('Assignee'));
+    ].find((select) => select.labels?.[0]?.textContent?.includes('负责人'));
     if (!definition || !assignee)
       throw new Error('Expected promotion selectors.');
 
@@ -107,9 +107,9 @@ it('selects a published Definition and coworker by display-safe labels while pro
     });
 
     const promote = [...host.querySelectorAll('button')].find(
-      (button) => button.textContent === 'Create Work',
+      (button) => button.textContent === '创建 Work',
     );
-    if (!promote) throw new Error('Expected Create Work button.');
+    if (!promote) throw new Error('Expected a 创建 Work button.');
     await act(async () => {
       promote.click();
       await settle();
@@ -153,11 +153,11 @@ it('shows a missing selected Task without Retry, while a transport failure remai
       );
     });
     await act(settle);
-    expect(host.textContent).toContain('The selected Task is unavailable.');
-    expect(host.textContent).toContain('Back to Tasks');
+    expect(host.textContent).toContain('所选任务已不可用。');
+    expect(host.textContent).toContain('返回任务列表');
     expect(
       [...host.querySelectorAll('button')].some(
-        (button) => button.textContent === 'Retry',
+        (button) => button.textContent === '重试',
       ),
     ).toBe(false);
   } finally {
@@ -194,10 +194,10 @@ it('keeps Retry for a selected Task transport failure', async () => {
       ),
     );
     await act(settle);
-    expect(host.textContent).toContain('Task could not be loaded');
+    expect(host.textContent).toContain('任务加载失败');
     expect(
       [...host.querySelectorAll('button')].some(
-        (button) => button.textContent === 'Retry',
+        (button) => button.textContent === '重试',
       ),
     ).toBe(true);
   } finally {
@@ -234,11 +234,11 @@ it('keeps Retry when a selected Task 500 carries its canonical not-found code', 
       ),
     );
     await act(settle);
-    expect(host.textContent).toContain('Task could not be loaded');
-    expect(host.textContent).not.toContain('The selected Task is unavailable.');
+    expect(host.textContent).toContain('任务加载失败');
+    expect(host.textContent).not.toContain('所选任务已不可用。');
     expect(
       [...host.querySelectorAll('button')].some(
-        (button) => button.textContent === 'Retry',
+        (button) => button.textContent === '重试',
       ),
     ).toBe(true);
   } finally {
@@ -393,7 +393,7 @@ it('shows selected Task loading instead of an empty state', async () => {
       ),
     );
     await act(settle);
-    expect(host.textContent).toContain('Loading selected Task…');
+    expect(host.textContent).toContain('正在加载所选任务…');
     expect(
       host.querySelector('[data-testid="tasks-selected-loading"]'),
     ).not.toBeNull();
@@ -430,12 +430,10 @@ it('keeps the selected Task detail when its comments read fails', async () => {
     );
     await act(settle);
     expect(host.textContent).toContain('Prepare brief');
-    expect(host.textContent).toContain(
-      'Comments for this Task could not be loaded. Please try again.',
-    );
+    expect(host.textContent).toContain('这个任务的评论加载失败，请重试。');
     expect(
       [...host.querySelectorAll('button')].some(
-        (button) => button.textContent === 'Retry',
+        (button) => button.textContent === '重试',
       ),
     ).toBe(true);
   } finally {

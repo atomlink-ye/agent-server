@@ -227,11 +227,29 @@ if (command.length === 0) {
   const claudeSettingsPath = join(claudeHome, 'settings.json');
   await mkdir(claudeHome, { recursive: true, mode: 0o700 });
   await chmod(claudeHome, 0o700);
-  await writeFile(
-    claudeSettingsPath,
-    JSON.stringify({ env: { ANTHROPIC_MODEL: openCodeGoModel } }),
-    { mode: 0o600 },
-  );
+  // On Amazon Bedrock (CLAUDE_CODE_USE_BEDROCK=1), Claude Code silently
+  // rewrites a bare model name like `claude-sonnet-5` to a cross-region
+  // inference profile ID (`us.anthropic.claude-sonnet-5`) before calling the
+  // provider. Our LiteLLM passthrough gateway only recognizes the bare model
+  // name (confirmed against its own `/v1/models` listing) and rejects the
+  // inference-profile-prefixed form with a 400. `modelOverrides` is the
+  // documented escape hatch: it intercepts that rewrite and maps the model
+  // back to the name the gateway actually serves. Only add it for the
+  // Bedrock transport — the Anthropic/OpenCode-Go paths never hit this
+  // rewrite and a model bare name there is already correct.
+  const claudeSettings =
+    process.env.CLAUDE_CODE_USE_BEDROCK === '1'
+      ? {
+          env: { ANTHROPIC_MODEL: openCodeGoModel },
+          modelOverrides: {
+            [openCodeGoModel]: openCodeGoModel,
+            [`us.anthropic.${openCodeGoModel}`]: openCodeGoModel,
+          },
+        }
+      : { env: { ANTHROPIC_MODEL: openCodeGoModel } };
+  await writeFile(claudeSettingsPath, JSON.stringify(claudeSettings), {
+    mode: 0o600,
+  });
   await chmod(claudeSettingsPath, 0o600);
   const codexHome = join(runtimeRoot, 'home', '.codex');
   await mkdir(codexHome, { recursive: true, mode: 0o700 });

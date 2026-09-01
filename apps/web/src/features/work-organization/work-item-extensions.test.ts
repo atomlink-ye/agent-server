@@ -105,7 +105,7 @@ describe('readColumnKind / columnKind', () => {
   it('guesses from the title while the field is absent', () => {
     expect(columnKind(column('In Progress'))).toBe('doing');
     expect(columnKind(column('WIP'))).toBe('doing');
-    expect(columnKind(column('In Review'))).toBe('review');
+    expect(columnKind(column('In Review'))).toBe('doing');
     expect(columnKind(column('Completed'))).toBe('done');
     expect(columnKind(column('Backlog'))).toBe('todo');
   });
@@ -130,63 +130,46 @@ describe('findDoingColumn', () => {
 });
 
 describe('readClaimState', () => {
-  it('answers null while no claim field is present', () => {
+  it('answers null on an unassigned WorkItem', () => {
     expect(readClaimState(item())).toBeNull();
   });
 
-  it('reads a partial claim record', () => {
-    expect(readClaimState(item({ claimed_by: 'ari' }))).toEqual({
-      claimedBy: 'ari',
-      claimedAt: null,
-      expiresAt: null,
-    });
+  it('reads the assignee as the claim holder, timestamped by updated_at', () => {
+    expect(
+      readClaimState(item({ assignee_id: 'ari', updated_at: timestamp })),
+    ).toEqual({ claimedBy: 'ari', claimedAt: timestamp });
   });
 });
 
 describe('isClaimable', () => {
-  it('falls back to assignment while the claim fields are absent', () => {
+  it('is claimable while unassigned', () => {
     expect(isClaimable(item(), now)).toBe(true);
-    expect(isClaimable(item({ assignee_id: 'ari' }), now)).toBe(false);
   });
 
-  it('never offers a claim on a done Task', () => {
-    expect(isClaimable(item({ status: 'done' }), now)).toBe(false);
-    expect(isClaimable(item({ status: 'done', claimed_by: null }), now)).toBe(
-      false,
-    );
-  });
-
-  it('offers a claim the backend reports as released', () => {
-    // A released claim still carries its history, so the record is present
-    // with no holder — that is claimable regardless of assignment.
-    const released = item({
-      claimed_by: null,
-      claimed_at: timestamp,
-      assignee_id: 'ari',
-    });
-    expect(isClaimable(released, now)).toBe(true);
-  });
-
-  it('refuses a live claim and allows a lapsed one', () => {
-    const live = item({
-      claimed_by: 'ari',
-      claim_expires_at: new Date(now + 60_000).toISOString(),
-    });
-    const lapsed = item({
-      claimed_by: 'ari',
-      claim_expires_at: new Date(now - 60_000).toISOString(),
-    });
-    expect(isClaimable(live, now)).toBe(false);
-    expect(isClaimable(lapsed, now)).toBe(true);
-  });
-
-  it('refuses a held claim that never expires', () => {
-    expect(isClaimable(item({ claimed_by: 'ari' }), now)).toBe(false);
-  });
-
-  it('refuses a claim whose expiry it cannot read', () => {
+  it('is not claimable while freshly assigned', () => {
     expect(
-      isClaimable(item({ claimed_by: 'ari', claim_expires_at: 'soon' }), now),
+      isClaimable(item({ assignee_id: 'ari', updated_at: timestamp }), now),
+    ).toBe(false);
+  });
+
+  it('never offers a claim on a done Task, even unassigned', () => {
+    expect(isClaimable(item({ status: 'done' }), now)).toBe(false);
+  });
+
+  it('becomes claimable again once the assignment goes stale (20 minutes)', () => {
+    const justUnder = new Date(now - 19 * 60 * 1000).toISOString();
+    const justOver = new Date(now - 20 * 60 * 1000).toISOString();
+    expect(
+      isClaimable(item({ assignee_id: 'ari', updated_at: justUnder }), now),
+    ).toBe(false);
+    expect(
+      isClaimable(item({ assignee_id: 'ari', updated_at: justOver }), now),
+    ).toBe(true);
+  });
+
+  it('refuses a claim whose updated_at it cannot read', () => {
+    expect(
+      isClaimable(item({ assignee_id: 'ari', updated_at: 'soon' }), now),
     ).toBe(false);
   });
 });
@@ -202,12 +185,12 @@ describe('claimBlockedReason', () => {
     );
   });
 
-  it('names the holder from the claim record or the assignee', () => {
-    expect(claimBlockedReason(item({ claimed_by: 'ari' }), now)).toBe(
-      '这个任务已被 ari 领取。',
-    );
-    expect(claimBlockedReason(item({ assignee_id: 'bo' }), now)).toBe(
-      '这个任务已被 bo 领取。',
-    );
+  it('names the holder from the current assignee', () => {
+    expect(
+      claimBlockedReason(
+        item({ assignee_id: 'ari', updated_at: timestamp }),
+        now,
+      ),
+    ).toBe('这个任务已被 ari 领取。');
   });
 });

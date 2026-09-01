@@ -32,10 +32,6 @@ function readStringArray(value: unknown): readonly string[] | null {
   return entries.length === value.length ? entries : null;
 }
 
-function readNullableString(value: unknown): string | null {
-  return typeof value === 'string' && value.length > 0 ? value : null;
-}
-
 /** Mentions the backend parsed out of a WorkItem's title/description. */
 export function readMentionIds(
   item: WorkItemDto | WorkItemCommentDto,
@@ -51,14 +47,9 @@ export function readCommentCount(item: WorkItemDto): number | null {
     : null;
 }
 
-export type BoardColumnKind = 'todo' | 'doing' | 'review' | 'done';
+export type BoardColumnKind = 'todo' | 'doing' | 'done';
 
-const COLUMN_KINDS: readonly BoardColumnKind[] = [
-  'todo',
-  'doing',
-  'review',
-  'done',
-];
+const COLUMN_KINDS: readonly BoardColumnKind[] = ['todo', 'doing', 'done'];
 
 /** The column's declared kind, when the backend declares one. */
 export function readColumnKind(
@@ -72,8 +63,10 @@ export function readColumnKind(
 }
 
 const TITLE_KINDS: readonly (readonly [BoardColumnKind, RegExp])[] = [
-  ['doing', /\b(doing|in[\s_-]?progress|wip|active)\b/i],
-  ['review', /\b(review|in[\s_-]?review|qa)\b/i],
+  [
+    'doing',
+    /\b(doing|in[\s_-]?progress|wip|active|review|in[\s_-]?review|qa)\b/i,
+  ],
   ['done', /\b(done|complete[d]?|shipped)\b/i],
   ['todo', /\b(todo|to[\s_-]?do|backlog|inbox|ready)\b/i],
 ];
@@ -98,37 +91,38 @@ export function findDoingColumn(
   return columns.find((column) => columnKind(column) === 'doing') ?? null;
 }
 
+const CLAIM_STALE_AFTER_MINUTES = 20;
+
 export interface ClaimState {
   readonly claimedBy: string | null;
+  /**
+   * The moment the claim was last touched (the WorkItem's `updated_at`).
+   * The backend's claim is `assignee_id` + staleness derived from this
+   * timestamp — there is no separate `claimed_at`/`claim_expires_at` pair.
+   */
   readonly claimedAt: string | null;
-  /** When the claim lapses and the card becomes claimable again. */
-  readonly expiresAt: string | null;
 }
 
-/** Claim bookkeeping, when the backend reports it. */
+/** Claim bookkeeping, read from the fields the backend actually returns. */
 export function readClaimState(item: WorkItemDto): ClaimState | null {
-  const raw = fields(item);
-  const claimedBy = readNullableString(raw.claimed_by);
-  const claimedAt = readNullableString(raw.claimed_at);
-  const expiresAt = readNullableString(raw.claim_expires_at);
-  if (claimedBy === null && claimedAt === null && expiresAt === null)
-    return null;
-  return { claimedBy, claimedAt, expiresAt };
+  if (item.assignee_id === null) return null;
+  return { claimedBy: item.assignee_id, claimedAt: item.updated_at };
 }
 
 /**
  * A card can be claimed while nobody holds it, or while the held claim has
- * lapsed. Without the backend's claim fields the honest signal we do have is
- * assignment: an unassigned card is unclaimed.
+ * gone stale (unattended for `CLAIM_STALE_AFTER_MINUTES` — the same 20-minute
+ * rule the backend's atomic claim UPDATE uses as its escape hatch for a
+ * crashed agent).
  */
 export function isClaimable(item: WorkItemDto, now: number): boolean {
   if (item.status === 'done') return false;
   const claim = readClaimState(item);
-  if (!claim) return item.assignee_id === null;
-  if (!claim.claimedBy) return true;
-  if (!claim.expiresAt) return false;
-  const expiry = Date.parse(claim.expiresAt);
-  return Number.isFinite(expiry) && expiry <= now;
+  if (!claim) return true;
+  if (!claim.claimedAt) return false;
+  const claimedAtMs = Date.parse(claim.claimedAt);
+  if (!Number.isFinite(claimedAtMs)) return false;
+  return now - claimedAtMs >= CLAIM_STALE_AFTER_MINUTES * 60 * 1000;
 }
 
 /** Why the Claim button is unavailable, for a title/description the user reads. */

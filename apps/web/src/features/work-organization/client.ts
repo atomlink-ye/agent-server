@@ -120,6 +120,11 @@ export interface ClaimResult {
   readonly supported: boolean;
   /** The claimed WorkItem, when the response carried a recognizable one. */
   readonly workItem: WorkItemDto | null;
+  /**
+   * The Board column the claim advanced the WorkItem into, or null when it
+   * stayed put (off-board, already Doing/Done, or an unclassified column).
+   */
+  readonly movedToColumnId: string | null;
 }
 
 /**
@@ -137,16 +142,31 @@ function isMissingRoute(reason: unknown): boolean {
   );
 }
 
-function readClaimedWorkItem(payload: unknown): WorkItemDto | null {
+/**
+ * The backend's real claim response is `{ work_item, moved_to_column_id }`
+ * (`ClaimWorkItemResponseSchema`). Kept shape-tolerant for a bare WorkItem or
+ * a `WorkItemDetailSchema`-shaped body too, since nothing stops a future
+ * deployment answering either.
+ */
+function readClaimedWorkItem(payload: unknown): {
+  readonly workItem: WorkItemDto;
+  readonly movedToColumnId: string | null;
+} | null {
+  if (payload !== null && typeof payload === 'object') {
+    const record = payload as Record<string, unknown>;
+    const workItem = tolerantParse(WorkItemSchema, record.work_item);
+    if (workItem) {
+      const movedToColumnId =
+        typeof record.moved_to_column_id === 'string'
+          ? record.moved_to_column_id
+          : null;
+      return { workItem, movedToColumnId };
+    }
+  }
   const detail = tolerantParse(WorkItemDetailSchema, payload);
-  if (detail) return detail.work_item;
+  if (detail) return { workItem: detail.work_item, movedToColumnId: null };
   const bare = tolerantParse(WorkItemSchema, payload);
-  if (bare) return bare;
-  if (payload !== null && typeof payload === 'object')
-    return tolerantParse(
-      WorkItemSchema,
-      (payload as Record<string, unknown>).work_item,
-    );
+  if (bare) return { workItem: bare, movedToColumnId: null };
   return null;
 }
 
@@ -320,10 +340,15 @@ export const workOrganizationClient = {
       );
     } catch (reason) {
       if (isFeatureUnavailable(reason) || isMissingRoute(reason))
-        return { supported: false, workItem: null };
+        return { supported: false, workItem: null, movedToColumnId: null };
       throw reason;
     }
-    return { supported: true, workItem: readClaimedWorkItem(payload) };
+    const read = readClaimedWorkItem(payload);
+    return {
+      supported: true,
+      workItem: read?.workItem ?? null,
+      movedToColumnId: read?.movedToColumnId ?? null,
+    };
   },
 
   async listBoards(): Promise<readonly WorkBoardDto[]> {

@@ -121,6 +121,7 @@ function createTasksApi() {
     description: null,
     status: 'todo',
     assignee_id: null,
+    mentions: [],
     created_by: 'principal-1',
     source_conversation_id: null,
     source_message_id: null,
@@ -179,6 +180,7 @@ function createTasksApi() {
         work_item_id: workItemId,
         author_id: 'principal-1',
         body: String(body?.body ?? ''),
+        mentions: [],
         created_at: timestamp,
       };
       comments.push(comment);

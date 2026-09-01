@@ -527,6 +527,7 @@ function taskFor(id: string, title: string) {
       description: null,
       status: 'todo',
       assignee_id: null,
+      mentions: [],
       created_by: 'principal-1',
       source_conversation_id: null,
       source_message_id: null,
@@ -544,6 +545,7 @@ function commentFor(workItemId: string, body: string) {
     work_item_id: workItemId,
     author_id: 'principal-1',
     body,
+    mentions: [],
     created_at: '2026-08-26T00:00:00.000Z',
   };
 }

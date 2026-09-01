@@ -283,12 +283,16 @@ function createCanvasApi({
     description: null,
     status: 'todo',
     assignee_id: entry.assignee_id,
+    mentions: [],
     created_by: 'principal-1',
     source_conversation_id: null,
     source_message_id: null,
     linked_work_id: null,
     created_at: timestamp,
-    updated_at: timestamp,
+    // A currently-assigned card must read as a *live* claim: the 20-minute
+    // staleness rule is judged against wall-clock "now", so an assigned
+    // fixture item stays claimed only when its updated_at is recent.
+    updated_at: entry.assignee_id ? new Date().toISOString() : timestamp,
   });
   const snapshot = () => ({
     board: {
@@ -305,6 +309,7 @@ function createCanvasApi({
       board_id: boardId,
       title: column.title,
       position: column.position,
+      kind: null,
       created_at: timestamp,
       updated_at: timestamp,
     })),
@@ -386,6 +391,7 @@ function createCanvasApi({
           board_id: boardId,
           title: column?.title ?? 'Unknown',
           position: column?.position ?? 0,
+          kind: null,
           created_at: timestamp,
           updated_at: timestamp,
         },
@@ -407,7 +413,7 @@ function createCanvasApi({
       if (entry) entry.assignee_id = 'principal-1';
       return json({
         work_item: entry ? workItem(entry) : null,
-        linked_work: null,
+        moved_to_column_id: null,
       });
     }
     if (path === '/api/work-items' && method === 'POST') {

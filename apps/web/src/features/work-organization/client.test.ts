@@ -16,6 +16,7 @@ function workItem(extra: Record<string, unknown> = {}) {
     description: null,
     status: 'todo',
     assignee_id: null,
+    mentions: [],
     created_by: 'user-1',
     source_conversation_id: null,
     source_message_id: null,
@@ -37,9 +38,7 @@ describe('forward-compatible response parsing', () => {
         {
           work_item: workItem({
             mentions: ['ari-analyst'],
-            claimed_by: 'ari-analyst',
-            claimed_at: timestamp,
-            claim_expires_at: null,
+            assignee_id: 'ari-analyst',
           }),
           linked_work: null,
         },
@@ -53,7 +52,6 @@ describe('forward-compatible response parsing', () => {
     expect(readClaimState(detail!.work_item)).toEqual({
       claimedBy: 'ari-analyst',
       claimedAt: timestamp,
-      expiresAt: null,
     });
   });
 
@@ -84,7 +82,7 @@ describe('claimWorkItem', () => {
   it('posts to the claim route and reads a detail response', async () => {
     const request = vi.spyOn(apiTransport, 'request').mockResolvedValue({
       work_item: workItem({ assignee_id: 'ari-analyst' }),
-      linked_work: null,
+      moved_to_column_id: '44444444-4444-4444-8444-444444444444',
     });
 
     const result = await workOrganizationClient.claimWorkItem(workItemId);
@@ -95,26 +93,34 @@ describe('claimWorkItem', () => {
     );
     expect(result.supported).toBe(true);
     expect(result.workItem?.assignee_id).toBe('ari-analyst');
+    expect(result.movedToColumnId).toBe('44444444-4444-4444-8444-444444444444');
   });
 
   it('reads a bare WorkItem response', async () => {
     vi.spyOn(apiTransport, 'request').mockResolvedValue(workItem());
     const result = await workOrganizationClient.claimWorkItem(workItemId);
     expect(result.workItem?.id).toBe(workItemId);
+    expect(result.movedToColumnId).toBeNull();
   });
 
-  it('reads a WorkItem carrying the new claim fields', async () => {
+  it('reads the claim response with no board move', async () => {
     vi.spyOn(apiTransport, 'request').mockResolvedValue({
-      work_item: workItem({ claimed_by: 'ari-analyst', claimed_at: timestamp }),
+      work_item: workItem({ assignee_id: 'ari-analyst' }),
+      moved_to_column_id: null,
     });
     const result = await workOrganizationClient.claimWorkItem(workItemId);
     expect(readClaimState(result.workItem!)?.claimedBy).toBe('ari-analyst');
+    expect(result.movedToColumnId).toBeNull();
   });
 
   it('reports a claim it cannot read as supported without a WorkItem', async () => {
     vi.spyOn(apiTransport, 'request').mockResolvedValue({ ok: true });
     const result = await workOrganizationClient.claimWorkItem(workItemId);
-    expect(result).toEqual({ supported: true, workItem: null });
+    expect(result).toEqual({
+      supported: true,
+      workItem: null,
+      movedToColumnId: null,
+    });
   });
 
   it('reports claim unsupported when the surface is not composed', async () => {
@@ -124,6 +130,7 @@ describe('claimWorkItem', () => {
     expect(await workOrganizationClient.claimWorkItem(workItemId)).toEqual({
       supported: false,
       workItem: null,
+      movedToColumnId: null,
     });
   });
 
@@ -134,6 +141,7 @@ describe('claimWorkItem', () => {
     expect(await workOrganizationClient.claimWorkItem(workItemId)).toEqual({
       supported: false,
       workItem: null,
+      movedToColumnId: null,
     });
   });
 
@@ -148,7 +156,7 @@ describe('claimWorkItem', () => {
 
   it('surfaces a conflicting claim as a real failure', async () => {
     vi.spyOn(apiTransport, 'request').mockRejectedValue(
-      new ApiTransportError(409, 'work_item_already_claimed', 'Taken.'),
+      new ApiTransportError(409, 'work_item_claim_conflict', 'Taken.'),
     );
     await expect(
       workOrganizationClient.claimWorkItem(workItemId),

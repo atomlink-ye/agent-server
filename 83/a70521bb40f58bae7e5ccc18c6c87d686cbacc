@@ -1,0 +1,67 @@
+apps/web/src/features/work-organization/BoardsPage.browser.test.tsx
+  e7416f21a37fd692 44,86-87,94,96,105-106,126,150,164-165,172,174,186-188,191,194,197,200-202,205-207,210-211,214,217,230-232,237-238,242-244,249-251,263,265,267,269,271,273,275,277,279,281,293-295,299,304-306,310,315-317,324,329-331,338,343-344,347,350,354,359-360,366-367,372-373,376-377,407,426-427,430,446,465,468,484,503,680,898
+apps/web/src/features/work-organization/ParticipantChip.tsx
+  e7416f21a37fd692 1-17,19-50,52,54,56-60
+apps/web/src/features/work-organization/TasksPage.tsx
+  e7416f21a37fd692 18-21,25-40,43-46,146,178-194,210,213-214,222,225,234,241,252,258,261,268,270-273,276,283-284,287,289,299,313,321,331,339,342,353,360-361,363,371,374,380,404,423-424,426,436-483,485-491,494,501,555-556,558,560,562-568,570-576,578-580,588,595,605,613,724,726-731,733-740,743,757,759-764,766-772,774-776,789,800,808,813,827,832,834-835,854,862-863,865,874,885,897,905,908,912-933,937,940-942
+apps/web/src/features/work-organization/work-organization.css
+  e7416f21a37fd692 241-247,253-254,322-635
+apps/web/src/features/work-organization/participants.ts
+  e7416f21a37fd692 1-109
+apps/web/src/features/work-organization/WorkItemMeta.tsx
+  e7416f21a37fd692 1-6,8-87
+apps/web/src/features/work-organization/board-move.test.ts
+  e7416f21a37fd692 1-152
+apps/web/src/features/work-organization/board-move.ts
+  e7416f21a37fd692 1-95
+apps/web/src/features/work-organization/TasksPage.browser.test.tsx
+  e7416f21a37fd692 88,98,110,112,156-157,160,197,200,237-238,241,396,433,436
+apps/web/src/features/work-organization/BoardCardPeek.tsx
+  e7416f21a37fd692 1-154,156-289
+apps/web/src/features/work-organization/work-item-extensions.ts
+  e7416f21a37fd692 1-144
+apps/web/src/features/work-organization/format.ts
+  e7416f21a37fd692 1-67
+apps/web/src/features/work-organization/MentionTextField.tsx
+  e7416f21a37fd692 1-184,186-212,214-265
+apps/web/src/features/work-organization/client.test.ts
+  e7416f21a37fd692 1-157
+apps/web/src/features/work-organization/participants.test.ts
+  e7416f21a37fd692 1-207
+apps/web/src/features/work-organization/mentions.test.ts
+  e7416f21a37fd692 1-115
+apps/web/src/features/work-organization/TasksPage.mentions.browser.test.tsx
+  e7416f21a37fd692 1-29,31-154,156-206,208-271,273-291
+apps/web/src/features/work-organization/mentions.ts
+  e7416f21a37fd692 1-116
+apps/web/src/features/work-organization/client.ts
+  e7416f21a37fd692 2,9,16,21-24,55-68,70-71,75-104,118-152,304-328
+apps/web/src/features/work-organization/BoardsPage.canvas.browser.test.tsx
+  e7416f21a37fd692 1-38,40-81,83-624
+apps/web/src/features/work-organization/MentionedText.tsx
+  e7416f21a37fd692 1-40,42-55
+apps/web/src/features/work-organization/work-item-extensions.test.ts
+  e7416f21a37fd692 1-213
+apps/web/src/features/work-organization/BoardsPage.tsx
+  e7416f21a37fd692 11-12,17-18,20-31,34-51,59,80-85,143-215,233,236-237,245,255,258,260,262,268,279,284,298,306-307,310,312,322,336,346,356,364,367,378,385-386,388,399,402,416,418-423,436-437,439,449-460,462-477,514,537-539,545,550,559,561-562,567,569-570,605-641,730-744,746-749,751-795,797,801-817,819-832,839,855,861,868,877,879-880,884,886,888,890-891,895,897-898,920,937-971,976-977,982-991,993,996-1032,1034-1038,1041-1045,1064,1081-1130,1150-1151,1188-1197,1203-1348
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2-bit.10+672fbf0",
+  "base_commit_sha": "83a70521bb40f58bae7e5ccc18c6c87d686cbacc",
+  "prompts": {
+    "e7416f21a37fd692": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "68a1d33c-9d37-4c19-a455-ea204726f416",
+        "model": "claude-opus-5"
+      },
+      "human_author": "link.ye",
+      "messages": [],
+      "total_additions": 20481,
+      "total_deletions": 833,
+      "accepted_lines": 8652,
+      "overriden_lines": 54
+    }
+  }
+}

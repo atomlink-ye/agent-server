@@ -15,6 +15,8 @@ export interface ChatDispatch {
   readonly priority?: ChatActivationPriority;
   readonly causes?: readonly ChatActivationCause[];
   readonly availableAt?: string;
+  /** Delivery attempts already claimed for this activation, including this one. */
+  readonly attemptCount?: number;
   readonly createdAt: string;
   readonly publishedAt: string | null;
 }
@@ -46,6 +48,24 @@ export interface ChatDispatchRepository {
   releaseClaim?(input: {
     readonly id: string;
     readonly workerId: string;
+    /**
+     * Backoff before the activation becomes claimable again. Omitting it keeps
+     * the historical immediate-retry behavior for older bounded callers.
+     */
+    readonly retryDelayMs?: number;
+    readonly errorName?: string;
+  }): Promise<boolean>;
+
+  /**
+   * Park a permanently undeliverable activation. The row stays unpublished and
+   * inspectable, stops being claimable, and releases the open-activation slot so
+   * later causes can still open a new activation.
+   */
+  deadLetterClaim?(input: {
+    readonly id: string;
+    readonly workerId: string;
+    readonly reason: string;
+    readonly errorName?: string;
   }): Promise<boolean>;
 
   markPublished(id: string, publishedAt: string): Promise<void>;

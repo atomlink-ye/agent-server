@@ -3,7 +3,10 @@ import { describe, expect, it } from 'vitest';
 
 import { applyDurableKernelMigrations } from './postgres.js';
 import { PostgresChatDispatchRepository } from './postgres-chat-dispatch-repository.js';
-import type { PostgresConnectable } from './postgres-conversation-repository.js';
+import type {
+  PostgresConnectable,
+  PostgresQueryable,
+} from './postgres-conversation-repository.js';
 
 const conversationId = '00000000-0000-4000-8000-00000000d201';
 const runtimeId = '00000000-0000-4000-8000-00000000d301';
@@ -144,6 +147,109 @@ describe('PostgresChatDispatchRepository N2 activation semantics', () => {
     await db.close();
   });
 
+  it('holds a released activation behind its retry backoff', async () => {
+    const db = await database();
+    const repository = new PostgresChatDispatchRepository(withRowCount(db));
+    await repository.enqueue({
+      tenantId: 'tenant-n2',
+      agentDefinitionId: 'agent-n2',
+      conversationId,
+      throughSequence: 1,
+      dedupeKey: 'message:first',
+    });
+
+    const claimed = await repository.claimNext('worker-a', 60_000);
+    expect(claimed?.attemptCount).toBe(1);
+    expect(
+      await repository.releaseClaim({
+        id: claimed!.id,
+        workerId: 'worker-a',
+        retryDelayMs: 60_000,
+        errorName: 'ExecutionPlaneUnavailableError',
+      }),
+    ).toBe(true);
+
+    // The row is released, but not claimable again in the same instant.
+    expect(await repository.claimNext('worker-a', 60_000)).toBeNull();
+    expect(await repository.listPending(10)).toHaveLength(0);
+    const row = await db.query<{
+      available_at: string | Date;
+      last_error_name: string | null;
+      attempt_count: number;
+    }>(
+      `SELECT available_at,last_error_name,attempt_count
+       FROM chat_dispatches WHERE id=$1`,
+      [claimed!.id],
+    );
+    expect(row.rows[0]?.last_error_name).toBe('ExecutionPlaneUnavailableError');
+    expect(Number(row.rows[0]?.attempt_count)).toBe(1);
+
+    // Once the backoff has elapsed the same activation is retried, not lost.
+    await db.query(
+      `UPDATE chat_dispatches SET available_at=NOW() - INTERVAL '1 second' WHERE id=$1`,
+      [claimed!.id],
+    );
+    const retried = await repository.claimNext('worker-a', 60_000);
+    expect(retried?.id).toBe(claimed!.id);
+    expect(retried?.attemptCount).toBe(2);
+
+    await db.close();
+  });
+
+  it('parks a dead-lettered activation without blocking the next one', async () => {
+    const db = await database();
+    const repository = new PostgresChatDispatchRepository(withRowCount(db));
+    await repository.enqueue({
+      tenantId: 'tenant-n2',
+      agentDefinitionId: 'agent-n2',
+      conversationId,
+      throughSequence: 1,
+      dedupeKey: 'message:first',
+    });
+    const claimed = await repository.claimNext('worker-a', 60_000);
+
+    expect(
+      await repository.deadLetterClaim({
+        id: claimed!.id,
+        workerId: 'worker-a',
+        reason: 'attempt_limit_exhausted',
+        errorName: 'RuntimeTurnExecutionError',
+      }),
+    ).toBe(true);
+
+    // Terminal for automatic retry, still inspectable and unpublished.
+    expect(await repository.claimNext('worker-a', 60_000)).toBeNull();
+    expect(await repository.listPending(10)).toHaveLength(0);
+    const parked = await db.query<{
+      dead_letter_reason: string | null;
+      dead_lettered_at: string | Date | null;
+      published_at: string | Date | null;
+    }>(
+      `SELECT dead_letter_reason,dead_lettered_at,published_at
+       FROM chat_dispatches WHERE id=$1`,
+      [claimed!.id],
+    );
+    expect(parked.rows[0]?.dead_letter_reason).toBe('attempt_limit_exhausted');
+    expect(parked.rows[0]?.dead_lettered_at).not.toBeNull();
+    expect(parked.rows[0]?.published_at).toBeNull();
+
+    // A later cause must open a new activation rather than joining the parked one.
+    const next = await repository.enqueue({
+      tenantId: 'tenant-n2',
+      agentDefinitionId: 'agent-n2',
+      conversationId,
+      throughSequence: 2,
+      dedupeKey: 'message:second',
+    });
+    expect(next.enqueued).toBe(true);
+    expect(next.dispatchId).not.toBe(claimed!.id);
+    const claimedNext = await repository.claimNext('worker-a', 60_000);
+    expect(claimedNext?.id).toBe(next.dispatchId);
+    expect(claimedNext?.throughSequence).toBe(2);
+
+    await db.close();
+  });
+
   it('keeps the per-epoch conversation watermark monotonic', async () => {
     const db = await database();
     const repository = new PostgresChatDispatchRepository(db);
@@ -177,6 +283,22 @@ describe('PostgresChatDispatchRepository N2 activation semantics', () => {
     await db.close();
   });
 });
+
+/**
+ * PGlite reports `affectedRows` where `pg` reports `rowCount`. Production runs
+ * over the wire protocol, so keep the shim in the test rather than the adapter.
+ */
+function withRowCount(db: PGlite): PostgresQueryable {
+  return {
+    async query(sql: string, values?: readonly unknown[]) {
+      const result = await db.query(sql, values ? [...values] : undefined);
+      return {
+        rows: result.rows as readonly Record<string, unknown>[],
+        rowCount: result.affectedRows ?? null,
+      };
+    },
+  } as PostgresQueryable;
+}
 
 async function database(): Promise<PGlite> {
   const db = new PGlite();

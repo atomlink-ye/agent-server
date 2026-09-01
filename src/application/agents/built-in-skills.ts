@@ -15,6 +15,12 @@ export const AGENT_SERVER_PRODUCT_WORK_CREATE_TOOL_REF =
   'agent-server/product-work-create';
 export const AGENT_SERVER_PRODUCT_WORK_RUN_START_TOOL_REF =
   'agent-server/product-work-run-start';
+/**
+ * Product coordination plane, not the Team-collaboration board protocol.
+ * See src/entrypoints/mcp/work-organization-mcp-tools.ts.
+ */
+export const AGENT_SERVER_WORK_ITEM_CLAIM_TOOL_REF =
+  'agent-server/work-item-claim';
 export const AGENT_SERVER_LIST_AGENT_WORKFLOWS_TOOL_REF =
   'agent-server/list-agent-workflows';
 export const AGENT_SERVER_DESCRIBE_WORKFLOW_TOOL_REF =
@@ -35,6 +41,7 @@ export const SUPPORTED_MANAGED_AGENT_TOOL_REFS = new Set([
   AGENT_SERVER_LEARNING_PROPOSAL_CREATE_TOOL_REF,
   AGENT_SERVER_PRODUCT_WORK_CREATE_TOOL_REF,
   AGENT_SERVER_PRODUCT_WORK_RUN_START_TOOL_REF,
+  AGENT_SERVER_WORK_ITEM_CLAIM_TOOL_REF,
   AGENT_SERVER_LIST_AGENT_WORKFLOWS_TOOL_REF,
   AGENT_SERVER_DESCRIBE_WORKFLOW_TOOL_REF,
 ]);

@@ -165,7 +165,19 @@ export async function createApplication(
       ? createWorkOrganizationCapabilities({
           database: pool,
           work: workModule,
+          logger,
           ...(directChatEnabled && conversations ? { conversations } : {}),
+          // A mention wakes a Coworker through the ordinary chat plane, so it is
+          // only wired where that plane exists at all.
+          ...(directChatEnabled && conversations && chatDispatches
+            ? {
+                wake: {
+                  conversations,
+                  dispatches: chatDispatches,
+                  definitions: resourceModule.managedAgentDefinitions,
+                },
+              }
+            : {}),
         })
       : undefined;
   const runtimeToolCatalog = createRuntimeToolCatalog({
@@ -177,6 +189,9 @@ export async function createApplication(
     logger,
     events,
     ...(workModule ? { work: workModule.contributeRuntime } : {}),
+    ...(workOrganizationModule
+      ? { workOrganization: workOrganizationModule.contributeRuntime }
+      : {}),
   });
   const runtimeOwner = createRuntimeOwner({
     database: pool,

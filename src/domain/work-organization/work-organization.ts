@@ -1,3 +1,5 @@
+import type { WorkBoardColumnKind } from './board-column-kinds.js';
+
 export const WORK_ITEM_STATUSES = [
   'todo',
   'in_progress',
@@ -18,6 +20,8 @@ export interface WorkItem extends WorkOrganizationOwnerScope {
   readonly description: string | null;
   readonly status: WorkItemStatus;
   readonly assigneeId: string | null;
+  /** Identities named by @-tokens in title+description at the last write. */
+  readonly mentions: readonly string[];
   readonly createdBy: string;
   readonly sourceConversationId: string | null;
   readonly sourceMessageId: string | null;
@@ -31,6 +35,8 @@ export interface WorkItemComment extends WorkOrganizationOwnerScope {
   readonly workItemId: string;
   readonly authorId: string;
   readonly body: string;
+  /** Identities named by @-tokens in the comment body. */
+  readonly mentions: readonly string[];
   readonly createdAt: string;
 }
 
@@ -50,6 +56,8 @@ export interface WorkBoardColumn extends WorkOrganizationOwnerScope {
   readonly boardId: string;
   readonly title: string;
   readonly position: number;
+  /** What the column means; null when its meaning is not declared. */
+  readonly kind: WorkBoardColumnKind | null;
   readonly createdAt: string;
   readonly updatedAt: string;
 }
@@ -109,6 +117,23 @@ export class WorkBoardColumnNotFoundError extends Error {
   public constructor() {
     super('The requested Board column was not found.');
     this.name = 'WorkBoardColumnNotFoundError';
+  }
+}
+
+/**
+ * Exactly one claimant may hold a WorkItem. This is raised only when the atomic
+ * claim UPDATE matched no row, so it always means "someone else holds it" and
+ * never "we failed to check" — there is no SELECT-then-UPDATE window.
+ */
+export class WorkItemClaimConflictError extends Error {
+  public readonly code = 'work_item_claim_conflict';
+  public constructor(public readonly holderId: string | null) {
+    // Read verbatim by whoever lost the race — a person in the UI or a Coworker
+    // in its tool result — so it says what happened AND what to do instead.
+    super(
+      '这个 WorkItem 已被他人认领，正在被处理，请不要重复开始，去处理其他 WorkItem。',
+    );
+    this.name = 'WorkItemClaimConflictError';
   }
 }
 

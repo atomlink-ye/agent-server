@@ -1,10 +1,17 @@
 import type {
+  ClaimWorkItemRecordInput,
+  ClaimWorkItemRecordResult,
   CreateBoardColumnRecordInput,
   CreateBoardRecordInput,
   CreateWorkItemRecordInput,
   UpdateWorkItemRecordInput,
+  WorkItemPlacementSummary,
   WorkOrganizationRepository,
 } from '../../application/ports/work-organization-repository.js';
+import {
+  claimTargetColumn,
+  isWorkBoardColumnKind,
+} from '../../domain/work-organization/board-column-kinds.js';
 import type {
   WorkBoard,
   WorkBoardColumn,
@@ -33,6 +40,7 @@ type WorkItemRow = {
   description: string | null;
   status: WorkItem['status'];
   assignee_id: string | null;
+  mentions: unknown;
   created_by: string;
   source_conversation_id: string | null;
   source_message_id: string | null;
@@ -48,6 +56,7 @@ type CommentRow = {
   work_item_id: string;
   author_id: string;
   body: string;
+  mentions: unknown;
   created_at: string | Date;
 };
 
@@ -69,6 +78,7 @@ type ColumnRow = {
   board_id: string;
   title: string;
   position: number;
+  kind: string | null;
   created_at: string | Date;
   updated_at: string | Date;
 };
@@ -94,9 +104,9 @@ export class PostgresWorkOrganizationRepository implements WorkOrganizationRepos
   ): Promise<WorkItem> {
     const result = await this.db.query<WorkItemRow>(
       `INSERT INTO product_work_items
-        (id,tenant_id,workspace_id,title,description,status,assignee_id,created_by,
+        (id,tenant_id,workspace_id,title,description,status,assignee_id,mentions,created_by,
          source_conversation_id,source_message_id,linked_work_id,created_at,updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NULL,$11,$11)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11,NULL,$12,$12)
        RETURNING *`,
       [
         input.id,
@@ -106,6 +116,7 @@ export class PostgresWorkOrganizationRepository implements WorkOrganizationRepos
         input.description,
         input.status,
         input.assigneeId,
+        JSON.stringify(input.mentions),
         input.createdBy,
         input.sourceConversationId,
         input.sourceMessageId,
@@ -149,7 +160,8 @@ export class PostgresWorkOrganizationRepository implements WorkOrganizationRepos
          description=CASE WHEN $5::boolean THEN $6 ELSE description END,
          status=COALESCE($7,status),
          assignee_id=CASE WHEN $8::boolean THEN $9 ELSE assignee_id END,
-         updated_at=$10
+         mentions=COALESCE($10::jsonb,mentions),
+         updated_at=$11
        WHERE tenant_id=$1 AND workspace_id=$2 AND id=$3
        RETURNING *`,
       [
@@ -162,11 +174,107 @@ export class PostgresWorkOrganizationRepository implements WorkOrganizationRepos
         input.status ?? null,
         input.assigneeId !== undefined,
         input.assigneeId ?? null,
+        input.mentions ? JSON.stringify(input.mentions) : null,
         input.now,
       ],
     );
     const row = result.rows?.[0];
     return row ? mapWorkItem(row) : null;
+  }
+
+  public async claimWorkItem(
+    input: ClaimWorkItemRecordInput,
+  ): Promise<ClaimWorkItemRecordResult> {
+    // Where the WorkItem sits and what its board's columns MEAN is read first,
+    // because the advance decision belongs to the pure domain rule rather than
+    // to SQL. Nothing is decided by this read: the move below re-checks the
+    // column it saw, so a concurrent drag loses the move, never the claim.
+    const placement = await this.findWorkItemPlacement(input, input.workItemId);
+    const advanceTo = placement
+      ? claimTargetColumn({
+          columns: (await this.listBoardColumns(input, placement.boardId)).map(
+            (column) => ({
+              id: column.id,
+              position: column.position,
+              kind: column.kind,
+            }),
+          ),
+          currentColumnId: placement.columnId,
+        })
+      : null;
+
+    // ONE statement, so it is ONE implicit transaction. The `claimed` CTE is the
+    // only source of truth: it either matched a row or it did not, and no
+    // SELECT-then-UPDATE window exists for a second claimant to slip through.
+    const result = await this.db.query<
+      WorkItemRow & { moved_to_column_id: string | null }
+    >(
+      `WITH claimed AS (
+         UPDATE product_work_items
+            SET assignee_id=$4,updated_at=$5
+          WHERE tenant_id=$1 AND workspace_id=$2 AND id=$3
+            AND (assignee_id IS NULL
+                 OR assignee_id=$4
+                 OR updated_at < $5::timestamptz - make_interval(mins => $6::int))
+          RETURNING *
+       ), moved AS (
+         UPDATE product_work_board_placements
+            SET column_id=$8,updated_at=$5
+          WHERE $7::boolean
+            AND tenant_id=$1 AND workspace_id=$2 AND work_item_id=$3
+            AND column_id=$9
+            AND EXISTS (SELECT 1 FROM claimed)
+          RETURNING column_id
+       )
+       SELECT claimed.*,(SELECT column_id FROM moved) AS moved_to_column_id
+         FROM claimed`,
+      [
+        input.tenantId,
+        input.workspaceId,
+        input.workItemId,
+        input.claimantId,
+        input.now,
+        input.staleAfterMinutes,
+        advanceTo !== null,
+        advanceTo ?? placement?.columnId ?? null,
+        placement?.columnId ?? null,
+      ],
+    );
+    const row = result.rows?.[0];
+    if (row)
+      return Object.freeze({
+        workItem: mapWorkItem(row),
+        holderId: row.assignee_id,
+        movedToColumnId: row.moved_to_column_id,
+      });
+
+    // The claim lost. Reading the holder afterwards is only for the message the
+    // loser gets, so a stale read here cannot corrupt anything.
+    const current = await this.findWorkItemById(input, input.workItemId);
+    return Object.freeze({
+      workItem: null,
+      holderId: current?.assigneeId ?? null,
+      movedToColumnId: null,
+    });
+  }
+
+  public async findWorkItemPlacement(
+    owner: WorkOrganizationOwnerScope,
+    workItemId: string,
+  ): Promise<WorkItemPlacementSummary | null> {
+    const result = await this.db.query<PlacementRow>(
+      `SELECT * FROM product_work_board_placements
+        WHERE tenant_id=$1 AND workspace_id=$2 AND work_item_id=$3`,
+      [owner.tenantId, owner.workspaceId, workItemId],
+    );
+    const row = result.rows?.[0];
+    return row
+      ? Object.freeze({
+          boardId: row.board_id,
+          columnId: row.column_id,
+          position: Number(row.position),
+        })
+      : null;
   }
 
   public async linkWork(input: {
@@ -226,12 +334,13 @@ export class PostgresWorkOrganizationRepository implements WorkOrganizationRepos
     readonly workItemId: string;
     readonly authorId: string;
     readonly body: string;
+    readonly mentions: readonly string[];
     readonly now: string;
   }): Promise<WorkItemComment | null> {
     const result = await this.db.query<CommentRow>(
       `INSERT INTO product_work_item_comments
-        (id,tenant_id,workspace_id,work_item_id,author_id,body,created_at)
-       SELECT $1,$2,$3,w.id,$5,$6,$7
+        (id,tenant_id,workspace_id,work_item_id,author_id,body,mentions,created_at)
+       SELECT $1,$2,$3,w.id,$5,$6,$7::jsonb,$8
          FROM product_work_items w
         WHERE w.tenant_id=$2 AND w.workspace_id=$3 AND w.id=$4
        RETURNING *`,
@@ -242,6 +351,7 @@ export class PostgresWorkOrganizationRepository implements WorkOrganizationRepos
         input.workItemId,
         input.authorId,
         input.body,
+        JSON.stringify(input.mentions),
         input.now,
       ],
     );
@@ -354,8 +464,8 @@ export class PostgresWorkOrganizationRepository implements WorkOrganizationRepos
   ): Promise<WorkBoardColumn | null> {
     const result = await this.db.query<ColumnRow>(
       `INSERT INTO product_work_board_columns
-        (id,tenant_id,workspace_id,board_id,title,position,created_at,updated_at)
-       SELECT $1,$2,$3,b.id,$5,$6,$7,$7
+        (id,tenant_id,workspace_id,board_id,title,position,kind,created_at,updated_at)
+       SELECT $1,$2,$3,b.id,$5,$6,$7,$8,$8
          FROM product_work_boards b
         WHERE b.tenant_id=$2 AND b.workspace_id=$3 AND b.id=$4
        RETURNING *`,
@@ -366,6 +476,7 @@ export class PostgresWorkOrganizationRepository implements WorkOrganizationRepos
         input.boardId,
         input.title,
         input.position,
+        input.kind,
         input.now,
       ],
     );
@@ -380,13 +491,15 @@ export class PostgresWorkOrganizationRepository implements WorkOrganizationRepos
     readonly columnId: string;
     readonly title?: string;
     readonly position?: number;
+    readonly kind?: WorkBoardColumn['kind'];
     readonly now: string;
   }): Promise<WorkBoardColumn | null> {
     const result = await this.db.query<ColumnRow>(
       `UPDATE product_work_board_columns SET
          title=COALESCE($5,title),
          position=COALESCE($6,position),
-         updated_at=$7
+         kind=CASE WHEN $7::boolean THEN $8 ELSE kind END,
+         updated_at=$9
        WHERE tenant_id=$1 AND workspace_id=$2 AND board_id=$3 AND id=$4
        RETURNING *`,
       [
@@ -396,11 +509,26 @@ export class PostgresWorkOrganizationRepository implements WorkOrganizationRepos
         input.columnId,
         input.title ?? null,
         input.position ?? null,
+        input.kind !== undefined,
+        input.kind ?? null,
         input.now,
       ],
     );
     const row = result.rows?.[0];
     return row ? mapColumn(row) : null;
+  }
+
+  public async listBoardColumns(
+    owner: WorkOrganizationOwnerScope,
+    boardId: string,
+  ): Promise<readonly WorkBoardColumn[]> {
+    const result = await this.db.query<ColumnRow>(
+      `SELECT * FROM product_work_board_columns
+        WHERE tenant_id=$1 AND workspace_id=$2 AND board_id=$3
+        ORDER BY position ASC,created_at ASC,id ASC`,
+      [owner.tenantId, owner.workspaceId, boardId],
+    );
+    return Object.freeze((result.rows ?? []).map(mapColumn));
   }
 
   public async deleteBoardColumn(input: {
@@ -512,6 +640,7 @@ function mapWorkItem(row: WorkItemRow): WorkItem {
     description: row.description,
     status: row.status,
     assigneeId: row.assignee_id,
+    mentions: toMentions(row.mentions),
     createdBy: row.created_by,
     sourceConversationId: row.source_conversation_id,
     sourceMessageId: row.source_message_id,
@@ -529,8 +658,31 @@ function mapComment(row: CommentRow): WorkItemComment {
     workItemId: row.work_item_id,
     authorId: row.author_id,
     body: row.body,
+    mentions: toMentions(row.mentions),
     createdAt: toIso(row.created_at),
   });
+}
+
+/**
+ * A jsonb column arrives either already parsed (node-postgres) or as text
+ * (some drivers), and rows written before the migration read as '[]'. Anything
+ * that is not an array of strings is dropped rather than trusted: a malformed
+ * mentions payload must not be able to wake an agent.
+ */
+function toMentions(value: unknown): readonly string[] {
+  const parsed = typeof value === 'string' ? safeParseJson(value) : value;
+  if (!Array.isArray(parsed)) return Object.freeze([]);
+  return Object.freeze(
+    parsed.filter((entry): entry is string => typeof entry === 'string'),
+  );
+}
+
+function safeParseJson(value: string): unknown {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
 }
 
 function mapBoard(row: BoardRow): WorkBoard {
@@ -554,6 +706,7 @@ function mapColumn(row: ColumnRow): WorkBoardColumn {
     boardId: row.board_id,
     title: row.title,
     position: Number(row.position),
+    kind: isWorkBoardColumnKind(row.kind) ? row.kind : null,
     createdAt: toIso(row.created_at),
     updatedAt: toIso(row.updated_at),
   });

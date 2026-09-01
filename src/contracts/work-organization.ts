@@ -3,12 +3,24 @@ import { z } from 'zod';
 export const WORK_ITEM_NOT_FOUND_CODE = 'work_item_not_found';
 export const WORK_BOARD_NOT_FOUND_CODE = 'work_board_not_found';
 
+export const WORK_ITEM_CLAIM_CONFLICT_CODE = 'work_item_claim_conflict';
+
 export const WorkItemStatusSchema = z.enum([
   'todo',
   'in_progress',
   'in_review',
   'done',
 ]);
+
+/**
+ * What a Board column MEANS, as opposed to what it is titled. Null is a real
+ * answer — a column whose meaning was never declared is left unclassified
+ * rather than guessed at, because a wrong guess silently moves someone's cards.
+ */
+export const WorkBoardColumnKindSchema = z.enum(['todo', 'doing', 'done']);
+
+/** Identities named by @-tokens in prose, resolved at write time. */
+export const MentionsSchema = z.array(z.string().min(1).max(256)).max(64);
 
 export const LinkedWorkSummarySchema = z
   .object({
@@ -34,6 +46,7 @@ export const WorkItemSchema = z
     description: z.string().nullable(),
     status: WorkItemStatusSchema,
     assignee_id: z.string().min(1).max(256).nullable(),
+    mentions: MentionsSchema,
     created_by: z.string().min(1),
     source_conversation_id: z.uuid().nullable(),
     source_message_id: z.uuid().nullable(),
@@ -106,6 +119,7 @@ export const WorkItemCommentSchema = z
       .string()
       .min(1)
       .max(16 * 1024),
+    mentions: MentionsSchema,
     created_at: z.string().datetime(),
   })
   .strict();
@@ -142,6 +156,7 @@ export const WorkBoardColumnSchema = z
     board_id: z.uuid(),
     title: z.string().min(1).max(120),
     position: z.number().int().nonnegative(),
+    kind: WorkBoardColumnKindSchema.nullable(),
     created_at: z.string().datetime(),
     updated_at: z.string().datetime(),
   })
@@ -192,6 +207,7 @@ export const CreateWorkBoardColumnRequestSchema = z
   .object({
     title: z.string().trim().min(1).max(120),
     position: z.number().int().min(0).max(1_000_000).optional(),
+    kind: WorkBoardColumnKindSchema.nullable().optional(),
   })
   .strict();
 
@@ -199,11 +215,31 @@ export const UpdateWorkBoardColumnRequestSchema = z
   .object({
     title: z.string().trim().min(1).max(120).optional(),
     position: z.number().int().min(0).max(1_000_000).optional(),
+    kind: WorkBoardColumnKindSchema.nullable().optional(),
   })
   .strict()
   .refine((value) => Object.keys(value).length > 0, {
     message: 'At least one Board column field must be updated.',
   });
+
+/**
+ * Claiming takes the caller's identity from the request credentials, so the
+ * body carries no claimant. An empty body is accepted and means "claim for me",
+ * which keeps the browser button a one-liner.
+ */
+export const ClaimWorkItemRequestSchema = z.object({}).strict();
+
+export const ClaimWorkItemResponseSchema = z
+  .object({
+    work_item: WorkItemSchema,
+    /**
+     * The column the claim advanced the WorkItem into, or null when it stayed
+     * put — off-board, already Doing, Done, or on a board whose columns do not
+     * declare their kind.
+     */
+    moved_to_column_id: z.uuid().nullable(),
+  })
+  .strict();
 
 export const PlaceWorkItemRequestSchema = z
   .object({
@@ -221,6 +257,20 @@ export type WorkBoardDto = z.infer<typeof WorkBoardSchema>;
 export type WorkBoardColumnDto = z.infer<typeof WorkBoardColumnSchema>;
 export type WorkBoardPlacementDto = z.infer<typeof WorkBoardPlacementSchema>;
 export type WorkBoardSnapshotDto = z.infer<typeof WorkBoardSnapshotSchema>;
+export type WorkBoardColumnKind = z.infer<typeof WorkBoardColumnKindSchema>;
+export type ClaimWorkItemResponseDto = z.infer<
+  typeof ClaimWorkItemResponseSchema
+>;
+
+export function toClaimWorkItemResponse(input: {
+  readonly workItem: Parameters<typeof toWorkItemResponse>[0];
+  readonly movedToColumnId: string | null;
+}): ClaimWorkItemResponseDto {
+  return ClaimWorkItemResponseSchema.parse({
+    work_item: toWorkItemResponse(input.workItem),
+    moved_to_column_id: input.movedToColumnId,
+  });
+}
 
 export function toWorkItemDetailResponse(input: {
   readonly workItem: {
@@ -230,6 +280,7 @@ export function toWorkItemDetailResponse(input: {
     readonly description: string | null;
     readonly status: WorkItemStatus;
     readonly assigneeId: string | null;
+    readonly mentions: readonly string[];
     readonly createdBy: string;
     readonly sourceConversationId: string | null;
     readonly sourceMessageId: string | null;
@@ -267,6 +318,7 @@ export function toWorkItemResponse(input: {
   readonly description: string | null;
   readonly status: WorkItemStatus;
   readonly assigneeId: string | null;
+  readonly mentions: readonly string[];
   readonly createdBy: string;
   readonly sourceConversationId: string | null;
   readonly sourceMessageId: string | null;
@@ -281,6 +333,7 @@ export function toWorkItemResponse(input: {
     description: input.description,
     status: input.status,
     assignee_id: input.assigneeId,
+    mentions: [...input.mentions],
     created_by: input.createdBy,
     source_conversation_id: input.sourceConversationId,
     source_message_id: input.sourceMessageId,
@@ -295,6 +348,7 @@ export function toWorkItemCommentResponse(input: {
   readonly workItemId: string;
   readonly authorId: string;
   readonly body: string;
+  readonly mentions: readonly string[];
   readonly createdAt: string;
 }): WorkItemCommentDto {
   return WorkItemCommentSchema.parse({
@@ -302,6 +356,7 @@ export function toWorkItemCommentResponse(input: {
     work_item_id: input.workItemId,
     author_id: input.authorId,
     body: input.body,
+    mentions: [...input.mentions],
     created_at: input.createdAt,
   });
 }
@@ -331,6 +386,7 @@ export function toWorkBoardColumnResponse(input: {
   readonly boardId: string;
   readonly title: string;
   readonly position: number;
+  readonly kind: WorkBoardColumnKind | null;
   readonly createdAt: string;
   readonly updatedAt: string;
 }): WorkBoardColumnDto {
@@ -339,6 +395,7 @@ export function toWorkBoardColumnResponse(input: {
     board_id: input.boardId,
     title: input.title,
     position: input.position,
+    kind: input.kind,
     created_at: input.createdAt,
     updated_at: input.updatedAt,
   });

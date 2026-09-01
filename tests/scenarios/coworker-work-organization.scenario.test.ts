@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import type {
+  ClaimWorkItemRecordInput,
+  ClaimWorkItemRecordResult,
   CreateBoardColumnRecordInput,
   CreateBoardRecordInput,
   CreateWorkItemRecordInput,
   UpdateWorkItemRecordInput,
+  WorkItemPlacementSummary,
   WorkOrganizationRepository,
 } from '../../src/application/ports/work-organization-repository.js';
 import {
@@ -12,6 +15,10 @@ import {
   type WorkOrganizationServiceOptions,
 } from '../../src/application/work-organization/work-organization-service.js';
 import type { AccessContext } from '../../src/domain/access-context.js';
+import {
+  claimTargetColumn,
+  type WorkBoardColumnKind,
+} from '../../src/domain/work-organization/board-column-kinds.js';
 import { createWork, type Work } from '../../src/domain/work/work.js';
 import type {
   WorkBoard,
@@ -54,6 +61,7 @@ class InMemoryWorkOrganizationRepository implements WorkOrganizationRepository {
       description: input.description,
       status: input.status,
       assigneeId: input.assigneeId,
+      mentions: input.mentions,
       createdBy: input.createdBy,
       sourceConversationId: input.sourceConversationId,
       sourceMessageId: input.sourceMessageId,
@@ -94,10 +102,77 @@ class InMemoryWorkOrganizationRepository implements WorkOrganizationRepository {
       ...(input.assigneeId !== undefined
         ? { assigneeId: input.assigneeId }
         : {}),
+      ...(input.mentions !== undefined ? { mentions: input.mentions } : {}),
       updatedAt: input.now,
     };
     this.items.set(next.id, next);
     return next;
+  }
+
+  /**
+   * The in-memory stand-in for the single-statement claim. It is deliberately
+   * written as one synchronous block with no await inside, because the property
+   * under test is "exactly one claimant wins" — an await between the check and
+   * the write would make this fixture lie about the production behaviour.
+   */
+  public async claimWorkItem(
+    input: ClaimWorkItemRecordInput,
+  ): Promise<ClaimWorkItemRecordResult> {
+    const current = this.items.get(input.workItemId);
+    if (!current || !sameOwner(current, input))
+      return { workItem: null, holderId: null, movedToColumnId: null };
+    const staleAt =
+      new Date(input.now).getTime() - input.staleAfterMinutes * 60_000;
+    const claimable =
+      current.assigneeId === null ||
+      current.assigneeId === input.claimantId ||
+      new Date(current.updatedAt).getTime() < staleAt;
+    if (!claimable)
+      return {
+        workItem: null,
+        holderId: current.assigneeId,
+        movedToColumnId: null,
+      };
+    const claimed: WorkItem = {
+      ...current,
+      assigneeId: input.claimantId,
+      updatedAt: input.now,
+    };
+    this.items.set(claimed.id, claimed);
+
+    const placement = this.placements.get(input.workItemId);
+    const advanceTo = placement
+      ? claimTargetColumn({
+          columns: [...this.columns.values()].filter(
+            (column) => column.boardId === placement.boardId,
+          ),
+          currentColumnId: placement.columnId,
+        })
+      : null;
+    if (placement && advanceTo)
+      this.placements.set(input.workItemId, {
+        ...placement,
+        columnId: advanceTo,
+        updatedAt: input.now,
+      });
+    return {
+      workItem: claimed,
+      holderId: input.claimantId,
+      movedToColumnId: advanceTo,
+    };
+  }
+
+  public async findWorkItemPlacement(
+    owner: WorkOrganizationOwnerScope,
+    workItemId: string,
+  ): Promise<WorkItemPlacementSummary | null> {
+    const placement = this.placements.get(workItemId);
+    if (!placement || !sameOwner(placement, owner)) return null;
+    return {
+      boardId: placement.boardId,
+      columnId: placement.columnId,
+      position: placement.position,
+    };
   }
 
   public async linkWork(input: {
@@ -133,6 +208,7 @@ class InMemoryWorkOrganizationRepository implements WorkOrganizationRepository {
     readonly workItemId: string;
     readonly authorId: string;
     readonly body: string;
+    readonly mentions: readonly string[];
     readonly now: string;
   }): Promise<WorkItemComment | null> {
     const item = await this.findWorkItemById(input, input.workItemId);
@@ -144,6 +220,7 @@ class InMemoryWorkOrganizationRepository implements WorkOrganizationRepository {
       workItemId: input.workItemId,
       authorId: input.authorId,
       body: input.body,
+      mentions: input.mentions,
       createdAt: input.now,
     };
     this.comments.set(input.workItemId, [
@@ -240,11 +317,23 @@ class InMemoryWorkOrganizationRepository implements WorkOrganizationRepository {
       boardId: input.boardId,
       title: input.title,
       position: input.position,
+      kind: input.kind,
       createdAt: input.now,
       updatedAt: input.now,
     };
     this.columns.set(column.id, column);
     return column;
+  }
+
+  public async listBoardColumns(
+    owner: WorkOrganizationOwnerScope,
+    boardId: string,
+  ): Promise<readonly WorkBoardColumn[]> {
+    return [...this.columns.values()]
+      .filter(
+        (column) => column.boardId === boardId && sameOwner(column, owner),
+      )
+      .sort((left, right) => left.position - right.position);
   }
 
   public async updateBoardColumn(input: {
@@ -254,6 +343,7 @@ class InMemoryWorkOrganizationRepository implements WorkOrganizationRepository {
     readonly columnId: string;
     readonly title?: string;
     readonly position?: number;
+    readonly kind?: WorkBoardColumnKind | null;
     readonly now: string;
   }): Promise<WorkBoardColumn | null> {
     const current = this.columns.get(input.columnId);
@@ -267,6 +357,7 @@ class InMemoryWorkOrganizationRepository implements WorkOrganizationRepository {
       ...current,
       ...(input.title !== undefined ? { title: input.title } : {}),
       ...(input.position !== undefined ? { position: input.position } : {}),
+      ...(input.kind !== undefined ? { kind: input.kind } : {}),
       updatedAt: input.now,
     };
     this.columns.set(next.id, next);
@@ -411,9 +502,7 @@ describe('Cumora-inspired coworker work organization MVE', () => {
           latest_run_summary: {
             id: '00000000-0000-4000-8000-000000000031',
             result_summary:
-              productState === 'complete'
-                ? 'The formal Work completed successfully.'
-                : null,
+              productState === 'complete' ? '正式 Work 已成功完成。' : null,
           },
         };
       },
@@ -422,25 +511,25 @@ describe('Cumora-inspired coworker work organization MVE', () => {
 
     const board = await service.createBoard({
       accessContext,
-      title: 'Research Board',
+      title: '调研看板',
     });
     const todo = await service.createColumn({
       accessContext,
       boardId: board.id,
-      title: 'Todo',
+      title: '待办',
       position: 0,
     });
     const review = await service.createColumn({
       accessContext,
       boardId: board.id,
-      title: 'Review',
+      title: '待评审',
       position: 1,
     });
 
     const created = await service.createWorkItem({
       accessContext,
-      title: 'Investigate competitor growth',
-      description: 'Turn the chat request into trackable coworker work.',
+      title: '调研竞品增长情况',
+      description: '把聊天里的请求变成可追踪的 Coworker 工作。',
       assigneeId: 'agent-researcher',
       sourceConversationId: conversationId,
       sourceMessageId: messageId,
@@ -456,7 +545,7 @@ describe('Cumora-inspired coworker work organization MVE', () => {
     const comment = await service.addComment({
       accessContext,
       workItemId: created.workItem.id,
-      body: '@agent-researcher please include evidence.',
+      body: '@agent-researcher 请补充证据。',
     });
     expect(comment.body).toContain('@agent-researcher');
     expect(
@@ -508,7 +597,7 @@ describe('Cumora-inspired coworker work organization MVE', () => {
     );
     expect(readyForReview.workItem.status).toBe('in_review');
     expect(readyForReview.linkedWork?.resultSummary).toBe(
-      'The formal Work completed successfully.',
+      '正式 Work 已成功完成。',
     );
 
     const done = await service.updateWorkItem({
@@ -546,11 +635,210 @@ describe('Cumora-inspired coworker work organization MVE', () => {
     await expect(
       service.createWorkItem({
         accessContext,
-        title: 'Invalid placement',
+        title: '无效的看板位置',
         boardId: '00000000-0000-4000-8000-000000000099',
         columnId: '00000000-0000-4000-8000-000000000098',
       }),
     ).rejects.toMatchObject({ code: 'work_board_not_found' });
     expect(repository.items.size).toBe(0);
   });
+
+  it('records mentions and wakes the named Coworker on create, update and comment', async () => {
+    const { repository, service, wakes } = createMentionFixture();
+    const created = await service.createWorkItem({
+      accessContext,
+      title: '整理注册转化漏斗数据',
+      description: '@研究员 请先看一下上周的埋点。',
+    });
+    expect(created.workItem.mentions).toEqual([researcher.id]);
+    expect(wakes).toHaveLength(1);
+    expect(wakes[0]).toMatchObject({
+      reason: 'mention',
+      mentions: [researcher.id],
+      actorId: 'human-1',
+      workItem: { title: '整理注册转化漏斗数据' },
+    });
+
+    // The same prose saved again must stay quiet: only tokens that were not in
+    // the previous row are new, otherwise every edit re-pings everyone named.
+    await service.updateWorkItem({
+      accessContext,
+      workItemId: created.workItem.id,
+      description: '@研究员 请先看一下上周的埋点。',
+    });
+    expect(wakes).toHaveLength(1);
+
+    await service.updateWorkItem({
+      accessContext,
+      workItemId: created.workItem.id,
+      description: '@研究员 @文案 一起看一下。',
+    });
+    expect(wakes.at(-1)).toMatchObject({
+      reason: 'mention',
+      mentions: [writer.id],
+    });
+
+    const comment = await service.addComment({
+      accessContext,
+      workItemId: created.workItem.id,
+      body: '@研究员 补充一下同比数据。',
+    });
+    expect(comment.mentions).toEqual([researcher.id]);
+    expect(wakes.at(-1)).toMatchObject({
+      reason: 'comment',
+      mentions: [researcher.id],
+      quote: '@研究员 补充一下同比数据。',
+    });
+    expect(repository.items.size).toBe(1);
+  });
+
+  it('treats a direct assignment as a mention and survives a failing wake', async () => {
+    const { service, wakes } = createMentionFixture({ failWake: true });
+    const created = await service.createWorkItem({
+      accessContext,
+      title: '给注册页写一版新文案',
+      assigneeId: writer.id,
+    });
+    // The wake threw. The WorkItem write must still stand, because a chat
+    // outage is not a reason to lose the user's card.
+    expect(created.workItem.assigneeId).toBe(writer.id);
+    expect(wakes[0]).toMatchObject({
+      reason: 'assignment',
+      mentions: [writer.id],
+    });
+
+    await service.updateWorkItem({
+      accessContext,
+      workItemId: created.workItem.id,
+      assigneeId: researcher.id,
+    });
+    expect(wakes.at(-1)).toMatchObject({
+      reason: 'assignment',
+      mentions: [researcher.id],
+    });
+  });
+
+  it('lets exactly one claimant win and advances the card into the Doing column', async () => {
+    const { service } = createMentionFixture();
+    const board = await service.createBoard({
+      accessContext,
+      title: '增长看板',
+    });
+    const todo = await service.createColumn({
+      accessContext,
+      boardId: board.id,
+      title: '待办',
+      position: 0,
+      kind: 'todo',
+    });
+    const doing = await service.createColumn({
+      accessContext,
+      boardId: board.id,
+      title: '进行中',
+      position: 1,
+      kind: 'doing',
+    });
+    const created = await service.createWorkItem({
+      accessContext,
+      title: '核对上周的转化数据',
+      boardId: board.id,
+      columnId: todo.id,
+      position: 0,
+    });
+
+    const claim = await service.claimWorkItem({
+      accessContext,
+      workItemId: created.workItem.id,
+      claimantId: researcher.id,
+    });
+    expect(claim.workItem.assigneeId).toBe(researcher.id);
+    expect(claim.movedToColumnId).toBe(doing.id);
+    expect(
+      (await service.getBoard(accessContext, board.id)).placements[0]?.columnId,
+    ).toBe(doing.id);
+
+    // A second Coworker arriving after the winner must be told to stop, and the
+    // holder must not change underneath the first claimant.
+    await expect(
+      service.claimWorkItem({
+        accessContext,
+        workItemId: created.workItem.id,
+        claimantId: writer.id,
+      }),
+    ).rejects.toMatchObject({
+      code: 'work_item_claim_conflict',
+      holderId: researcher.id,
+    });
+
+    // Re-claiming what you already hold is idempotent, and it does not shove
+    // the card forward a second time.
+    const again = await service.claimWorkItem({
+      accessContext,
+      workItemId: created.workItem.id,
+      claimantId: researcher.id,
+    });
+    expect(again.workItem.assigneeId).toBe(researcher.id);
+    expect(again.movedToColumnId).toBeNull();
+  });
 });
+
+const researcher = {
+  id: '00000000-0000-4000-8000-000000000041',
+  displayName: '研究员',
+  normalizedName: 'agent-researcher',
+  runtimeAvailable: true,
+};
+const writer = {
+  id: '00000000-0000-4000-8000-000000000042',
+  displayName: '文案',
+  normalizedName: 'agent-writer',
+  runtimeAvailable: true,
+};
+
+/** A service wired with a mention roster and a recording wake seam. */
+function createMentionFixture(options?: { readonly failWake?: boolean }): {
+  readonly repository: InMemoryWorkOrganizationRepository;
+  readonly service: WorkOrganizationService;
+  readonly wakes: {
+    readonly reason?: string;
+    readonly mentions: readonly string[];
+    readonly actorId: string;
+    readonly quote?: string;
+    readonly workItem: { readonly title: string };
+  }[];
+} {
+  const repository = new InMemoryWorkOrganizationRepository();
+  const wakes: {
+    readonly reason?: string;
+    readonly mentions: readonly string[];
+    readonly actorId: string;
+    readonly quote?: string;
+    readonly workItem: { readonly title: string };
+  }[] = [];
+  const service = new WorkOrganizationService({
+    repository,
+    workIdentity: {
+      async createWork() {
+        throw new Error('not used');
+      },
+      async findWorkById() {
+        return null;
+      },
+    },
+    async workListProjection() {
+      throw new Error('not used');
+    },
+    mentionRoster: {
+      async listMentionableAgents() {
+        return [researcher, writer];
+      },
+    },
+    async wakeMentionedAgents(input) {
+      wakes.push(input);
+      if (options?.failWake) throw new Error('chat plane unavailable');
+      return { woken: input.mentions.length, skipped: 0 };
+    },
+    now: () => new Date('2026-08-26T01:00:00.000Z'),
+  });
+  return { repository, service, wakes };
+}

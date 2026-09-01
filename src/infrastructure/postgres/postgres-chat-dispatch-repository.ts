@@ -111,7 +111,7 @@ export class PostgresChatDispatchRepository implements ChatDispatchRepository {
           dedupe_key,activation_key,priority,available_at,created_at,updated_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$9)
        ON CONFLICT (activation_key)
-       WHERE published_at IS NULL AND claimed_by IS NULL
+       WHERE published_at IS NULL AND claimed_by IS NULL AND dead_lettered_at IS NULL
        DO UPDATE SET
          through_sequence=GREATEST(chat_dispatches.through_sequence, EXCLUDED.through_sequence),
          priority=CASE
@@ -178,6 +178,7 @@ export class PostgresChatDispatchRepository implements ChatDispatchRepository {
     const result = await this.database.query<ChatDispatchRow>(
       `SELECT * FROM chat_dispatches
        WHERE published_at IS NULL
+         AND dead_lettered_at IS NULL
          AND available_at <= NOW()
          AND (claimed_by IS NULL OR claim_expires_at <= NOW())
        ORDER BY CASE priority WHEN 'urgent' THEN 0 ELSE 1 END,
@@ -195,6 +196,7 @@ export class PostgresChatDispatchRepository implements ChatDispatchRepository {
          SELECT id
          FROM chat_dispatches
          WHERE published_at IS NULL
+           AND dead_lettered_at IS NULL
            AND available_at <= NOW()
            AND (claimed_by IS NULL OR claim_expires_at <= NOW())
          ORDER BY CASE priority WHEN 'urgent' THEN 0 ELSE 1 END,
@@ -262,15 +264,56 @@ export class PostgresChatDispatchRepository implements ChatDispatchRepository {
     return (result.rowCount ?? 0) === 1;
   }
 
+  /**
+   * A failed activation must not become claimable again immediately: without a
+   * retry delay one permanently failing activation is claimed and released as
+   * fast as the database can answer.
+   */
   async releaseClaim(input: {
     readonly id: string;
     readonly workerId: string;
+    readonly retryDelayMs?: number;
+    readonly errorName?: string;
   }): Promise<boolean> {
     const result = await this.database.query(
       `UPDATE chat_dispatches
-       SET claimed_by=NULL, claim_expires_at=NULL, available_at=NOW(), updated_at=NOW()
+       SET claimed_by=NULL,
+           claim_expires_at=NULL,
+           available_at=NOW() + ($3::bigint * INTERVAL '1 millisecond'),
+           last_error_name=COALESCE($4, last_error_name),
+           last_failed_at=NOW(),
+           updated_at=NOW()
        WHERE id=$1 AND claimed_by=$2 AND published_at IS NULL`,
-      [input.id, input.workerId],
+      [
+        input.id,
+        input.workerId,
+        boundedRetryDelay(input.retryDelayMs ?? 0),
+        input.errorName ?? null,
+      ],
+    );
+    return (result.rowCount ?? 0) === 1;
+  }
+
+  async deadLetterClaim(input: {
+    readonly id: string;
+    readonly workerId: string;
+    readonly reason: string;
+    readonly errorName?: string;
+  }): Promise<boolean> {
+    const result = await this.database.query(
+      `UPDATE chat_dispatches
+       SET claimed_by=NULL,
+           claim_expires_at=NULL,
+           dead_lettered_at=NOW(),
+           dead_letter_reason=$3,
+           last_error_name=COALESCE($4, last_error_name),
+           last_failed_at=NOW(),
+           updated_at=NOW()
+       WHERE id=$1
+         AND claimed_by=$2
+         AND published_at IS NULL
+         AND dead_lettered_at IS NULL`,
+      [input.id, input.workerId, input.reason, input.errorName ?? null],
     );
     return (result.rowCount ?? 0) === 1;
   }
@@ -363,6 +406,7 @@ export class PostgresChatDispatchRepository implements ChatDispatchRepository {
       priority: row.priority,
       causes: Object.freeze((causes.rows ?? []).map(mapCause)),
       availableAt: isoDate(row.available_at)!,
+      attemptCount: Number(row.attempt_count ?? 0),
       createdAt: isoDate(row.created_at)!,
       publishedAt: isoDate(row.published_at),
     });
@@ -440,6 +484,12 @@ function priorityForCause(cause: ChatActivationCause): ChatActivationPriority {
 function boundedDebounce(value: number): number {
   if (!Number.isFinite(value)) return 0;
   return Math.max(0, Math.min(1_000, Math.trunc(value)));
+}
+
+/** A retry delay is pacing, never a way to park a row indefinitely. */
+function boundedRetryDelay(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(3_600_000, Math.trunc(value)));
 }
 
 function assertSequence(value: number): void {

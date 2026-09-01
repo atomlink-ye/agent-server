@@ -98,7 +98,15 @@ export function createChatCapabilities(
     {
       workerId: `${options.workerId}:chat`,
       leaseMs: options.leaseMs,
-      onError: ({ phase, errorName, error }) => {
+      onError: ({
+        phase,
+        errorName,
+        error,
+        dispatchId,
+        attemptCount,
+        outcome,
+        retryDelayMs,
+      }) => {
         options.logger.log('error', 'chat.delivery_worker.failed', {
           phase,
           error_name: errorName,
@@ -108,6 +116,30 @@ export function createChatCapabilities(
             typeof (error as { code?: unknown })?.code === 'string'
               ? (error as { code: string }).code
               : undefined,
+          dispatch_id: dispatchId,
+          attempt_count: attemptCount,
+          retry_outcome: outcome,
+          retry_delay_ms: retryDelayMs,
+          worker_id: `${options.workerId}:chat`,
+        });
+      },
+      onDeadLetter: (event) => {
+        options.logger.log('error', 'chat.delivery_worker.dead_letter', {
+          dispatch_id: event.dispatchId,
+          tenant_id: event.tenantId,
+          conversation_id: event.conversationId,
+          attempt_count: event.attemptCount,
+          reason: event.reason,
+          error_name: event.errorName,
+          parked: event.parked,
+          worker_id: `${options.workerId}:chat`,
+        });
+      },
+      onCircuitState: (event) => {
+        options.logger.log('warn', 'chat.delivery_worker.circuit_breaker', {
+          state: event.state,
+          cooldown_ms: event.cooldownMs,
+          error_name: event.errorName,
           worker_id: `${options.workerId}:chat`,
         });
       },

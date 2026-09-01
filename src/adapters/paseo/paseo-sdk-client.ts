@@ -3,6 +3,7 @@ import { DaemonClient } from '@getpaseo/client';
 import type { ExecutionMcpServerConfig } from '../../application/ports/runtime-extension-binding.js';
 import type { ManagedEnvironmentProvider } from '../../domain/environments/managed-environment-package.js';
 import type { PaseoModelDescriptor } from './model-selector.js';
+import { resolvePaseoCompatibilityLaunchPolicy } from './paseo-launch-policy.js';
 import {
   PaseoClientProjectionError,
   type PaseoAgentStreamEvent,
@@ -20,14 +21,6 @@ import {
   type PaseoToolDetail,
 } from './paseo-client-port.js';
 
-const PASEO_PROVIDER_DEFAULT_MODE: Readonly<
-  Record<ManagedEnvironmentProvider, string>
-> = {
-  opencode: 'build',
-  claude: 'auto',
-  codex: 'full-access',
-};
-
 /**
  * Compatibility seam for the currently pinned @getpaseo/client SDK. All raw
  * DaemonClient message decoding stays here and must not leak into the
@@ -35,12 +28,19 @@ const PASEO_PROVIDER_DEFAULT_MODE: Readonly<
  */
 export class PaseoSdkClient implements PaseoClientPort {
   readonly #client: DaemonClient;
+  /**
+   * The launch mode a provider accepts depends on how the daemon reaches its
+   * model, so the environment that selects the transport is an input here.
+   */
+  readonly #environment: NodeJS.ProcessEnv;
 
   public constructor(options: {
     readonly url: string;
     readonly connectTimeoutMs: number;
     readonly clientId?: string;
+    readonly environment?: NodeJS.ProcessEnv;
   }) {
+    this.#environment = options.environment ?? process.env;
     this.#client = new DaemonClient({
       url: options.url,
       clientId: options.clientId ?? `agent-server-${process.pid}`,
@@ -110,7 +110,10 @@ export class PaseoSdkClient implements PaseoClientPort {
     const agent = await this.#client.createAgent({
       provider: input.provider,
       model: input.model,
-      modeId: PASEO_PROVIDER_DEFAULT_MODE[input.provider],
+      modeId: resolvePaseoCompatibilityLaunchPolicy(
+        input.provider,
+        this.#environment,
+      ).mode,
       cwd: input.cwd,
       workspaceId: input.workspaceId,
       systemPrompt: input.systemPrompt,

@@ -17,6 +17,9 @@ export const applicationEnvironmentNames = [
   'PASEO_RUNTIME_ROOT',
   'PASEO_RUNTIME_CELL_ROOT',
   'AGENT_SERVER_SKILL_REGISTRY_ROOT',
+  // The API process selects the Claude launch mode from the active transport, so
+  // it needs the transport flag itself. Bedrock credentials stay with the daemon.
+  'CLAUDE_CODE_USE_BEDROCK',
 ];
 
 export function createApplicationEnvironment({

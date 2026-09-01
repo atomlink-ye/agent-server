@@ -1,0 +1,41 @@
+src/infrastructure/postgres/postgres.ts
+  ae6a6b9122c06aba 97
+src/entrypoints/chat/worker.ts
+  ae6a6b9122c06aba 2-9,15-42,47-52,56-61,69-76,82,94-95,121-124,147-149,163,169-227,231-234,239-258,265,267-270,275,277,284-299,315-322
+src/infrastructure/postgres/migrations/0063_chat_dispatch_retry_backoff.sql
+  ae6a6b9122c06aba 1-24
+src/infrastructure/postgres/postgres-chat-dispatch-repository.ts
+  ae6a6b9122c06aba 114,181,199,267-271,275-276,280-285,287-316,409,489-494
+src/composition/create-chat-capabilities.ts
+  ae6a6b9122c06aba 101-109,119-142
+src/application/chat/chat-delivery-retry-policy.test.ts
+  ae6a6b9122c06aba 1-110
+src/entrypoints/chat/worker.test.ts
+  ae6a6b9122c06aba 1-311
+src/infrastructure/postgres/postgres-chat-dispatch-repository.test.ts
+  ae6a6b9122c06aba 6-9,150-252,287-302
+src/application/chat/chat-delivery-retry-policy.ts
+  ae6a6b9122c06aba 1-159
+src/application/ports/chat-dispatch-repository.ts
+  ae6a6b9122c06aba 18-19,51-68
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2-bit.10+672fbf0",
+  "base_commit_sha": "93fdb0865c7cca4625afa5c0f83ca7d05f3a4ba9",
+  "prompts": {
+    "ae6a6b9122c06aba": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a65290ee-69c7-4504-a356-186cb30316e2",
+        "model": "claude-opus-5"
+      },
+      "human_author": "link.ye",
+      "messages": [],
+      "total_additions": 1123,
+      "total_deletions": 54,
+      "accepted_lines": 1102,
+      "overriden_lines": 0
+    }
+  }
+}

@@ -112,6 +112,30 @@ Runtime mode still uses host processes. It invokes the existing `scripts/dev/wit
 
 Provider credentials remain explicit environment input. Do not add fallback credentials to repository files.
 
+### Claude Code transports
+
+Claude Code reaches a model over one of three transports, and they are not
+interchangeable. `src/shared/claude-code-transport.ts` owns that fact:
+
+| Transport       | Selected by                                                                                             | Claude launch mode  |
+| --------------- | ------------------------------------------------------------------------------------------------------- | ------------------- |
+| `anthropic_api` | default; `ANTHROPIC_BASE_URL` may point at an Anthropic-compatible gateway such as `opencode.ai/zen/go` | `auto`              |
+| `bedrock`       | `CLAUDE_CODE_USE_BEDROCK`                                                                               | `bypassPermissions` |
+| `vertex`        | `CLAUDE_CODE_USE_VERTEX`                                                                                | `bypassPermissions` |
+
+Claude's `auto` permission mode is implemented only on the Anthropic API. On
+Bedrock or Vertex the Paseo daemon rejects Agent creation with "Claude Auto mode
+requires the Anthropic API", which surfaces as an immediately failed turn, so the
+Paseo launch policy selects `bypassPermissions` for those transports instead.
+
+The daemon environment is the isolated safe set plus an explicit forwarding list,
+so a Bedrock run needs `CLAUDE_CODE_USE_BEDROCK`,
+`CLAUDE_CODE_SKIP_BEDROCK_AUTH`, `ANTHROPIC_BEDROCK_BASE_URL` and
+`ANTHROPIC_AUTH_TOKEN` on that list. `scripts/dev/with-paseo.mjs` and
+`scripts/dev/paseo-runtime.mjs` forward them; exporting them only in a shell
+without listing them there leaves the daemon on the Anthropic API path.
+`PASEO_MODEL` must name a model the selected transport serves.
+
 ## Database strategy
 
 ### PGlite — default deterministic database

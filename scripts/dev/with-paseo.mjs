@@ -37,6 +37,14 @@ const paseoEnvironmentNames = [
   'ANTHROPIC_DEFAULT_OPUS_MODEL',
   'ANTHROPIC_SMALL_FAST_MODEL',
   'CLAUDE_CODE_SUBAGENT_MODEL',
+  // AWS Bedrock transport for Claude Code. Exporting these in a shell is not
+  // enough on its own: the daemon environment is the isolated safe set plus the
+  // names listed here, so an unlisted variable silently leaves the daemon on the
+  // Anthropic API path. See src/shared/claude-code-transport.ts.
+  'CLAUDE_CODE_USE_BEDROCK',
+  'CLAUDE_CODE_SKIP_BEDROCK_AUTH',
+  'ANTHROPIC_BEDROCK_BASE_URL',
+  'ANTHROPIC_AUTH_TOKEN',
   'IS_SANDBOX',
   'PASEO_BIN',
   'OPENCODE_BIN',

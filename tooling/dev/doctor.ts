@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { Pool } from 'pg';
 
 import { durableKernelMigrationFileNames } from '../../src/infrastructure/postgres/postgres.js';
+import { detectClaudeCodeTransport } from '../../src/shared/claude-code-transport.js';
 import {
   canConnectTcp,
   commandAvailable,
@@ -282,15 +283,31 @@ async function providerCheck(
   const provider = (
     environment.PASEO_PROVIDER?.trim() || 'claude'
   ).toLowerCase();
-  const keyByProvider: Readonly<Record<string, string>> = {
-    opencode: 'OPENCODE_GO_API_KEY',
-    claude: 'OPENCODE_GO_API_KEY',
-    anthropic: 'OPENCODE_GO_API_KEY',
-    codex: 'OPENAI_API_KEY',
-    openai: 'OPENAI_API_KEY',
-  };
-  const keyName = keyByProvider[provider];
-  if (!keyName) {
+  const transport = detectClaudeCodeTransport(environment);
+  // A Claude provider on a Bedrock/Vertex transport never reads the opencode-go
+  // gateway key, and its credential can arrive as an Anthropic bearer token, an
+  // AWS credential, or an explicitly skipped auth. Probing the gateway key there
+  // reported a missing credential the run does not need.
+  const claudeCredentialNames =
+    transport === 'anthropic_api'
+      ? (['OPENCODE_GO_API_KEY'] as const)
+      : ([
+          'ANTHROPIC_AUTH_TOKEN',
+          'AWS_BEARER_TOKEN_BEDROCK',
+          'AWS_ACCESS_KEY_ID',
+          'AWS_PROFILE',
+          'CLAUDE_CODE_SKIP_BEDROCK_AUTH',
+        ] as const);
+  const credentialNamesByProvider: Readonly<Record<string, readonly string[]>> =
+    {
+      opencode: ['OPENCODE_GO_API_KEY'],
+      claude: claudeCredentialNames,
+      anthropic: claudeCredentialNames,
+      codex: ['OPENAI_API_KEY'],
+      openai: ['OPENAI_API_KEY'],
+    };
+  const credentialNames = credentialNamesByProvider[provider];
+  if (!credentialNames) {
     return {
       name: 'provider',
       status: 'warn',
@@ -310,15 +327,23 @@ async function providerCheck(
   } catch (error) {
     validationError = error instanceof Error ? error.message : String(error);
   }
-  const configured = Boolean(environment[keyName]?.trim());
+  const configuredName = credentialNames.find((name) =>
+    environment[name]?.trim(),
+  );
   const binariesInstalled = providerBinaryNames.every((name) =>
     binaryStatus.includes(`${name}=installed(`),
   );
-  const ready = configured && binariesInstalled && validationStatus === 'valid';
+  const ready =
+    configuredName !== undefined &&
+    binariesInstalled &&
+    validationStatus === 'valid';
+  const credentialDetail = configuredName
+    ? `${configuredName}=configured`
+    : `${credentialNames.join('|')}=absent`;
   return {
     name: 'provider',
     status: ready ? 'ok' : 'warn',
-    detail: `${provider}: ${keyName}=${configured ? 'configured' : 'absent'}; validation=${validationStatus}${validationError ? `(${validationError})` : ''}; ${binaryStatus}; config=${configStatus}`,
+    detail: `${provider}: transport=${transport}; ${credentialDetail}; validation=${validationStatus}${validationError ? `(${validationError})` : ''}; ${binaryStatus}; config=${configStatus}`,
     requiredFor: ['runtime'],
   };
 }

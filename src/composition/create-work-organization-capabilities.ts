@@ -12,6 +12,7 @@ import type { ApiEnvironment } from '../entrypoints/api/http-types.js';
 import { registerWorkOrganizationRoutes } from '../entrypoints/api/routes/work-organization.js';
 import { registerWorkOrganizationMcpTools } from '../entrypoints/mcp/work-organization-mcp-tools.js';
 import { PostgresConversationAgentIdentityResolver } from '../infrastructure/postgres/postgres-conversation-agent-identity-resolver.js';
+import { PostgresWakeLoopGuardRepository } from '../infrastructure/postgres/postgres-wake-loop-guard-repository.js';
 import { PostgresWorkOrganizationRepository } from '../infrastructure/postgres/postgres-work-organization-repository.js';
 import type { AppConfig } from '../shared/config.js';
 import type { Logger } from '../shared/observability/logger.js';
@@ -65,6 +66,9 @@ export function createWorkOrganizationCapabilities(
   const roster = wake
     ? createManagedAgentMentionRoster(wake.definitions)
     : undefined;
+  const wakeLoopGuard = wake
+    ? new PostgresWakeLoopGuardRepository(options.database)
+    : undefined;
   const service = new WorkOrganizationService({
     repository: new PostgresWorkOrganizationRepository(options.database),
     workIdentity: options.work.identity,
@@ -82,6 +86,7 @@ export function createWorkOrganizationCapabilities(
                 ...(wake.debounceMs === undefined
                   ? {}
                   : { debounceMs: wake.debounceMs }),
+                ...(wakeLoopGuard ? { wakeLoopGuard } : {}),
                 ...(options.logger ? { logger: options.logger } : {}),
               },
               input,

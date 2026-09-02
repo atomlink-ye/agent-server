@@ -4,7 +4,7 @@ import { ChatActivationPlanner } from './chat-activation-planner.js';
 export const CHAT_ACTIVATION_BURST_DEBOUNCE_MS = 75;
 
 export async function enqueueChatDispatchForMessage(
-  dispatches: ChatDispatchRepository,
+  dispatches: Pick<ChatDispatchRepository, 'enqueue'>,
   input: {
     readonly tenantId: string;
     readonly conversationId: string;

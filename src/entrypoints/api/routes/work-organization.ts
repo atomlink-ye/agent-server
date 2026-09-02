@@ -11,10 +11,13 @@ import {
 import {
   WorkBoardColumnNotFoundError,
   WorkBoardNotFoundError,
+  WorkItemClaimConflictError,
   WorkItemNotFoundError,
   WorkOrganizationValidationError,
 } from '../../../domain/work-organization/work-organization.js';
 import {
+  ClaimWorkItemRequestSchema,
+  ClaimWorkItemResponseSchema,
   CreateWorkBoardColumnRequestSchema,
   CreateWorkBoardRequestSchema,
   CreateWorkItemCommentRequestSchema,
@@ -29,6 +32,7 @@ import {
   WorkItemCommentsResponseSchema,
   WorkItemDetailSchema,
   WorkItemListResponseSchema,
+  toClaimWorkItemResponse,
   toWorkBoardColumnResponse,
   toWorkBoardPlacementResponse,
   toWorkBoardResponse,
@@ -165,6 +169,31 @@ export function registerWorkOrganizationRoutes(
       });
       return context.json(
         WorkItemDetailSchema.parse(toWorkItemDetailResponse(detail)),
+        200,
+      );
+    } catch (error) {
+      throw mapWorkOrganizationError(error);
+    }
+  });
+
+  app.post('/api/v1/work-items/:workItemId/claim', async (context) => {
+    const workItemId = requireUuid(
+      context.req.param('workItemId'),
+      'workItemId',
+    );
+    // The body carries nothing today, but it is parsed so an unknown field is
+    // rejected now rather than silently ignored until the shape grows.
+    const parsed = ClaimWorkItemRequestSchema.safeParse(
+      await readBoundedJson(context.req.raw, 4 * 1024).catch(() => ({})),
+    );
+    if (!parsed.success) throw invalidRequest('认领请求不接受任何字段。');
+    try {
+      const claim = await dependencies.service.claimWorkItem({
+        accessContext: getAuthenticatedAccessContext(context),
+        workItemId,
+      });
+      return context.json(
+        ClaimWorkItemResponseSchema.parse(toClaimWorkItemResponse(claim)),
         200,
       );
     } catch (error) {
@@ -353,6 +382,7 @@ export function registerWorkOrganizationRoutes(
         ...(parsed.data.position !== undefined
           ? { position: parsed.data.position }
           : {}),
+        ...(parsed.data.kind !== undefined ? { kind: parsed.data.kind } : {}),
       });
       return context.json({ column: toWorkBoardColumnResponse(column) }, 201);
     } catch (error) {
@@ -379,6 +409,7 @@ export function registerWorkOrganizationRoutes(
         ...(parsed.data.position !== undefined
           ? { position: parsed.data.position }
           : {}),
+        ...(parsed.data.kind !== undefined ? { kind: parsed.data.kind } : {}),
       });
       return context.json({ column: toWorkBoardColumnResponse(column) }, 200);
     } catch (error) {
@@ -450,6 +481,8 @@ function mapWorkOrganizationError(error: unknown): Error {
     return new HttpError(404, error.code, error.message);
   if (error instanceof WorkBoardColumnNotFoundError)
     return new HttpError(404, error.code, error.message);
+  if (error instanceof WorkItemClaimConflictError)
+    return new HttpError(409, error.code, error.message);
   if (error instanceof WorkOrganizationValidationError)
     return new HttpError(400, error.code, error.message);
   if (error instanceof WorkDefinitionValidationError)

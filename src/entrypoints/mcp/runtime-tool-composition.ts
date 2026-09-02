@@ -19,6 +19,7 @@ import {
   AGENT_SERVER_SYNTHETIC_ANALOG_SUMMARY_TOOL_REF,
   AGENT_SERVER_SYNTHETIC_EVENT_BATCH_TOOL_REF,
   AGENT_SERVER_SYNTHETIC_STOCK_SNAPSHOT_TOOL_REF,
+  AGENT_SERVER_WORK_ITEM_CLAIM_TOOL_REF,
 } from '../../application/agents/built-in-skills.js';
 import {
   createCollaborationRuntimeContributor,
@@ -34,6 +35,8 @@ export function createRuntimeToolCatalog(input: {
   readonly logger: Logger;
   readonly events?: Pick<RunEventRepository, 'append'>;
   readonly work?: RuntimeToolContributor;
+  /** Product coordination plane; composed only when Boards are enabled. */
+  readonly workOrganization?: RuntimeToolContributor;
 }): RuntimeToolCatalog {
   const syntheticToolReceipt = createSyntheticToolReceipt();
   return createCatalog([
@@ -77,6 +80,15 @@ export function createRuntimeToolCatalog(input: {
               AGENT_SERVER_DESCRIBE_WORKFLOW_TOOL_REF,
             ],
             contribute: input.work,
+          },
+        ]
+      : []),
+    ...(input.workOrganization
+      ? [
+          {
+            ref: 'work-organization',
+            toolRefs: [AGENT_SERVER_WORK_ITEM_CLAIM_TOOL_REF],
+            contribute: input.workOrganization,
           },
         ]
       : []),

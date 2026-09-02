@@ -2,6 +2,8 @@ import type { Hono } from 'hono';
 import { z, type ZodType } from 'zod';
 
 import {
+  ClaimWorkItemRequestSchema,
+  ClaimWorkItemResponseSchema,
   CreateWorkBoardColumnRequestSchema,
   CreateWorkBoardRequestSchema,
   CreateWorkItemCommentRequestSchema,
@@ -93,6 +95,23 @@ export function registerBrowserWorkOrganizationRoutes(
       'PATCH',
       parsed.data,
       WorkItemDetailSchema,
+    );
+  });
+  app.post('/api/work-items/:workItemId/claim', async (context) => {
+    const workItemId = context.req.param('workItemId');
+    if (!isUuid(workItemId)) return invalidRequest();
+    // The claim button sends no body, so an absent one is normalized to {} and
+    // the claimant is taken from the forwarded session credentials.
+    const parsed = ClaimWorkItemRequestSchema.safeParse(
+      await context.req.json().catch(() => ({})),
+    );
+    if (!parsed.success) return invalidRequest();
+    return forwardJson(
+      config,
+      `/api/v1/work-items/${encodeURIComponent(workItemId)}/claim`,
+      'POST',
+      parsed.data,
+      ClaimWorkItemResponseSchema,
     );
   });
   app.post('/api/work-items/:workItemId/promote', async (context) => {

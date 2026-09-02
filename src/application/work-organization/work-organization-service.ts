@@ -2,9 +2,18 @@ import { randomUUID } from 'node:crypto';
 
 import type { AccessContext } from '../../domain/access-context.js';
 import type { Work } from '../../domain/work/work.js';
+import type { WorkBoardColumnKind } from '../../domain/work-organization/board-column-kinds.js';
+import type { WorkItemMentionReason } from '../../domain/work-organization/work-item-mention-brief.js';
+import {
+  mentionSourceText,
+  newMentions,
+  parseMentions,
+  type MentionTarget,
+} from '../../domain/work-organization/work-item-mentions.js';
 import {
   WorkBoardColumnNotFoundError,
   WorkBoardNotFoundError,
+  WorkItemClaimConflictError,
   WorkItemNotFoundError,
   WorkOrganizationValidationError,
   type LinkedWorkSummary,
@@ -21,6 +30,26 @@ import {
 import type { ConversationRepository } from '../ports/conversation-repository.js';
 import type { WorkOrganizationRepository } from '../ports/work-organization-repository.js';
 import type { WorkIdentityApi } from '../work/work-identity-api.js';
+import type {
+  MentionableAgentRoster,
+  WakeMentionedAgentsInput,
+} from './wake-mentioned-agents.js';
+
+/**
+ * How long a claim stands without an update before another claimant may take
+ * it over. Long enough that a working agent is never robbed mid-turn, short
+ * enough that a crashed one does not park a WorkItem for a day.
+ */
+export const WORK_ITEM_CLAIM_STALE_AFTER_MINUTES = 20;
+
+/**
+ * The wake side of a mention, injected rather than called directly so the
+ * service stays testable without a chat runtime, and so the whole feature
+ * degrades to "mentions are recorded but nobody is woken" when chat is absent.
+ */
+export type WakeMentionedAgentsFn = (
+  input: WakeMentionedAgentsInput,
+) => Promise<unknown>;
 
 export interface WorkOrganizationServiceOptions {
   readonly repository: WorkOrganizationRepository;
@@ -29,6 +58,10 @@ export interface WorkOrganizationServiceOptions {
     ConversationRepository,
     'getConversation' | 'listMessages'
   >;
+  /** Absent on narrow test seams; mentions then fall back to raw @-tokens. */
+  readonly mentionRoster?: MentionableAgentRoster;
+  /** Absent when chat is not composed; mentions are still recorded. */
+  readonly wakeMentionedAgents?: WakeMentionedAgentsFn;
   readonly workListProjection: (input: {
     readonly tenantId: string;
     readonly workspaceId: string;
@@ -79,6 +112,8 @@ export class WorkOrganizationService {
   private readonly repository: WorkOrganizationRepository;
   private readonly workIdentity: WorkOrganizationServiceOptions['workIdentity'];
   private readonly conversations?: WorkOrganizationServiceOptions['conversations'];
+  private readonly mentionRoster: MentionableAgentRoster | undefined;
+  private readonly wake: WakeMentionedAgentsFn | undefined;
   private readonly workListProjection: WorkOrganizationServiceOptions['workListProjection'];
   private readonly now: () => Date;
 
@@ -86,6 +121,8 @@ export class WorkOrganizationService {
     this.repository = options.repository;
     this.workIdentity = options.workIdentity;
     this.conversations = options.conversations;
+    this.mentionRoster = options.mentionRoster;
+    this.wake = options.wakeMentionedAgents;
     this.workListProjection = options.workListProjection;
     this.now = options.now ?? (() => new Date());
   }
@@ -124,13 +161,21 @@ export class WorkOrganizationService {
     }
 
     const now = this.now().toISOString();
+    const title = input.title.trim();
+    const description = input.description?.trim() || null;
+    const assigneeId = input.assigneeId?.trim() || null;
+    const mentions = await this.resolveMentions(
+      owner.tenantId,
+      mentionSourceText(title, description),
+    );
     const workItem = await this.repository.createWorkItem({
       ...owner,
       id: randomUUID(),
-      title: input.title.trim(),
-      description: input.description?.trim() || null,
+      title,
+      description,
       status: 'todo',
-      assigneeId: input.assigneeId?.trim() || null,
+      assigneeId,
+      mentions,
       createdBy: input.accessContext.principalId,
       sourceConversationId: input.sourceConversationId ?? null,
       sourceMessageId: input.sourceMessageId ?? null,
@@ -147,6 +192,20 @@ export class WorkOrganizationService {
       });
       if (!placement) throw new WorkBoardColumnNotFoundError();
     }
+    // An explicit assignment is an implicit mention: the assignee learns about
+    // the work the same way, whether their name was typed in prose or picked
+    // from a field. Assignment wins the reason so the brief reads honestly.
+    await this.wakeFor(input.accessContext, workItem, {
+      mentions: assigneeId ? [assigneeId] : mentions,
+      reason: assigneeId ? 'assignment' : 'mention',
+      ...(boardId && columnId ? { boardId, columnId } : {}),
+    });
+    if (assigneeId && mentions.length > 0)
+      await this.wakeFor(input.accessContext, workItem, {
+        mentions: mentions.filter((mention) => mention !== assigneeId),
+        reason: 'mention',
+        ...(boardId && columnId ? { boardId, columnId } : {}),
+      });
     return this.hydrateWorkItem(input.accessContext, workItem);
   }
 
@@ -178,8 +237,33 @@ export class WorkOrganizationService {
     if (input.title !== undefined) validateText(input.title, 1, 200, 'title');
     validateOptionalText(input.description, 16 * 1024, 'description');
     validateOptionalId(input.assigneeId, 'assigneeId');
+    const owner = WorkOrganizationService.ownerFromAccessContext(
+      input.accessContext,
+    );
+    // Re-parsing needs the prose as it will BE, not as it was, so the previous
+    // row is read first. Its stored mentions are what makes a re-save silent:
+    // only tokens that were not there before are woken. Reading it
+    // unconditionally also lets an unchanged assignee stay quiet.
+    const previous = await this.repository.findWorkItemById(
+      owner,
+      input.workItemId,
+    );
+    if (!previous) throw new WorkItemNotFoundError();
+    const prose = input.title !== undefined || input.description !== undefined;
+    const mentions = prose
+      ? await this.resolveMentions(
+          owner.tenantId,
+          mentionSourceText(
+            input.title !== undefined ? input.title.trim() : previous.title,
+            input.description !== undefined
+              ? input.description?.trim() || null
+              : previous.description,
+          ),
+        )
+      : null;
+
     const item = await this.repository.updateWorkItem({
-      ...WorkOrganizationService.ownerFromAccessContext(input.accessContext),
+      ...owner,
       id: input.workItemId,
       ...(input.title !== undefined ? { title: input.title.trim() } : {}),
       ...(input.description !== undefined
@@ -189,9 +273,36 @@ export class WorkOrganizationService {
       ...(input.assigneeId !== undefined
         ? { assigneeId: input.assigneeId?.trim() || null }
         : {}),
+      ...(mentions ? { mentions } : {}),
       now: this.now().toISOString(),
     });
     if (!item) throw new WorkItemNotFoundError();
+
+    const placement = await this.repository.findWorkItemPlacement(
+      owner,
+      item.id,
+    );
+    const board = placement
+      ? { boardId: placement.boardId, columnId: placement.columnId }
+      : {};
+    const added = mentions ? newMentions(previous.mentions, mentions) : [];
+    if (added.length > 0)
+      await this.wakeFor(input.accessContext, item, {
+        mentions: added,
+        reason: 'mention',
+        ...board,
+      });
+    // A newly set assignee is woken even when nothing in the prose changed.
+    if (
+      input.assigneeId !== undefined &&
+      item.assigneeId &&
+      item.assigneeId !== previous.assigneeId
+    )
+      await this.wakeFor(input.accessContext, item, {
+        mentions: [item.assigneeId],
+        reason: 'assignment',
+        ...board,
+      });
     return this.hydrateWorkItem(input.accessContext, item);
   }
 
@@ -238,16 +349,86 @@ export class WorkOrganizationService {
     readonly body: string;
   }): Promise<WorkItemComment> {
     validateText(input.body, 1, 16 * 1024, 'body');
+    const owner = WorkOrganizationService.ownerFromAccessContext(
+      input.accessContext,
+    );
+    const body = input.body.trim();
+    const mentions = await this.resolveMentions(owner.tenantId, body);
     const comment = await this.repository.createComment({
-      ...WorkOrganizationService.ownerFromAccessContext(input.accessContext),
+      ...owner,
       id: randomUUID(),
       workItemId: input.workItemId,
       authorId: input.accessContext.principalId,
-      body: input.body.trim(),
+      body,
+      mentions,
       now: this.now().toISOString(),
     });
     if (!comment) throw new WorkItemNotFoundError();
+    if (mentions.length > 0) {
+      // The comment already exists; the wake is the part allowed to fail.
+      const workItem = await this.repository.findWorkItemById(
+        owner,
+        input.workItemId,
+      );
+      const placement = await this.repository.findWorkItemPlacement(
+        owner,
+        input.workItemId,
+      );
+      if (workItem)
+        await this.wakeFor(input.accessContext, workItem, {
+          mentions,
+          reason: 'comment',
+          quote: body,
+          ...(placement
+            ? { boardId: placement.boardId, columnId: placement.columnId }
+            : {}),
+        });
+    }
     return comment;
+  }
+
+  /**
+   * Take ownership of a WorkItem. The atomic UPDATE in the repository is the
+   * whole mechanism: this method only turns "no row matched" into the error the
+   * loser sees, and reports where the winner's card ended up.
+   *
+   * Callable by a person through the UI button and by a Coworker through the
+   * claim tool; both arrive here, so both obey the same one-holder rule.
+   */
+  public async claimWorkItem(input: {
+    readonly accessContext: AccessContext;
+    readonly workItemId: string;
+    /** Defaults to the caller; an agent tool passes its own identity. */
+    readonly claimantId?: string;
+  }): Promise<{
+    readonly workItem: WorkItem;
+    readonly movedToColumnId: string | null;
+  }> {
+    const owner = WorkOrganizationService.ownerFromAccessContext(
+      input.accessContext,
+    );
+    const claimantId = (
+      input.claimantId ?? input.accessContext.principalId
+    ).trim();
+    validateOptionalId(claimantId, 'claimantId');
+    const existing = await this.repository.findWorkItemById(
+      owner,
+      input.workItemId,
+    );
+    if (!existing) throw new WorkItemNotFoundError();
+
+    const result = await this.repository.claimWorkItem({
+      ...owner,
+      workItemId: input.workItemId,
+      claimantId,
+      staleAfterMinutes: WORK_ITEM_CLAIM_STALE_AFTER_MINUTES,
+      now: this.now().toISOString(),
+    });
+    if (!result.workItem) throw new WorkItemClaimConflictError(result.holderId);
+    return {
+      workItem: result.workItem,
+      movedToColumnId: result.movedToColumnId,
+    };
   }
 
   public async listComments(
@@ -343,6 +524,7 @@ export class WorkOrganizationService {
     readonly boardId: string;
     readonly title: string;
     readonly position?: number;
+    readonly kind?: WorkBoardColumnKind | null;
   }): Promise<WorkBoardColumn> {
     validateText(input.title, 1, 120, 'title');
     const column = await this.repository.createBoardColumn({
@@ -351,6 +533,7 @@ export class WorkOrganizationService {
       boardId: input.boardId,
       title: input.title.trim(),
       position: normalizePosition(input.position),
+      kind: input.kind ?? null,
       now: this.now().toISOString(),
     });
     if (!column) throw new WorkBoardNotFoundError();
@@ -363,6 +546,7 @@ export class WorkOrganizationService {
     readonly columnId: string;
     readonly title?: string;
     readonly position?: number;
+    readonly kind?: WorkBoardColumnKind | null;
   }): Promise<WorkBoardColumn> {
     if (input.title !== undefined) validateText(input.title, 1, 120, 'title');
     const column = await this.repository.updateBoardColumn({
@@ -373,6 +557,7 @@ export class WorkOrganizationService {
       ...(input.position !== undefined
         ? { position: normalizePosition(input.position) }
         : {}),
+      ...(input.kind !== undefined ? { kind: input.kind } : {}),
       now: this.now().toISOString(),
     });
     if (!column) throw new WorkBoardColumnNotFoundError();
@@ -409,6 +594,73 @@ export class WorkOrganizationService {
     });
     if (!placement) throw new WorkBoardColumnNotFoundError();
     return placement;
+  }
+
+  /**
+   * Parse @-tokens against the tenant's Coworker roster.
+   *
+   * The roster is a convenience, not a gate: without it the parser still records
+   * the literal token, so `@some-agent` survives a roster read failure and a
+   * later save can still resolve it. Parsing itself stays pure.
+   */
+  private async resolveMentions(
+    tenantId: string,
+    text: string,
+  ): Promise<readonly string[]> {
+    if (!text.includes('@')) return [];
+    let targets: readonly MentionTarget[] = [];
+    if (this.mentionRoster) {
+      try {
+        const agents = await this.mentionRoster.listMentionableAgents({
+          tenantId,
+        });
+        targets = agents.flatMap((agent) => [
+          { id: agent.id, name: agent.displayName },
+          { id: agent.id, name: agent.normalizedName },
+        ]);
+      } catch {
+        targets = [];
+      }
+    }
+    return parseMentions(text, targets);
+  }
+
+  /**
+   * Best-effort by contract. The WorkItem write has already happened, so a wake
+   * that throws is swallowed here as well as inside the wake itself: a chat
+   * outage must not turn a successful WorkItem mutation into a 500.
+   */
+  private async wakeFor(
+    accessContext: AccessContext,
+    workItem: WorkItem,
+    input: {
+      readonly mentions: readonly string[];
+      readonly reason: WorkItemMentionReason;
+      readonly quote?: string;
+      readonly boardId?: string;
+      readonly columnId?: string;
+    },
+  ): Promise<void> {
+    if (!this.wake || input.mentions.length === 0) return;
+    try {
+      await this.wake({
+        tenantId: accessContext.tenantId,
+        workspaceId: accessContext.workspaceId,
+        mentions: input.mentions,
+        actorId: accessContext.principalId,
+        actorType: accessContext.principalType,
+        reason: input.reason,
+        ...(input.quote === undefined ? {} : { quote: input.quote }),
+        workItem: {
+          id: workItem.id,
+          title: workItem.title,
+          ...(input.boardId ? { boardId: input.boardId } : {}),
+          ...(input.columnId ? { columnId: input.columnId } : {}),
+        },
+      });
+    } catch {
+      // Intentionally silent here: wakeMentionedAgents logs its own failures.
+    }
   }
 
   private async hydrateWorkItem(

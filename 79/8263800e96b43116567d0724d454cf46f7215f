@@ -1,0 +1,33 @@
+src/entrypoints/api/routes/browser-work-organization.ts
+  aca42ed5722d6da8 1,4,54,56,69,82,97,115,131,143,158,168,170,183,196,211,223,239,257,270,286,297,306,320,328-335
+src/entrypoints/api/routes/work-organization.ts
+  aca42ed5722d6da8 45,68,88,131,155,192,216,240,266,279,300,316,342,361,379,403,425,444
+src/entrypoints/api/authentication.ts
+  aca42ed5722d6da8 4,6,9-13,28,37-43,48-53
+apps/web/src/api/transport.ts
+  aca42ed5722d6da8 1-23,52
+src/entrypoints/api/http-types.ts
+  aca42ed5722d6da8 1-4,9-15
+src/entrypoints/api/access-context.ts
+  aca42ed5722d6da8 1-13,17,28-41
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2-bit.10+672fbf0",
+  "base_commit_sha": "798263800e96b43116567d0724d454cf46f7215f",
+  "prompts": {
+    "aca42ed5722d6da8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "61490965-60c3-425b-81fc-88c14ca0e3ec",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 7,
+      "total_deletions": 2,
+      "accepted_lines": 134,
+      "overriden_lines": 0
+    }
+  }
+}

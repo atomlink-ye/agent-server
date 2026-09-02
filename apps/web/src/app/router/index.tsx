@@ -27,6 +27,7 @@ export function AppRouter() {
       <Route path="/agents" element={<WorkspaceRoute />} />
       <Route path="/agents/:agentId" element={<WorkspaceRoute />} />
       <Route path="/files" element={<WorkspaceRoute />} />
+      <Route path="/whispers" element={<WorkspaceRoute />} />
       <Route path="*" element={<Navigate replace to="/" />} />
     </Routes>
   );

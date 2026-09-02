@@ -4,6 +4,8 @@ import type {
   WorkItemDto,
 } from '@atomlink-ye/agent-server/product-contract';
 
+import { participantLabelSafe, type Participant } from './participants';
+
 /**
  * Forward-compatible readers for WorkItem/Board fields the parallel backend
  * Worker is adding (`mentions` on a WorkItem and on a comment, `kind` on a
@@ -129,10 +131,12 @@ export function isClaimable(item: WorkItemDto, now: number): boolean {
 export function claimBlockedReason(
   item: WorkItemDto,
   now: number,
+  participants: readonly Participant[],
 ): string | null {
   if (isClaimable(item, now)) return null;
   if (item.status === 'done') return '这个任务已经完成了。';
   const claim = readClaimState(item);
-  const holder = claim?.claimedBy ?? item.assignee_id;
-  return holder ? `这个任务已被 ${holder} 领取。` : '当前无法领取这个任务。';
+  const holderId = claim?.claimedBy ?? item.assignee_id;
+  if (!holderId) return '当前无法领取这个任务。';
+  return `这个任务已被 ${participantLabelSafe(participants, holderId)} 领取。`;
 }

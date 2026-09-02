@@ -4,6 +4,7 @@ import type {
 } from '@atomlink-ye/agent-server/product-contract';
 import { describe, expect, it } from 'vitest';
 
+import type { Participant } from './participants';
 import {
   claimBlockedReason,
   columnKind,
@@ -175,12 +176,20 @@ describe('isClaimable', () => {
 });
 
 describe('claimBlockedReason', () => {
+  const participant: Participant = {
+    id: 'ari',
+    name: 'Ari Analyst',
+    kind: 'agent',
+    detail: null,
+    active: true,
+  };
+
   it('says nothing while the Task is claimable', () => {
-    expect(claimBlockedReason(item(), now)).toBeNull();
+    expect(claimBlockedReason(item(), now, [])).toBeNull();
   });
 
   it('explains a done Task', () => {
-    expect(claimBlockedReason(item({ status: 'done' }), now)).toBe(
+    expect(claimBlockedReason(item({ status: 'done' }), now, [])).toBe(
       '这个任务已经完成了。',
     );
   });
@@ -190,7 +199,19 @@ describe('claimBlockedReason', () => {
       claimBlockedReason(
         item({ assignee_id: 'ari', updated_at: timestamp }),
         now,
+        [participant],
       ),
-    ).toBe('这个任务已被 ari 领取。');
+    ).toBe('这个任务已被 Ari Analyst 领取。');
+  });
+
+  it('falls back without exposing the raw id when the holder is unresolved', () => {
+    const holderId = '11111111-1111-4111-8111-111111111111';
+    expect(
+      claimBlockedReason(
+        item({ assignee_id: holderId, updated_at: timestamp }),
+        now,
+        [],
+      ),
+    ).toBe('这个任务已被 该同事 领取。');
   });
 });

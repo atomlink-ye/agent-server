@@ -96,6 +96,7 @@ export const durableKernelMigrationFileNames = [
   '0062_coworker_work_organization.sql',
   '0063_chat_dispatch_retry_backoff.sql',
   '0064_work_item_mentions_and_column_kinds.sql',
+  '0065_agent_chat_runtime_busy_statuses.sql',
 ] as const;
 const durableKernelMigrationRegistryTable = 'durable_kernel_schema_migrations';
 const durableKernelMigrationAdvisoryLock = [

@@ -8,7 +8,10 @@ import {
   directPairKey,
 } from '../../domain/chat/conversation.js';
 import type { ChatMessage } from '../../domain/chat/chat-message.js';
-import type { AgentChatRuntime } from '../../domain/chat/agent-chat-runtime.js';
+import type {
+  AgentChatRuntime,
+  AgentChatRuntimeStatus,
+} from '../../domain/chat/agent-chat-runtime.js';
 import type {
   ConversationMessageAuthorContext,
   ConversationRepository,
@@ -665,7 +668,7 @@ function mapAgentChatRuntime(row: AgentChatRuntimeRow): AgentChatRuntime {
     agentDefinitionId: row.agent_definition_id,
     activeAgentVersionId: row.active_agent_version_id,
     epoch: row.epoch,
-    status: row.status as 'available' | 'draining' | 'unavailable',
+    status: row.status as AgentChatRuntimeStatus,
     lastActiveAt: row.last_active_at ? iso_date(row.last_active_at) : null,
     createdAt: iso_date(row.created_at),
     updatedAt: iso_date(row.updated_at),

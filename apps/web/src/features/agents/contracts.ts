@@ -1,4 +1,5 @@
-export type CoworkerRuntimeStatus = 'available' | 'draining' | 'unavailable';
+export type CoworkerRuntimeStatus =
+  'available' | 'draining' | 'unavailable' | 'working' | 'thinking';
 
 export interface Coworker {
   readonly id: string;

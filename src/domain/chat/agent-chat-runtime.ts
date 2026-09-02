@@ -1,4 +1,5 @@
-export type AgentChatRuntimeStatus = 'available' | 'draining' | 'unavailable';
+export type AgentChatRuntimeStatus =
+  'available' | 'draining' | 'unavailable' | 'working' | 'thinking';
 
 export interface AgentChatRuntime {
   /** UUID-backed runtime identity used as the chat extension scope. */

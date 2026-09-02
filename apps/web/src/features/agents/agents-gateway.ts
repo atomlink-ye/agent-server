@@ -235,8 +235,15 @@ function boolean(value: unknown): boolean {
     throw new Error('Invalid Capability input contract.');
   return value;
 }
+const RUNTIME_STATUSES = [
+  'available',
+  'draining',
+  'unavailable',
+  'working',
+  'thinking',
+] as const;
 function runtimeStatus(value: unknown): Coworker['runtimeStatus'] {
-  if (value === 'available' || value === 'draining' || value === 'unavailable')
-    return value;
+  if ((RUNTIME_STATUSES as readonly unknown[]).includes(value))
+    return value as Coworker['runtimeStatus'];
   throw new Error('Invalid Coworker runtime status.');
 }

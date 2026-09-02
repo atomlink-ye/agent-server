@@ -502,8 +502,38 @@ export class PostgresWorkDefinitionSourceRepository implements WorkDefinitionSou
   }
 
   public async listAgentWorkBindings(input: AgentWorkBindingScope) {
-    const result = await this.db.query<DefinitionRow & VersionRow>(
-      `SELECT d.${definitionColumns.split(',').join(',d.')},v.${versionColumns.split(',').join(',v.')}
+    // `definitionColumns` and `versionColumns` both include a bare `id`
+    // (and `versionColumns` includes `definition_id`, which collides with
+    // nothing on the definition side but is worth naming explicitly too).
+    // A plain `SELECT d.id,...,v.id,...` hands the pg driver two same-named
+    // result columns; it silently keeps only the *last* one, so every row's
+    // `.id` became the version id even where `mapDefinition()` expected the
+    // definition id. Every consumer of this row (`mapDefinition`,
+    // `mapVersion`) read the same clobbered `row.id` — that is the "Work
+    // Definition lineage is invalid" a Coworker calling `list_agent_workflows`
+    // then `product_work_create` would hit 100% of the time. Alias each
+    // side's `id`/`definition_id` under distinct names and rebuild
+    // definition-row-shaped and version-row-shaped objects before mapping.
+    const result = await this.db.query<
+      Omit<DefinitionRow, 'id'> &
+        Omit<VersionRow, 'id' | 'definition_id'> & {
+          definition_row_id: string;
+          version_row_id: string;
+          version_row_definition_id: string;
+        }
+    >(
+      `SELECT d.${definitionColumns
+        .split(',')
+        .filter((column) => column !== 'id')
+        .join(',d.')},d.id AS definition_row_id,
+              v.${versionColumns
+                .split(',')
+                .filter(
+                  (column) => column !== 'id' && column !== 'definition_id',
+                )
+                .join(
+                  ',v.',
+                )},v.id AS version_row_id,v.definition_id AS version_row_definition_id
          FROM agent_work_bindings a
          JOIN work_definition_source_definitions d
            ON d.id=a.work_definition_id
@@ -528,8 +558,15 @@ export class PostgresWorkDefinitionSourceRepository implements WorkDefinitionSou
       ],
     );
     return (result.rows ?? []).map((row) => ({
-      definition: mapDefinition(row),
-      version: mapVersion(row),
+      definition: mapDefinition({
+        ...row,
+        id: row.definition_row_id,
+      } as DefinitionRow),
+      version: mapVersion({
+        ...row,
+        id: row.version_row_id,
+        definition_id: row.version_row_definition_id,
+      } as VersionRow),
     }));
   }
 }

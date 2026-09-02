@@ -8,6 +8,7 @@ import { RunTrace } from '../run-trace/run-trace-view';
 import { longestAttemptMs } from '../run-trace/selectors';
 import type { NormalizedTrace } from '../run-trace/normalized';
 import { useObserveRunTokens } from './queries/use-observe-run-tokens';
+import { AssistantMarkdown } from '@/features/conversations/components/assistant-markdown';
 import './observe.css';
 
 export function ObserveDetail({
@@ -75,9 +76,15 @@ export function ObserveDetail({
           {stateView.label}
         </span>
       </header>
-      <p className="observe-detail-result">
-        {run.result_summary ?? resultCaptureLabel(run.result_capture_status)}
-      </p>
+      {run.result_summary ? (
+        <div className="observe-detail-result">
+          <AssistantMarkdown text={run.result_summary} />
+        </div>
+      ) : (
+        <p className="observe-detail-result">
+          {resultCaptureLabel(run.result_capture_status)}
+        </p>
+      )}
       <ObserveMetricCards trace={detail.trace} tokens={tokens} />
       <RunTrace live={live} trace={detail.trace} />
     </section>

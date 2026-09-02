@@ -24,4 +24,5 @@ export const realPostgresSuites = [
   'tests/integration/chat-work-bridge-real-pg.integration.test.ts',
   'tests/integration/work-chat-wake-real-pg.integration.test.ts',
   'tests/integration/host-native-require-native-postgres-real-pg.integration.test.ts',
+  'tests/integration/agent-work-bindings-real-pg.integration.test.ts',
 ] as const satisfies readonly string[];

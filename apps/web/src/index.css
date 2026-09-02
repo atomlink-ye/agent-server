@@ -219,7 +219,11 @@ textarea {
   height: 32px;
   place-items: center;
   border-radius: 10px;
-  font-size: 21px;
+}
+
+.rail-tab-icon svg {
+  width: 21px;
+  height: 21px;
 }
 
 .rail-tab:hover:not(:disabled) .rail-tab-icon,
@@ -905,8 +909,14 @@ textarea {
 }
 
 .composer-tool {
+  display: grid;
   padding: 3px;
-  font-size: 20px;
+  place-items: center;
+}
+
+.composer-tool svg {
+  width: 20px;
+  height: 20px;
 }
 
 .send-button {
@@ -918,9 +928,11 @@ textarea {
   border-radius: 10px;
   background: var(--skype);
   color: white;
-  font-size: 18px;
-  font-weight: 800;
-  line-height: 1;
+}
+
+.send-button svg {
+  width: 18px;
+  height: 18px;
 }
 
 .send-button:hover:not(:disabled) {
@@ -1339,7 +1351,11 @@ textarea {
   .rail-tab-icon {
     width: 28px;
     height: 28px;
-    font-size: 18px;
+  }
+
+  .rail-tab-icon svg {
+    width: 18px;
+    height: 18px;
   }
 
   .rail-tab[data-active='true']::before {

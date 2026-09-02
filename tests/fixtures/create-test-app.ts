@@ -40,6 +40,9 @@ export const testConfig = {
   productWorkSurface: 'composed',
   teamCompletionApprovalRequired: false,
   skillRegistryRoot: '/tmp/agent-server-test/skill-registry',
+  chat: {
+    activationBurstDebounceMs: 0,
+  },
   serviceAccounts: [
     {
       serviceAccountId: 'svc_enabled',

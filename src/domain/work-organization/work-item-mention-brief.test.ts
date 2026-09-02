@@ -92,6 +92,16 @@ describe('workItemMentionBrief', () => {
     expect(body).toContain('…');
   });
 
+  it('tells the agent to leave the WorkItem in a state that reflects completion', () => {
+    const body = workItemMentionBrief({
+      reason: 'mention',
+      actorLabel: '丹娜',
+      workItem,
+    });
+    expect(body).toContain('已完成');
+    expect(body).toContain('进行中');
+  });
+
   it('is pure: the same input always produces the same brief', () => {
     const input = {
       reason: 'mention' as const,

@@ -65,6 +65,14 @@ export function workItemMentionBrief(input: WorkItemMentionBriefInput): string {
         : ''),
   );
   lines.push('如果你不是合适的执行者，请在这里回复说明原因，不要认领。');
+  // Mirrors an incident we already fixed once (a WorkRun that succeeded but
+  // showed nothing on Files/Overview): the wake should not let it recur by
+  // omission, so it says the sentence out loud instead of assuming an agent
+  // will think to close the loop on its own.
+  lines.push(
+    '如果工作在这里就做完了，请确保 WorkItem 的状态真实反映“已完成”，不要停留在过时的“进行中”' +
+      (onBoard ? '——看板显示进行中而工作其实做完了，比没有看板还糟糕。' : '。'),
+  );
   return lines.join('\n');
 }
 

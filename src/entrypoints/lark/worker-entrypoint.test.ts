@@ -12,6 +12,7 @@ const baseConfig: AppConfig = {
   productWorkSurface: 'composed',
   teamCompletionApprovalRequired: false,
   skillRegistryRoot: '/tmp/agent-server-test/skill-registry',
+  chat: { activationBurstDebounceMs: 2_000 },
   paseo: {
     wsUrl: 'ws://127.0.0.1:6767/ws',
     agentCwd: '/tmp/agent-server-test',

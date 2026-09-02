@@ -147,6 +147,7 @@ function config(): AppConfig {
     productWorkSurface: 'composed',
     teamCompletionApprovalRequired: false,
     skillRegistryRoot: '/tmp/coworker-api-test',
+    chat: { activationBurstDebounceMs: 2_000 },
     serviceAccounts: [
       {
         serviceAccountId: principalId,

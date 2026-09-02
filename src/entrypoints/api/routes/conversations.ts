@@ -171,6 +171,7 @@ export function registerConversationRoutes(
         lastReadSequence: unread.lastReadSequence,
         latestMessageSequence: message.sequence,
         latestMessageAuthorType: message.authorType,
+        debounceMs: dependencies.config.chat.activationBurstDebounceMs,
       },
     );
     return c.json(

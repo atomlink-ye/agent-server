@@ -481,9 +481,10 @@ function priorityForCause(cause: ChatActivationCause): ChatActivationPriority {
     : 'normal';
 }
 
+/** Must stay >= the configured burst debounce window or it silently clamps it away. */
 function boundedDebounce(value: number): number {
   if (!Number.isFinite(value)) return 0;
-  return Math.max(0, Math.min(1_000, Math.trunc(value)));
+  return Math.max(0, Math.min(30_000, Math.trunc(value)));
 }
 
 /** A retry delay is pacing, never a way to park a row indefinitely. */

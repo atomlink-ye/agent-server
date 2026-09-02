@@ -36,6 +36,8 @@ export interface WakeMentionedAgentsDependencies {
     'findOrCreateDirect' | 'appendMessage' | 'getUnread' | 'getChatRuntime'
   >;
   readonly dispatches: Pick<ChatDispatchRepository, 'enqueue'>;
+  /** Overrides the enqueue burst-debounce default; pass the configured value. */
+  readonly debounceMs?: number;
   readonly logger?: Logger;
 }
 
@@ -205,6 +207,9 @@ async function wakeOne(
       latestMessageSequence: message.sequence,
       latestMessageAuthorType: message.authorType,
       latestMessageId: message.id,
+      ...(dependencies.debounceMs === undefined
+        ? {}
+        : { debounceMs: dependencies.debounceMs }),
     });
     dependencies.logger?.log('info', 'work_item.mention.woken', {
       tenant_id: input.tenantId,

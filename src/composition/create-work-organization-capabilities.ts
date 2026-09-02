@@ -44,6 +44,8 @@ export interface CreateWorkOrganizationCapabilitiesOptions {
       ManagedAgentDefinitionRead,
       'listManagedDefinitionsByTenant'
     >;
+    /** Overrides the enqueue burst-debounce default; pass the configured value. */
+    readonly debounceMs?: number;
   };
   readonly logger?: Logger;
 }
@@ -77,6 +79,9 @@ export function createWorkOrganizationCapabilities(
                 roster,
                 conversations: wake.conversations,
                 dispatches: wake.dispatches,
+                ...(wake.debounceMs === undefined
+                  ? {}
+                  : { debounceMs: wake.debounceMs }),
                 ...(options.logger ? { logger: options.logger } : {}),
               },
               input,

@@ -175,6 +175,7 @@ export async function createApplication(
                   conversations,
                   dispatches: chatDispatches,
                   definitions: resourceModule.managedAgentDefinitions,
+                  debounceMs: config.chat.activationBurstDebounceMs,
                 },
               }
             : {}),

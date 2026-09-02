@@ -30,6 +30,7 @@ describe('run routes', () => {
         productWorkSurface: 'composed',
         teamCompletionApprovalRequired: false,
         skillRegistryRoot: '/tmp/agent-server-test/skill-registry',
+        chat: { activationBurstDebounceMs: 2_000 },
         serviceAccounts: [
           {
             serviceAccountId: 'svc_enabled',

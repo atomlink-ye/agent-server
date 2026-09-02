@@ -27,6 +27,9 @@ describe('loadConfig', () => {
       dispatcher: {
         concurrency: 4,
       },
+      chat: {
+        activationBurstDebounceMs: 2_000,
+      },
       paseo: {
         wsUrl: 'ws://127.0.0.1:6767/ws',
         provider: 'opencode',
@@ -53,6 +56,32 @@ describe('loadConfig', () => {
         ?.concurrency,
     ).toBe(7);
   });
+
+  it('parses the chat activation burst debounce window from the environment', () => {
+    expect(
+      loadConfig({
+        AGENT_SERVER_CHAT_ACTIVATION_BURST_DEBOUNCE_MS: '500',
+      }).chat.activationBurstDebounceMs,
+    ).toBe(500);
+  });
+
+  it('uses the default burst debounce window for a blank value', () => {
+    expect(
+      loadConfig({ AGENT_SERVER_CHAT_ACTIVATION_BURST_DEBOUNCE_MS: '' }).chat
+        .activationBurstDebounceMs,
+    ).toBe(2_000);
+  });
+
+  it.each(['invalid', '-1', '30001', '1.5'])(
+    'rejects invalid chat activation burst debounce value %j',
+    (value) => {
+      expect(() =>
+        loadConfig({
+          AGENT_SERVER_CHAT_ACTIVATION_BURST_DEBOUNCE_MS: value,
+        }),
+      ).toThrow(ConfigurationError);
+    },
+  );
 
   it.each(['', ' ', '\t\n'])(
     'uses timeout defaults and default source for blank values %j',

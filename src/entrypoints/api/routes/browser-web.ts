@@ -34,6 +34,11 @@ import {
   CreateConversationRequestSchema,
   PostConversationMessageRequestSchema,
 } from '../../../contracts/conversations.js';
+import {
+  WhisperListResponseSchema,
+  WhisperMessagesResponseSchema,
+  WhisperReadResponseSchema,
+} from '../../../contracts/whisper.js';
 import { SkillListResponseSchema } from '../../../contracts/skills.js';
 import {
   RuntimeCapabilitiesResponseSchema,
@@ -170,6 +175,38 @@ export function registerBrowserWebRoutes(
       parsed.data,
       ConversationPostResponseSchema,
       { successStatus: 202 },
+    );
+  });
+
+  // Whisper is peek-only for humans: GET routes exist, no POST does. That
+  // asymmetry -- not a role/permission check -- is what keeps a human from
+  // ever writing into an agent-to-agent whisper channel.
+  app.get('/api/whispers', async () =>
+    readBrowserJson(
+      config,
+      logger,
+      '/api/v1/whispers',
+      WhisperListResponseSchema,
+    ),
+  );
+  app.get('/api/whispers/:whisperChannelId', async (c) => {
+    const id = c.req.param('whisperChannelId');
+    if (!isId(id)) return invalidRequest();
+    return readBrowserJson(
+      config,
+      logger,
+      `/api/v1/whispers/${encodeURIComponent(id)}`,
+      WhisperReadResponseSchema,
+    );
+  });
+  app.get('/api/whispers/:whisperChannelId/messages', async (c) => {
+    const id = c.req.param('whisperChannelId');
+    if (!isId(id)) return invalidRequest();
+    return readBrowserJson(
+      config,
+      logger,
+      `/api/v1/whispers/${encodeURIComponent(id)}/messages`,
+      WhisperMessagesResponseSchema,
     );
   });
 

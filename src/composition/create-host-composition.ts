@@ -17,6 +17,7 @@ import type { TeamCapabilities } from './create-team-capabilities.js';
 import { createApplicationLifecycle } from './create-application-lifecycle.js';
 import { createWorkers, type WorkerSet } from './create-workers.js';
 import type { PostgresRunDispatcher } from '../infrastructure/postgres/postgres-run-dispatcher.js';
+import type { WhisperRepository } from '../application/ports/whisper-repository.js';
 
 export interface HostCompositionInput {
   readonly config: AppConfig;
@@ -37,6 +38,8 @@ export interface HostCompositionInput {
   readonly workChatWorker?: WorkerSet['workChatWorker'];
   readonly runtime: Pick<RuntimeOwner, 'runtimeProvider' | 'runtimeMcpServer'>;
   readonly dispatcher: PostgresRunDispatcher;
+  /** Human peek surface for agent-initiated whisper channels. */
+  readonly whispers?: WhisperRepository;
   readonly pool: Pick<Pool, 'end'>;
   readonly activationReconciler: Pick<
     TeamCapabilities['activationReconciler'],
@@ -83,6 +86,7 @@ export async function createHostComposition(input: HostCompositionInput) {
     ...(input.workOrganizationModule
       ? { workOrganizationModule: input.workOrganizationModule }
       : {}),
+    ...(input.whispers ? { whispers: input.whispers } : {}),
     memoryModule: input.memory,
     resourceModule: input.resources,
   });

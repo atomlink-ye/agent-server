@@ -6,9 +6,15 @@ import type { ConversationAgentIdentityResolver } from '../../application/work-o
 import { OpenWhisper } from '../../application/whisper/open-whisper.js';
 import { SendWhisperMessage } from '../../application/whisper/send-whisper-message.js';
 import type { WhisperRepository } from '../../application/ports/whisper-repository.js';
+import {
+  AGENT_SERVER_WHISPER_OPEN_TOOL_REF,
+  AGENT_SERVER_WHISPER_SEND_TOOL_REF,
+} from '../../application/agents/built-in-skills.js';
 
-export const AGENT_SERVER_WHISPER_OPEN_TOOL_REF = 'agent-server/whisper-open';
-export const AGENT_SERVER_WHISPER_SEND_TOOL_REF = 'agent-server/whisper-send';
+export {
+  AGENT_SERVER_WHISPER_OPEN_TOOL_REF,
+  AGENT_SERVER_WHISPER_SEND_TOOL_REF,
+};
 
 const whisperOpenInput = z.strictObject({
   partner_agent_ids: z.array(z.string().min(1).max(256)).min(1).max(8),

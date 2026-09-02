@@ -19,6 +19,12 @@ spec:
       kind: tool
     - ref: agent-server/list-agent-workflows
       kind: tool
+    - ref: agent-server/work-item-claim
+      kind: tool
+    - ref: agent-server/whisper-open
+      kind: tool
+    - ref: agent-server/whisper-send
+      kind: tool
   skills:
     - ref: agent-server/memory-api
   input:

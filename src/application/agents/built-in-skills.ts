@@ -25,6 +25,13 @@ export const AGENT_SERVER_LIST_AGENT_WORKFLOWS_TOOL_REF =
   'agent-server/list-agent-workflows';
 export const AGENT_SERVER_DESCRIBE_WORKFLOW_TOOL_REF =
   'agent-server/describe-workflow';
+/**
+ * Canonical definition. `src/entrypoints/mcp/whisper-mcp-tools.ts`
+ * re-exports these rather than defining them, so `application` stays the
+ * single authoritative source and `entrypoints` remains the consumer.
+ */
+export const AGENT_SERVER_WHISPER_OPEN_TOOL_REF = 'agent-server/whisper-open';
+export const AGENT_SERVER_WHISPER_SEND_TOOL_REF = 'agent-server/whisper-send';
 
 /**
  * User/ManagedAgent-declared tool refs.
@@ -44,6 +51,8 @@ export const SUPPORTED_MANAGED_AGENT_TOOL_REFS = new Set([
   AGENT_SERVER_WORK_ITEM_CLAIM_TOOL_REF,
   AGENT_SERVER_LIST_AGENT_WORKFLOWS_TOOL_REF,
   AGENT_SERVER_DESCRIBE_WORKFLOW_TOOL_REF,
+  AGENT_SERVER_WHISPER_OPEN_TOOL_REF,
+  AGENT_SERVER_WHISPER_SEND_TOOL_REF,
 ]);
 
 /** Internal platform catalog; never require users to list these in spec.tools. */

@@ -5,6 +5,9 @@ import {
   AGENT_SERVER_LIST_AGENT_WORKFLOWS_TOOL_REF,
   AGENT_SERVER_PRODUCT_WORK_CREATE_TOOL_REF,
   AGENT_SERVER_PRODUCT_WORK_RUN_START_TOOL_REF,
+  AGENT_SERVER_WHISPER_OPEN_TOOL_REF,
+  AGENT_SERVER_WHISPER_SEND_TOOL_REF,
+  AGENT_SERVER_WORK_ITEM_CLAIM_TOOL_REF,
 } from './built-in-skills.js';
 import type { ModelPolicyRef } from '../../domain/agents/managed-agent-package.js';
 
@@ -25,6 +28,18 @@ const DEFAULT_COWORKER_WORK_TOOLS = Object.freeze([
   AGENT_SERVER_DESCRIBE_WORKFLOW_TOOL_REF,
 ]);
 
+/**
+ * Every Coworker hired through the product form gets private coordination
+ * with other Coworkers by default (Cumora's "any Coworker can whisper"
+ * mental model) — this is a platform capability, not an opt-in the human
+ * author configures per Coworker.
+ */
+const DEFAULT_COWORKER_COORDINATION_TOOLS = Object.freeze([
+  AGENT_SERVER_WORK_ITEM_CLAIM_TOOL_REF,
+  AGENT_SERVER_WHISPER_OPEN_TOOL_REF,
+  AGENT_SERVER_WHISPER_SEND_TOOL_REF,
+]);
+
 /** Friendly authoring projected onto the canonical immutable Agent package. */
 export function compileCoworkerDraft(draft: CoworkerAuthoringDraft): string {
   if (!draft.name.trim()) throw new Error('Give this Coworker a name.');
@@ -43,6 +58,7 @@ export function compileCoworkerDraft(draft: CoworkerAuthoringDraft): string {
     : identityInstruction;
   const tools = unique([
     ...DEFAULT_COWORKER_WORK_TOOLS,
+    ...DEFAULT_COWORKER_COORDINATION_TOOLS,
     ...(draft.tools ?? []),
   ]).map((ref) => ({ ref, kind: 'tool' as const }));
   const skills = unique(draft.skills ?? []).map((ref) => ({ ref }));

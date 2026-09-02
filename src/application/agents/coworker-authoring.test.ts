@@ -8,6 +8,9 @@ const WORK_TOOLS = [
   'agent-server/product-work-run-start',
   'agent-server/list-agent-workflows',
   'agent-server/describe-workflow',
+  'agent-server/work-item-claim',
+  'agent-server/whisper-open',
+  'agent-server/whisper-send',
 ];
 
 describe('compileCoworkerDraft', () => {

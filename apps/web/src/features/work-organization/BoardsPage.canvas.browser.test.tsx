@@ -234,6 +234,41 @@ it('offers no mention list until an @ is typed', async () => {
   }
 });
 
+it('leaves the card form open on plain Enter and submits only on Cmd/Ctrl+Enter', async () => {
+  const api = createCanvasApi();
+  const mounted = await mountBoard(api.fetch);
+  try {
+    await clickButton(mounted.host, '+ 新建任务');
+    const title = inputByLabel(mounted.host, '任务标题');
+    await typeInto(title, 'Multiline title');
+
+    await act(async () => {
+      title.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }),
+      );
+      await settle();
+    });
+    expect(api.createdWorkItems).toEqual([]);
+    expect(mounted.host.querySelector('.work-board-authoring')).not.toBeNull();
+
+    await act(async () => {
+      title.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'Enter',
+          metaKey: true,
+          bubbles: true,
+        }),
+      );
+      await settle();
+    });
+    expect(api.createdWorkItems).toEqual([
+      { title: 'Multiline title', column_id: todoColumnId },
+    ]);
+  } finally {
+    await mounted.dispose();
+  }
+});
+
 function createCanvasApi({
   failPlacement = false,
   holdPlacement = false,
@@ -590,19 +625,29 @@ async function clickButton(host: HTMLElement, name: string): Promise<void> {
   });
 }
 
-function inputByLabel(host: HTMLElement, labelText: string): HTMLInputElement {
+function inputByLabel(
+  host: HTMLElement,
+  labelText: string,
+): HTMLInputElement | HTMLTextAreaElement {
   const label = [...host.querySelectorAll('label')].find((candidate) =>
     candidate.textContent?.includes(labelText),
   );
-  const input = label?.querySelector<HTMLInputElement>('input');
+  const input = label?.querySelector<HTMLInputElement | HTMLTextAreaElement>(
+    'input, textarea',
+  );
   if (!input) throw new Error(`Expected a "${labelText}" input.`);
   return input;
 }
 
 /** Types character by character so the mention reader sees a moving caret. */
-async function typeInto(input: HTMLInputElement, text: string): Promise<void> {
+async function typeInto(
+  input: HTMLInputElement | HTMLTextAreaElement,
+  text: string,
+): Promise<void> {
   const descriptor = Object.getOwnPropertyDescriptor(
-    HTMLInputElement.prototype,
+    input instanceof HTMLTextAreaElement
+      ? HTMLTextAreaElement.prototype
+      : HTMLInputElement.prototype,
     'value',
   );
   for (const character of text) {

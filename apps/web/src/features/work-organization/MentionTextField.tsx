@@ -25,6 +25,13 @@ export interface MentionTextFieldProps {
   readonly maxLength?: number;
   readonly multiline?: boolean;
   readonly rows?: number;
+  /**
+   * When true, Cmd+Enter (Mac) or Ctrl+Enter (other platforms) submits the
+   * surrounding `<form>` while the mention list is closed; plain Enter keeps
+   * inserting a newline. Only meaningful together with `multiline` — a
+   * single-line `<input>` already submits its form on Enter natively.
+   */
+  readonly submitOnModEnter?: boolean;
   readonly autoFocus?: boolean;
   readonly disabled?: boolean;
   readonly className?: string;
@@ -45,7 +52,9 @@ export interface MentionTextFieldProps {
  *
  * Keyboard: ArrowUp/ArrowDown move the highlight, Enter or Tab insert, Escape
  * dismisses without leaving the field. The list is only re-armed by editing,
- * so Escape stays dismissed while the caret sits in the same token.
+ * so Escape stays dismissed while the caret sits in the same token. When the
+ * list is closed, `submitOnModEnter` makes Cmd/Ctrl+Enter submit the form
+ * instead of inserting a newline.
  */
 export function MentionTextField({
   value,
@@ -57,6 +66,7 @@ export function MentionTextField({
   maxLength,
   multiline = false,
   rows,
+  submitOnModEnter = false,
   autoFocus = false,
   disabled = false,
   className,
@@ -123,31 +133,41 @@ export function MentionTextField({
   }
 
   function handleKeyDown(event: React.KeyboardEvent<Control>) {
-    if (!open) return;
-    if (event.key === 'ArrowDown') {
-      event.preventDefault();
-      setHighlight((current) => (current + 1) % suggestions.length);
+    if (open) {
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        setHighlight((current) => (current + 1) % suggestions.length);
+        return;
+      }
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        setHighlight(
+          (current) => (current - 1 + suggestions.length) % suggestions.length,
+        );
+        return;
+      }
+      if (event.key === 'Enter' || event.key === 'Tab') {
+        const participant = suggestions[highlight];
+        if (!participant) return;
+        event.preventDefault();
+        insert(participant);
+        return;
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        setDismissedAt(draft?.anchor ?? null);
+        setDraft(null);
+      }
       return;
     }
-    if (event.key === 'ArrowUp') {
+    if (
+      submitOnModEnter &&
+      event.key === 'Enter' &&
+      (event.metaKey || event.ctrlKey)
+    ) {
       event.preventDefault();
-      setHighlight(
-        (current) => (current - 1 + suggestions.length) % suggestions.length,
-      );
-      return;
-    }
-    if (event.key === 'Enter' || event.key === 'Tab') {
-      const participant = suggestions[highlight];
-      if (!participant) return;
-      event.preventDefault();
-      insert(participant);
-      return;
-    }
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      event.stopPropagation();
-      setDismissedAt(draft?.anchor ?? null);
-      setDraft(null);
+      event.currentTarget.form?.requestSubmit();
     }
   }
 

@@ -1,0 +1,112 @@
+.observe-pane-subhead {
+  margin: 0 var(--space-5) var(--space-3);
+  color: var(--ink-500);
+  font-size: var(--text-sm);
+}
+
+.observe-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: flex-end;
+  margin: 0 var(--space-5) var(--space-4);
+}
+
+.observe-filters label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--ink-500);
+}
+
+.observe-filters select {
+  min-width: 140px;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--ink-200);
+  background: var(--cloud);
+  font-size: var(--text-sm);
+  color: var(--ink-900);
+}
+
+.observe-auto-refresh {
+  flex-direction: row !important;
+  align-items: center;
+  gap: var(--space-2) !important;
+}
+
+.observe-agent-chip {
+  display: inline-block;
+  margin-top: var(--space-1);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--sky-100);
+  color: var(--sky-ink);
+  font-size: var(--text-xs);
+}
+
+.observe-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.observe-detail-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.observe-detail-header h2 {
+  font-size: var(--text-lg);
+  word-break: break-all;
+}
+
+.observe-detail-timestamps {
+  color: var(--ink-500);
+  font-size: var(--text-sm);
+}
+
+.observe-kicker {
+  margin: 0;
+  color: var(--ink-500);
+  font-size: var(--text-eyebrow);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.observe-state-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+.observe-state-pill--running {
+  background: var(--gold-soft);
+  color: var(--gold-deep);
+}
+
+.observe-state-pill--needs_you {
+  background: var(--coral-soft);
+  color: var(--coral-deep);
+}
+
+.observe-state-pill--complete {
+  background: var(--grass-soft);
+  color: var(--grass-deep);
+}
+
+.observe-state-pill--problem {
+  background: var(--coral-soft);
+  color: var(--coral-deep);
+}
+
+.observe-state-pill--not_captured {
+  background: var(--ink-100);
+  color: var(--ink-500);
+}

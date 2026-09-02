@@ -76,7 +76,7 @@ Board    = Workspace-scoped projection over WorkItems
 
 **Review projection:** a linked Work's canonical Product projection is the authority. Owner-scoped WorkItem reads/lists project a successful formal Work to `in_review` unless the WorkItem is already in review/done. The browser does not infer completion from transcript/runtime output. Human action is required for `done`.
 
-**Web baseline:** the single Coworker Workspace Rail exposes Tasks and Boards alongside Conversations, Agents, Work, and Files. `/tasks/:workItemId` and `/boards/:boardId` are deep-link selections in the same Vite shell. Work opened from a Task can navigate back using route context, while durable linkage remains backend state.
+**Web baseline:** the single Coworker Workspace Rail exposes Tasks and Boards alongside Conversations, Agents, Work, Observe, and Files. `/tasks/:workItemId` and `/boards/:boardId` are deep-link selections in the same Vite shell. Work opened from a Task can navigate back using route context, while durable linkage remains backend state. `Observe` is a read-only cross-Work list of traced Runs (filterable by Agent participation and Product state) that opens the existing Run Trace view; it is an additional entry point alongside the Work tab's own `?run=` deep link, not a replacement for it, and adds no new backend contract.
 
 The MVE deliberately does not implement Calendar/cadence/proactive wake, Whisper/Convene, email identity, a general workflow DAG, a new runtime, or a second Workspace/Task state machine.
 

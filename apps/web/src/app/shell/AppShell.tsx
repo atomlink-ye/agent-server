@@ -6,6 +6,7 @@ import AgentsPage from '../../features/agents/AgentsPage';
 import FilesPage from '../../features/files/FilesPage';
 import { BoardsPage } from '../../features/work-organization/BoardsPage';
 import { TasksPage } from '../../features/work-organization/TasksPage';
+import { ObservePage } from '../../features/observe/ObservePage';
 import { WorkPage } from '../../features/work/WorkPage';
 import type { AppStore } from '../../features/conversations/stores/app';
 import type { ConversationsStore } from '../../features/conversations/stores/conversations';
@@ -82,6 +83,10 @@ export function AppShell({
       navigate('/files');
       return;
     }
+    if (tab === 'observe') {
+      navigate('/observe');
+      return;
+    }
     navigate(
       returnConversationId ? conversationPath(returnConversationId) : '/',
     );
@@ -118,6 +123,7 @@ export function AppShell({
           selectedSessionIndex={selectedSessionIndex}
         />
       ) : null}
+      {activeTab === 'observe' ? <ObservePage /> : null}
     </div>
   );
 }
@@ -125,6 +131,7 @@ export function AppShell({
 function tabForPath(pathname: string): DesktopTab {
   if (pathname.startsWith('/tasks')) return 'tasks';
   if (pathname.startsWith('/boards')) return 'boards';
+  if (pathname.startsWith('/observe')) return 'observe';
   if (pathname.startsWith('/work')) return 'work';
   if (pathname.startsWith('/agents')) return 'agents';
   if (pathname.startsWith('/files')) return 'files';

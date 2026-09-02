@@ -196,6 +196,11 @@ const ConfigSchema = z
       .int()
       .min(1)
       .default(4),
+    AGENT_SERVER_CHAT_ACTIVATION_BURST_DEBOUNCE_MS: z.preprocess(
+      (value) =>
+        typeof value === 'string' && value.trim() === '' ? undefined : value,
+      z.coerce.number().int().min(0).max(30_000).default(2_000),
+    ),
     AGENT_SERVER_TEAM_COMPLETION_APPROVAL_REQUIRED:
       BooleanEnvironment.default(false),
     SERVICE_ACCOUNTS_JSON: ServiceAccountsEnvironmentSchema,
@@ -311,6 +316,10 @@ export type AppConfig = Readonly<{
   larkCanary?: LarkCanaryConfig;
   skillRegistryRoot: string;
   dispatcher?: { concurrency: number };
+  chat: {
+    /** How long the first burst wake waits for further wakes to fold in before a turn snapshots them together. */
+    activationBurstDebounceMs: number;
+  };
   paseo: {
     wsUrl: string;
     provider: ManagedEnvironmentProvider;
@@ -417,6 +426,10 @@ export function loadConfig(
     ),
     dispatcher: {
       concurrency: parsed.data.AGENT_SERVER_DISPATCHER_CONCURRENCY,
+    },
+    chat: {
+      activationBurstDebounceMs:
+        parsed.data.AGENT_SERVER_CHAT_ACTIVATION_BURST_DEBOUNCE_MS,
     },
     paseo: {
       wsUrl: parsed.data.PASEO_WS_URL,

@@ -1,7 +1,12 @@
 import type { ChatDispatchRepository } from '../ports/chat-dispatch-repository.js';
 import { ChatActivationPlanner } from './chat-activation-planner.js';
 
-export const CHAT_ACTIVATION_BURST_DEBOUNCE_MS = 75;
+/**
+ * Fallback for callers that never pass `debounceMs`. Production callers
+ * should pass `config.chat.activationBurstDebounceMs` (AGENT_SERVER_CHAT_ACTIVATION_BURST_DEBOUNCE_MS)
+ * instead of relying on this constant, so operators can tune the window without a code change.
+ */
+export const CHAT_ACTIVATION_BURST_DEBOUNCE_MS = 2_000;
 
 export async function enqueueChatDispatchForMessage(
   dispatches: Pick<ChatDispatchRepository, 'enqueue'>,

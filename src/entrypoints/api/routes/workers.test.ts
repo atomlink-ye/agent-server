@@ -98,6 +98,7 @@ function config(): AppConfig {
     productWorkSurface: 'composed',
     teamCompletionApprovalRequired: false,
     skillRegistryRoot: '/tmp/worker-api-test',
+    chat: { activationBurstDebounceMs: 2_000 },
     serviceAccounts: [
       {
         serviceAccountId: principalId,

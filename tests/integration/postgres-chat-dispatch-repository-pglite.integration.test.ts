@@ -76,4 +76,58 @@ describe('PostgresChatDispatchRepository PGlite wire compatibility', () => {
       conversationId,
     });
   });
+
+  it('folds a burst of wakes within the debounce window into one unclaimed dispatch', async () => {
+    database = new PGlite('memory://');
+    await database.waitReady;
+    server = new PGLiteSocketServer({
+      db: database as never,
+      host: '127.0.0.1',
+      port: 0,
+      maxConnections: 4,
+    });
+    await server.start();
+    const port = Number(server.getServerConn().split(':').at(-1));
+    pool = new Pool({
+      connectionString: `postgresql://postgres:postgres@127.0.0.1:${port}/postgres`,
+      max: 2,
+    });
+    await applyDurableKernelMigrations(pool);
+    const burstConversationId = '00000000-0000-4000-8000-00000000d402';
+    await pool.query(
+      `INSERT INTO conversations
+         (id,tenant_id,kind,direct_pair_key,next_sequence,created_at,updated_at)
+       VALUES ($1,'tenant-burst','direct','direct:burst',1,NOW(),NOW())`,
+      [burstConversationId],
+    );
+
+    const repository = new PostgresChatDispatchRepository(pool);
+    const first = await repository.enqueue({
+      tenantId: 'tenant-burst',
+      agentDefinitionId: 'agent-burst',
+      conversationId: burstConversationId,
+      throughSequence: 1,
+      dedupeKey: 'message:burst-1',
+      debounceMs: 2_000,
+    });
+    const second = await repository.enqueue({
+      tenantId: 'tenant-burst',
+      agentDefinitionId: 'agent-burst',
+      conversationId: burstConversationId,
+      throughSequence: 2,
+      dedupeKey: 'message:burst-2',
+      debounceMs: 2_000,
+    });
+
+    expect(first.enqueued).toBe(true);
+    expect(second.enqueued).toBe(true);
+    expect(second.dispatchId).toBe(first.dispatchId);
+
+    const dispatches = await pool.query(
+      'SELECT through_sequence FROM chat_dispatches WHERE conversation_id=$1',
+      [burstConversationId],
+    );
+    expect(dispatches.rows).toHaveLength(1);
+    expect(Number(dispatches.rows[0]!.through_sequence)).toBe(2);
+  });
 });

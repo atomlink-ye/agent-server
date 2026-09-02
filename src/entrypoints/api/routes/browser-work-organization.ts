@@ -1,6 +1,7 @@
-import type { Hono } from 'hono';
+import type { Context, Hono } from 'hono';
 import { z, type ZodType } from 'zod';
 
+import { USER_ID_HEADER } from '../access-context.js';
 import {
   ClaimWorkItemRequestSchema,
   ClaimWorkItemResponseSchema,
@@ -50,8 +51,9 @@ export function registerBrowserWorkOrganizationRoutes(
   app: Hono<ApiEnvironment>,
   config: AppConfig,
 ): void {
-  app.get('/api/work-items', async () =>
+  app.get('/api/work-items', async (context) =>
     forward(
+      context,
       config,
       '/api/v1/work-items',
       { method: 'GET' },
@@ -64,6 +66,7 @@ export function registerBrowserWorkOrganizationRoutes(
     );
     if (!parsed.success) return invalidRequest();
     return forwardJson(
+      context,
       config,
       '/api/v1/work-items',
       'POST',
@@ -76,6 +79,7 @@ export function registerBrowserWorkOrganizationRoutes(
     const workItemId = context.req.param('workItemId');
     if (!isUuid(workItemId)) return invalidRequest();
     return forward(
+      context,
       config,
       `/api/v1/work-items/${encodeURIComponent(workItemId)}`,
       { method: 'GET' },
@@ -90,6 +94,7 @@ export function registerBrowserWorkOrganizationRoutes(
     );
     if (!parsed.success) return invalidRequest();
     return forwardJson(
+      context,
       config,
       `/api/v1/work-items/${encodeURIComponent(workItemId)}`,
       'PATCH',
@@ -107,6 +112,7 @@ export function registerBrowserWorkOrganizationRoutes(
     );
     if (!parsed.success) return invalidRequest();
     return forwardJson(
+      context,
       config,
       `/api/v1/work-items/${encodeURIComponent(workItemId)}/claim`,
       'POST',
@@ -122,6 +128,7 @@ export function registerBrowserWorkOrganizationRoutes(
     );
     if (!parsed.success) return invalidRequest();
     return forwardJson(
+      context,
       config,
       `/api/v1/work-items/${encodeURIComponent(workItemId)}/promote`,
       'POST',
@@ -133,6 +140,7 @@ export function registerBrowserWorkOrganizationRoutes(
     const workItemId = context.req.param('workItemId');
     if (!isUuid(workItemId)) return invalidRequest();
     return forward(
+      context,
       config,
       `/api/v1/work-items/${encodeURIComponent(workItemId)}/comments`,
       { method: 'GET' },
@@ -147,6 +155,7 @@ export function registerBrowserWorkOrganizationRoutes(
     );
     if (!parsed.success) return invalidRequest();
     return forwardJson(
+      context,
       config,
       `/api/v1/work-items/${encodeURIComponent(workItemId)}/comments`,
       'POST',
@@ -156,8 +165,9 @@ export function registerBrowserWorkOrganizationRoutes(
     );
   });
 
-  app.get('/api/boards', async () =>
+  app.get('/api/boards', async (context) =>
     forward(
+      context,
       config,
       '/api/v1/boards',
       { method: 'GET' },
@@ -170,6 +180,7 @@ export function registerBrowserWorkOrganizationRoutes(
     );
     if (!parsed.success) return invalidRequest();
     return forwardJson(
+      context,
       config,
       '/api/v1/boards',
       'POST',
@@ -182,6 +193,7 @@ export function registerBrowserWorkOrganizationRoutes(
     const boardId = context.req.param('boardId');
     if (!isUuid(boardId)) return invalidRequest();
     return forward(
+      context,
       config,
       `/api/v1/boards/${encodeURIComponent(boardId)}`,
       { method: 'GET' },
@@ -196,6 +208,7 @@ export function registerBrowserWorkOrganizationRoutes(
     );
     if (!parsed.success) return invalidRequest();
     return forwardJson(
+      context,
       config,
       `/api/v1/boards/${encodeURIComponent(boardId)}`,
       'PATCH',
@@ -207,6 +220,7 @@ export function registerBrowserWorkOrganizationRoutes(
     const boardId = context.req.param('boardId');
     if (!isUuid(boardId)) return invalidRequest();
     return forward(
+      context,
       config,
       `/api/v1/boards/${encodeURIComponent(boardId)}`,
       { method: 'DELETE' },
@@ -222,6 +236,7 @@ export function registerBrowserWorkOrganizationRoutes(
     );
     if (!parsed.success) return invalidRequest();
     return forwardJson(
+      context,
       config,
       `/api/v1/boards/${encodeURIComponent(boardId)}/columns`,
       'POST',
@@ -239,6 +254,7 @@ export function registerBrowserWorkOrganizationRoutes(
     );
     if (!parsed.success) return invalidRequest();
     return forwardJson(
+      context,
       config,
       `/api/v1/boards/${encodeURIComponent(boardId)}/columns/${encodeURIComponent(columnId)}`,
       'PATCH',
@@ -251,6 +267,7 @@ export function registerBrowserWorkOrganizationRoutes(
     const columnId = context.req.param('columnId');
     if (!isUuid(boardId) || !isUuid(columnId)) return invalidRequest();
     return forward(
+      context,
       config,
       `/api/v1/boards/${encodeURIComponent(boardId)}/columns/${encodeURIComponent(columnId)}`,
       { method: 'DELETE' },
@@ -266,6 +283,7 @@ export function registerBrowserWorkOrganizationRoutes(
     );
     if (!parsed.success) return invalidRequest();
     return forwardJson(
+      context,
       config,
       `/api/v1/boards/${encodeURIComponent(boardId)}/placement`,
       'PUT',
@@ -276,6 +294,7 @@ export function registerBrowserWorkOrganizationRoutes(
 }
 
 async function forwardJson(
+  context: Context<ApiEnvironment>,
   config: AppConfig,
   path: string,
   method: 'POST' | 'PATCH' | 'PUT',
@@ -284,6 +303,7 @@ async function forwardJson(
   successStatus = 200,
 ): Promise<Response> {
   return forward(
+    context,
     config,
     path,
     {
@@ -297,6 +317,7 @@ async function forwardJson(
 }
 
 async function forward(
+  context: Context<ApiEnvironment>,
   config: AppConfig,
   path: string,
   init: RequestInit,
@@ -304,7 +325,14 @@ async function forward(
   successStatus = 200,
 ): Promise<Response> {
   try {
-    const upstream = await fetchAuthenticated(config, path, init);
+    const userId = context.req.header(USER_ID_HEADER)?.trim();
+    const upstream = await fetchAuthenticated(config, path, {
+      ...init,
+      headers: {
+        ...init.headers,
+        ...(userId ? { [USER_ID_HEADER]: userId } : {}),
+      },
+    });
     const body = await readJson(upstream, {
       ...(upstream.status === 204 ? { emptyValue: null } : {}),
     });

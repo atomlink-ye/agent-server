@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 import { createConversation } from '../conversations/conversations-gateway';
+import { ApiTransportError } from '../../api/transport';
 import {
   loadCoworkers,
   loadCoworkerProfile,
@@ -11,6 +12,21 @@ import type { Coworker } from './contracts';
 import { CapabilityBuilder, NewCoworkerForm } from './AuthoringPanels';
 import TitleBar from '../../app/shell/TitleBar';
 import './agents.css';
+
+const BUSY_RUNTIME_STATUSES: ReadonlySet<Coworker['runtimeStatus']> = new Set([
+  'working',
+  'thinking',
+]);
+
+function describeOpenConversationError(reason: unknown): string {
+  if (
+    reason instanceof ApiTransportError &&
+    reason.code === 'chat_runtime_unavailable'
+  ) {
+    return 'This Coworker is handling another conversation right now. Wait for it to finish, then try Chat again.';
+  }
+  return reason instanceof Error ? reason.message : String(reason);
+}
 
 /**
  * Cumora shows four status chips (working/thinking/available/resting) and
@@ -107,7 +123,7 @@ export function AgentsPage() {
       const conversation = await createConversation(selectedAgentId);
       navigate(`/conversations/${encodeURIComponent(conversation.id)}`);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+      setError(describeOpenConversationError(reason));
       setOpening(false);
     }
   }
@@ -305,10 +321,20 @@ export function AgentsPage() {
                       disabled={
                         opening ||
                         profile.agent.runtimeStatus === 'draining' ||
-                        profile.agent.runtimeStatus === 'unavailable'
+                        profile.agent.runtimeStatus === 'unavailable' ||
+                        BUSY_RUNTIME_STATUSES.has(profile.agent.runtimeStatus)
+                      }
+                      title={
+                        BUSY_RUNTIME_STATUSES.has(profile.agent.runtimeStatus)
+                          ? 'This Coworker is handling another conversation right now. Try again once it finishes.'
+                          : undefined
                       }
                     >
-                      {opening ? 'Opening…' : 'Chat'}
+                      {opening
+                        ? 'Opening…'
+                        : BUSY_RUNTIME_STATUSES.has(profile.agent.runtimeStatus)
+                          ? 'Busy'
+                          : 'Chat'}
                     </button>
                     <button
                       className="agents-whisper"

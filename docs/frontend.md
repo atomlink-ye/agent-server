@@ -25,6 +25,7 @@ Coworker Workspace
 ├── Tasks
 ├── Boards
 ├── Work
+├── Observe
 └── Files
 ```
 
@@ -35,6 +36,7 @@ The surface responsibilities are explicit:
 - `Tasks` is the user-facing projection of durable backend `WorkItem` coordination commitments.
 - `Boards` is a Kanban projection over the same WorkItems; it is not a second Task model.
 - `Work` owns formal Work Definition / Work / WorkRun execution.
+- `Observe` is a read-only cross-Work projection of the same Product WorkRun/Trace facts the Work tab already renders for one selected Work; it lists traced Runs and opens the existing Run Trace view, filterable by Agent participation and Product state. It introduces no new backend contract or Work/Run state.
 - `Files` exposes the existing coworker file surface.
 
 A persisted Conversation message can create a WorkItem through an editable `Create task` affordance. The source Conversation/message is retained on the WorkItem. A WorkItem can then be assigned, discussed, organized on a Board, and promoted to a formal Work through the existing canonical Work application contract.
@@ -134,6 +136,8 @@ Current routes are deep links into the same workspace shell:
 /boards/:boardId           selected Board
 /work                      Work tab, no selection
 /work/:workId              selected Work
+/observe                   Observe tab; `?work=&run=` selects a traced Run,
+                           `?agent=&status=` filter the list
 /files                     Files
 ```
 

@@ -24,6 +24,7 @@ export function AppRouter() {
       <Route path="/boards/:boardId" element={<WorkspaceRoute />} />
       <Route path="/work" element={<WorkspaceRoute />} />
       <Route path="/work/:workId" element={<WorkspaceRoute />} />
+      <Route path="/observe" element={<WorkspaceRoute />} />
       <Route path="/agents" element={<WorkspaceRoute />} />
       <Route path="/agents/:agentId" element={<WorkspaceRoute />} />
       <Route path="/files" element={<WorkspaceRoute />} />

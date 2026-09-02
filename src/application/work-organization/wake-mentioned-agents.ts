@@ -1,3 +1,4 @@
+import { USER_PRINCIPAL_TYPE } from '../../domain/access-context.js';
 import {
   workItemMentionBrief,
   type WorkItemMentionReason,
@@ -6,6 +7,11 @@ import type { Logger } from '../../shared/observability/logger.js';
 import { enqueueChatDispatchForMessage } from '../chat/enqueue-chat-dispatch.js';
 import type { ChatDispatchRepository } from '../ports/chat-dispatch-repository.js';
 import type { ConversationRepository } from '../ports/conversation-repository.js';
+import {
+  decideWakeLoopGuard,
+  type WakeLoopGuardOptions,
+  type WakeLoopGuardRepository,
+} from './wake-loop-guard.js';
 
 /**
  * A Coworker identity an @-token is allowed to name.
@@ -37,6 +43,12 @@ export interface WakeMentionedAgentsDependencies {
   >;
   readonly dispatches: Pick<ChatDispatchRepository, 'enqueue'>;
   readonly logger?: Logger;
+  /**
+   * Cross-turn loop breaker. Absent means unguarded — every mention wakes,
+   * exactly as before this existed. See wake-loop-guard.ts.
+   */
+  readonly wakeLoopGuard?: WakeLoopGuardRepository;
+  readonly wakeLoopGuardOptions?: WakeLoopGuardOptions;
 }
 
 export interface WakeMentionedAgentsInput {
@@ -87,6 +99,16 @@ export async function wakeMentionedAgents(
   const mentions = dedupe(input.mentions);
   if (mentions.length === 0) return { woken: [], skipped: [] };
 
+  if (
+    dependencies.wakeLoopGuard &&
+    (await isWakeLoopCapped(dependencies, input))
+  ) {
+    return Object.freeze({
+      woken: Object.freeze([]),
+      skipped: Object.freeze([...mentions]),
+    });
+  }
+
   const roster = await listRoster(dependencies, input);
   const woken: string[] = [];
   const skipped: string[] = [];
@@ -122,6 +144,54 @@ async function listRoster(
       reason: errorReason(error),
     });
     return [];
+  }
+}
+
+/**
+ * One counter observation per wake event (not per resolved mention): the
+ * question is "has this WorkItem's mutation stream been looping", which is a
+ * property of the event, not of any one mention inside it.
+ *
+ * Fails closed on a repository error, mirroring listRoster above: when the
+ * guard cannot be consulted, the safer default for a loop breaker is not to
+ * wake rather than to wake unconditionally.
+ */
+async function isWakeLoopCapped(
+  dependencies: WakeMentionedAgentsDependencies,
+  input: WakeMentionedAgentsInput,
+): Promise<boolean> {
+  try {
+    const state = await dependencies.wakeLoopGuard!.observeWake({
+      tenantId: input.tenantId,
+      workspaceId: input.workspaceId,
+      workItemId: input.workItem.id,
+      causedByHuman: input.actorType === USER_PRINCIPAL_TYPE,
+    });
+    const decision = decideWakeLoopGuard(
+      state,
+      dependencies.wakeLoopGuardOptions,
+    );
+    if (decision.kind === 'block') {
+      dependencies.logger?.log('warn', 'work_item.mention.wake_loop_capped', {
+        tenant_id: input.tenantId,
+        work_item_id: input.workItem.id,
+        agent_wake_count: decision.agentWakeCount,
+        hard_cap: decision.hardCap,
+      });
+      return true;
+    }
+    return false;
+  } catch (error) {
+    dependencies.logger?.log(
+      'warn',
+      'work_item.mention.wake_loop_guard_unavailable',
+      {
+        tenant_id: input.tenantId,
+        work_item_id: input.workItem.id,
+        reason: errorReason(error),
+      },
+    );
+    return true;
   }
 }
 

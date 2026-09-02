@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import type { WakeLoopGuardRepository } from './wake-loop-guard.js';
 import {
   wakeMentionedAgents,
   type MentionableAgent,
@@ -92,6 +93,22 @@ function createDependencies(
     },
   } as unknown as WakeMentionedAgentsDependencies;
   return { deps, recorded };
+}
+
+/** Same shape as PostgresWakeLoopGuardRepository, kept in memory for tests. */
+function createInMemoryWakeLoopGuard(): WakeLoopGuardRepository & {
+  counters: Map<string, number>;
+} {
+  const counters = new Map<string, number>();
+  return {
+    counters,
+    async observeWake(input) {
+      const key = `${input.tenantId}:${input.workspaceId}:${input.workItemId}`;
+      const next = input.causedByHuman ? 0 : (counters.get(key) ?? 0) + 1;
+      counters.set(key, next);
+      return { agentWakeCount: next };
+    },
+  };
 }
 
 const baseInput = {
@@ -212,5 +229,93 @@ describe('wakeMentionedAgents', () => {
     });
     expect(result).toEqual({ woken: [], skipped: [] });
     expect(recorded.directs).toEqual([]);
+  });
+});
+
+describe('wakeMentionedAgents cross-turn loop guard', () => {
+  it('wakes normally while an agent-caused run stays under the hard cap', async () => {
+    const { deps, recorded } = createDependencies([researcher]);
+    const wakeLoopGuard = createInMemoryWakeLoopGuard();
+
+    for (let round = 0; round < 5; round += 1) {
+      const result = await wakeMentionedAgents(
+        { ...deps, wakeLoopGuard },
+        {
+          ...baseInput,
+          actorType: 'service_account',
+          mentions: [researcher.id],
+        },
+      );
+      expect(result.woken).toEqual([researcher.id]);
+    }
+    expect(recorded.appended.length).toBe(5);
+  });
+
+  it('blocks further wakes once agent-caused wakes on the same WorkItem exceed the hard cap', async () => {
+    const { deps, recorded } = createDependencies([researcher]);
+    const wakeLoopGuard = createInMemoryWakeLoopGuard();
+    const guardedDeps = { ...deps, wakeLoopGuard };
+
+    for (let round = 0; round < 20; round += 1) {
+      await wakeMentionedAgents(guardedDeps, {
+        ...baseInput,
+        actorType: 'service_account',
+        mentions: [researcher.id],
+      });
+    }
+    expect(recorded.appended.length).toBe(20);
+
+    const capped = await wakeMentionedAgents(guardedDeps, {
+      ...baseInput,
+      actorType: 'service_account',
+      mentions: [researcher.id],
+    });
+    expect(capped).toEqual({ woken: [], skipped: [researcher.id] });
+    // The blocked call must never touch the chat path at all.
+    expect(recorded.appended.length).toBe(20);
+  });
+
+  it('resets the loop counter when a human causes the wake, un-capping the WorkItem', async () => {
+    const { deps, recorded } = createDependencies([researcher]);
+    const wakeLoopGuard = createInMemoryWakeLoopGuard();
+    const guardedDeps = { ...deps, wakeLoopGuard };
+
+    for (let round = 0; round < 20; round += 1) {
+      await wakeMentionedAgents(guardedDeps, {
+        ...baseInput,
+        actorType: 'service_account',
+        mentions: [researcher.id],
+      });
+    }
+    await wakeMentionedAgents(guardedDeps, {
+      ...baseInput,
+      actorType: 'user',
+      mentions: [researcher.id],
+    });
+    const afterHuman = await wakeMentionedAgents(guardedDeps, {
+      ...baseInput,
+      actorType: 'service_account',
+      mentions: [researcher.id],
+    });
+
+    expect(afterHuman.woken).toEqual([researcher.id]);
+    expect(recorded.appended.length).toBe(22);
+  });
+
+  it('fails closed (skips) when the wake-loop-guard repository itself errors', async () => {
+    const { deps, recorded } = createDependencies([researcher]);
+    const failingGuard: WakeLoopGuardRepository = {
+      async observeWake() {
+        throw new Error('counter store down');
+      },
+    };
+
+    const result = await wakeMentionedAgents(
+      { ...deps, wakeLoopGuard: failingGuard },
+      { ...baseInput, mentions: [researcher.id] },
+    );
+
+    expect(result).toEqual({ woken: [], skipped: [researcher.id] });
+    expect(recorded.appended).toEqual([]);
   });
 });

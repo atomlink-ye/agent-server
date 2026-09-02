@@ -150,7 +150,12 @@ export function BoardCardPeek({
               {formatWorkTime(detail.work_item.updated_at)}
             </small>
           </div>
-          <h2>{detail.work_item.title}</h2>
+          <h2>
+            <MentionedText
+              text={detail.work_item.title}
+              participants={participants}
+            />
+          </h2>
           <p className="work-org-muted">
             由 {participantLabel(participants, detail.work_item.created_by)}{' '}
             创建
@@ -184,6 +189,7 @@ export function BoardCardPeek({
             {claimSupported ? (
               <ClaimButton
                 detail={detail}
+                participants={participants}
                 claiming={claiming}
                 onClaim={() => void claim()}
               />
@@ -259,10 +265,12 @@ export function BoardCardPeek({
  */
 function ClaimButton({
   detail,
+  participants,
   claiming,
   onClaim,
 }: {
   readonly detail: WorkItemDetailDto;
+  readonly participants: readonly Participant[];
   readonly claiming: boolean;
   readonly onClaim: () => void;
 }) {
@@ -270,7 +278,7 @@ function ClaimButton({
   if (!isClaimable(detail.work_item, now))
     return (
       <span className="work-org-muted" data-testid="work-board-claim-blocked">
-        {claimBlockedReason(detail.work_item, now)}
+        {claimBlockedReason(detail.work_item, now, participants)}
       </span>
     );
   return (

@@ -76,6 +76,19 @@ export function participantLabel(
 }
 
 /**
+ * The display name when the participant is known, else a fallback that
+ * never exposes a raw id — for prose (like a claim-blocked reason) where an
+ * unresolved UUID would read as a bug rather than as "unknown participant".
+ */
+export function participantLabelSafe(
+  directory: readonly Participant[],
+  id: string,
+  fallback = '该同事',
+): string {
+  return findParticipant(directory, id)?.name ?? fallback;
+}
+
+/**
  * Cumora shows a generated avatar image per participant. This product has no
  * avatar asset, so the chip falls back to initials — the same information
  * density without inventing an image pipeline.

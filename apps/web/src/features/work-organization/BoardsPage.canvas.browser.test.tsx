@@ -154,7 +154,7 @@ it('says a claim is held rather than offering one that cannot succeed', async ()
     expect(
       mounted.host.querySelector('[data-testid="work-board-claim-blocked"]')
         ?.textContent,
-    ).toBe('这个任务已被 coworker-1 领取。');
+    ).toBe('这个任务已被 Ari Analyst 领取。');
     expect(
       mounted.host.querySelector('[data-testid="work-board-claim"]'),
     ).toBeNull();

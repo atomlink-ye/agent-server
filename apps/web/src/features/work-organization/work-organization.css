@@ -125,8 +125,18 @@
   display: none;
 }
 
-.work-org-board-create--mobile,
 .work-board-card-move {
+  display: none;
+}
+
+/*
+ * `.work-org-board-create--mobile` always renders alongside `.work-org-form`
+ * (see BoardsPage.tsx), whose own `display: grid` has equal specificity to a
+ * single-class selector. Pairing both classes here gives the mobile-only
+ * hide the specificity it needs to win outside the mobile breakpoint,
+ * regardless of source order.
+ */
+.work-org-form.work-org-board-create--mobile {
   display: none;
 }
 
@@ -747,7 +757,7 @@
     padding: 9px 10px;
   }
 
-  .work-org-board-create--mobile {
+  .work-org-form.work-org-board-create--mobile {
     display: grid;
     gap: 12px;
     margin-bottom: 16px;

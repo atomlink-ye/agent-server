@@ -1312,7 +1312,9 @@ function BoardCard({
           {formatWorkTime(item.updated_at)}
         </small>
       </span>
-      <strong>{item.title}</strong>
+      <strong>
+        <MentionedText text={item.title} participants={participants} />
+      </strong>
       {preview ? (
         <small className="work-board-card-preview">
           <MentionedText text={preview} participants={participants} />

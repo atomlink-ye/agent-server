@@ -469,7 +469,9 @@ function TaskListItem({
           {formatWorkTime(item.updated_at)}
         </small>
       </span>
-      <strong>{item.title}</strong>
+      <strong>
+        <MentionedText text={item.title} participants={participants} />
+      </strong>
       {preview ? (
         <small className="work-org-list-item-preview">
           <MentionedText text={preview} participants={participants} />
@@ -722,7 +724,9 @@ function TaskDetail({
         <div className="work-org-detail-header">
           <div>
             <span className="eyebrow">任务</span>
-            <h1>{item.title}</h1>
+            <h1>
+              <MentionedText text={item.title} participants={participants} />
+            </h1>
             <div className="work-org-detail-meta">
               <ParticipantChip
                 participants={participants}

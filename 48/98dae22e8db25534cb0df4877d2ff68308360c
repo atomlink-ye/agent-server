@@ -1,0 +1,37 @@
+apps/web/src/features/work-organization/participants.ts
+  6bda43604168fee9 79-90
+apps/web/src/features/work-organization/BoardCardPeek.tsx
+  6bda43604168fee9 153-158,192,268,273,281
+apps/web/src/features/work-organization/work-item-extensions.ts
+  6bda43604168fee9 7-8,134,139-141
+apps/web/src/features/work-organization/work-item-extensions.test.ts
+  6bda43604168fee9 7,179-186,188,192,202-213,215
+apps/web/src/features/work-organization/work-organization.css
+  6bda43604168fee9 132-142,760
+apps/web/src/features/work-organization/BoardsPage.canvas.browser.test.tsx
+  6bda43604168fee9 157
+apps/web/src/features/work-organization/BoardsPage.tsx
+  6bda43604168fee9 1315-1317
+apps/web/src/features/work-organization/TasksPage.tsx
+  6bda43604168fee9 472-474,727-729
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2-bit.10+672fbf0",
+  "base_commit_sha": "4898dae22e8db25534cb0df4877d2ff68308360c",
+  "prompts": {
+    "6bda43604168fee9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "463844c6-d8f9-4b3d-ba80-bb6e1ccaa4b0",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "link.ye",
+      "messages": [],
+      "total_additions": 1202,
+      "total_deletions": 202,
+      "accepted_lines": 1013,
+      "overriden_lines": 0
+    }
+  }
+}

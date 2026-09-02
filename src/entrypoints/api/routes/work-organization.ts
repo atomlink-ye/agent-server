@@ -42,7 +42,7 @@ import {
 } from '../../../contracts/work-organization.js';
 import { HttpError } from '../../../contracts/http.js';
 import type { AppConfig } from '../../../shared/config.js';
-import { getAuthenticatedAccessContext } from '../access-context.js';
+import { getRequestAccessContext } from '../access-context.js';
 import { requireServiceAccountAccess } from '../authentication.js';
 import type { ApiEnvironment } from '../http-types.js';
 import { readBoundedJson } from '../read-bounded-json.js';
@@ -65,7 +65,7 @@ export function registerWorkOrganizationRoutes(
   }
 
   app.get('/api/v1/work-items', async (context) => {
-    const access = getAuthenticatedAccessContext(context);
+    const access = getRequestAccessContext(context);
     try {
       const items = await dependencies.service.listWorkItems(access);
       return context.json(
@@ -85,7 +85,7 @@ export function registerWorkOrganizationRoutes(
     );
     if (!parsed.success)
       throw invalidRequest('A valid WorkItem request is required.');
-    const access = getAuthenticatedAccessContext(context);
+    const access = getRequestAccessContext(context);
     try {
       const detail = await dependencies.service.createWorkItem({
         accessContext: access,
@@ -128,7 +128,7 @@ export function registerWorkOrganizationRoutes(
     );
     try {
       const detail = await dependencies.service.getWorkItem(
-        getAuthenticatedAccessContext(context),
+        getRequestAccessContext(context),
         workItemId,
       );
       return context.json(
@@ -152,7 +152,7 @@ export function registerWorkOrganizationRoutes(
       throw invalidRequest('A valid WorkItem update is required.');
     try {
       const detail = await dependencies.service.updateWorkItem({
-        accessContext: getAuthenticatedAccessContext(context),
+        accessContext: getRequestAccessContext(context),
         workItemId,
         ...(parsed.data.title !== undefined
           ? { title: parsed.data.title }
@@ -189,7 +189,7 @@ export function registerWorkOrganizationRoutes(
     if (!parsed.success) throw invalidRequest('认领请求不接受任何字段。');
     try {
       const claim = await dependencies.service.claimWorkItem({
-        accessContext: getAuthenticatedAccessContext(context),
+        accessContext: getRequestAccessContext(context),
         workItemId,
       });
       return context.json(
@@ -213,7 +213,7 @@ export function registerWorkOrganizationRoutes(
       throw invalidRequest('A valid Work promotion request is required.');
     try {
       const detail = await dependencies.service.promoteWorkItem({
-        accessContext: getAuthenticatedAccessContext(context),
+        accessContext: getRequestAccessContext(context),
         workItemId,
         definitionId: parsed.data.definition_id,
         definitionVersionId: parsed.data.definition_version_id,
@@ -237,7 +237,7 @@ export function registerWorkOrganizationRoutes(
     );
     try {
       const comments = await dependencies.service.listComments(
-        getAuthenticatedAccessContext(context),
+        getRequestAccessContext(context),
         workItemId,
       );
       return context.json(
@@ -263,7 +263,7 @@ export function registerWorkOrganizationRoutes(
       throw invalidRequest('A valid WorkItem comment is required.');
     try {
       const comment = await dependencies.service.addComment({
-        accessContext: getAuthenticatedAccessContext(context),
+        accessContext: getRequestAccessContext(context),
         workItemId,
         body: parsed.data.body,
       });
@@ -276,7 +276,7 @@ export function registerWorkOrganizationRoutes(
   app.get('/api/v1/boards', async (context) => {
     try {
       const boards = await dependencies.service.listBoards(
-        getAuthenticatedAccessContext(context),
+        getRequestAccessContext(context),
       );
       return context.json(
         WorkBoardListResponseSchema.parse({
@@ -297,7 +297,7 @@ export function registerWorkOrganizationRoutes(
       throw invalidRequest('A valid Board request is required.');
     try {
       const board = await dependencies.service.createBoard({
-        accessContext: getAuthenticatedAccessContext(context),
+        accessContext: getRequestAccessContext(context),
         title: parsed.data.title,
         ...(parsed.data.description !== undefined
           ? { description: parsed.data.description }
@@ -313,7 +313,7 @@ export function registerWorkOrganizationRoutes(
     const boardId = requireUuid(context.req.param('boardId'), 'boardId');
     try {
       const snapshot = await dependencies.service.getBoard(
-        getAuthenticatedAccessContext(context),
+        getRequestAccessContext(context),
         boardId,
       );
       return context.json(
@@ -339,7 +339,7 @@ export function registerWorkOrganizationRoutes(
       throw invalidRequest('A valid Board update is required.');
     try {
       const board = await dependencies.service.updateBoard({
-        accessContext: getAuthenticatedAccessContext(context),
+        accessContext: getRequestAccessContext(context),
         boardId,
         ...(parsed.data.title !== undefined
           ? { title: parsed.data.title }
@@ -358,7 +358,7 @@ export function registerWorkOrganizationRoutes(
     const boardId = requireUuid(context.req.param('boardId'), 'boardId');
     try {
       await dependencies.service.deleteBoard(
-        getAuthenticatedAccessContext(context),
+        getRequestAccessContext(context),
         boardId,
       );
       return context.body(null, 204);
@@ -376,7 +376,7 @@ export function registerWorkOrganizationRoutes(
       throw invalidRequest('A valid Board column is required.');
     try {
       const column = await dependencies.service.createColumn({
-        accessContext: getAuthenticatedAccessContext(context),
+        accessContext: getRequestAccessContext(context),
         boardId,
         title: parsed.data.title,
         ...(parsed.data.position !== undefined
@@ -400,7 +400,7 @@ export function registerWorkOrganizationRoutes(
       throw invalidRequest('A valid Board column update is required.');
     try {
       const column = await dependencies.service.updateColumn({
-        accessContext: getAuthenticatedAccessContext(context),
+        accessContext: getRequestAccessContext(context),
         boardId,
         columnId,
         ...(parsed.data.title !== undefined
@@ -422,7 +422,7 @@ export function registerWorkOrganizationRoutes(
     const columnId = requireUuid(context.req.param('columnId'), 'columnId');
     try {
       await dependencies.service.deleteColumn({
-        accessContext: getAuthenticatedAccessContext(context),
+        accessContext: getRequestAccessContext(context),
         boardId,
         columnId,
       });
@@ -441,7 +441,7 @@ export function registerWorkOrganizationRoutes(
       throw invalidRequest('A valid WorkItem placement is required.');
     try {
       const placement = await dependencies.service.placeWorkItem({
-        accessContext: getAuthenticatedAccessContext(context),
+        accessContext: getRequestAccessContext(context),
         boardId,
         columnId: parsed.data.column_id,
         workItemId: parsed.data.work_item_id,

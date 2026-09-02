@@ -1,3 +1,26 @@
+const USER_ID_HEADER = 'x-agent-server-user-id';
+const USER_ID_STORAGE_KEY = 'agent-server.user-id';
+
+/**
+ * There is no real login/session mechanism yet -- this is a stable
+ * per-browser identifier so writes made through the UI can be attributed to
+ * a human principal (`principalType: 'user'`) instead of the shared
+ * service-account token every browser request otherwise authenticates as.
+ * Falls back to a fixed dev id when `localStorage` is unavailable (SSR,
+ * private-mode restrictions).
+ */
+function resolveUserId(): string {
+  try {
+    const existing = window.localStorage.getItem(USER_ID_STORAGE_KEY);
+    if (existing) return existing;
+    const generated = `local-dev-user-${crypto.randomUUID()}`;
+    window.localStorage.setItem(USER_ID_STORAGE_KEY, generated);
+    return generated;
+  } catch {
+    return 'local-dev-user';
+  }
+}
+
 export class ApiTransportError extends Error {
   readonly status: number;
   readonly code: string;
@@ -26,6 +49,7 @@ export class ApiTransport {
         credentials: 'same-origin',
         headers: {
           accept: 'application/json',
+          [USER_ID_HEADER]: resolveUserId(),
           ...(init.body === undefined
             ? {}
             : { 'content-type': 'application/json' }),

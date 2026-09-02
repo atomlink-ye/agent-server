@@ -102,4 +102,20 @@ export interface ConversationRepository {
     readonly tenantId: string;
     readonly agentDefinitionId: string;
   }): Promise<AgentChatRuntime | null>;
+
+  /**
+   * Atomically transitions the runtime from 'available' to 'working'. Returns
+   * false (no-op) when another turn already holds the runtime busy, so callers
+   * never clobber a concurrent turn's busy state.
+   */
+  beginChatRuntimeTurn(input: {
+    readonly tenantId: string;
+    readonly agentDefinitionId: string;
+  }): Promise<boolean>;
+
+  /** Transitions the runtime back to 'available' only if it is still 'working'. */
+  endChatRuntimeTurn(input: {
+    readonly tenantId: string;
+    readonly agentDefinitionId: string;
+  }): Promise<void>;
 }

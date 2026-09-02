@@ -90,9 +90,27 @@ export class ChatDeliveryReconciler {
       return;
     }
 
-    const brain = await this.#resolveBrain.execute(context);
-    const reply = await this.#executeTurn.execute(context, brain);
-    const materialized = await this.#materialize.execute(context, reply);
+    // CAS 'available' -> 'working': the same deferral used for a missing
+    // runtime above also covers a runtime another turn already holds busy, so
+    // this never overlaps with -- or clobbers -- that other turn's status.
+    const began = await this.conversations.beginChatRuntimeTurn({
+      tenantId: dispatch.tenantId,
+      agentDefinitionId: dispatch.agentDefinitionId,
+    });
+    if (!began) throw new ChatTurnRuntimeUnavailableError();
+
+    let reply;
+    let materialized;
+    try {
+      const brain = await this.#resolveBrain.execute(context);
+      reply = await this.#executeTurn.execute(context, brain);
+      materialized = await this.#materialize.execute(context, reply);
+    } finally {
+      await this.conversations.endChatRuntimeTurn({
+        tenantId: dispatch.tenantId,
+        agentDefinitionId: dispatch.agentDefinitionId,
+      });
+    }
 
     if (workerId) await this.completeCompatibilityClaim(dispatch, workerId);
 

@@ -591,6 +591,33 @@ export class PostgresConversationRepository implements ConversationRepository {
     return row ? mapAgentChatRuntime(row) : null;
   }
 
+  async beginChatRuntimeTurn(input: {
+    readonly tenantId: string;
+    readonly agentDefinitionId: string;
+  }): Promise<boolean> {
+    const now = iso();
+    const result = await this.database.query(
+      `UPDATE agent_chat_runtimes
+       SET status='working', updated_at=$3
+       WHERE tenant_id=$1 AND agent_definition_id=$2 AND status='available'`,
+      [input.tenantId, input.agentDefinitionId, now],
+    );
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async endChatRuntimeTurn(input: {
+    readonly tenantId: string;
+    readonly agentDefinitionId: string;
+  }): Promise<void> {
+    const now = iso();
+    await this.database.query(
+      `UPDATE agent_chat_runtimes
+       SET status='available', updated_at=$3
+       WHERE tenant_id=$1 AND agent_definition_id=$2 AND status='working'`,
+      [input.tenantId, input.agentDefinitionId, now],
+    );
+  }
+
   private async acquire(): Promise<PostgresClient> {
     if (
       'connect' in this.database &&

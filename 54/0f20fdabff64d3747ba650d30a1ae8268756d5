@@ -1,0 +1,31 @@
+apps/web/src/features/work-organization/work-organization.css
+  725a732e8944805b 310
+apps/web/src/features/observe/queries/use-observe-run-tokens.ts
+  725a732e8944805b 1-62
+apps/web/src/features/observe/ObserveDetail.tsx
+  725a732e8944805b 8-11,26,81,87-150
+apps/web/src/features/observe/ObserveDetail.browser.test.tsx
+  725a732e8944805b 1-204
+apps/web/src/features/observe/observe.css
+  725a732e8944805b 113-153
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2-bit.10+672fbf0",
+  "base_commit_sha": "540f20fdabff64d3747ba650d30a1ae8268756d5",
+  "prompts": {
+    "725a732e8944805b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c0b0e992-e062-4dd7-9e1e-aeafd951d2c8",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "link.ye",
+      "messages": [],
+      "total_additions": 436,
+      "total_deletions": 48,
+      "accepted_lines": 393,
+      "overriden_lines": 0
+    }
+  }
+}

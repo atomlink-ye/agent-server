@@ -110,3 +110,44 @@
   background: var(--ink-100);
   color: var(--ink-500);
 }
+
+.observe-metric-cards {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.observe-metric-card {
+  border: 1px solid var(--ink-100);
+  border-radius: var(--radius-lg);
+  background: var(--cloud);
+  padding: var(--space-3) var(--space-4);
+}
+
+.observe-metric-card-value {
+  margin: 0;
+  color: var(--ink-900);
+  font-size: var(--text-title);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.observe-metric-card-label {
+  margin: var(--space-1) 0 0;
+  color: var(--ink-500);
+  font-size: var(--text-eyebrow);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.observe-metric-card-hint {
+  margin: var(--space-1) 0 0;
+  color: var(--ink-300);
+  font-size: var(--text-xs);
+}
+
+@media (max-width: 700px) {
+  .observe-metric-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

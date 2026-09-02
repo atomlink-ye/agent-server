@@ -1,3 +1,15 @@
+import type { ComponentType, SVGProps } from 'react';
+import {
+  IAgent,
+  IBoard,
+  IChat,
+  IFile,
+  IObserve,
+  IShip,
+  ITasks,
+  IWhisper,
+} from '../../components/icons';
+
 export type DesktopTab =
   | 'conversations'
   | 'agents'
@@ -23,49 +35,49 @@ export function Rail({ activeTab, onSelectTab }: RailProps) {
         <RailTab
           active={activeTab === 'conversations'}
           label="Conversations"
-          icon="◌"
+          Icon={IChat}
           onClick={() => onSelectTab('conversations')}
         />
         <RailTab
           active={activeTab === 'agents'}
           label="Agents"
-          icon="◎"
+          Icon={IAgent}
           onClick={() => onSelectTab('agents')}
         />
         <RailTab
           active={activeTab === 'tasks'}
           label="Tasks"
-          icon="☑"
+          Icon={ITasks}
           onClick={() => onSelectTab('tasks')}
         />
         <RailTab
           active={activeTab === 'boards'}
           label="Boards"
-          icon="▦"
+          Icon={IBoard}
           onClick={() => onSelectTab('boards')}
         />
         <RailTab
           active={activeTab === 'work'}
           label="Work"
-          icon="✓"
+          Icon={IShip}
           onClick={() => onSelectTab('work')}
         />
         <RailTab
           active={activeTab === 'observe'}
           label="Observe"
-          icon="◈"
+          Icon={IObserve}
           onClick={() => onSelectTab('observe')}
         />
         <RailTab
           active={activeTab === 'files'}
           label="Files"
-          icon="▱"
+          Icon={IFile}
           onClick={() => onSelectTab('files')}
         />
         <RailTab
           active={activeTab === 'whispers'}
           label="Whispers"
-          icon="◐"
+          Icon={IWhisper}
           onClick={() => onSelectTab('whispers')}
         />
       </nav>
@@ -76,12 +88,12 @@ export function Rail({ activeTab, onSelectTab }: RailProps) {
 function RailTab({
   active,
   label,
-  icon,
+  Icon,
   onClick,
 }: {
   readonly active: boolean;
   readonly label: string;
-  readonly icon: string;
+  readonly Icon: ComponentType<SVGProps<SVGSVGElement>>;
   readonly onClick: () => void;
 }) {
   return (
@@ -94,7 +106,7 @@ function RailTab({
       onClick={onClick}
     >
       <span className="rail-tab-icon" aria-hidden="true">
-        {icon}
+        <Icon />
       </span>
       <span>{label}</span>
     </button>

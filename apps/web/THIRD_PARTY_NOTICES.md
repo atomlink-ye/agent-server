@@ -4,7 +4,8 @@ This app adapts limited visual and composition ideas from Cumora:
 
 - Project: [Cumora](https://github.com/yetone/cumora)
 - Adapted file/idea areas: the desktop rail, title bar, three-column shell, conversation/work contextual panes, and the direction of global CSS design tokens, spacing, radii, and shadows.
-- The adaptation is implemented in new and existing files under `src/desktop`, `src/components/chat`, `src/components/work`, and `src/index.css`; no Cumora assets or component source are copied into this app.
+- The adaptation is implemented in new and existing files under `src/desktop`, `src/components/chat`, `src/components/work`, and `src/index.css`.
+- `src/components/icons.tsx` is copied verbatim from Cumora's `src/components/icons.tsx` (the 24x24 stroke-based SVG icon set) under the same MIT license.
 
 ## Cumora license
 

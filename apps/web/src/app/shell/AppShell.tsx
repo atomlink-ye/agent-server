@@ -8,6 +8,7 @@ import { BoardsPage } from '../../features/work-organization/BoardsPage';
 import { TasksPage } from '../../features/work-organization/TasksPage';
 import { ObservePage } from '../../features/observe/ObservePage';
 import { WorkPage } from '../../features/work/WorkPage';
+import WhispersPage from '../../features/whispers/WhispersPage';
 import type { AppStore } from '../../features/conversations/stores/app';
 import type { ConversationsStore } from '../../features/conversations/stores/conversations';
 import type { MessagesStore } from '../../features/conversations/stores/messages';
@@ -87,6 +88,10 @@ export function AppShell({
       navigate('/observe');
       return;
     }
+    if (tab === 'whispers') {
+      navigate('/whispers');
+      return;
+    }
     navigate(
       returnConversationId ? conversationPath(returnConversationId) : '/',
     );
@@ -113,6 +118,7 @@ export function AppShell({
         <BoardsPage selectedBoardId={selectedBoardId} />
       ) : null}
       {activeTab === 'files' ? <FilesPage /> : null}
+      {activeTab === 'whispers' ? <WhispersPage /> : null}
       {activeTab === 'work' ? (
         <WorkPage
           returnConversationId={returnConversationId}
@@ -135,6 +141,7 @@ function tabForPath(pathname: string): DesktopTab {
   if (pathname.startsWith('/work')) return 'work';
   if (pathname.startsWith('/agents')) return 'agents';
   if (pathname.startsWith('/files')) return 'files';
+  if (pathname.startsWith('/whispers')) return 'whispers';
   return 'conversations';
 }
 

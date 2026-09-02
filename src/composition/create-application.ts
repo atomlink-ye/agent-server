@@ -34,6 +34,8 @@ import { createRuntimeOwner } from './create-runtime-owner.js';
 import { createRunExecutionComposition } from './create-run-execution-composition.js';
 import { createHostComposition } from './create-host-composition.js';
 import { recordExecutionTrace } from '../shared/observability/execution-trace.js';
+import { PostgresWhisperRepository } from '../infrastructure/postgres/postgres-whisper-repository.js';
+import { PostgresConversationAgentIdentityResolver } from '../infrastructure/postgres/postgres-conversation-agent-identity-resolver.js';
 
 export interface SingleRunDebugControl {
   claimAndExecute(runId: string): Promise<{
@@ -87,6 +89,14 @@ export async function createApplication(
   const directChatPlane = config.directChatPlane;
   const directChatEnabled = directChatPlane !== 'absent';
   const productWorkEnabled = config.productWorkSurface === 'composed';
+  // Whisper reuses the conversation plane's tables, so it composes under the
+  // same gate: no Chat plane, no agent identity to resolve a whisper as.
+  const whisperRepository = directChatEnabled
+    ? new PostgresWhisperRepository(pool)
+    : undefined;
+  const whisperAgentIdentities = directChatEnabled
+    ? new PostgresConversationAgentIdentityResolver(pool)
+    : undefined;
   const kernel = createKernelCapabilities({
     pool,
     config,
@@ -192,6 +202,14 @@ export async function createApplication(
     ...(workModule ? { work: workModule.contributeRuntime } : {}),
     ...(workOrganizationModule
       ? { workOrganization: workOrganizationModule.contributeRuntime }
+      : {}),
+    ...(whisperRepository && whisperAgentIdentities
+      ? {
+          whisper: {
+            repository: whisperRepository,
+            agentIdentities: whisperAgentIdentities,
+          },
+        }
       : {}),
   });
   const runtimeOwner = createRuntimeOwner({
@@ -307,6 +325,7 @@ export async function createApplication(
     ...(workChatWorker ? { workChatWorker } : {}),
     runtime: { runtimeProvider, runtimeMcpServer },
     dispatcher,
+    ...(whisperRepository ? { whispers: whisperRepository } : {}),
     pool,
     activationReconciler: collaborationActivationReconciler,
     ...(options.singleRunDebug ? { singleRunDebug: true } : {}),

@@ -38,6 +38,8 @@ import type { ConversationRepository } from '../../application/ports/conversatio
 import type { ChatDispatchRepository } from '../../application/ports/chat-dispatch-repository.js';
 import type { ConversationWorkEntitlementRepository } from '../../application/ports/conversation-work-entitlement-repository.js';
 import { registerConversationRoutes } from './routes/conversations.js';
+import type { WhisperRepository } from '../../application/ports/whisper-repository.js';
+import { registerWhisperRoutes } from './routes/whispers.js';
 
 export interface AppDependencies {
   readonly config: AppConfig;
@@ -57,6 +59,7 @@ export interface AppDependencies {
   readonly conversations?: ConversationRepository;
   readonly chatDispatches?: ChatDispatchRepository;
   readonly conversationWorkEntitlements?: ConversationWorkEntitlementRepository;
+  readonly whispers?: WhisperRepository;
   readonly submitSessionTurn: SubmitSessionTurn;
   readonly events: RunEventRepository;
   readonly cancelTask: CancelTask;
@@ -166,6 +169,12 @@ export function createHttpApp(
       dependencies.conversationWorkEntitlements
         ? { workEntitlements: dependencies.conversationWorkEntitlements }
         : {}),
+    });
+  }
+  if (dependencies.whispers) {
+    registerWhisperRoutes(app, {
+      config: dependencies.config,
+      whispers: dependencies.whispers,
     });
   }
 

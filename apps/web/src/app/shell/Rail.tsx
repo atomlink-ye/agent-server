@@ -5,7 +5,8 @@ export type DesktopTab =
   | 'boards'
   | 'work'
   | 'observe'
-  | 'files';
+  | 'files'
+  | 'whispers';
 
 export interface RailProps {
   readonly activeTab: DesktopTab;
@@ -60,6 +61,12 @@ export function Rail({ activeTab, onSelectTab }: RailProps) {
           label="Files"
           icon="▱"
           onClick={() => onSelectTab('files')}
+        />
+        <RailTab
+          active={activeTab === 'whispers'}
+          label="Whispers"
+          icon="◐"
+          onClick={() => onSelectTab('whispers')}
         />
       </nav>
     </aside>

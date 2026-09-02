@@ -1,0 +1,53 @@
+.whispers-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  overflow-y: auto;
+}
+
+.whispers-list button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.whispers-list button[data-active='true'] {
+  background: var(--surface-active, rgba(0, 0, 0, 0.06));
+}
+
+.whisper-observer-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--ink-300, #6b7280);
+}
+
+.whisper-message-log {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.whisper-message {
+  max-width: 640px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--surface-raised, rgba(0, 0, 0, 0.04));
+}
+
+.whisper-message strong {
+  display: block;
+  font-size: 12px;
+  margin-bottom: 2px;
+}

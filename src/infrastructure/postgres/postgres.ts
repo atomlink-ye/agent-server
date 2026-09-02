@@ -97,6 +97,7 @@ export const durableKernelMigrationFileNames = [
   '0063_chat_dispatch_retry_backoff.sql',
   '0064_work_item_mentions_and_column_kinds.sql',
   '0065_work_item_wake_loop_counters.sql',
+  '0066_whisper_channels.sql',
 ] as const;
 const durableKernelMigrationRegistryTable = 'durable_kernel_schema_migrations';
 const durableKernelMigrationAdvisoryLock = [

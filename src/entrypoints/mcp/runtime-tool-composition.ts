@@ -25,6 +25,13 @@ import {
   createCollaborationRuntimeContributor,
   createSyntheticRuntimeToolsContributor,
 } from './runtime-tool-contributors.js';
+import {
+  AGENT_SERVER_WHISPER_OPEN_TOOL_REF,
+  AGENT_SERVER_WHISPER_SEND_TOOL_REF,
+  registerWhisperMcpTools,
+} from './whisper-mcp-tools.js';
+import type { WhisperRepository } from '../../application/ports/whisper-repository.js';
+import type { ConversationAgentIdentityResolver } from '../../application/work-organization/conversation-agent-identity.js';
 
 export function createRuntimeToolCatalog(input: {
   readonly memory: RuntimeToolContributor;
@@ -37,6 +44,11 @@ export function createRuntimeToolCatalog(input: {
   readonly work?: RuntimeToolContributor;
   /** Product coordination plane; composed only when Boards are enabled. */
   readonly workOrganization?: RuntimeToolContributor;
+  /** Agent-initiated private coordination; composed only when Chat is enabled. */
+  readonly whisper?: {
+    readonly repository: WhisperRepository;
+    readonly agentIdentities: ConversationAgentIdentityResolver;
+  };
 }): RuntimeToolCatalog {
   const syntheticToolReceipt = createSyntheticToolReceipt();
   return createCatalog([
@@ -92,5 +104,31 @@ export function createRuntimeToolCatalog(input: {
           },
         ]
       : []),
+    ...(input.whisper
+      ? [
+          {
+            ref: 'whisper',
+            toolRefs: [
+              AGENT_SERVER_WHISPER_OPEN_TOOL_REF,
+              AGENT_SERVER_WHISPER_SEND_TOOL_REF,
+            ],
+            contribute: createWhisperRuntimeToolsContributor(input.whisper),
+          },
+        ]
+      : []),
   ]);
+}
+
+function createWhisperRuntimeToolsContributor(whisper: {
+  readonly repository: WhisperRepository;
+  readonly agentIdentities: ConversationAgentIdentityResolver;
+}): RuntimeToolContributor {
+  return ({ server, grant, authorize }) =>
+    registerWhisperMcpTools({
+      server,
+      grant,
+      authorize,
+      repository: whisper.repository,
+      agentIdentities: whisper.agentIdentities,
+    });
 }

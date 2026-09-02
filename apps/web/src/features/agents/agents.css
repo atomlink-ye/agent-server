@@ -23,6 +23,11 @@
   background: var(--coral);
   color: var(--ink-900);
 }
+.agents-status-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
 .agents-list {
   display: flex;
   flex-direction: column;
@@ -81,7 +86,7 @@
 }
 .agents-profile-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 14px;
 }
 .agents-profile-copy {
@@ -95,6 +100,35 @@
   margin: 2px 0 0;
   color: var(--ink-500);
   font-size: 13px;
+}
+.agents-profile-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.agents-quote {
+  color: var(--ink-700);
+  font-size: 13px;
+  font-style: italic;
+}
+.agents-host-badge {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--ink-100);
+  color: var(--ink-700);
+  font-size: 11px;
+}
+.agents-profile-actions {
+  display: flex;
+  flex: none;
+  gap: 8px;
+}
+.agents-whisper {
+  border: 1px solid var(--ink-100);
+  background: var(--cloud);
+  color: var(--ink-500);
+  font-weight: 600;
 }
 .agents-runtime {
   align-self: flex-start;
@@ -117,6 +151,14 @@
 .agents-runtime--unavailable {
   background: var(--ink-100);
   color: var(--ink-500);
+}
+.agents-runtime--working {
+  background: var(--grass-soft);
+  color: var(--grass-deep);
+}
+.agents-runtime--thinking {
+  background: var(--sky-100);
+  color: var(--skype-deep);
 }
 .agents-save-success {
   display: flex;

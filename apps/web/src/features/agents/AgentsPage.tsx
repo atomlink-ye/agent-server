@@ -12,6 +12,28 @@ import { CapabilityBuilder, NewCoworkerForm } from './AuthoringPanels';
 import TitleBar from '../../app/shell/TitleBar';
 import './agents.css';
 
+/**
+ * Cumora shows four status chips (working/thinking/available/resting) and
+ * omits its rarely-set fifth state ("waiting") from that row. `draining`
+ * plays the same rarely-set role here (nothing in this codebase writes it
+ * today), so it keeps the same treatment: a real status, but not a filter
+ * pill.
+ */
+const STATUS_FILTERS: readonly Coworker['runtimeStatus'][] = [
+  'working',
+  'thinking',
+  'available',
+  'unavailable',
+];
+
+const RUNTIME_STATUS_LABEL: Record<Coworker['runtimeStatus'], string> = {
+  working: 'Working',
+  thinking: 'Thinking',
+  available: 'Available',
+  draining: 'Draining',
+  unavailable: 'Unavailable',
+};
+
 export function AgentsPage() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -28,6 +50,12 @@ export function AgentsPage() {
     null,
   );
   const [reload, setReload] = useState(0);
+  const [statusFilter, setStatusFilter] = useState<
+    Coworker['runtimeStatus'] | null
+  >(null);
+  const visibleAgents = statusFilter
+    ? agents.filter((agent) => agent.runtimeStatus === statusFilter)
+    : agents;
 
   useEffect(() => {
     let active = true;
@@ -112,6 +140,32 @@ export function AgentsPage() {
             + New Coworker
           </button>
         </div>
+        {agents.length > 0 ? (
+          <div
+            className="agents-status-filters"
+            role="group"
+            aria-label="Filter Coworkers by status"
+          >
+            {STATUS_FILTERS.map((status) => {
+              const count = agents.filter(
+                (agent) => agent.runtimeStatus === status,
+              ).length;
+              const active = statusFilter === status;
+              return (
+                <button
+                  key={status}
+                  type="button"
+                  className="filter-chip"
+                  aria-pressed={active}
+                  data-active={active ? 'true' : 'false'}
+                  onClick={() => setStatusFilter(active ? null : status)}
+                >
+                  {RUNTIME_STATUS_LABEL[status]} · {count}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
         <div className="agents-list">
           {loading && agents.length === 0 ? (
             <p className="pane-placeholder">Loading Coworkers…</p>
@@ -124,7 +178,14 @@ export function AgentsPage() {
               </button>
             </div>
           ) : null}
-          {agents.map((agent) => (
+          {!loading && agents.length > 0 && visibleAgents.length === 0 ? (
+            <p className="pane-placeholder">
+              No Coworkers are{' '}
+              {statusFilter ? RUNTIME_STATUS_LABEL[statusFilter] : ''} right
+              now.
+            </p>
+          ) : null}
+          {visibleAgents.map((agent) => (
             <button
               type="button"
               className="agents-list-item"
@@ -154,7 +215,7 @@ export function AgentsPage() {
               <span
                 className={`agents-runtime agents-runtime--${agent.runtimeStatus}`}
               >
-                {agent.runtimeStatus}
+                {RUNTIME_STATUS_LABEL[agent.runtimeStatus]}
               </span>
             </button>
           ))}
@@ -216,21 +277,48 @@ export function AgentsPage() {
                   <div className="agents-profile-copy">
                     <span className="eyebrow">AI Coworker</span>
                     <h1>{profile.agent.displayName}</h1>
-                    <p>
-                      {profile.agent.roleLabel ?? 'Coworker'} ·{' '}
-                      {profile.agent.runtimeStatus}
+                    <p className="agents-profile-meta">
+                      {profile.agent.roleLabel ?? 'Coworker'}
+                      <span
+                        className={`agents-runtime agents-runtime--${profile.agent.runtimeStatus}`}
+                      >
+                        {RUNTIME_STATUS_LABEL[profile.agent.runtimeStatus]}
+                      </span>
+                      {profile.capabilities.modelPolicyRef ? (
+                        <span
+                          className="agents-host-badge"
+                          title="Model policy backing this Coworker (this project has no paired-device concept, so the model/engine reference stands in for Cumora's host badge)"
+                        >
+                          {profile.capabilities.modelPolicyRef}
+                        </span>
+                      ) : null}
                     </p>
+                    {profile.agent.summary ? (
+                      <p className="agents-quote">“{profile.agent.summary}”</p>
+                    ) : null}
                   </div>
-                  <button
-                    className="agents-primary"
-                    type="button"
-                    onClick={() => void openConversation()}
-                    disabled={
-                      opening || profile.agent.runtimeStatus !== 'available'
-                    }
-                  >
-                    {opening ? 'Opening…' : 'Chat'}
-                  </button>
+                  <div className="agents-profile-actions">
+                    <button
+                      className="agents-primary"
+                      type="button"
+                      onClick={() => void openConversation()}
+                      disabled={
+                        opening ||
+                        profile.agent.runtimeStatus === 'draining' ||
+                        profile.agent.runtimeStatus === 'unavailable'
+                      }
+                    >
+                      {opening ? 'Opening…' : 'Chat'}
+                    </button>
+                    <button
+                      className="agents-whisper"
+                      type="button"
+                      disabled
+                      title="Whisper is being built separately and will land here."
+                    >
+                      Whisper
+                    </button>
+                  </div>
                 </header>
 
                 <article className="agents-card agents-about-card">
@@ -303,7 +391,9 @@ export function AgentsPage() {
                       <h3>Runtime</h3>
                       <dl>
                         <dt>Status</dt>
-                        <dd>{profile.agent.runtimeStatus}</dd>
+                        <dd>
+                          {RUNTIME_STATUS_LABEL[profile.agent.runtimeStatus]}
+                        </dd>
                         <dt>Published version</dt>
                         <dd className="agents-mono">
                           {profile.agent.activeAgentVersionId}

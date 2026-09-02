@@ -149,7 +149,13 @@ export const AgentDefinitionResponseSchema = z
 export const AgentCoworkerResponseSchema = AgentDefinitionResponseSchema.extend(
   {
     active_agent_version_id: AgentIdSchema,
-    runtime_status: z.enum(['available', 'draining', 'unavailable']),
+    runtime_status: z.enum([
+      'available',
+      'draining',
+      'unavailable',
+      'working',
+      'thinking',
+    ]),
   },
 ).strict();
 

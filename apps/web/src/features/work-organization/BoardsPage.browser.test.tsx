@@ -92,12 +92,12 @@ it('adds a Task card through the in-app form instead of a native dialog', async 
     });
 
     expect(host.textContent).toContain('添加任务卡片');
-    const title = host.querySelector<HTMLInputElement>(
-      'input[placeholder="任务标题"]',
+    const title = host.querySelector<HTMLTextAreaElement>(
+      'textarea[placeholder="任务标题…"]',
     );
-    if (!title) throw new Error('Expected an in-app Task title input.');
+    if (!title) throw new Error('Expected an in-app Task title textarea.');
     await act(async () => {
-      setInputValue(title, 'New card title');
+      setTextareaValue(title, 'New card title');
       await settle();
     });
     const addTaskButton = [
@@ -208,7 +208,11 @@ it('completes every Board authoring action in-app and requires confirmed deletio
     await expectText(mounted.host, 'Ready · 0');
 
     await clickButton(mounted.host, '+ 新建任务');
-    await setInputValueByLabel(mounted.host, '任务标题', 'Release checklist');
+    await setTextareaValueByLabel(
+      mounted.host,
+      '任务标题',
+      'Release checklist',
+    );
     await setTextareaValueByLabel(
       mounted.host,
       '描述（可选）',
@@ -278,7 +282,7 @@ it('disables authoring controls until a title can succeed', async () => {
 
     await clickButton(mounted.host, '+ 新建任务');
     await expectAuthoringSubmitDisabled(mounted.host, true);
-    await setInputValueByLabel(mounted.host, '任务标题', 'Valid Task title');
+    await setTextareaValueByLabel(mounted.host, '任务标题', 'Valid Task title');
     await expectAuthoringSubmitDisabled(mounted.host, false);
     expectNoNativeDialogs();
   } finally {
@@ -341,7 +345,7 @@ for (const failure of [
     name: 'Task creation',
     begin: async (host: HTMLElement) => {
       await clickButton(host, '+ 新建任务');
-      await setInputValueByLabel(host, '任务标题', 'Unsent Task');
+      await setTextareaValueByLabel(host, '任务标题', 'Unsent Task');
       await setTextareaValueByLabel(
         host,
         '描述（可选）',
@@ -592,6 +596,15 @@ function setInputValue(input: HTMLInputElement, value: string): void {
   );
   descriptor?.set?.call(input, value);
   input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+function setTextareaValue(textarea: HTMLTextAreaElement, value: string): void {
+  const descriptor = Object.getOwnPropertyDescriptor(
+    HTMLTextAreaElement.prototype,
+    'value',
+  );
+  descriptor?.set?.call(textarea, value);
+  textarea.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
 type BoardRequest = {
@@ -876,12 +889,7 @@ async function setTextareaValueByLabel(
   const textarea = label?.querySelector<HTMLTextAreaElement>('textarea');
   if (!textarea) throw new Error(`Expected a "${labelText}" textarea.`);
   await act(async () => {
-    const descriptor = Object.getOwnPropertyDescriptor(
-      HTMLTextAreaElement.prototype,
-      'value',
-    );
-    descriptor?.set?.call(textarea, value);
-    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    setTextareaValue(textarea, value);
     await settle();
   });
 }

@@ -945,9 +945,18 @@ function BoardCanvas({
                   )
                 }
                 participants={participants}
-                placeholder="任务标题"
+                placeholder="任务标题…"
                 maxLength={200}
+                multiline
+                rows={2}
+                submitOnModEnter
                 autoFocus
+                hint={
+                  <small className="work-org-muted">
+                    Enter 换行，⌘/Ctrl + Enter 提交；输入 @ 可以提及 AI
+                    同事或团队成员。
+                  </small>
+                }
               />
               <MentionTextField
                 label="描述（可选）"

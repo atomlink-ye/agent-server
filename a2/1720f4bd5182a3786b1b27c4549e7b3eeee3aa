@@ -1,0 +1,39 @@
+apps/web/src/features/agents/contracts.ts
+  c42a376188cc2255 1-2
+src/domain/chat/agent-chat-runtime.ts
+  c42a376188cc2255 1-2
+src/infrastructure/postgres/migrations/0067_agent_chat_runtime_busy_statuses.sql
+  c42a376188cc2255 1-14
+src/infrastructure/postgres/postgres.ts
+  c42a376188cc2255 101
+src/contracts/agents.ts
+  c42a376188cc2255 152-158
+apps/web/src/features/agents/AgentsPage.tsx
+  c42a376188cc2255 15-36,53-58,143-168,181-188,218,280-294,296-320,394-396
+src/infrastructure/postgres/postgres-conversation-repository.ts
+  c42a376188cc2255 11-14,671
+apps/web/src/features/agents/agents.css
+  c42a376188cc2255 26-30,89,104-132,155-161
+apps/web/src/features/agents/agents-gateway.ts
+  c42a376188cc2255 238-244,246-247
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2-bit.10+672fbf0",
+  "base_commit_sha": "a21720f4bd5182a3786b1b27c4549e7b3eeee3aa",
+  "prompts": {
+    "c42a376188cc2255": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "82096863-82fc-45bd-bf77-087d7e190ca2",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "link.ye",
+      "messages": [],
+      "total_additions": 200,
+      "total_deletions": 35,
+      "accepted_lines": 188,
+      "overriden_lines": 0
+    }
+  }
+}

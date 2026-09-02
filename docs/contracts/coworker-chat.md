@@ -53,7 +53,7 @@ Only managed AgentDefinitions with an `agent_chat_runtimes` row are listed, so a
 }
 ```
 
-`runtime_status` is the closed `available | draining | unavailable` vocabulary. Provider RuntimeSession IDs, provider agent/thread IDs, prompts, credentials, model names, tenant/principal IDs, and raw runtime payloads are not part of this response.
+`runtime_status` is the closed `available | draining | unavailable | working | thinking` vocabulary. `ChatDeliveryReconciler` is the only writer today: it CAS-transitions the runtime from `available` to `working` for the duration of one in-flight Chat turn and back to `available` when that turn ends (success or failure), so a runtime with an in-flight turn reports `working` and defers (never overlaps) a second concurrent turn. `draining` / `unavailable` are reserved for other lifecycle writers; `thinking` is reserved for a future finer-grained "model is generating" signal and is not yet written. Provider RuntimeSession IDs, provider agent/thread IDs, prompts, credentials, model names, tenant/principal IDs, and raw runtime payloads are not part of this response.
 
 The same `cursor` / `limit` rules as managed Agent version lists apply: default limit 20, allowed 1–100, opaque repository cursor, unknown or ambiguous query parameters rejected.
 

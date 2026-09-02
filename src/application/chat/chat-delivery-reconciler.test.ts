@@ -12,6 +12,7 @@ import type { AgentResolutionApi } from '../ports/agent-resolution-api.js';
 import type { AgentChatRuntime } from '../../domain/chat/agent-chat-runtime.js';
 import type { ChatMessage } from '../../domain/chat/chat-message.js';
 import { ChatDeliveryReconciler } from './chat-delivery-reconciler.js';
+import { ChatTurnRuntimeUnavailableError } from './resolve-chat-turn-context.js';
 import { ChatBrainResolver } from './chat-brain-resolver.js';
 
 class FakeConversationRepository implements ConversationRepository {
@@ -112,6 +113,27 @@ class FakeConversationRepository implements ConversationRepository {
   }): Promise<AgentChatRuntime | null> {
     const key = `${input.tenantId}:${input.agentDefinitionId}`;
     return this.runtimes.get(key) ?? null;
+  }
+
+  async beginChatRuntimeTurn(input: {
+    readonly tenantId: string;
+    readonly agentDefinitionId: string;
+  }): Promise<boolean> {
+    const key = `${input.tenantId}:${input.agentDefinitionId}`;
+    const runtime = this.runtimes.get(key);
+    if (!runtime || runtime.status !== 'available') return false;
+    this.runtimes.set(key, { ...runtime, status: 'working' });
+    return true;
+  }
+
+  async endChatRuntimeTurn(input: {
+    readonly tenantId: string;
+    readonly agentDefinitionId: string;
+  }): Promise<void> {
+    const key = `${input.tenantId}:${input.agentDefinitionId}`;
+    const runtime = this.runtimes.get(key);
+    if (!runtime || runtime.status !== 'working') return;
+    this.runtimes.set(key, { ...runtime, status: 'available' });
   }
 
   setRuntime(runtime: AgentChatRuntime): void {
@@ -516,5 +538,144 @@ describe('ChatDeliveryReconciler', () => {
 
     expect(processed).toBe(2);
     expect(dispatchRepo.listPending).toHaveBeenCalledWith(50);
+  });
+
+  it('5. busy runtime: reconcile defers instead of overlapping an in-flight turn', async () => {
+    const convRepo = new FakeConversationRepository();
+    const dispatchRepo = new FakeChatDispatchRepository();
+    const provider = new FakeChatTurnProvider();
+
+    const runtime: AgentChatRuntime = Object.freeze({
+      id: '00000000-0000-4000-8000-000000000005',
+      tenantId: 'tenant-5',
+      agentDefinitionId: 'agent-d5',
+      activeAgentVersionId: 'v1',
+      epoch: 1,
+      status: 'working', // another turn already holds this runtime busy
+      lastActiveAt: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    convRepo.setRuntime(runtime);
+
+    const principalMessage: ChatMessage = Object.freeze({
+      id: 'msg-1',
+      tenantId: 'tenant-5',
+      conversationId: 'conv-5',
+      sequence: 1,
+      authorType: 'principal',
+      authorId: 'sa-1',
+      body: 'Hello agent',
+      agentDefinitionId: null,
+      agentVersionId: null,
+      runtimeEpoch: null,
+      provider: null,
+      workRef: null,
+      createdAt: new Date().toISOString(),
+    });
+    convRepo.addMessage('conv-5', principalMessage);
+
+    const dispatch: ChatDispatch = Object.freeze({
+      id: 'dispatch-5',
+      tenantId: 'tenant-5',
+      agentDefinitionId: 'agent-d5',
+      conversationId: 'conv-5',
+      throughSequence: 1,
+      dedupeKey: 'chat:agent-d5:conv-5:1',
+      createdAt: new Date().toISOString(),
+      publishedAt: null,
+    });
+    dispatchRepo.setDispatch(dispatch);
+
+    const reconciler = new ChatDeliveryReconciler(
+      convRepo,
+      dispatchRepo,
+      provider,
+      createTestBrainResolver(),
+      fakeConversationWorkLinks,
+    );
+
+    await expect(reconciler.reconcile(dispatch)).rejects.toBeInstanceOf(
+      ChatTurnRuntimeUnavailableError,
+    );
+
+    // The provider must never run concurrently with the in-flight turn, and
+    // the other turn's busy status must not be clobbered by this deferral.
+    expect(provider.lastRunTurnInput).toBeNull();
+    const afterAttempt = await convRepo.getChatRuntime({
+      tenantId: 'tenant-5',
+      agentDefinitionId: 'agent-d5',
+    });
+    expect(afterAttempt?.status).toBe('working');
+  });
+
+  it('6. provider failure: runtime status returns to available via the finally path', async () => {
+    const convRepo = new FakeConversationRepository();
+    const dispatchRepo = new FakeChatDispatchRepository();
+    const provider: ChatTurnProvider = {
+      runTurn: async () => {
+        throw new Error('provider exploded');
+      },
+    };
+
+    const runtime: AgentChatRuntime = Object.freeze({
+      id: '00000000-0000-4000-8000-000000000006',
+      tenantId: 'tenant-6',
+      agentDefinitionId: 'agent-d6',
+      activeAgentVersionId: 'v1',
+      epoch: 1,
+      status: 'available',
+      lastActiveAt: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    convRepo.setRuntime(runtime);
+
+    const principalMessage: ChatMessage = Object.freeze({
+      id: 'msg-1',
+      tenantId: 'tenant-6',
+      conversationId: 'conv-6',
+      sequence: 1,
+      authorType: 'principal',
+      authorId: 'sa-1',
+      body: 'Hello agent',
+      agentDefinitionId: null,
+      agentVersionId: null,
+      runtimeEpoch: null,
+      provider: null,
+      workRef: null,
+      createdAt: new Date().toISOString(),
+    });
+    convRepo.addMessage('conv-6', principalMessage);
+
+    const dispatch: ChatDispatch = Object.freeze({
+      id: 'dispatch-6',
+      tenantId: 'tenant-6',
+      agentDefinitionId: 'agent-d6',
+      conversationId: 'conv-6',
+      throughSequence: 1,
+      dedupeKey: 'chat:agent-d6:conv-6:1',
+      createdAt: new Date().toISOString(),
+      publishedAt: null,
+    });
+    dispatchRepo.setDispatch(dispatch);
+
+    const reconciler = new ChatDeliveryReconciler(
+      convRepo,
+      dispatchRepo,
+      provider,
+      createTestBrainResolver(),
+      fakeConversationWorkLinks,
+    );
+
+    await expect(reconciler.reconcile(dispatch)).rejects.toThrow(
+      'provider exploded',
+    );
+
+    const afterFailure = await convRepo.getChatRuntime({
+      tenantId: 'tenant-6',
+      agentDefinitionId: 'agent-d6',
+    });
+    expect(afterFailure?.status).toBe('available');
   });
 });

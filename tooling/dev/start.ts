@@ -7,6 +7,7 @@ import {
   hostFixtureRuntimeEnvironment,
   hostRuntimeEnvironment,
   hostWebEnvironment,
+  connectablePostgres,
   prepareHostNativeEnvironment,
   repositoryRoot,
   runCommand,
@@ -58,15 +59,18 @@ async function readGeneratedWebEnv(): Promise<NodeJS.ProcessEnv> {
   }
 }
 
-function describeRuntimeBanner(environment: NodeJS.ProcessEnv): string {
+function describeRuntimeBanner(
+  environment: NodeJS.ProcessEnv,
+  databaseBackend: 'pglite' | 'postgres',
+): string {
   const fixtureId = environment.AGENT_SERVER_FIXTURE_RUNTIME_PROVIDER?.trim();
   if (fixtureId)
-    return `runtime=fixture-replay (fixture=${fixtureId}, live-provider=false)`;
+    return `runtime=fixture-replay (fixture=${fixtureId}, live-provider=false, database=${databaseBackend})`;
   const adapter = environment.RUNTIME_ADAPTER ?? 'none';
   const directChatPlane = environment.AGENT_SERVER_DIRECT_CHAT_PLANE ?? 'mock';
   const productWorkPlane =
     environment.AGENT_SERVER_PRODUCT_WORK_PLANE ?? 'absent';
-  return `runtime=${adapter} (direct-chat=${directChatPlane}, product-work=${productWorkPlane})`;
+  return `runtime=${adapter} (direct-chat=${directChatPlane}, product-work=${productWorkPlane}, database=${databaseBackend})`;
 }
 
 function exitOf(
@@ -95,7 +99,20 @@ export async function startHostDevelopment(
   mode: HostDevMode,
   environment: NodeJS.ProcessEnv = process.env,
 ): Promise<void> {
-  const prepared = await prepareHostNativeEnvironment(environment);
+  // Live runtime mode must use native PostgreSQL. The socket-backed PGlite
+  // fallback has single-connection prepared-statement semantics that are not
+  // safe for concurrent runtime traffic.
+  const prepared = await prepareHostNativeEnvironment({
+    ...environment,
+    ...(mode === 'runtime' ? { CANARY_REQUIRE_NATIVE_POSTGRES: '1' } : {}),
+  });
+  const database = await connectablePostgres(prepared.DATABASE_URL!);
+  if (!database.ok)
+    throw new Error('Prepared development database is no longer reachable.');
+  const databaseBackend = database.backend;
+  if (mode === 'runtime' && databaseBackend !== 'postgres') {
+    throw new Error('Runtime development requires native PostgreSQL.');
+  }
   const applicationEnvironment =
     mode === 'runtime'
       ? hostRuntimeEnvironment(prepared)
@@ -177,7 +194,7 @@ export async function startHostDevelopment(
         `host-native dev ready: mode=${mode}`,
         `api=${apiBaseUrl}`,
         'web=http://127.0.0.1:3001',
-        describeRuntimeBanner(applicationEnvironment),
+        describeRuntimeBanner(applicationEnvironment, databaseBackend),
         'bootstrap=agent/environment/team/workspace ready',
         '',
       ].join('\n'),

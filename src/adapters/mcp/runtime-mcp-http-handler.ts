@@ -21,164 +21,161 @@ export function createRuntimeMcpHttpHandler(input: {
 }): (req: IncomingMessage, res: ServerResponse) => Promise<void> {
   const sessions = new Map<string, McpSession>();
   return async (req, res) => {
-    if (req.url?.split('?')[0] !== MCP_PATH) {
-      sendJson(res, 404, { error: 'not_found' });
-      return;
-    }
-    if (req.method !== 'POST') {
-      sendJson(res, 405, { error: 'method_not_allowed' });
-      return;
-    }
-    let body: unknown;
+    let method: string | null = null;
+    let requested: string | null = null;
+    let mcpSessionIdForLog: string | null = null;
+    let newSession = false;
+    let server: McpServer | undefined;
+    let transport: StreamableHTTPServerTransport | undefined;
     try {
-      body = await readJson(req);
-    } catch (error) {
-      if ((error as { code?: string }).code === 'request_too_large') {
-        sendJson(res, 413, { error: 'request_too_large' });
+      if (req.url?.split('?')[0] !== MCP_PATH) {
+        sendJson(res, 404, { error: 'not_found' });
         return;
       }
-      sendJson(res, 400, { error: 'invalid_request' });
-      return;
-    }
-    const bearer = readBearer(req);
-    const requested = requestedTool(body);
-    const method = requestedMethod(body);
-    const mcpSessionIdForLog = mcpSessionIdHeader(req);
-    // This outer gate is authentication-only, for every method including
-    // `tools/call`: it proves the bearer is a live, correctly-scoped grant
-    // for the current catalog shape (`executeDiscovery` ->
-    // evaluateRuntimeGrantDiscoveryPolicy) and nothing more. It deliberately
-    // never checks turn binding, turn activity, or per-tool allowance --
-    // that is the job of the *inner* gate, which every registered tool goes
-    // through on every real invocation via the `authorize` callback threaded
-    // through `toolCatalog.contribute` below (see
-    // runtime-tool-contributors.ts, product-work-mcp-tools.ts,
-    // collaboration-mcp-tools.ts: each call re-authorizes with its own tool
-    // REF through `AuthorizeRuntimeTool.execute` ->
-    // evaluateRuntimeGrantPolicy). A single gate here that tried to
-    // authorize a specific tool would have to compare the *registered MCP
-    // tool NAME* carried in `params.name` (e.g. `list_agent_workflows`)
-    // against `grant.allowedTools`, which stores tool REFs (e.g.
-    // `agent-server/list-agent-workflows`) -- a comparison that can never
-    // match. That mismatch is exactly the bug this fix removes. Also see
-    // team-tool-context.ts: "Tool visibility is not an authorization input:
-    // every call re-reads ... and validates the active-turn epoch."
-    const authResult = bearer
-      ? await input.authorize.executeDiscovery({
-          bearerToken: bearer,
-          currentCatalogDigest: input.toolCatalog.digest,
-        })
-      : null;
-    if (!authResult || authResult.kind !== 'authorized') {
-      // A missing bearer never reaches executeDiscovery(), so there is no
-      // policy reason to attach beyond the fact that no credential was
-      // presented. `method`/`requested_tool` record which JSON-RPC call hit
-      // this gate -- a real per-tool denial now always happens at the inner
-      // gate instead, where the tool REF (not the name logged here) is the
-      // one that matters.
-      input.logger?.log('warn', 'runtime.mcp.auth.denied', {
-        bearer_present: bearer !== null,
-        ...(authResult?.kind === 'denied' ? { reason: authResult.reason } : {}),
-        ...(requested ? { requested_tool: requested } : {}),
-        ...(method ? { method } : {}),
-        ...(mcpSessionIdForLog ? { mcp_session_id: mcpSessionIdForLog } : {}),
-      });
-      sendJson(res, 401, { error: 'unauthorized' });
-      return;
-    }
-    const grant = authResult.context;
-    const sessionId = req.headers['mcp-session-id'];
-    if (Array.isArray(sessionId)) {
-      sendJson(res, 404, { error: 'not_found' });
-      return;
-    }
-    const existing =
-      typeof sessionId === 'string' ? sessions.get(sessionId) : undefined;
-    if (sessionId && !existing) {
-      // A provider holding an MCP transport session the server has forgotten
-      // looks like a mystery 404 without this: record which session id.
-      input.logger?.log('warn', 'runtime.mcp.session.denied', {
-        reason: 'mcp_session_unknown',
-        mcp_session_id: sessionId,
-      });
-      sendJson(res, 404, { error: 'not_found' });
-      return;
-    }
-    if (existing && existing.grantId !== grant.grantId) {
-      // Distinct from an authorization denial: the MCP transport session
-      // outlived the grant it was opened with (e.g. a new turn/grant issued
-      // while the provider kept reusing the old session id).
-      input.logger?.log('warn', 'runtime.mcp.session.denied', {
-        reason: 'mcp_session_grant_changed',
-        ...(typeof sessionId === 'string' ? { mcp_session_id: sessionId } : {}),
-      });
-      sendJson(res, 401, { error: 'unauthorized' });
-      return;
-    }
-    const server =
-      existing?.server ??
-      new McpServer({
-        name: 'agent-server-memory-mcp',
-        version: '0.1.0',
-      });
-    let transport!: StreamableHTTPServerTransport;
-    transport =
-      existing?.transport ??
-      new StreamableHTTPServerTransport({
-        sessionIdGenerator: randomUUID,
-        onsessioninitialized: (id) => {
-          sessions.set(id, {
-            server,
-            transport,
-            grantId: grant.grantId,
-          });
-        },
-      });
-    if (!existing) {
-      input.toolCatalog.contribute({
-        server,
-        grant,
-        authorize: async (toolRef) => {
-          const authorized = await input.authorize.execute({
-            bearerToken: bearer!,
-            requestedTool: toolRef,
-            currentCatalogDigest: input.toolCatalog.digest,
-          });
-          if (authorized.kind === 'authorized') return authorized.context;
-          // This is the gate that actually decides an invocation, and its
-          // reason used to be discarded: the tool merely answered `not_found`,
-          // so an operator saw a working transport refuse every call with no
-          // way to tell a stale catalog digest from an unbound turn.
-          input.logger?.log('warn', 'runtime.mcp.tool.denied', {
-            reason: authorized.reason,
-            tool_ref: toolRef,
-          });
-          return null;
-        },
-      });
-    }
-    const newSession = !existing;
-    if (newSession) {
-      transport.onclose = () => {
-        const id = transport.sessionId;
-        if (id && sessions.get(id)?.transport === transport)
-          sessions.delete(id);
-      };
-    }
-    try {
-      if (newSession)
-        await server.connect(transport as Parameters<typeof server.connect>[0]);
-      await transport.handleRequest(req, res, body);
-    } catch {
-      if (!res.headersSent) sendJson(res, 500, { error: 'internal_error' });
-      if (newSession) {
-        await transport.close().catch(() => undefined);
-        await server.close().catch(() => undefined);
+      if (req.method !== 'POST') {
+        sendJson(res, 405, { error: 'method_not_allowed' });
+        return;
       }
-    }
-    if (newSession && !transport.sessionId) {
-      await transport.close().catch(() => undefined);
-      await server.close().catch(() => undefined);
+      let body: unknown;
+      try {
+        body = await readJson(req);
+      } catch (error) {
+        if ((error as { code?: string }).code === 'request_too_large') {
+          sendJson(res, 413, { error: 'request_too_large' });
+          return;
+        }
+        sendJson(res, 400, { error: 'invalid_request' });
+        return;
+      }
+      const bearer = readBearer(req);
+      requested = requestedTool(body);
+      method = requestedMethod(body);
+      mcpSessionIdForLog = mcpSessionIdHeader(req);
+      // This outer gate is authentication-only, for every method including
+      // `tools/call`: it proves the bearer is a live, correctly-scoped grant
+      // for the current catalog shape (`executeDiscovery` ->
+      // evaluateRuntimeGrantDiscoveryPolicy) and nothing more. It deliberately
+      // never checks turn binding, turn activity, or per-tool allowance --
+      // that is the job of the *inner* gate, which every registered tool goes
+      // through on every real invocation via the `authorize` callback threaded
+      // through `toolCatalog.contribute` below.
+      const authResult = bearer
+        ? await input.authorize.executeDiscovery({
+            bearerToken: bearer,
+            currentCatalogDigest: input.toolCatalog.digest,
+          })
+        : null;
+      if (!authResult || authResult.kind !== 'authorized') {
+        input.logger?.log('warn', 'runtime.mcp.auth.denied', {
+          bearer_present: bearer !== null,
+          ...(authResult?.kind === 'denied'
+            ? { reason: authResult.reason }
+            : {}),
+          ...(requested ? { requested_tool: requested } : {}),
+          ...(method ? { method } : {}),
+          ...(mcpSessionIdForLog ? { mcp_session_id: mcpSessionIdForLog } : {}),
+        });
+        sendJson(res, 401, { error: 'unauthorized' });
+        return;
+      }
+      const grant = authResult.context;
+      const sessionId = req.headers['mcp-session-id'];
+      if (Array.isArray(sessionId)) {
+        sendJson(res, 404, { error: 'not_found' });
+        return;
+      }
+      const existing =
+        typeof sessionId === 'string' ? sessions.get(sessionId) : undefined;
+      if (sessionId && !existing) {
+        input.logger?.log('warn', 'runtime.mcp.session.denied', {
+          reason: 'mcp_session_unknown',
+          mcp_session_id: sessionId,
+        });
+        sendJson(res, 404, { error: 'not_found' });
+        return;
+      }
+      if (existing && existing.grantId !== grant.grantId) {
+        input.logger?.log('warn', 'runtime.mcp.session.denied', {
+          reason: 'mcp_session_grant_changed',
+          ...(typeof sessionId === 'string'
+            ? { mcp_session_id: sessionId }
+            : {}),
+        });
+        sendJson(res, 401, { error: 'unauthorized' });
+        return;
+      }
+      const mcpServer =
+        existing?.server ??
+        new McpServer({
+          name: 'agent-server-memory-mcp',
+          version: '0.1.0',
+        });
+      server = mcpServer;
+      transport =
+        existing?.transport ??
+        new StreamableHTTPServerTransport({
+          sessionIdGenerator: randomUUID,
+          onsessioninitialized: (id) => {
+            sessions.set(id, {
+              server: mcpServer,
+              transport: transport!,
+              grantId: grant.grantId,
+            });
+          },
+        });
+      newSession = !existing;
+      if (!existing) {
+        input.toolCatalog.contribute({
+          server: mcpServer,
+          grant,
+          authorize: async (toolRef) => {
+            const authorized = await input.authorize.execute({
+              bearerToken: bearer!,
+              requestedTool: toolRef,
+              currentCatalogDigest: input.toolCatalog.digest,
+            });
+            if (authorized.kind === 'authorized') return authorized.context;
+            input.logger?.log('warn', 'runtime.mcp.tool.denied', {
+              reason: authorized.reason,
+              tool_ref: toolRef,
+            });
+            return null;
+          },
+        });
+      }
+      if (newSession) {
+        transport.onclose = () => {
+          const id = transport?.sessionId;
+          if (id && sessions.get(id)?.transport === transport)
+            sessions.delete(id);
+        };
+      }
+      if (newSession)
+        await mcpServer.connect(
+          transport as Parameters<typeof mcpServer.connect>[0],
+        );
+      await transport.handleRequest(req, res, body);
+      if (newSession && !transport.sessionId) {
+        await transport.close().catch(() => undefined);
+        await mcpServer.close().catch(() => undefined);
+      }
+    } catch {
+      try {
+        input.logger?.log('error', 'runtime.mcp.request.failed');
+      } catch {
+        // Logging must not turn a controlled request failure into a rejection.
+      }
+      try {
+        if (!res.headersSent) sendJson(res, 500, { error: 'internal_error' });
+        else if (!res.writableEnded) res.destroy();
+      } catch {
+        // The client may have already disconnected while the failure was
+        // being handled; there is no second response to send in that case.
+      }
+      if (newSession && transport) {
+        await transport.close().catch(() => undefined);
+        await server?.close().catch(() => undefined);
+      }
     }
   };
 }

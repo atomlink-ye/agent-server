@@ -127,6 +127,52 @@ describe('browser-safe Vite facade', () => {
     expect(JSON.stringify(body)).not.toContain('provider_session');
   });
 
+  it('preserves dispatch presentation and the original brief through the browser facade', async () => {
+    process.env.AGENT_SERVER_SERVICE_TOKEN = SERVICE_TOKEN;
+    const dispatch = {
+      kind: 'work_item_dispatch',
+      work_item_id: WORK_ID,
+      reason: 'assignment',
+      actor_label: 'Alex',
+      recipient_label: 'Maya',
+      task_title: 'Name our top 3 competitors',
+    };
+    const message = {
+      message_id: VERSION_ID,
+      conversation_id: WORK_ID,
+      sequence: 1,
+      author_type: 'principal',
+      author_id: 'svc_local',
+      body: 'Original Agent instructions remain available for inspection.',
+      agent_definition_id: null,
+      agent_version_id: null,
+      runtime_epoch: null,
+      work_ref: null,
+      dispatch,
+      created_at: '2026-09-07T00:00:00.000Z',
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              messages: [
+                { ...message, turn_metadata: { private: 'internal' } },
+              ],
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          ),
+      ),
+    );
+
+    const response = await appWithBrowserRoutes().request(
+      `/api/conversations/${WORK_ID}/messages`,
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ messages: [message] });
+  });
+
   it('keeps the Work chat card bounded to browser-safe fields', async () => {
     process.env.AGENT_SERVER_SERVICE_TOKEN = SERVICE_TOKEN;
     vi.stubGlobal(

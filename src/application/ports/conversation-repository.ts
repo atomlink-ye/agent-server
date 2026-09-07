@@ -2,7 +2,10 @@ import type {
   Conversation,
   ConversationMember,
 } from '../../domain/chat/conversation.js';
-import type { ChatMessage } from '../../domain/chat/chat-message.js';
+import type {
+  ChatMessage,
+  WorkItemDispatch,
+} from '../../domain/chat/chat-message.js';
 import type { AgentChatRuntime } from '../../domain/chat/agent-chat-runtime.js';
 
 export type ConversationMessageAuthorContext =
@@ -59,6 +62,8 @@ export interface ConversationRepository {
     readonly author: ConversationMessageAuthorContext;
     readonly body: string;
     readonly workRef?: string | null;
+    /** Narrow server-authored metadata for a WorkItem-triggered dispatch. */
+    readonly dispatch?: WorkItemDispatch | null;
     readonly deliveryId?: string | null;
   }): Promise<ChatMessage>;
 

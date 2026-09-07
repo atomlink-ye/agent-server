@@ -464,6 +464,18 @@ async function wakeOne(
           reason: input.reason ?? 'mention',
         },
       },
+      dispatch: {
+        kind: 'work_item_dispatch',
+        workItemId: input.workItem.id,
+        reason: input.reason ?? 'mention',
+        actorLabel: boundedSnapshotText(
+          input.actorLabel ?? input.actorId,
+          'Someone',
+          256,
+        ),
+        recipientLabel: boundedSnapshotText(agent.displayName, 'Coworker', 256),
+        taskTitle: boundedSnapshotText(input.workItem.title, 'Task', 200),
+      },
       body,
     });
     dependencies.logger?.log(
@@ -607,4 +619,16 @@ function dedupe(values: readonly string[]): readonly string[] {
 
 function errorReason(error: unknown): string {
   return error instanceof Error ? error.name : 'unknown';
+}
+
+function boundedSnapshotText(
+  value: string | undefined,
+  fallback: string,
+  maxLength: number,
+): string {
+  const normalized = value?.trim() ?? '';
+  if (!normalized) return fallback;
+  return normalized.length <= maxLength
+    ? normalized
+    : `${normalized.slice(0, maxLength - 1)}…`;
 }

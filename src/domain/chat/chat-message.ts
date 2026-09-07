@@ -1,5 +1,16 @@
 export type ChatMessageAuthorType = 'principal' | 'agent_definition';
 
+export type WorkItemDispatchReason = 'assignment' | 'mention' | 'comment';
+
+export interface WorkItemDispatch {
+  readonly kind: 'work_item_dispatch';
+  readonly workItemId: string;
+  readonly reason: WorkItemDispatchReason;
+  readonly actorLabel: string;
+  readonly recipientLabel: string;
+  readonly taskTitle: string;
+}
+
 export interface ChatMessage {
   readonly id: string;
   readonly tenantId: string;
@@ -13,6 +24,7 @@ export interface ChatMessage {
   readonly runtimeEpoch: number | null;
   readonly provider: string | null;
   readonly workRef: string | null;
+  readonly dispatch?: WorkItemDispatch | null;
   /** Optional durable delivery identity; legacy messages have no value. */
   readonly deliveryId?: string | null;
   readonly createdAt: string;

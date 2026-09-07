@@ -14,6 +14,15 @@ export interface Conversation {
 
 export type ChatAuthorType = 'principal' | 'agent_definition';
 
+export interface WorkItemDispatch {
+  readonly kind: 'work_item_dispatch';
+  readonly workItemId: string;
+  readonly reason: 'assignment' | 'mention' | 'comment';
+  readonly actorLabel: string;
+  readonly recipientLabel: string;
+  readonly taskTitle: string;
+}
+
 export interface ChatMessage {
   readonly id: string;
   readonly conversationId: ConversationId;
@@ -22,6 +31,7 @@ export interface ChatMessage {
   readonly authorId: string;
   readonly body: string;
   readonly workRef: string | null;
+  readonly dispatch?: WorkItemDispatch | null;
   readonly createdAt: string;
 }
 

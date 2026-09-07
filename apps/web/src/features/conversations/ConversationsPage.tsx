@@ -438,6 +438,9 @@ export function ConversationsPage({
                 state={messageState}
                 onRetry={retryMessages}
                 onOpenWork={openWork}
+                fallbackRecipientLabel={
+                  selectedConversation?.directAgent?.displayName ?? null
+                }
               />
               <ChatComposer
                 draft={messageState?.draft ?? ''}

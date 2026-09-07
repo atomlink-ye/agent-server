@@ -46,6 +46,21 @@ Conversation source references are accepted only as a pair. Creation validates t
 
 A new mention — and an explicit `assignee_id`, which counts as an implicit mention — wakes the named Coworker through the existing direct-chat wake path (`findOrCreateDirect` -> principal-authored message -> chat dispatch). Waking is best-effort: a chat failure is logged and never rolls back or fails the WorkItem mutation.
 
+Wake messages retain the complete Agent instructions in `body`. Their optional
+`dispatch` projection identifies `kind: work_item_dispatch`, `work_item_id`,
+`reason` (`assignment`, `mention`, or `comment`), `actor_label`,
+`recipient_label`, and `task_title`. Labels and title describe the event when it
+was recorded; they do not prove that the Coworker claimed or completed the Task.
+The browser renders a compact Task event with a `/tasks/:workItemId` link,
+reads current status from the owner-scoped WorkItem API, and keeps the original
+instructions in a closed-by-default disclosure. Generic turn metadata is not
+part of this projection. `work_ref` continues to identify formal Work only.
+
+Historical assignment briefs have no durable dispatch marker. The browser can
+recognize a complete canonical assignment brief with matching WorkItem/claim
+identifiers for display only; this recognition does not write state or establish assignment
+authority. Other unmarked messages remain ordinary conversation messages.
+
 A durable per-WorkItem counter breaks a mutual-wake loop: `wakeMentionedAgents` refuses to wake past `DEFAULT_WAKE_LOOP_HARD_CAP` (20) consecutive agent-caused wakes on the same WorkItem with no human back in the loop. A human-caused mention or comment resets the counter. This is a different axis from `MAX_WORK_ITEM_MENTIONS` (a width limit on one message's @-tokens): the loop guard bounds depth across turns, not breadth within one turn. See `src/application/work-organization/wake-loop-guard.ts`; the count-vs-cap comparison itself is generic (`src/application/coordination/loop-cap-guard.ts`), shared in spirit — not in storage or reset semantics — with the unrelated Team-collaboration `maxLeadTurns` backstop.
 
 Claiming a WorkItem is a single atomic `UPDATE` whose matched-row count is the only source of truth. A WorkItem is claimable when it is unassigned, already held by the claimant, or stale (`updated_at` older than 20 minutes, the escape hatch for a crashed Coworker). A successful claim on a Board also advances the card from a `todo` column into that Board's `doing` column — forward only, never out of an unclassified column. Losing the race is `409 work_item_claim_conflict`, not a silent no-op.
@@ -122,5 +137,9 @@ This is the product coordination plane. It is unrelated to the Team-collaboratio
 `0062_coworker_work_organization.sql` adds durable WorkItem, comment, Board, column, and placement tables. `0064_work_item_mentions_and_column_kinds.sql` adds `product_work_board_columns.kind` plus `mentions` on WorkItems and comments, and backfills `kind` only on exact case-insensitive title matches. `0065_work_item_wake_loop_counters.sql` adds the per-WorkItem mutual-wake counter backing the loop guard above. The current Prove/MVE scope uses the existing single-service process for promotion serialization plus the durable unique linked-Work constraint. It does not claim multi-host promotion recovery or a generalized workflow engine.
 
 The 0064 title backfill runs only when upgrading a database that has not recorded that migration. Already-applied migrations are skipped; normal Board creation, editing, and claiming do not run that backfill. Stored kinds do not distinguish a historical backfill from an explicit user selection, so a bulk reset to null would also erase user declarations.
+
+`0068_chat_message_work_item_dispatch.sql` adds nullable dispatch presentation to
+Conversation messages. It does not change message bodies or backfill historical
+messages from prose. Apply it before running a server that writes this metadata.
 
 The WorkItem/Board state is canonical database state. Frontend optimistic/drag UI must converge by re-reading the bounded API response.

@@ -42,6 +42,17 @@ export const ConversationMessageAuthorTypeSchema = z.enum([
   'agent_definition',
 ]);
 
+export const WorkItemDispatchSchema = z
+  .object({
+    kind: z.literal('work_item_dispatch'),
+    work_item_id: z.uuid(),
+    reason: z.enum(['assignment', 'mention', 'comment']),
+    actor_label: z.string().trim().min(1).max(256),
+    recipient_label: z.string().trim().min(1).max(256),
+    task_title: z.string().trim().min(1).max(200),
+  })
+  .strict();
+
 export const ConversationMessageSchema = z.object({
   message_id: z.string().min(1),
   conversation_id: z.string().min(1),
@@ -53,6 +64,7 @@ export const ConversationMessageSchema = z.object({
   agent_version_id: z.string().nullable(),
   runtime_epoch: z.number().int().nullable(),
   work_ref: z.string().nullable(),
+  dispatch: WorkItemDispatchSchema.nullable().optional(),
   created_at: z.string().min(1),
 });
 
@@ -118,6 +130,7 @@ export const PostConversationMessageRequestSchema = z
 export type ConversationKind = z.infer<typeof ConversationKindSchema>;
 export type Conversation = z.infer<typeof ConversationSchema>;
 export type ConversationMessage = z.infer<typeof ConversationMessageSchema>;
+export type WorkItemDispatch = z.infer<typeof WorkItemDispatchSchema>;
 export type ChatWorkCard = z.infer<typeof ChatWorkCardSchema>;
 export type ConversationListResponse = z.infer<
   typeof ConversationListResponseSchema

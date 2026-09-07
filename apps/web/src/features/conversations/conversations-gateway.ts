@@ -143,7 +143,28 @@ function normalizeMessage(value: unknown): ChatMessage {
     authorId: requiredString(record?.author_id),
     body: requiredString(record?.body),
     workRef: nullableString(record?.work_ref),
+    dispatch: normalizeDispatch(record?.dispatch),
     createdAt: requiredString(record?.created_at),
+  };
+}
+
+function normalizeDispatch(value: unknown): ChatMessage['dispatch'] {
+  if (value === null || value === undefined) return null;
+  const record = asRecord(value);
+  if (!record || record.kind !== 'work_item_dispatch') throw invalidResponse();
+  const reason = record.reason;
+  if (reason !== 'assignment' && reason !== 'mention' && reason !== 'comment') {
+    throw invalidResponse();
+  }
+  const workItemId = requiredString(record.work_item_id);
+  if (!isUuid(workItemId)) throw invalidResponse();
+  return {
+    kind: 'work_item_dispatch',
+    workItemId,
+    reason,
+    actorLabel: requiredString(record.actor_label),
+    recipientLabel: requiredString(record.recipient_label),
+    taskTitle: requiredString(record.task_title),
   };
 }
 

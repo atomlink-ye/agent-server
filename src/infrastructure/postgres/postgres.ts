@@ -99,6 +99,7 @@ export const durableKernelMigrationFileNames = [
   '0065_work_item_wake_loop_counters.sql',
   '0066_whisper_channels.sql',
   '0067_agent_chat_runtime_busy_statuses.sql',
+  '0068_chat_message_work_item_dispatch.sql',
 ] as const;
 const durableKernelMigrationRegistryTable = 'durable_kernel_schema_migrations';
 const durableKernelMigrationAdvisoryLock = [

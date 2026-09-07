@@ -43,6 +43,11 @@ A persisted Conversation message can create a WorkItem through an editable `Crea
 
 Formal Work completion is projected by the backend into WorkItem `in_review`. The frontend must never infer review completion from transcript text, runtime events, or visual status. A human explicitly moves the WorkItem from `in_review` to `done`.
 
+WorkItem dispatch messages appear as compact Task events in Conversations. The
+event names the actor and recipient, links to the Task, and reads its current
+status from the WorkItem API. Agent instructions remain available through an
+explicit disclosure. An assignment event alone never implies a successful claim.
+
 A Work Card in Chat is still a bridge into the Work tab. Opening any Conversation, Task, Board, Work, Agent, or File changes selection inside the same application shell; it must not navigate to a second dashboard shell.
 
 The Work tab preserves the useful Work product capabilities that existed before the frontend convergence:

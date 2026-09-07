@@ -1,10 +1,18 @@
-import { useState, type ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
-import type { ConversationId, ChatMessage } from './contracts';
+import { useEffect, useState, type ReactNode } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import type {
+  ConversationId,
+  ChatMessage,
+  WorkItemDispatch,
+} from '../contracts';
 import type { ConversationMessagesState } from '../stores/messages';
 import { WorkCard } from '../../work/components/WorkCard';
 import { workOrganizationClient } from '../../work-organization/client';
+import { isFeatureUnavailable } from '../../../api/feature-availability';
+import { STATUS_LABELS } from '../../work-organization/format';
 import { AssistantMarkdown } from './assistant-markdown';
+import { recognizeLegacyWorkItemAssignmentBrief } from '../legacy-work-item-assignment-brief';
+import './dispatch-card.css';
 
 export interface ChatTranscriptProps {
   readonly conversationId: ConversationId | null;
@@ -12,6 +20,7 @@ export interface ChatTranscriptProps {
   readonly state: ConversationMessagesState | null;
   readonly onRetry: () => void;
   readonly onOpenWork: (workId: string, conversationId: ConversationId) => void;
+  readonly fallbackRecipientLabel?: string | null;
 }
 
 function StateMessage({ children }: { readonly children: ReactNode }) {
@@ -26,6 +35,41 @@ function StateMessage({ children }: { readonly children: ReactNode }) {
 }
 
 function Message({
+  message,
+  showWorkCard,
+  onOpenWork,
+  fallbackRecipientLabel,
+}: {
+  readonly message: ChatMessage;
+  readonly showWorkCard: boolean;
+  readonly onOpenWork: (workId: string, conversationId: ConversationId) => void;
+  readonly fallbackRecipientLabel: string | null;
+}) {
+  const legacyDispatch =
+    message.dispatch == null && message.authorType === 'principal'
+      ? recognizeLegacyWorkItemAssignmentBrief(message.body)
+      : null;
+  const dispatch = message.dispatch ?? legacyDispatch;
+  if (dispatch) {
+    return (
+      <DispatchCard
+        dispatch={dispatch}
+        body={message.body}
+        fallbackRecipientLabel={fallbackRecipientLabel}
+      />
+    );
+  }
+
+  return (
+    <NormalMessage
+      message={message}
+      showWorkCard={showWorkCard}
+      onOpenWork={onOpenWork}
+    />
+  );
+}
+
+function NormalMessage({
   message,
   showWorkCard,
   onOpenWork,
@@ -130,12 +174,138 @@ function Message({
   );
 }
 
+type DispatchStatus =
+  | { readonly kind: 'loading' }
+  | { readonly kind: 'ready'; readonly status: keyof typeof STATUS_LABELS }
+  | { readonly kind: 'unavailable' }
+  | { readonly kind: 'error' };
+
+const dispatchRefreshIntervalMs = 3_000;
+
+function DispatchCard({
+  dispatch,
+  body,
+  fallbackRecipientLabel,
+}: {
+  readonly dispatch: WorkItemDispatch;
+  readonly body: string;
+  readonly fallbackRecipientLabel: string | null;
+}) {
+  const [status, setStatus] = useState<DispatchStatus>({ kind: 'loading' });
+  const [taskTitle, setTaskTitle] = useState(dispatch.taskTitle);
+
+  useEffect(() => {
+    let disposed = false;
+    let intervalId: number | null = null;
+    let refreshInFlight = false;
+
+    const load = (): void => {
+      if (
+        disposed ||
+        refreshInFlight ||
+        document.visibilityState !== 'visible'
+      ) {
+        return;
+      }
+      refreshInFlight = true;
+      void workOrganizationClient
+        .getWorkItem(dispatch.workItemId)
+        .then((detail) => {
+          if (disposed) return;
+          const nextStatus = detail.work_item.status;
+          setStatus({ kind: 'ready', status: nextStatus });
+          setTaskTitle(detail.work_item.title);
+        })
+        .catch((reason: unknown) => {
+          if (!disposed)
+            setStatus({
+              kind: isFeatureUnavailable(reason) ? 'unavailable' : 'error',
+            });
+        })
+        .finally(() => {
+          refreshInFlight = false;
+        });
+    };
+
+    const startPolling = (): void => {
+      if (disposed || document.visibilityState !== 'visible') return;
+      load();
+      intervalId = window.setInterval(load, dispatchRefreshIntervalMs);
+    };
+    const handleVisibility = (): void => {
+      if (document.visibilityState === 'visible' && intervalId === null) {
+        startPolling();
+      } else if (
+        document.visibilityState !== 'visible' &&
+        intervalId !== null
+      ) {
+        window.clearInterval(intervalId);
+        intervalId = null;
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    startPolling();
+    return () => {
+      disposed = true;
+      if (intervalId !== null) window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [dispatch.workItemId]);
+
+  const actor = safeLabel(dispatch.actorLabel, 'Someone');
+  const recipient = safeLabel(
+    dispatch.recipientLabel,
+    safeLabel(fallbackRecipientLabel, 'Coworker'),
+  );
+  const action =
+    dispatch.reason === 'assignment'
+      ? 'assigned'
+      : dispatch.reason === 'mention'
+        ? 'mentioned'
+        : 'commented for';
+
+  return (
+    <article className="dispatch-card" aria-label="Task dispatch">
+      <p className="dispatch-card__event">
+        <strong>{actor}</strong> {action} <strong>{recipient}</strong>{' '}
+        {dispatch.reason === 'assignment' ? 'to' : 'on'}{' '}
+        <Link to={`/tasks/${encodeURIComponent(dispatch.workItemId)}`}>
+          {taskTitle}
+        </Link>
+      </p>
+      <p className="dispatch-card__status" aria-live="polite">
+        {status.kind === 'loading' ? 'Checking task status…' : null}
+        {status.kind === 'ready' ? STATUS_LABELS[status.status] : null}
+        {status.kind === 'unavailable' ? 'Task status is unavailable.' : null}
+        {status.kind === 'error' ? 'Task status could not be loaded.' : null}
+      </p>
+      <details className="dispatch-card__details">
+        <summary>Dispatch details</summary>
+        <p>{body}</p>
+      </details>
+    </article>
+  );
+}
+
+function safeLabel(value: string | null | undefined, fallback: string): string {
+  const trimmed = value?.trim();
+  return trimmed && !isUuidLike(trimmed) ? trimmed : fallback;
+}
+
+function isUuidLike(value: string): boolean {
+  return /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/iu.test(
+    value,
+  );
+}
+
 export function ChatTranscript({
   conversationId,
   hasConversations,
   state,
   onRetry,
   onOpenWork,
+  fallbackRecipientLabel = null,
 }: ChatTranscriptProps) {
   const navigate = useNavigate();
 
@@ -205,6 +375,7 @@ export function ChatTranscript({
             cardAnchorByWork.get(message.workRef) === message.sequence
           }
           onOpenWork={onOpenWork}
+          fallbackRecipientLabel={fallbackRecipientLabel}
         />
       ))}
       {awaitingReply ? (

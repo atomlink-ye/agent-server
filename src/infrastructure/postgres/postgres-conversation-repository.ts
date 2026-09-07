@@ -7,7 +7,10 @@ import {
   assertDirectConversationInvariant,
   directPairKey,
 } from '../../domain/chat/conversation.js';
-import type { ChatMessage } from '../../domain/chat/chat-message.js';
+import type {
+  ChatMessage,
+  WorkItemDispatch,
+} from '../../domain/chat/chat-message.js';
 import type {
   AgentChatRuntime,
   AgentChatRuntimeStatus,
@@ -73,6 +76,7 @@ type ChatMessageRow = {
   runtime_epoch: number | null;
   provider: string | null;
   work_ref: string | null;
+  work_item_dispatch: WorkItemDispatch | null;
   delivery_id: string | null;
   created_at: string | Date;
 };
@@ -293,6 +297,7 @@ export class PostgresConversationRepository implements ConversationRepository {
     readonly author: ConversationMessageAuthorContext;
     readonly body: string;
     readonly workRef?: string | null;
+    readonly dispatch?: WorkItemDispatch | null;
     readonly deliveryId?: string | null;
   }): Promise<ChatMessage> {
     const authorType = input.author.type;
@@ -375,8 +380,8 @@ export class PostgresConversationRepository implements ConversationRepository {
       const messageResult = hasDeliveryId
         ? await client.query<ChatMessageRow>(
             `INSERT INTO chat_messages
-             (id, tenant_id, conversation_id, sequence, author_type, author_id, body, agent_definition_id, agent_version_id, runtime_epoch, provider, work_ref, delivery_id, created_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+             (id, tenant_id, conversation_id, sequence, author_type, author_id, body, agent_definition_id, agent_version_id, runtime_epoch, provider, work_ref, work_item_dispatch, delivery_id, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
              ON CONFLICT (tenant_id, conversation_id, delivery_id)
              WHERE delivery_id IS NOT NULL DO NOTHING
              RETURNING *`,
@@ -393,14 +398,15 @@ export class PostgresConversationRepository implements ConversationRepository {
               runtimeEpoch,
               provider,
               input.workRef ?? null,
+              input.dispatch ?? null,
               input.deliveryId,
               now,
             ],
           )
         : await client.query<ChatMessageRow>(
             `INSERT INTO chat_messages
-             (id, tenant_id, conversation_id, sequence, author_type, author_id, body, agent_definition_id, agent_version_id, runtime_epoch, provider, work_ref, created_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+             (id, tenant_id, conversation_id, sequence, author_type, author_id, body, agent_definition_id, agent_version_id, runtime_epoch, provider, work_ref, work_item_dispatch, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
              RETURNING *`,
             [
               messageId,
@@ -415,6 +421,7 @@ export class PostgresConversationRepository implements ConversationRepository {
               runtimeEpoch,
               provider,
               input.workRef ?? null,
+              input.dispatch ?? null,
               now,
             ],
           );
@@ -683,6 +690,7 @@ function mapChatMessage(row: ChatMessageRow): ChatMessage {
     runtimeEpoch: row.runtime_epoch ?? null,
     provider: row.provider ?? null,
     workRef: row.work_ref ?? null,
+    dispatch: row.work_item_dispatch ?? null,
     deliveryId: row.delivery_id ?? null,
     createdAt: iso_date(row.created_at),
   });

@@ -391,6 +391,16 @@ function messageResponse(message: ChatMessage) {
     agent_version_id: message.agentVersionId,
     runtime_epoch: message.runtimeEpoch,
     work_ref: message.workRef,
+    dispatch: message.dispatch
+      ? {
+          kind: message.dispatch.kind,
+          work_item_id: message.dispatch.workItemId,
+          reason: message.dispatch.reason,
+          actor_label: message.dispatch.actorLabel,
+          recipient_label: message.dispatch.recipientLabel,
+          task_title: message.dispatch.taskTitle,
+        }
+      : null,
     created_at: message.createdAt,
   };
 }

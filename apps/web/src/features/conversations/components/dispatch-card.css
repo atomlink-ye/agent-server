@@ -1,0 +1,60 @@
+.dispatch-card {
+  width: min(100%, 620px);
+  align-self: flex-start;
+  border: 1px solid var(--sky-200);
+  border-left: 3px solid var(--skype);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, var(--sky-50), var(--cloud));
+  box-shadow: var(--shadow-soft);
+  padding: 13px 15px;
+  color: var(--ink-700);
+}
+
+.dispatch-card__event,
+.dispatch-card__status,
+.dispatch-card__details p {
+  margin: 0;
+}
+
+.dispatch-card__event {
+  line-height: 1.5;
+}
+
+.dispatch-card__event a {
+  color: var(--skype);
+  font-weight: 700;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 2px;
+}
+
+.dispatch-card__status {
+  margin-top: 7px;
+  color: var(--ink-500);
+  font-size: var(--text-sm);
+}
+
+.dispatch-card__details {
+  margin-top: 10px;
+  border-top: 1px solid var(--sky-100);
+  padding-top: 8px;
+  color: var(--ink-600);
+  font-size: var(--text-sm);
+}
+
+.dispatch-card__details summary {
+  width: fit-content;
+  cursor: pointer;
+  color: var(--ink-600);
+  font-weight: 600;
+}
+
+.dispatch-card__details p {
+  margin-top: 8px;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 700px) {
+  .dispatch-card {
+    width: 100%;
+  }
+}

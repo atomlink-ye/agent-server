@@ -126,6 +126,54 @@ describe('ExecutionRuntimeChatTurnProvider', () => {
     });
   });
 
+  it('names every granted platform tool in the prompt so a deferred MCP catalog stays reachable', async () => {
+    const creator = new RecordingDesiredSpec([
+      runtimeSession('runtime-session-1'),
+    ]);
+    const executor = new RecordingTurnExecutor();
+    const provider = new ExecutionRuntimeChatTurnProvider(
+      creator,
+      executor,
+      recordingConfiguration,
+    );
+
+    await provider.runTurn({
+      ...turnIdentity('agent-definition-1', 'agent-version-1'),
+      brain: chatBrain({
+        toolRefs: [
+          'agent-server/workspace-list',
+          'agent-server/workspace-read',
+          'agent-server/workspace-write',
+          'agent-server/work-item-claim',
+        ],
+      }),
+      messages: [
+        { authorType: 'principal', authorId: 'principal-1', body: 'hello' },
+      ],
+    });
+
+    const prompt = executor.calls[0]?.prompt ?? '';
+    expect(prompt).toContain('GRANTED PLATFORM TOOLS:');
+    expect(prompt).toContain('MCP server named "agent-server"');
+    for (const name of [
+      'workspace_list',
+      'workspace_read',
+      'workspace_write',
+      'work_item_claim',
+      'list_agent_workflows',
+      'product_work_run_start',
+    ])
+      expect(prompt).toContain(`- ${name}`);
+    expect(creator.calls[0]?.toolRefs).toEqual([
+      'agent-server/workspace-list',
+      'agent-server/workspace-read',
+      'agent-server/workspace-write',
+      'agent-server/work-item-claim',
+      'agent-server/list-agent-workflows',
+      'agent-server/product-work-run-start',
+    ]);
+  });
+
   it('passes delta and canonical recovery prompts so runtime Ensure chooses reuse or replacement', async () => {
     const creator = new RecordingDesiredSpec([
       runtimeSession('runtime-session-1'),
@@ -366,6 +414,7 @@ function chatBrain(
     instructions?: string;
     capabilitySummary?: Record<string, unknown>;
     agentHome?: Record<string, unknown>;
+    toolRefs?: readonly string[];
   } = {},
 ): ResolvedChatBrain {
   const agentDefinitionId = input.agentDefinitionId ?? 'agent-definition-1';
@@ -408,6 +457,6 @@ function chatBrain(
     capabilitySummary: input.capabilitySummary ?? {},
     agentHome: input.agentHome ?? {},
     resolvedSkills: [],
-    toolRefs: [],
+    toolRefs: input.toolRefs ?? [],
   } as unknown as ResolvedChatBrain;
 }

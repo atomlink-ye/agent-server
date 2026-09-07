@@ -19,6 +19,8 @@ import {
   AGENT_SERVER_LIST_AGENT_WORKFLOWS_TOOL_REF,
   AGENT_SERVER_PRODUCT_WORK_RUN_START_TOOL_REF,
 } from '../../application/agents/built-in-skills.js';
+import { renderGrantedPlatformToolsPrompt } from '../../application/agents/runtime-tool-mcp-names.js';
+import { AGENT_SERVER_EXECUTION_MCP_SERVER_NAME } from '../../application/ports/runtime-extension-binding.js';
 import { createDesiredRuntimeSystemPrompt } from '../../domain/runtime/desired-runtime-system-prompt.js';
 
 /**
@@ -63,13 +65,7 @@ export class ExecutionRuntimeChatTurnProvider implements ChatTurnProvider {
       agentVersionId: turnContext.agentVersionId,
       environmentVersionId: null,
       resolvedSkills: input.brain.resolvedSkills,
-      toolRefs: [
-        ...new Set([
-          ...input.brain.toolRefs,
-          AGENT_SERVER_LIST_AGENT_WORKFLOWS_TOOL_REF,
-          AGENT_SERVER_PRODUCT_WORK_RUN_START_TOOL_REF,
-        ]),
-      ],
+      toolRefs: grantedChatToolRefs(input),
       configuration: {
         ...this.configuration,
         contextEpoch: turnContext.runtimeEpoch,
@@ -178,6 +174,24 @@ function buildExecutionPrompt(
   );
 }
 
+/**
+ * The desired spec and the system prompt must describe the same grant: the
+ * spec is what the Runtime authorizes, the prompt is what the Agent knows it
+ * holds. Deriving both from this one list keeps a granted tool from being
+ * invisible to the model that was granted it.
+ */
+function grantedChatToolRefs(
+  input: Parameters<ChatTurnProvider['runTurn']>[0],
+): readonly string[] {
+  return Object.freeze([
+    ...new Set([
+      ...input.brain.toolRefs,
+      AGENT_SERVER_LIST_AGENT_WORKFLOWS_TOOL_REF,
+      AGENT_SERVER_PRODUCT_WORK_RUN_START_TOOL_REF,
+    ]),
+  ]);
+}
+
 /** Provider bootstrap state must remain stable across turns in one chat epoch. */
 function buildStableSystemPrompt(
   input: Parameters<ChatTurnProvider['runTurn']>[0],
@@ -189,8 +203,21 @@ function buildStableSystemPrompt(
     `Agent definition ID: ${input.agentDefinitionId}`,
     `Agent version ID: ${input.agentVersionId}`,
     `RESOLVED SKILLS:\n${deterministicJson(input.brain.resolvedSkills)}`,
+    renderGrantedPlatformTools(input),
     `\nTRUSTED AGENT INSTRUCTIONS:\n${input.brain.instructions}`,
-  ].join('\n');
+  ]
+    .filter((section) => section !== null)
+    .join('\n');
+}
+
+function renderGrantedPlatformTools(
+  input: Parameters<ChatTurnProvider['runTurn']>[0],
+): string | null {
+  const section = renderGrantedPlatformToolsPrompt(
+    grantedChatToolRefs(input),
+    AGENT_SERVER_EXECUTION_MCP_SERVER_NAME,
+  );
+  return section === null ? null : `\n${section}`;
 }
 
 function buildTurnPrompt(

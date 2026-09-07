@@ -7,6 +7,8 @@ import { terminalRunStatuses } from '../../domain/runs/run-status.js';
 import type { Task } from '../../domain/tasks/task.js';
 import type { Logger } from '../../shared/observability/logger.js';
 import { AGENT_SERVER_PLATFORM_COLLABORATION_TOOL_REFS } from '../agents/built-in-skills.js';
+import { renderGrantedPlatformToolsPrompt } from '../agents/runtime-tool-mcp-names.js';
+import { AGENT_SERVER_EXECUTION_MCP_SERVER_NAME } from '../ports/runtime-extension-binding.js';
 import { resolveRuntimeModelPolicy } from '../agents/runtime-model-policy.js';
 import type { RuntimeSessionStore } from '../ports/runtime-session-store.js';
 import type {
@@ -197,7 +199,7 @@ export class AgentRunExecutor {
           ])
         : resolved.toolRefs;
 
-    const prompts = await this.promptContext.buildTurnPrompts({
+    const builtPrompts = await this.promptContext.buildTurnPrompts({
       resolved: resolvedForPrompt,
       priorExternalSessionId: runtimeSession?.id ?? null,
       team: collaborativeTeam,
@@ -206,6 +208,20 @@ export class AgentRunExecutor {
       leadState: agenticLeadState,
       task,
     });
+    // The Runtime grant and the system prompt must describe the same tools:
+    // the provider hides MCP tools from the directly-visible tool list, so a
+    // Work participant that is never told the names does the work by hand
+    // instead of through the Runtime.
+    const grantedPlatformTools = renderGrantedPlatformToolsPrompt(
+      runtimeToolRefs,
+      AGENT_SERVER_EXECUTION_MCP_SERVER_NAME,
+    );
+    const prompts = grantedPlatformTools
+      ? {
+          ...builtPrompts,
+          systemPrompt: `${builtPrompts.systemPrompt}\n\n${grantedPlatformTools}`,
+        }
+      : builtPrompts;
 
     const environmentVersionId =
       productSession?.environmentVersionId ??

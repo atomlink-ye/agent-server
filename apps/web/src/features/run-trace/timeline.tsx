@@ -124,20 +124,13 @@ function ActivityTimeline({
       </header>
       {chronological.length ? (
         <ol>
-          {chronological.map((event) => (
-            <li key={`${event.runId}:${event.sequence}:${event.createdAt}`}>
-              <time dateTime={event.createdAt}>
-                {formatTimestamp(event.createdAt)}
-              </time>
-              <span
-                className={`run-trace__event-dot run-trace__event-dot--${eventTone(event.type)}`}
-              />
-              <div>
-                <strong>{eventLabel(event.type)}</strong>
-                <small>Event {event.sequence}</small>
-              </div>
-            </li>
-          ))}
+          {groupActivityEvents(chronological).map((entry) =>
+            entry.kind === 'output-group' ? (
+              <OutputEventGroup group={entry} key={entry.key} />
+            ) : (
+              <ActivityEventRow event={entry.event} key={entry.key} />
+            ),
+          )}
         </ol>
       ) : (
         <p className="run-trace__empty-activity">
@@ -146,6 +139,137 @@ function ActivityTimeline({
       )}
     </section>
   );
+}
+
+type ActivityEntry =
+  | {
+      readonly kind: 'event';
+      readonly event: TraceExecutionEvent;
+      readonly key: string;
+    }
+  | {
+      readonly kind: 'output-group';
+      readonly events: readonly TraceExecutionEvent[];
+      readonly key: string;
+    };
+
+/**
+ * Output updates can be very chatty. Consecutive updates from one captured
+ * Run are one response until another event interrupts them. This intentionally
+ * uses the event order itself rather than a timing threshold, so an appended
+ * update extends the same group without guessing whether the agent paused.
+ */
+function groupActivityEvents(
+  events: readonly TraceExecutionEvent[],
+): readonly ActivityEntry[] {
+  const grouped: ActivityEntry[] = [];
+  for (const event of events) {
+    const previous = grouped.at(-1);
+    if (
+      isOutputEvent(event) &&
+      previous?.kind === 'output-group' &&
+      previous.events[0]?.runId === event.runId
+    ) {
+      grouped[grouped.length - 1] = {
+        ...previous,
+        events: [...previous.events, event],
+      };
+      continue;
+    }
+    if (isOutputEvent(event)) {
+      grouped.push({
+        kind: 'output-group',
+        events: [event],
+        key: activityEventKey(event),
+      });
+      continue;
+    }
+    grouped.push({ kind: 'event', event, key: activityEventKey(event) });
+  }
+  return grouped;
+}
+
+function OutputEventGroup({
+  group,
+}: {
+  readonly group: Extract<ActivityEntry, { readonly kind: 'output-group' }>;
+}) {
+  const [first] = group.events;
+  if (!first) return null;
+  // A lone update should stay as compact as every other activity event. The
+  // disclosure earns its extra affordance only once it hides repeated rows.
+  if (group.events.length === 1) return <ActivityEventRow event={first} />;
+  return (
+    <li className="run-trace__event-group" data-run-id={first.runId}>
+      <details>
+        <summary>
+          <time dateTime={first.createdAt}>
+            {formatTimestamp(first.createdAt)}
+          </time>
+          <span className="run-trace__event-dot run-trace__event-dot--output" />
+          <span className="run-trace__event-group-summary">
+            <span aria-hidden="true" className="run-trace__event-group-chevron">
+              ▸
+            </span>
+            <span>
+              <strong>Agent responded</strong>
+              <small>
+                {group.events.length} updates · {observedDuration(group.events)}
+              </small>
+            </span>
+          </span>
+        </summary>
+        <ol aria-label="Output updates">
+          {group.events.map((event) => (
+            <ActivityEventRow event={event} key={activityEventKey(event)} />
+          ))}
+        </ol>
+      </details>
+    </li>
+  );
+}
+
+function ActivityEventRow({ event }: { readonly event: TraceExecutionEvent }) {
+  return (
+    <li
+      className="run-trace__event-row"
+      data-event-sequence={event.sequence}
+      data-run-id={event.runId}
+      title={`Source Run ${event.runId}`}
+    >
+      <time dateTime={event.createdAt}>{formatTimestamp(event.createdAt)}</time>
+      <span
+        className={`run-trace__event-dot run-trace__event-dot--${eventTone(event.type)}`}
+      />
+      <div>
+        <strong>{eventLabel(event.type)}</strong>
+        <small title={`Source Run ${event.runId}`}>
+          Event {event.sequence}
+        </small>
+      </div>
+    </li>
+  );
+}
+
+function activityEventKey(event: TraceExecutionEvent): string {
+  return `${event.runId}:${event.sequence}:${event.createdAt}`;
+}
+
+function isOutputEvent(event: TraceExecutionEvent): boolean {
+  return event.type.toLocaleLowerCase() === 'output';
+}
+
+function observedDuration(events: readonly TraceExecutionEvent[]): string {
+  const first = events[0];
+  const last = events.at(-1);
+  if (!first || !last) return 'duration not captured';
+  const milliseconds = Date.parse(last.createdAt) - Date.parse(first.createdAt);
+  if (!Number.isFinite(milliseconds)) return 'duration not captured';
+  const seconds = Math.max(0, Math.round(milliseconds / 1000));
+  const minutes = Math.floor(seconds / 60);
+  return minutes
+    ? `${minutes}m ${seconds % 60}s observed`
+    : `${seconds}s observed`;
 }
 
 function eventLabel(type: string): string {

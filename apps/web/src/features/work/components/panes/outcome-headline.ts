@@ -9,7 +9,8 @@ const outcomeHeadlineLimit = 120;
 
 /** The report's own title/first meaningful line, flattened for the heading. */
 export function outcomeHeadline(outcome: string): string {
-  const flat = (titleLine(outcome)?.text ?? outcome)
+  const displayOutcome = outcomeForDisplay(outcome);
+  const flat = (titleLine(displayOutcome)?.text ?? displayOutcome)
     .replace(/[*_`]/g, '')
     .trim();
   return flat.length > outcomeHeadlineLimit
@@ -23,11 +24,32 @@ export function outcomeHeadline(outcome: string): string {
  * like `Done` is rendered exactly once.
  */
 export function outcomeBody(outcome: string): string {
-  const title = titleLine(outcome);
+  const displayOutcome = outcomeForDisplay(outcome);
+  const title = titleLine(displayOutcome);
   if (!title) return '';
-  const lines = outcome.split('\n');
+  const lines = displayOutcome.split('\n');
   lines.splice(0, title.index + 1);
   return lines.join('\n').trimStart();
+}
+
+/**
+ * A final result can be framed by a Markdown rule even though the Overview
+ * supplies its own heading boundary. Strip only rules before any report
+ * content: internal rules, setext headings, and fenced code remain untouched.
+ */
+function outcomeForDisplay(outcome: string): string {
+  const lines = outcome.split('\n');
+  let index = 0;
+  while (index < lines.length) {
+    while (lines[index]?.trim() === '') index += 1;
+    if (!isThematicBreak(lines[index])) break;
+    index += 1;
+  }
+  return lines.slice(index).join('\n');
+}
+
+function isThematicBreak(line: string | undefined): boolean {
+  return line !== undefined && /^\s{0,3}(?:-\s*){3,}$/u.test(line);
 }
 
 function titleLine(outcome: string): {

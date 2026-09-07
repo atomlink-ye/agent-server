@@ -91,6 +91,13 @@
 .work-overview__outcome .assistant-markdown > :last-child {
   margin-bottom: 0;
 }
+/* Result summaries sometimes frame the body with a Markdown thematic break.
+   The summary already supplies that boundary, so hide only direct edge rules;
+   internal rules, setext headings, and fenced code keep their Markdown shape. */
+.work-overview__outcome .assistant-markdown > hr:first-child,
+.work-overview__outcome .assistant-markdown > hr:last-child {
+  display: none;
+}
 .work-overview__outcome .assistant-markdown table {
   display: block;
   overflow-x: auto;

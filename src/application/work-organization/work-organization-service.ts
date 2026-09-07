@@ -5,6 +5,10 @@ import type { Work } from '../../domain/work/work.js';
 import type { WorkBoardColumnKind } from '../../domain/work-organization/board-column-kinds.js';
 import type { WorkItemMentionReason } from '../../domain/work-organization/work-item-mention-brief.js';
 import {
+  createLogger,
+  type Logger,
+} from '../../shared/observability/logger.js';
+import {
   mentionSourceText,
   newMentions,
   parseMentions,
@@ -28,7 +32,10 @@ import {
   type WorkOrganizationOwnerScope,
 } from '../../domain/work-organization/work-organization.js';
 import type { ConversationRepository } from '../ports/conversation-repository.js';
-import type { WorkOrganizationRepository } from '../ports/work-organization-repository.js';
+import type {
+  WorkItemPlacementSummary,
+  WorkOrganizationRepository,
+} from '../ports/work-organization-repository.js';
 import type { WorkIdentityApi } from '../work/work-identity-api.js';
 import type {
   MentionableAgentRoster,
@@ -41,6 +48,11 @@ import type {
  * enough that a crashed one does not park a WorkItem for a day.
  */
 export const WORK_ITEM_CLAIM_STALE_AFTER_MINUTES = 20;
+
+const defaultWorkOrganizationLogger = createLogger({
+  service: 'work-organization',
+  minimumLevel: 'info',
+});
 
 /**
  * The wake side of a mention, injected rather than called directly so the
@@ -62,6 +74,8 @@ export interface WorkOrganizationServiceOptions {
   readonly mentionRoster?: MentionableAgentRoster;
   /** Absent when chat is not composed; mentions are still recorded. */
   readonly wakeMentionedAgents?: WakeMentionedAgentsFn;
+  /** Optional override; otherwise the bounded work-organization logger is used. */
+  readonly logger?: Logger;
   readonly workListProjection: (input: {
     readonly tenantId: string;
     readonly workspaceId: string;
@@ -114,6 +128,7 @@ export class WorkOrganizationService {
   private readonly conversations?: WorkOrganizationServiceOptions['conversations'];
   private readonly mentionRoster: MentionableAgentRoster | undefined;
   private readonly wake: WakeMentionedAgentsFn | undefined;
+  private readonly logger: Logger;
   private readonly workListProjection: WorkOrganizationServiceOptions['workListProjection'];
   private readonly now: () => Date;
 
@@ -123,6 +138,7 @@ export class WorkOrganizationService {
     this.conversations = options.conversations;
     this.mentionRoster = options.mentionRoster;
     this.wake = options.wakeMentionedAgents;
+    this.logger = options.logger ?? defaultWorkOrganizationLogger;
     this.workListProjection = options.workListProjection;
     this.now = options.now ?? (() => new Date());
   }
@@ -181,16 +197,75 @@ export class WorkOrganizationService {
       sourceMessageId: input.sourceMessageId ?? null,
       now,
     });
-    if (boardId && columnId) {
-      const placement = await this.repository.placeWorkItem({
-        ...owner,
-        boardId,
-        columnId,
-        workItemId: workItem.id,
-        position: normalizePosition(input.position),
-        now,
+    if (input.assigneeId !== undefined) {
+      this.logger?.log('info', 'work_item.assignment.requested', {
+        tenant_id: owner.tenantId,
+        work_item_id: workItem.id,
+        reason: 'field_specified',
+        assignee_present: assigneeId !== null,
       });
-      if (!placement) throw new WorkBoardColumnNotFoundError();
+      this.logger?.log('info', 'work_item.assignment.persisted', {
+        tenant_id: owner.tenantId,
+        work_item_id: workItem.id,
+        reason: assigneeId === null ? 'cleared' : 'assigned',
+        assignee_present: workItem.assigneeId !== null,
+      });
+    }
+    const potentialWake = assigneeId !== null || mentions.length > 0;
+    if (boardId && columnId) {
+      if (potentialWake)
+        this.logger.log('info', 'work_item.wake.placement.started', {
+          tenant_id: owner.tenantId,
+          work_item_id: workItem.id,
+          reason: 'pre_wake_placement',
+        });
+      let placement: WorkBoardPlacement | null;
+      try {
+        placement = await this.repository.placeWorkItem({
+          ...owner,
+          boardId,
+          columnId,
+          workItemId: workItem.id,
+          position: normalizePosition(input.position),
+          now,
+        });
+      } catch (error) {
+        if (potentialWake)
+          this.logger.log('warn', 'work_item.wake.placement.failed', {
+            tenant_id: owner.tenantId,
+            work_item_id: workItem.id,
+            reason: 'placement_write_failed',
+            error_name: errorReason(error),
+          });
+        throw error;
+      }
+      if (!placement) {
+        if (potentialWake)
+          this.logger.log('warn', 'work_item.wake.placement.failed', {
+            tenant_id: owner.tenantId,
+            work_item_id: workItem.id,
+            reason: 'placement_missing',
+          });
+        throw new WorkBoardColumnNotFoundError();
+      }
+      if (potentialWake)
+        this.logger.log('info', 'work_item.wake.placement.completed', {
+          tenant_id: owner.tenantId,
+          work_item_id: workItem.id,
+          reason: 'pre_wake_placement',
+        });
+    }
+    if (input.assigneeId !== undefined) {
+      this.logger?.log(
+        assigneeId === null ? 'warn' : 'info',
+        'work_item.assignment.decision',
+        {
+          tenant_id: owner.tenantId,
+          work_item_id: workItem.id,
+          reason: assigneeId === null ? 'cleared' : 'wake_requested',
+          assignee_present: workItem.assigneeId !== null,
+        },
+      );
     }
     // An explicit assignment is an implicit mention: the assignee learns about
     // the work the same way, whether their name was typed in prose or picked
@@ -250,11 +325,23 @@ export class WorkOrganizationService {
     const owner = WorkOrganizationService.ownerFromAccessContext(
       input.accessContext,
     );
+    this.logger?.log('info', 'work_item.update.received', {
+      tenant_id: owner.tenantId,
+      work_item_id: input.workItemId,
+      reason: 'update_received',
+      assignee_field_present: input.assigneeId !== undefined,
+    });
+    if (input.assigneeId !== undefined) {
+      this.logger?.log('info', 'work_item.assignment.update_started', {
+        tenant_id: owner.tenantId,
+        work_item_id: input.workItemId,
+        reason: 'field_specified',
+        assignee_present: Boolean(input.assigneeId?.trim()),
+      });
+    }
     // WorkItem mutations share this repository lock with promotion.
-    return this.repository.withPromotionLock(
-      owner,
-      input.workItemId,
-      () => this.updateWorkItemUnlocked(input, owner),
+    return this.repository.withPromotionLock(owner, input.workItemId, () =>
+      this.updateWorkItemUnlocked(input, owner),
     );
   }
 
@@ -303,13 +390,21 @@ export class WorkOrganizationService {
     });
     if (!item) throw new WorkItemNotFoundError();
 
-    const placement = await this.repository.findWorkItemPlacement(
-      owner,
-      item.id,
-    );
-    const board = placement
-      ? { boardId: placement.boardId, columnId: placement.columnId }
-      : {};
+    if (input.assigneeId !== undefined) {
+      const persistedReason =
+        item.assigneeId === previous.assigneeId
+          ? 'unchanged'
+          : item.assigneeId === null
+            ? 'cleared'
+            : 'assigned';
+      this.logger?.log('info', 'work_item.assignment.persisted', {
+        tenant_id: owner.tenantId,
+        work_item_id: item.id,
+        reason: persistedReason,
+        assignee_present: item.assigneeId !== null,
+      });
+    }
+
     const added = mentions ? newMentions(previous.mentions, mentions) : [];
     const assignmentId =
       input.assigneeId !== undefined &&
@@ -317,6 +412,56 @@ export class WorkOrganizationService {
       item.assigneeId !== previous.assigneeId
         ? item.assigneeId
         : null;
+    const potentialWake = assignmentId !== null || added.length > 0;
+    if (potentialWake)
+      this.logger.log('info', 'work_item.wake.placement.started', {
+        tenant_id: owner.tenantId,
+        work_item_id: item.id,
+        reason: 'pre_wake_placement',
+      });
+    let placement: WorkItemPlacementSummary | null = null;
+    try {
+      placement = await this.repository.findWorkItemPlacement(owner, item.id);
+    } catch (error) {
+      if (potentialWake)
+        this.logger.log('warn', 'work_item.wake.placement.failed', {
+          tenant_id: owner.tenantId,
+          work_item_id: item.id,
+          reason: 'placement_lookup_failed',
+          error_name: errorReason(error),
+        });
+      throw error;
+    }
+    if (potentialWake)
+      this.logger.log('info', 'work_item.wake.placement.completed', {
+        tenant_id: owner.tenantId,
+        work_item_id: item.id,
+        reason: 'pre_wake_placement',
+        placement_present: placement !== null,
+      });
+    const board = placement
+      ? { boardId: placement.boardId, columnId: placement.columnId }
+      : {};
+    if (input.assigneeId !== undefined) {
+      const assignmentReason =
+        assignmentId !== null
+          ? 'wake_requested'
+          : item.assigneeId === null
+            ? previous.assigneeId === null
+              ? 'unchanged'
+              : 'cleared'
+            : 'unchanged';
+      this.logger?.log(
+        assignmentId !== null ? 'info' : 'warn',
+        'work_item.assignment.decision',
+        {
+          tenant_id: owner.tenantId,
+          work_item_id: item.id,
+          reason: assignmentReason,
+          assignee_present: item.assigneeId !== null,
+        },
+      );
+    }
     const mentionWakeTargets = assignmentId
       ? added.filter((mention) => mention !== assignmentId)
       : added;
@@ -436,10 +581,8 @@ export class WorkOrganizationService {
     const owner = WorkOrganizationService.ownerFromAccessContext(
       input.accessContext,
     );
-    return this.repository.withPromotionLock(
-      owner,
-      input.workItemId,
-      () => this.claimWorkItemUnlocked(input, owner),
+    return this.repository.withPromotionLock(owner, input.workItemId, () =>
+      this.claimWorkItemUnlocked(input, owner),
     );
   }
 
@@ -709,7 +852,27 @@ export class WorkOrganizationService {
       readonly columnId?: string;
     },
   ): Promise<void> {
-    if (!this.wake || input.mentions.length === 0) return;
+    const attributes = {
+      tenant_id: accessContext.tenantId,
+      work_item_id: workItem.id,
+      reason: input.reason,
+      mention_count: input.mentions.length,
+    };
+    this.logger?.log('info', 'work_item.wake.requested', attributes);
+    if (!this.wake) {
+      this.logger?.log('warn', 'work_item.wake.skipped', {
+        ...attributes,
+        reason: 'wake_unavailable',
+      });
+      return;
+    }
+    if (input.mentions.length === 0) {
+      this.logger?.log('warn', 'work_item.wake.skipped', {
+        ...attributes,
+        reason: 'empty_mentions',
+      });
+      return;
+    }
     try {
       await this.wake({
         tenantId: accessContext.tenantId,
@@ -727,8 +890,13 @@ export class WorkOrganizationService {
           ...(input.columnId ? { columnId: input.columnId } : {}),
         },
       });
-    } catch {
-      // Intentionally silent here: wakeMentionedAgents logs its own failures.
+    } catch (error) {
+      this.logger?.log('warn', 'work_item.wake.failed', {
+        ...attributes,
+        reason: 'wake_failed',
+        stage: 'wake_dispatch',
+        error_name: errorReason(error),
+      });
     }
   }
 
@@ -844,4 +1012,8 @@ function validateOptionalId(
   const trimmed = value.trim();
   if (!trimmed || trimmed.length > 256)
     throw new WorkOrganizationValidationError(`${field} is invalid.`);
+}
+
+function errorReason(error: unknown): string {
+  return error instanceof Error ? error.name : 'unknown';
 }

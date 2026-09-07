@@ -24,7 +24,7 @@ export interface MentionableAgent {
   readonly id: string;
   readonly displayName: string;
   readonly normalizedName: string;
-  /** Only an available runtime can be woken; anything else is skipped. */
+  /** Ordinary mentions require this roster availability flag; assignments re-check runtime status. */
   readonly runtimeAvailable: boolean;
 }
 
@@ -74,7 +74,7 @@ export interface WakeMentionedAgentsInput {
 }
 
 export interface WakeMentionedAgentsResult {
-  /** Agent definition ids that received a durable wake message. */
+  /** Agent definition ids whose durable dispatch was admitted. */
   readonly woken: readonly string[];
   /** Mentions that named nobody wakeable — a human, a stranger, or the actor. */
   readonly skipped: readonly string[];
@@ -100,19 +100,45 @@ export async function wakeMentionedAgents(
   input: WakeMentionedAgentsInput,
 ): Promise<WakeMentionedAgentsResult> {
   const mentions = dedupe(input.mentions);
-  if (mentions.length === 0) return { woken: [], skipped: [] };
+  const baseAttributes = {
+    tenant_id: input.tenantId,
+    work_item_id: input.workItem.id,
+    reason: input.reason ?? 'mention',
+  };
+  dependencies.logger?.log('info', 'work_item.mention.wake.started', {
+    ...baseAttributes,
+    mention_count: mentions.length,
+  });
+  if (mentions.length === 0) {
+    dependencies.logger?.log('warn', 'work_item.mention.wake_skipped', {
+      ...baseAttributes,
+      reason: 'empty_mentions',
+    });
+    dependencies.logger?.log('warn', 'work_item.mention.wake.completed', {
+      ...baseAttributes,
+      woken_count: 0,
+      skipped_count: 0,
+      reason: 'empty_mentions',
+    });
+    return { woken: [], skipped: [] };
+  }
 
-  if (
-    dependencies.wakeLoopGuard &&
-    (await isWakeLoopCapped(dependencies, input))
-  ) {
-    return Object.freeze({
+  if (await isWakeLoopCapped(dependencies, input)) {
+    const result = Object.freeze({
       woken: Object.freeze([]),
       skipped: Object.freeze([...mentions]),
     });
+    dependencies.logger?.log('warn', 'work_item.mention.wake.completed', {
+      ...baseAttributes,
+      woken_count: 0,
+      skipped_count: mentions.length,
+      reason: 'guard_blocked',
+    });
+    return result;
   }
 
-  const roster = await listRoster(dependencies, input);
+  const rosterResult = await listRoster(dependencies, input);
+  const roster = rosterResult.agents;
   const woken: string[] = [];
   const skipped: string[] = [];
 
@@ -121,35 +147,89 @@ export async function wakeMentionedAgents(
       input.reason === 'assignment'
         ? resolveAgentById(roster, mention)
         : resolveAgent(roster, mention);
-    if (!agent || agent.id === input.actorId) {
+    if (!agent) {
+      dependencies.logger?.log('warn', 'work_item.mention.wake_skipped', {
+        ...baseAttributes,
+        reason: rosterResult.failed
+          ? 'roster_unavailable'
+          : 'no_matching_agent',
+      });
+      skipped.push(mention);
+      continue;
+    }
+    dependencies.logger?.log('info', 'work_item.mention.resolved', {
+      ...baseAttributes,
+      agent_definition_id: agent.id,
+      reason: 'resolved',
+    });
+    if (agent.id === input.actorId) {
+      dependencies.logger?.log('warn', 'work_item.mention.wake_skipped', {
+        ...baseAttributes,
+        agent_definition_id: agent.id,
+        reason: 'self_mention',
+      });
       skipped.push(mention);
       continue;
     }
     const delivered = await wakeOne(dependencies, input, agent);
     (delivered ? woken : skipped).push(delivered ? agent.id : mention);
   }
-  return Object.freeze({
+  const result = Object.freeze({
     woken: Object.freeze(woken),
     skipped: Object.freeze(skipped),
   });
+  dependencies.logger?.log(
+    skipped.length > 0 ? 'warn' : 'info',
+    'work_item.mention.wake.completed',
+    {
+      ...baseAttributes,
+      woken_count: woken.length,
+      skipped_count: skipped.length,
+      reason:
+        skipped.length === 0
+          ? 'dispatch_admitted'
+          : woken.length === 0
+            ? 'all_skipped'
+            : 'partial_skip',
+    },
+  );
+  return result;
 }
 
 async function listRoster(
   dependencies: WakeMentionedAgentsDependencies,
   input: WakeMentionedAgentsInput,
-): Promise<readonly MentionableAgent[]> {
+): Promise<{
+  readonly agents: readonly MentionableAgent[];
+  readonly failed: boolean;
+}> {
+  dependencies.logger?.log('info', 'work_item.mention.roster.started', {
+    tenant_id: input.tenantId,
+    work_item_id: input.workItem.id,
+    reason: 'resolve_mentions',
+  });
   try {
-    return await dependencies.roster.listMentionableAgents({
+    const roster = await dependencies.roster.listMentionableAgents({
       tenantId: input.tenantId,
     });
+    dependencies.logger?.log('info', 'work_item.mention.roster.completed', {
+      tenant_id: input.tenantId,
+      work_item_id: input.workItem.id,
+      reason: 'roster_loaded',
+      agent_count: roster.length,
+    });
+    return { agents: roster, failed: false };
   } catch (error) {
     // No roster means no wake. It does not mean no WorkItem.
     dependencies.logger?.log('warn', 'work_item.mention.roster_unavailable', {
       tenant_id: input.tenantId,
       work_item_id: input.workItem.id,
-      reason: errorReason(error),
+      reason: 'roster_unavailable',
+      error_name: errorReason(error),
+      agent_count: 0,
+      failure_count: 1,
     });
-    return [];
+    return { agents: [], failed: true };
   }
 }
 
@@ -166,7 +246,25 @@ async function isWakeLoopCapped(
   dependencies: WakeMentionedAgentsDependencies,
   input: WakeMentionedAgentsInput,
 ): Promise<boolean> {
+  if (!dependencies.wakeLoopGuard) {
+    dependencies.logger?.log('info', 'work_item.mention.wake_loop_guard', {
+      tenant_id: input.tenantId,
+      work_item_id: input.workItem.id,
+      decision: 'allow',
+      reason: 'guard_disabled',
+    });
+    return false;
+  }
   try {
+    dependencies.logger?.log(
+      'info',
+      'work_item.mention.wake_loop_guard.started',
+      {
+        tenant_id: input.tenantId,
+        work_item_id: input.workItem.id,
+        reason: 'observe_guard',
+      },
+    );
     const state = await dependencies.wakeLoopGuard!.observeWake({
       tenantId: input.tenantId,
       workspaceId: input.workspaceId,
@@ -181,11 +279,25 @@ async function isWakeLoopCapped(
       dependencies.logger?.log('warn', 'work_item.mention.wake_loop_capped', {
         tenant_id: input.tenantId,
         work_item_id: input.workItem.id,
+        decision: 'block',
+        reason: decision.reason,
         agent_wake_count: decision.agentWakeCount,
         hard_cap: decision.hardCap,
       });
+      dependencies.logger?.log('warn', 'work_item.mention.wake_skipped', {
+        tenant_id: input.tenantId,
+        work_item_id: input.workItem.id,
+        reason: 'hard_loop_cap',
+      });
       return true;
     }
+    dependencies.logger?.log('info', 'work_item.mention.wake_loop_guard', {
+      tenant_id: input.tenantId,
+      work_item_id: input.workItem.id,
+      decision: 'allow',
+      reason: 'guard_allow',
+      agent_wake_count: state.agentWakeCount,
+    });
     return false;
   } catch (error) {
     dependencies.logger?.log(
@@ -194,9 +306,16 @@ async function isWakeLoopCapped(
       {
         tenant_id: input.tenantId,
         work_item_id: input.workItem.id,
-        reason: errorReason(error),
+        decision: 'error',
+        reason: 'guard_error',
+        error_name: errorReason(error),
       },
     );
+    dependencies.logger?.log('warn', 'work_item.mention.wake_skipped', {
+      tenant_id: input.tenantId,
+      work_item_id: input.workItem.id,
+      reason: 'guard_error',
+    });
     return true;
   }
 }
@@ -206,6 +325,7 @@ async function wakeOne(
   input: WakeMentionedAgentsInput,
   agent: MentionableAgent,
 ): Promise<boolean> {
+  let stage = 'runtime_check';
   try {
     if (input.reason !== 'assignment' && !agent.runtimeAvailable) {
       dependencies.logger?.log(
@@ -215,13 +335,35 @@ async function wakeOne(
           tenant_id: input.tenantId,
           work_item_id: input.workItem.id,
           agent_definition_id: agent.id,
+          runtime_available: agent.runtimeAvailable,
+          runtime_status: null,
+          reason: 'roster_runtime_unavailable',
         },
       );
       return false;
     }
+    stage = 'runtime_lookup';
+    dependencies.logger?.log(
+      'info',
+      'work_item.mention.runtime_lookup.started',
+      {
+        tenant_id: input.tenantId,
+        work_item_id: input.workItem.id,
+        agent_definition_id: agent.id,
+        reason: 'get_runtime',
+      },
+    );
     const runtime = await dependencies.conversations.getChatRuntime({
       tenantId: input.tenantId,
       agentDefinitionId: agent.id,
+    });
+    dependencies.logger?.log('info', 'work_item.mention.runtime_checked', {
+      tenant_id: input.tenantId,
+      work_item_id: input.workItem.id,
+      agent_definition_id: agent.id,
+      runtime_available: agent.runtimeAvailable,
+      runtime_status: runtime?.status ?? null,
+      reason: 'runtime_observed',
     });
     const runtimeWakeable =
       runtime !== null &&
@@ -238,6 +380,9 @@ async function wakeOne(
           tenant_id: input.tenantId,
           work_item_id: input.workItem.id,
           agent_definition_id: agent.id,
+          runtime_available: agent.runtimeAvailable,
+          runtime_status: runtime?.status ?? null,
+          reason: 'runtime_not_wakeable',
         },
       );
       return false;
@@ -246,12 +391,34 @@ async function wakeOne(
     // A mention is allowed to be the FIRST contact, so the conversation is
     // created here if it does not exist. findOrCreateDirect is idempotent, so
     // two mentions in the same breath still share one conversation.
+    stage = 'direct_conversation';
+    dependencies.logger?.log(
+      'info',
+      'work_item.mention.direct_conversation.started',
+      {
+        tenant_id: input.tenantId,
+        work_item_id: input.workItem.id,
+        agent_definition_id: agent.id,
+        reason: 'find_or_create',
+      },
+    );
     const conversation = await dependencies.conversations.findOrCreateDirect({
       tenantId: input.tenantId,
       principalId: input.actorId,
       principalType: input.actorType,
       agentDefinitionId: agent.id,
     });
+    dependencies.logger?.log(
+      'info',
+      'work_item.mention.direct_conversation.completed',
+      {
+        tenant_id: input.tenantId,
+        work_item_id: input.workItem.id,
+        agent_definition_id: agent.id,
+        conversation_id: conversation.id,
+        reason: 'conversation_ready',
+      },
+    );
 
     const brief = workItemMentionBrief({
       reason: input.reason ?? 'mention',
@@ -272,6 +439,18 @@ async function wakeOne(
           ].join('\n\n')
         : brief;
 
+    stage = 'message_append';
+    dependencies.logger?.log(
+      'info',
+      'work_item.mention.message_append.started',
+      {
+        tenant_id: input.tenantId,
+        work_item_id: input.workItem.id,
+        agent_definition_id: agent.id,
+        conversation_id: conversation.id,
+        reason: 'principal_wake_message',
+      },
+    );
     const message = await dependencies.conversations.appendMessage({
       author: {
         type: 'principal',
@@ -287,19 +466,58 @@ async function wakeOne(
       },
       body,
     });
+    dependencies.logger?.log(
+      'info',
+      'work_item.mention.message_append.completed',
+      {
+        tenant_id: input.tenantId,
+        work_item_id: input.workItem.id,
+        agent_definition_id: agent.id,
+        conversation_id: conversation.id,
+        message_id: message.id,
+        message_sequence: message.sequence,
+        reason: 'message_persisted',
+      },
+    );
 
-    const lastReadSequence =
-      input.reason === 'assignment'
-        ? Math.max(0, message.sequence - 1)
-        : (
-            await dependencies.conversations.getUnread({
-              tenantId: input.tenantId,
-              conversationId: conversation.id,
-              principalType: input.actorType,
-              principalId: input.actorId,
-            })
-          ).lastReadSequence;
-    await enqueueChatDispatchForMessage(dependencies.dispatches, {
+    stage = 'unread_lookup';
+    let lastReadSequence: number;
+    if (input.reason === 'assignment') {
+      lastReadSequence = Math.max(0, message.sequence - 1);
+    } else {
+      dependencies.logger?.log(
+        'info',
+        'work_item.mention.unread_lookup.started',
+        {
+          tenant_id: input.tenantId,
+          work_item_id: input.workItem.id,
+          agent_definition_id: agent.id,
+          conversation_id: conversation.id,
+          reason: 'planner_snapshot',
+        },
+      );
+      const unread = await dependencies.conversations.getUnread({
+        tenantId: input.tenantId,
+        conversationId: conversation.id,
+        principalType: input.actorType,
+        principalId: input.actorId,
+      });
+      lastReadSequence = unread.lastReadSequence;
+      dependencies.logger?.log(
+        'info',
+        'work_item.mention.unread_lookup.completed',
+        {
+          tenant_id: input.tenantId,
+          work_item_id: input.workItem.id,
+          agent_definition_id: agent.id,
+          conversation_id: conversation.id,
+          last_read_sequence: lastReadSequence,
+          unread_count: unread.unreadCount,
+          reason: 'planner_snapshot',
+        },
+      );
+    }
+    const enqueueInput = {
       tenantId: input.tenantId,
       conversationId: conversation.id,
       agentDefinitionId: agent.id,
@@ -307,15 +525,36 @@ async function wakeOne(
       latestMessageSequence: message.sequence,
       latestMessageAuthorType: message.authorType,
       latestMessageId: message.id,
+      workItemId: input.workItem.id,
+      ...(dependencies.logger === undefined
+        ? {}
+        : { logger: dependencies.logger }),
       ...(dependencies.debounceMs === undefined
         ? {}
         : { debounceMs: dependencies.debounceMs }),
-    });
+    };
+    stage = 'dispatch_enqueue';
+    const enqueued = await enqueueChatDispatchForMessage(
+      dependencies.dispatches,
+      enqueueInput,
+    );
+    if (!enqueued) {
+      dependencies.logger?.log('warn', 'work_item.mention.wake_skipped', {
+        tenant_id: input.tenantId,
+        work_item_id: input.workItem.id,
+        agent_definition_id: agent.id,
+        conversation_id: conversation.id,
+        reason: 'dispatch_not_enqueued',
+      });
+      return false;
+    }
     dependencies.logger?.log('info', 'work_item.mention.woken', {
       tenant_id: input.tenantId,
       work_item_id: input.workItem.id,
       agent_definition_id: agent.id,
       conversation_id: conversation.id,
+      reason: 'dispatch_admitted',
+      dispatch_admitted: true,
     });
     return true;
   } catch (error) {
@@ -325,7 +564,9 @@ async function wakeOne(
       tenant_id: input.tenantId,
       work_item_id: input.workItem.id,
       agent_definition_id: agent.id,
-      reason: errorReason(error),
+      reason: 'wake_failed',
+      stage,
+      error_name: errorReason(error),
     });
     return false;
   }

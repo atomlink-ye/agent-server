@@ -286,20 +286,25 @@ export class WorkOrganizationService {
       ? { boardId: placement.boardId, columnId: placement.columnId }
       : {};
     const added = mentions ? newMentions(previous.mentions, mentions) : [];
-    if (added.length > 0)
+    const assignmentId =
+      input.assigneeId !== undefined &&
+      item.assigneeId !== null &&
+      item.assigneeId !== previous.assigneeId
+        ? item.assigneeId
+        : null;
+    const mentionWakeTargets = assignmentId
+      ? added.filter((mention) => mention !== assignmentId)
+      : added;
+    if (mentionWakeTargets.length > 0)
       await this.wakeFor(input.accessContext, item, {
-        mentions: added,
+        mentions: mentionWakeTargets,
         reason: 'mention',
         ...board,
       });
     // A newly set assignee is woken even when nothing in the prose changed.
-    if (
-      input.assigneeId !== undefined &&
-      item.assigneeId &&
-      item.assigneeId !== previous.assigneeId
-    )
+    if (assignmentId)
       await this.wakeFor(input.accessContext, item, {
-        mentions: [item.assigneeId],
+        mentions: [assignmentId],
         reason: 'assignment',
         ...board,
       });
@@ -425,8 +430,29 @@ export class WorkOrganizationService {
       now: this.now().toISOString(),
     });
     if (!result.workItem) throw new WorkItemClaimConflictError(result.holderId);
+
+    let workItem = result.workItem;
+    if (result.workItem.status === 'todo') {
+      const transitioned = await this.repository.updateWorkItem({
+        ...owner,
+        id: result.workItem.id,
+        status: 'in_progress',
+        now: this.now().toISOString(),
+      });
+      if (!transitioned) throw new WorkItemNotFoundError();
+      workItem = transitioned;
+      await this.repository.createComment({
+        ...owner,
+        id: randomUUID(),
+        workItemId: transitioned.id,
+        authorId: claimantId,
+        body: '已认领此 WorkItem，开始处理。',
+        mentions: [],
+        now: this.now().toISOString(),
+      });
+    }
     return {
-      workItem: result.workItem,
+      workItem,
       movedToColumnId: result.movedToColumnId,
     };
   }
@@ -654,6 +680,7 @@ export class WorkOrganizationService {
         workItem: {
           id: workItem.id,
           title: workItem.title,
+          description: workItem.description,
           ...(input.boardId ? { boardId: input.boardId } : {}),
           ...(input.columnId ? { columnId: input.columnId } : {}),
         },

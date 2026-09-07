@@ -3,7 +3,7 @@
 ## Requirements
 
 - Node compatible with `.nvmrc` and pnpm `11.7.0` for host-side deterministic tooling.
-- Native PostgreSQL only when working on real PostgreSQL semantics. Core development otherwise falls back to PGlite.
+- Native PostgreSQL for the live runtime (`pnpm dev:runtime`). Core development and deterministic tests fall back to PGlite, which multiplexes every connection onto one ...[truncated]
 - Linux or macOS, x64 or arm64.
 - External credentials only for live provider smoke.
 
@@ -24,13 +24,14 @@ pnpm doctor
 pnpm dev
 ```
 
-For runtime work, prepare the Linux-only provider toolchain and start the
-host-native runtime process:
+For runtime work, start the host-native runtime process. It requires native
+PostgreSQL and the provider CLIs:
 
 ```bash
-pnpm setup:providers
 pnpm dev:runtime
 ```
+
+On Linux, `pnpm setup:providers` materializes ...[truncated]
 
 Provider credentials and model selection are explicit environment input. The
 development harness records only ignored local state under `.local/`.

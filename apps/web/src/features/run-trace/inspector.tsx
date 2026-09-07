@@ -19,6 +19,8 @@ export function Inspector({
   readonly onMode: (mode: InspectorMode) => void;
 }) {
   const selectedAttempt = model.selectedAttempt;
+  if (!selectedAttempt && !(mode === 'conversation' && model.messages.length))
+    return null;
   return (
     <aside
       className="run-trace__inspector"
@@ -26,53 +28,39 @@ export function Inspector({
       aria-labelledby="trace-inspector-heading"
     >
       <h3 id="trace-inspector-heading">Execution Inspector</h3>
-      {selectedAttempt || (mode === 'conversation' && model.messages.length) ? (
-        <>
-          {selectedAttempt ? (
-            <div className="run-trace__selected-execution">
-              <h4>{selectedAttempt.workItem.subject}</h4>
-              <p>{model.actorName}</p>
-            </div>
-          ) : null}
-          <div
-            className="run-trace__inspector-tabs"
-            role="tablist"
-            aria-label="Inspector detail"
+      {selectedAttempt ? (
+        <div className="run-trace__selected-execution">
+          <h4>{selectedAttempt.workItem.subject}</h4>
+          <p>{model.actorName}</p>
+        </div>
+      ) : null}
+      <div
+        className="run-trace__inspector-tabs"
+        role="tablist"
+        aria-label="Inspector detail"
+      >
+        {(['overview', 'conversation', 'activity'] as const).map((item) => (
+          <button
+            aria-selected={mode === item}
+            key={item}
+            onClick={() => onMode(item)}
+            role="tab"
+            type="button"
           >
-            {(['overview', 'conversation', 'activity'] as const).map((item) => (
-              <button
-                aria-selected={mode === item}
-                key={item}
-                onClick={() => onMode(item)}
-                role="tab"
-                type="button"
-              >
-                {item[0]!.toUpperCase() + item.slice(1)}
-              </button>
-            ))}
-          </div>
-          {mode === 'overview' ? (
-            <InspectorOverview
-              actorName={model.actorName}
-              selectedAttempt={selectedAttempt}
-            />
-          ) : null}
-          {mode === 'conversation' ? (
-            <ConversationDetail
-              model={model}
-              selectedAttempt={selectedAttempt}
-            />
-          ) : null}
-          {mode === 'activity' ? <ActivityDetail model={model} /> : null}
-        </>
-      ) : (
-        <p className="run-trace__unavailable">
-          {/* The Timeline plots Runs, and only a Team Work has Attempts, so
-              naming Attempts here told a single-Agent user to click something
-              their Work does not have. */}
-          Select a Run in the Timeline to inspect recorded facts.
-        </p>
-      )}
+            {item[0]!.toUpperCase() + item.slice(1)}
+          </button>
+        ))}
+      </div>
+      {mode === 'overview' && selectedAttempt ? (
+        <InspectorOverview
+          actorName={model.actorName}
+          selectedAttempt={selectedAttempt}
+        />
+      ) : null}
+      {mode === 'conversation' ? (
+        <ConversationDetail model={model} selectedAttempt={selectedAttempt} />
+      ) : null}
+      {mode === 'activity' ? <ActivityDetail model={model} /> : null}
     </aside>
   );
 }

@@ -6,6 +6,14 @@
   margin: var(--space-3) 0 0;
   max-width: 620px;
 }
+
+.work-detail-surface-note {
+  max-width: 520px;
+  margin: var(--space-2) 0 0;
+  color: var(--ink-500);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
 .work-detail-header--stacked {
   display: block;
 }
@@ -116,6 +124,15 @@
   color: var(--grass-deep);
   font-size: var(--text-eyebrow);
   margin: var(--space-2) 0 0;
+}
+.work-result-link {
+  display: inline-flex;
+  margin-top: var(--space-4);
+  color: var(--ink-900);
+  font-size: var(--text-sm);
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .work-run-list {

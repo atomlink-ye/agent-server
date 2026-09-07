@@ -230,7 +230,7 @@ export function MentionTextField({
           data-testid="mention-suggestions"
           id={listboxId}
           role="listbox"
-          aria-label="提及成员"
+          aria-label="Mention a member"
         >
           {suggestions.map((participant, index) => (
             <li key={participant.id} role="presentation">

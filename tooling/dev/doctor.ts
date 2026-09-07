@@ -159,18 +159,18 @@ async function paseoCheck(
   const configuredWsUrl = environment.PASEO_WS_URL?.trim();
   if (!configuredWsUrl) {
     try {
-      await validateProviders(environment);
+      const paths = await validateProviders(environment);
       return {
         name: 'paseo',
         status: 'ok',
-        detail: 'provisioned provider-toolchain Paseo binary is valid',
+        detail: `Paseo binary is valid: ${paths.paseo}`,
         requiredFor: ['runtime'],
       };
     } catch (error) {
       return {
         name: 'paseo',
         status: 'warn',
-        detail: `provider-toolchain Paseo binary unavailable: ${error instanceof Error ? error.message : String(error)}`,
+        detail: `Paseo binary unavailable: ${error instanceof Error ? error.message : String(error)}`,
         requiredFor: ['runtime'],
       };
     }
@@ -242,15 +242,17 @@ async function binaryVersion(path: string): Promise<string> {
   });
 }
 
-async function providerBinaryStatus(): Promise<string> {
+async function providerBinaryStatus(
+  paths: typeof providerToolchainPaths,
+): Promise<string> {
   const statuses = await Promise.all(
     providerBinaryNames.map(async (name) => {
       try {
-        await access(providerToolchainPaths[name], constants.X_OK);
+        await access(paths[name], constants.X_OK);
       } catch {
         return `${name}=absent`;
       }
-      return `${name}=installed(${await binaryVersion(providerToolchainPaths[name])})`;
+      return `${name}=installed(${await binaryVersion(paths[name])})`;
     }),
   );
   return statuses.join(',');
@@ -315,18 +317,17 @@ async function providerCheck(
       requiredFor: ['runtime'],
     };
   }
-  const [binaryStatus, configStatus] = await Promise.all([
-    providerBinaryStatus(),
-    providerConfigStatus(),
-  ]);
+  const configStatus = await providerConfigStatus();
   let validationStatus = 'failed';
   let validationError = '';
+  let resolvedPaths = providerToolchainPaths;
   try {
-    await validateProviders(environment);
+    resolvedPaths = await validateProviders(environment);
     validationStatus = 'valid';
   } catch (error) {
     validationError = error instanceof Error ? error.message : String(error);
   }
+  const binaryStatus = await providerBinaryStatus(resolvedPaths);
   const configuredName = credentialNames.find((name) =>
     environment[name]?.trim(),
   );

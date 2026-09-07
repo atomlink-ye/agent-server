@@ -1,7 +1,7 @@
 .work-shell {
   width: min(100% - 64px, 1120px);
   margin: 0 auto;
-  padding: 48px 0 72px;
+  padding: var(--space-8) 0 72px;
 }
 
 .work-shell-kicker {
@@ -240,7 +240,7 @@
 @media (max-width: 700px) {
   .work-shell {
     width: min(100% - 40px, 1120px);
-    padding-top: var(--space-8);
+    padding-top: var(--space-6);
   }
 
   .work-list-region {

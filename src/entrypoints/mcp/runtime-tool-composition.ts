@@ -20,6 +20,8 @@ import {
   AGENT_SERVER_SYNTHETIC_EVENT_BATCH_TOOL_REF,
   AGENT_SERVER_SYNTHETIC_STOCK_SNAPSHOT_TOOL_REF,
   AGENT_SERVER_WORK_ITEM_CLAIM_TOOL_REF,
+  AGENT_SERVER_WORK_ITEM_COMMENT_TOOL_REF,
+  AGENT_SERVER_WORK_ITEM_STATUS_TOOL_REF,
 } from '../../application/agents/built-in-skills.js';
 import {
   createCollaborationRuntimeContributor,
@@ -99,7 +101,11 @@ export function createRuntimeToolCatalog(input: {
       ? [
           {
             ref: 'work-organization',
-            toolRefs: [AGENT_SERVER_WORK_ITEM_CLAIM_TOOL_REF],
+            toolRefs: [
+              AGENT_SERVER_WORK_ITEM_CLAIM_TOOL_REF,
+              AGENT_SERVER_WORK_ITEM_COMMENT_TOOL_REF,
+              AGENT_SERVER_WORK_ITEM_STATUS_TOOL_REF,
+            ],
             contribute: input.workOrganization,
           },
         ]

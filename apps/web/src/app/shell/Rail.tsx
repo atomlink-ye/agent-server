@@ -28,7 +28,7 @@ export interface RailProps {
 export function Rail({ activeTab, onSelectTab }: RailProps) {
   return (
     <aside className="rail" aria-label="Primary navigation">
-      <div className="rail-brand" aria-label="Agent Chat">
+      <div className="rail-brand" aria-label="Agent Server">
         <span aria-hidden="true">✦</span>
       </div>
       <nav className="rail-tabs" aria-label="Sections">
@@ -108,7 +108,7 @@ function RailTab({
       <span className="rail-tab-icon" aria-hidden="true">
         <Icon />
       </span>
-      <span>{label}</span>
+      <span className="rail-tab-label">{label}</span>
     </button>
   );
 }

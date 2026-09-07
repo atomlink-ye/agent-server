@@ -85,6 +85,8 @@ It does not expose technical Task/Run trees, provider identity, prompts, credent
 
 A Board column carries a nullable `kind` (`todo | doing | done`) describing what the column _means_, as opposed to what it is called. `null` means the meaning is not declared, and placement automation then leaves that column alone: a board titled _Backlog / In flight / Shipped_ is never guessed at, because a wrong guess silently moves a user's cards.
 
+Creating a Board atomically creates Todo, Doing, and Done columns at positions 0, 1, and 2 with matching kinds. The browser exposes a Workflow stage selector when creating or editing a column; Not declared sends `kind: null`. Renaming a column does not infer its kind. These operations leave other existing columns unchanged.
+
 A Board is a Workspace-scoped coordination projection. A WorkItem can exist without a Board. In this MVE a WorkItem has at most one Board placement, represented separately from the WorkItem so Board ownership does not leak into the core coordination object.
 
 ### Routes
@@ -92,7 +94,7 @@ A Board is a Workspace-scoped coordination projection. A WorkItem can exist with
 | Method   | Path                                     | Success | Semantics                                                                 |
 | -------- | ---------------------------------------- | ------- | ------------------------------------------------------------------------- |
 | `GET`    | `/api/v1/boards`                         | `200`   | Lists owner-scoped Boards.                                                |
-| `POST`   | `/api/v1/boards`                         | `201`   | Creates a Board.                                                          |
+| `POST`   | `/api/v1/boards`                         | `201`   | Creates a Board with Todo/Doing/Done columns and matching kinds.            |
 | `GET`    | `/api/v1/boards/{id}`                    | `200`   | Returns Board, ordered columns, placements, and the referenced WorkItems. |
 | `PATCH`  | `/api/v1/boards/{id}`                    | `200`   | Updates title/description.                                                |
 | `DELETE` | `/api/v1/boards/{id}`                    | `204`   | Deletes Board projection; WorkItems remain.                               |
@@ -118,5 +120,7 @@ This is the product coordination plane. It is unrelated to the Team-collaboratio
 ## Persistence and recovery boundary
 
 `0062_coworker_work_organization.sql` adds durable WorkItem, comment, Board, column, and placement tables. `0064_work_item_mentions_and_column_kinds.sql` adds `product_work_board_columns.kind` plus `mentions` on WorkItems and comments, and backfills `kind` only on exact case-insensitive title matches. `0065_work_item_wake_loop_counters.sql` adds the per-WorkItem mutual-wake counter backing the loop guard above. The current Prove/MVE scope uses the existing single-service process for promotion serialization plus the durable unique linked-Work constraint. It does not claim multi-host promotion recovery or a generalized workflow engine.
+
+The 0064 title backfill runs only when upgrading a database that has not recorded that migration. Already-applied migrations are skipped; normal Board creation, editing, and claiming do not run that backfill. Stored kinds do not distinguish a historical backfill from an explicit user selection, so a bulk reset to null would also erase user declarations.
 
 The WorkItem/Board state is canonical database state. Frontend optimistic/drag UI must converge by re-reading the bounded API response.

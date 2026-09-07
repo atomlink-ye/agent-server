@@ -24,16 +24,20 @@ import ParticipantChip from './ParticipantChip';
 import { buildParticipantDirectory, type Participant } from './participants';
 import {
   columnKind,
-  findDoingColumn,
   readCommentCount,
+  readColumnKind,
   readMentionIds,
+  type BoardColumnKind,
 } from './work-item-extensions';
 import { CommentCount, MentionRow, StatusBadge } from './WorkItemMeta';
 import './work-organization.css';
 
-const BOARDS_LOAD_ERROR = '看板加载失败，请检查网络连接后重试。';
-const BOARDS_UNAVAILABLE = '当前工作区暂未开启看板协作。';
-const BOARDS_ACTION_ERROR = '这次看板改动没能保存，请重试。';
+const BOARDS_LOAD_ERROR =
+  'Unable to load Boards. Check your connection and try again.';
+const BOARDS_UNAVAILABLE =
+  'Board collaboration is not enabled in this workspace yet.';
+const BOARDS_ACTION_ERROR =
+  'Unable to save this Board change. Please try again.';
 
 /**
  * How often an open Board re-reads its snapshot.
@@ -50,13 +54,23 @@ const BOARD_REFRESH_INTERVAL_MS = 5000;
 const CARD_MIME = 'application/x-agent-server-work-item';
 const COLUMN_MIME = 'application/x-agent-server-board-column';
 
+const COLUMN_KIND_OPTIONS: readonly {
+  readonly value: BoardColumnKind | '';
+  readonly label: string;
+}[] = [
+  { value: 'todo', label: 'Todo' },
+  { value: 'doing', label: 'Doing' },
+  { value: 'done', label: 'Done' },
+  { value: '', label: 'Not declared' },
+];
+
 type RecoverableError = {
   readonly source: 'snapshot' | 'action';
   readonly message: string;
   readonly retry?: () => void;
 };
 
-// The left pane's "还没有看板。" claim is a factual statement about the
+// The left pane's "No Boards yet." claim is a factual statement about the
 // user's data. It must only be reachable from a successful load, never from
 // "we could not ask" (error) or "this capability is off" (unavailable).
 type ListStatus = 'loading' | 'ready' | 'unavailable' | 'error';
@@ -230,11 +244,11 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
 
   return (
     <>
-      <aside className="sidebar work-org-pane" aria-label="看板导航">
+      <aside className="sidebar work-org-pane" aria-label="Board navigation">
         <div className="pane-heading work-org-heading">
           <div>
-            <span className="eyebrow">AI 同事工作区</span>
-            <h1>看板</h1>
+            <span className="eyebrow">AI Coworker workspace</span>
+            <h1>Boards</h1>
           </div>
           <button
             type="button"
@@ -242,7 +256,7 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
             disabled={listStatus === 'unavailable' || listStatus === 'error'}
             onClick={() => setCreatingBoard(true)}
           >
-            + 新建看板
+            + New Board
           </button>
         </div>
         {creatingBoard ? (
@@ -252,20 +266,20 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
           >
             <input
               autoFocus
-              aria-label="新看板标题"
+              aria-label="New Board title"
               value={newBoardTitle}
               onChange={(event) => setNewBoardTitle(event.target.value)}
-              placeholder="看板标题"
+              placeholder="Board title"
             />
-            <button type="submit">创建</button>
+            <button type="submit">Create</button>
             <button type="button" onClick={() => setCreatingBoard(false)}>
-              取消
+              Cancel
             </button>
           </form>
         ) : null}
         <div className="work-org-list">
           {listStatus === 'loading' && boards.length === 0 ? (
-            <p className="pane-placeholder">正在加载看板…</p>
+            <p className="pane-placeholder">Loading Boards…</p>
           ) : null}
           {listStatus === 'unavailable' ? (
             <div className="pane-placeholder" role="status">
@@ -276,12 +290,12 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
             <div className="pane-placeholder" role="alert">
               <p>{BOARDS_LOAD_ERROR}</p>
               <button type="button" onClick={() => void loadBoards()}>
-                重试
+                Try again
               </button>
             </div>
           ) : null}
           {listStatus === 'ready' && boards.length === 0 ? (
-            <p className="pane-placeholder">还没有看板。</p>
+            <p className="pane-placeholder">No Boards yet.</p>
           ) : null}
           {listStatus === 'ready'
             ? boards.map((board) => (
@@ -295,7 +309,10 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
                   }
                 >
                   <strong>{board.title}</strong>
-                  <small>{board.description ?? '人和 AI 同事共用的看板'}</small>
+                  <small>
+                    {board.description ??
+                      'A Board shared by people and AI Coworkers'}
+                  </small>
                 </button>
               ))
             : null}
@@ -303,13 +320,13 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
       </aside>
 
       <main className="chat-panel work-board-main">
-        <TitleBar section="看板" />
-        <section className="work-org-content" aria-label="看板画布">
+        <TitleBar section="Boards" />
+        <section className="work-org-content" aria-label="Board canvas">
           <div className="work-org-mobile-picker">
             <label>
-              <span>看板</span>
+              <span>Board</span>
               <select
-                aria-label="选择看板"
+                aria-label="Select a Board"
                 value={selectedBoardId ?? ''}
                 onChange={(event) =>
                   navigate(
@@ -319,7 +336,7 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
                   )
                 }
               >
-                <option value="">选择看板</option>
+                <option value="">Select a Board</option>
                 {boards.map((board) => (
                   <option key={board.id} value={board.id}>
                     {board.title}
@@ -333,7 +350,7 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
               disabled={listStatus === 'unavailable' || listStatus === 'error'}
               onClick={() => setCreatingBoard(true)}
             >
-              + 新建看板
+              + New Board
             </button>
           </div>
           {error &&
@@ -343,7 +360,7 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
               <p>{error.message}</p>
               {error.retry ? (
                 <button type="button" onClick={error.retry}>
-                  重试
+                  Try again
                 </button>
               ) : null}
             </div>
@@ -353,7 +370,7 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
               <span className="work-main-icon" aria-hidden="true">
                 ▦
               </span>
-              <h1>看板功能未开启</h1>
+              <h1>Boards are unavailable</h1>
               <p>{BOARDS_UNAVAILABLE}</p>
             </div>
           ) : listStatus === 'error' ? (
@@ -361,10 +378,10 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
               <span className="work-main-icon" aria-hidden="true">
                 ▦
               </span>
-              <h1>看板加载失败</h1>
+              <h1>Unable to load Boards</h1>
               <p>{BOARDS_LOAD_ERROR}</p>
               <button type="button" onClick={() => void loadBoards()}>
-                重试
+                Try again
               </button>
             </div>
           ) : selectionStatus === 'loading' ? (
@@ -375,17 +392,20 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
               <span className="work-main-icon" aria-hidden="true">
                 ▦
               </span>
-              <h1>正在加载所选看板…</h1>
+              <h1>Loading the selected Board…</h1>
             </div>
           ) : selectionStatus === 'not_found' ? (
             <div className="work-main-empty" data-testid="boards-not-found">
               <span className="work-main-icon" aria-hidden="true">
                 ▦
               </span>
-              <h1>所选看板已不可用。</h1>
-              <p>这个看板可能已被删除，或已移出当前工作区。</p>
+              <h1>The selected Board is unavailable.</h1>
+              <p>
+                This Board may have been deleted or moved out of the current
+                workspace.
+              </p>
               <button type="button" onClick={() => navigate('/boards')}>
-                返回看板列表
+                Back to Boards
               </button>
             </div>
           ) : selectionStatus === 'error' ? (
@@ -396,10 +416,10 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
               <span className="work-main-icon" aria-hidden="true">
                 ▦
               </span>
-              <h1>看板加载失败</h1>
+              <h1>Unable to load Boards</h1>
               <p>{BOARDS_LOAD_ERROR}</p>
               <button type="button" onClick={() => void loadSnapshot()}>
-                重试
+                Try again
               </button>
             </div>
           ) : creatingBoard ? (
@@ -433,10 +453,13 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
               <span className="work-main-icon" aria-hidden="true">
                 ▦
               </span>
-              <h1>选择一个看板</h1>
-              <p>在工作正式进入 Work 执行之前，先用看板把它梳理清楚。</p>
+              <h1>Select a Board</h1>
+              <p>
+                Use a Board to organize the work before it enters formal Work
+                execution.
+              </p>
               <button type="button" onClick={() => setCreatingBoard(true)}>
-                新建看板
+                New Board
               </button>
             </div>
           )}
@@ -511,7 +534,7 @@ function BoardAuthoringForm({
           {submitLabel}
         </button>
         <button type="button" onClick={onCancel}>
-          取消
+          Cancel
         </button>
       </div>
     </form>
@@ -534,20 +557,20 @@ function BoardCreationForm({
   return (
     <BoardAuthoringForm
       className={className}
-      eyebrow="新建看板"
-      heading="给这个看板起个名字"
-      submitLabel="创建看板"
+      eyebrow="New Board"
+      heading="Name this Board"
+      submitLabel="Create Board"
       submitDisabled={!title.trim()}
       onCancel={onCancel}
       onSubmit={onSubmit}
     >
       <label>
-        看板标题
+        Board title
         <input
           autoFocus
           value={title}
           onChange={(event) => onChange(event.target.value)}
-          placeholder="看板标题"
+          placeholder="Board title"
         />
       </label>
     </BoardAuthoringForm>
@@ -573,6 +596,9 @@ function BoardCanvas({
 }) {
   const navigate = useNavigate();
   const [newColumnTitle, setNewColumnTitle] = useState('');
+  const [newColumnKind, setNewColumnKind] = useState<BoardColumnKind | null>(
+    null,
+  );
   const [addingColumn, setAddingColumn] = useState(false);
   const [authoring, setAuthoring] = useState<
     | {
@@ -583,6 +609,7 @@ function BoardCanvas({
         readonly kind: 'rename-column';
         readonly columnId: string;
         readonly title: string;
+        readonly columnKind: BoardColumnKind | null;
       }
     | {
         readonly kind: 'create-card';
@@ -622,6 +649,11 @@ function BoardCanvas({
       ),
     [snapshot.columns],
   );
+
+  function declaredColumnKind(columnId: string): BoardColumnKind | null {
+    const column = snapshot.columns.find((entry) => entry.id === columnId);
+    return column ? readColumnKind(column) : null;
+  }
 
   // The Board's own mention/assignee directory: the Coworker roster plus every
   // principal these cards have actually shown us.
@@ -670,8 +702,10 @@ function BoardCanvas({
       await workOrganizationClient.createColumn(snapshot.board.id, {
         title: newColumnTitle.trim(),
         position: snapshot.columns.length,
+        kind: newColumnKind,
       });
       setNewColumnTitle('');
+      setNewColumnKind(null);
       setAddingColumn(false);
       await refresh();
     } catch {
@@ -696,11 +730,16 @@ function BoardCanvas({
         const column = snapshot.columns.find(
           (entry) => entry.id === authoring.columnId,
         );
-        if (!title || title === column?.title) return;
+        if (
+          !title ||
+          (title === column?.title &&
+            authoring.columnKind === (column ? readColumnKind(column) : null))
+        )
+          return;
         await workOrganizationClient.updateColumn(
           snapshot.board.id,
           authoring.columnId,
-          { title },
+          { title, kind: authoring.columnKind },
         );
         await refresh();
       } else if (authoring.kind === 'delete-column') {
@@ -804,23 +843,9 @@ function BoardCanvas({
     }
   }
 
-  /** After a claim, the card belongs where work in progress lives. */
-  async function moveClaimedCard(workItemId: string) {
-    const doing = findDoingColumn(columns);
-    const holding = columns.find((column) =>
-      (placementsByColumn.get(column.id) ?? []).some(
-        (entry) => entry.item.id === workItemId,
-      ),
-    );
-    if (!doing || holding?.id === doing.id) {
-      await refresh().catch(() => onError(BOARDS_ACTION_ERROR));
-      return;
-    }
-    await moveCard(
-      workItemId,
-      doing.id,
-      (placementsByColumn.get(doing.id) ?? []).length,
-    );
+  /** The server owns the claim transition, including any Board placement. */
+  async function refreshAfterClaim() {
+    await refresh().catch(() => onError(BOARDS_ACTION_ERROR));
   }
 
   function readDragKind(event: React.DragEvent): 'card' | 'column' | null {
@@ -836,7 +861,7 @@ function BoardCanvas({
     <>
       <header className="work-board-toolbar">
         <div>
-          <span className="eyebrow">共享工作</span>
+          <span className="eyebrow">Shared work</span>
           <h1>{snapshot.board.title}</h1>
           {snapshot.board.description ? (
             <p className="work-org-muted">{snapshot.board.description}</p>
@@ -852,20 +877,20 @@ function BoardCanvas({
               })
             }
           >
-            重命名
+            Rename
           </button>
           <button
             type="button"
             onClick={() => setAuthoring({ kind: 'delete-board' })}
           >
-            删除
+            Delete
           </button>
           <button
             type="button"
             className="work-org-primary"
             onClick={() => setAddingColumn(true)}
           >
-            + 新建列
+            + New column
           </button>
         </div>
       </header>
@@ -874,28 +899,28 @@ function BoardCanvas({
           className="work-board-authoring"
           eyebrow={
             authoring.kind === 'create-card'
-              ? '新建任务'
+              ? 'New Task'
               : authoring.kind.startsWith('delete')
-                ? '确认删除'
-                : '编辑看板'
+                ? 'Confirm deletion'
+                : 'Edit Board'
           }
           heading={
             authoring.kind === 'rename-board'
-              ? '重命名这个看板'
+              ? 'Rename this Board'
               : authoring.kind === 'rename-column'
-                ? '重命名这一列'
+                ? 'Edit this column'
                 : authoring.kind === 'create-card'
-                  ? '添加任务卡片'
+                  ? 'Add a Task card'
                   : authoring.kind === 'delete-board'
-                    ? `删除“${snapshot.board.title}”？`
-                    : `删除列“${authoring.title}”？`
+                    ? `Delete “${snapshot.board.title}”?`
+                    : `Delete the “${authoring.title}” column?`
           }
           submitLabel={
             authoring.kind.startsWith('delete')
-              ? '删除'
+              ? 'Delete'
               : authoring.kind === 'create-card'
-                ? '添加任务'
-                : '保存'
+                ? 'Add Task'
+                : 'Save'
           }
           submitDisabled={
             authoring.kind === 'create-card'
@@ -905,10 +930,12 @@ function BoardCanvas({
                   authoring.title.trim() === snapshot.board.title
                 : authoring.kind === 'rename-column'
                   ? !authoring.title.trim() ||
-                    authoring.title.trim() ===
+                    (authoring.title.trim() ===
                       snapshot.columns.find(
                         (column) => column.id === authoring.columnId,
-                      )?.title
+                      )?.title &&
+                      authoring.columnKind ===
+                        declaredColumnKind(authoring.columnId))
                   : false
           }
           onCancel={() => setAuthoring(null)}
@@ -916,26 +943,57 @@ function BoardCanvas({
         >
           {authoring.kind === 'rename-board' ||
           authoring.kind === 'rename-column' ? (
-            <label>
-              {authoring.kind === 'rename-board' ? '看板标题' : '列标题'}
-              <input
-                autoFocus
-                value={authoring.title}
-                onChange={(event) =>
-                  setAuthoring((current) =>
-                    current &&
-                    (current.kind === 'rename-board' ||
-                      current.kind === 'rename-column')
-                      ? { ...current, title: event.target.value }
-                      : current,
-                  )
-                }
-              />
-            </label>
+            <>
+              <label>
+                {authoring.kind === 'rename-board'
+                  ? 'Board title'
+                  : 'Column title'}
+                <input
+                  autoFocus
+                  value={authoring.title}
+                  onChange={(event) =>
+                    setAuthoring((current) =>
+                      current &&
+                      (current.kind === 'rename-board' ||
+                        current.kind === 'rename-column')
+                        ? { ...current, title: event.target.value }
+                        : current,
+                    )
+                  }
+                />
+              </label>
+              {authoring.kind === 'rename-column' ? (
+                <label>
+                  Workflow stage
+                  <select
+                    aria-label="Workflow stage"
+                    value={authoring.columnKind ?? ''}
+                    onChange={(event) =>
+                      setAuthoring((current) =>
+                        current?.kind === 'rename-column'
+                          ? {
+                              ...current,
+                              columnKind:
+                                (event.target.value as BoardColumnKind) ||
+                                null,
+                            }
+                          : current,
+                      )
+                    }
+                  >
+                    {COLUMN_KIND_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+            </>
           ) : authoring.kind === 'create-card' ? (
             <>
               <MentionTextField
-                label="任务标题"
+                label="Task title"
                 value={authoring.title}
                 onChange={(title) =>
                   setAuthoring((current) =>
@@ -945,7 +1003,7 @@ function BoardCanvas({
                   )
                 }
                 participants={participants}
-                placeholder="任务标题…"
+                placeholder="Task title…"
                 maxLength={200}
                 multiline
                 rows={2}
@@ -953,13 +1011,13 @@ function BoardCanvas({
                 autoFocus
                 hint={
                   <small className="work-org-muted">
-                    Enter 换行，⌘/Ctrl + Enter 提交；输入 @ 可以提及 AI
-                    同事或团队成员。
+                    Press Enter for a new line, or ⌘/Ctrl + Enter to submit.
+                    Type @ to mention an AI Coworker or team member.
                   </small>
                 }
               />
               <MentionTextField
-                label="描述（可选）"
+                label="Description (optional)"
                 value={authoring.description}
                 onChange={(description) =>
                   setAuthoring((current) =>
@@ -969,12 +1027,12 @@ function BoardCanvas({
                   )
                 }
                 participants={participants}
-                placeholder="描述一下这个任务"
+                placeholder="Describe this Task"
                 multiline
                 rows={4}
                 hint={
                   <small className="work-org-muted">
-                    输入 @ 可以提及 AI 同事或团队成员。
+                    Type @ to mention an AI Coworker or team member.
                   </small>
                 }
               />
@@ -982,8 +1040,8 @@ function BoardCanvas({
           ) : (
             <p>
               {authoring.kind === 'delete-board'
-                ? '任务本身会保留，只移除这个看板视图。'
-                : '卡片会作为任务保留，但会离开这个看板。'}
+                ? 'Tasks will remain; only this Board view will be removed.'
+                : 'Cards will remain as Tasks, but will be removed from this Board.'}
             </p>
           )}
         </BoardAuthoringForm>
@@ -1042,7 +1100,7 @@ function BoardCanvas({
                     draggable
                     role="button"
                     tabIndex={0}
-                    aria-label={`拖动 ${column.title} 调整列顺序`}
+                    aria-label={`Drag ${column.title} to reorder columns`}
                     data-testid="work-board-column-handle"
                     data-column-id={column.id}
                     onDragStart={(event) => {
@@ -1063,12 +1121,13 @@ function BoardCanvas({
                   <div className="work-board-column-actions">
                     <button
                       type="button"
-                      aria-label={`重命名 ${column.title}`}
+                      aria-label={`Edit ${column.title}`}
                       onClick={() =>
                         setAuthoring({
                           kind: 'rename-column',
                           columnId: column.id,
                           title: column.title,
+                          columnKind: readColumnKind(column),
                         })
                       }
                     >
@@ -1076,7 +1135,7 @@ function BoardCanvas({
                     </button>
                     <button
                       type="button"
-                      aria-label={`删除 ${column.title}`}
+                      aria-label={`Delete ${column.title}`}
                       onClick={() =>
                         setAuthoring({
                           kind: 'delete-column',
@@ -1159,7 +1218,7 @@ function BoardCanvas({
                     })
                   }
                 >
-                  + 新建任务
+                  + New Task
                 </button>
               </section>
             );
@@ -1173,14 +1232,39 @@ function BoardCanvas({
                 autoFocus
                 value={newColumnTitle}
                 onChange={(event) => setNewColumnTitle(event.target.value)}
-                placeholder="列标题"
+                placeholder="Column title"
               />
+              <label>
+                Workflow stage
+                <select
+                  aria-label="Workflow stage"
+                  value={newColumnKind ?? ''}
+                  onChange={(event) =>
+                    setNewColumnKind(
+                      (event.target.value as BoardColumnKind) || null,
+                    )
+                  }
+                >
+                  {COLUMN_KIND_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <div className="work-org-actions">
                 <button type="submit" className="work-org-primary">
-                  添加
+                  Add
                 </button>
-                <button type="button" onClick={() => setAddingColumn(false)}>
-                  取消
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewColumnTitle('');
+                    setNewColumnKind(null);
+                    setAddingColumn(false);
+                  }}
+                >
+                  Cancel
                 </button>
               </div>
             </form>
@@ -1190,7 +1274,7 @@ function BoardCanvas({
               className="work-board-column work-board-add-column"
               onClick={() => setAddingColumn(true)}
             >
-              + 添加列
+              + Add column
             </button>
           )}
         </div>
@@ -1199,7 +1283,7 @@ function BoardCanvas({
             workItemId={peekWorkItemId}
             participants={participants}
             claimSupported={claimSupported}
-            onClaimed={(workItemId) => void moveClaimedCard(workItemId)}
+            onClaimed={() => void refreshAfterClaim()}
             onClaimUnsupported={() => setClaimSupported(false)}
             onClose={() => setPeekWorkItemId(null)}
           />
@@ -1327,17 +1411,17 @@ function BoardCard({
       </span>
       <div className="work-board-card-actions">
         <button type="button" onClick={onOpenPeek}>
-          卡片详情
+          Card details
         </button>
         <button type="button" onClick={onOpenTask}>
-          打开任务
+          Open Task
         </button>
       </div>
       {columns.length > 1 ? (
         <label className="work-board-card-move">
-          <span>移动到</span>
+          <span>Move to</span>
           <select
-            aria-label={`把 ${item.title} 移动到其他列`}
+            aria-label={`Move ${item.title} to another column`}
             defaultValue=""
             onChange={(event) => {
               const target = event.currentTarget.value;
@@ -1345,7 +1429,7 @@ function BoardCard({
               if (target) onMoveTo(target);
             }}
           >
-            <option value="">选择列…</option>
+            <option value="">Select a column…</option>
             {columns
               .filter((target) => target.id !== columnId)
               .map((target) => (

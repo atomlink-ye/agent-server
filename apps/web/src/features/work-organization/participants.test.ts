@@ -36,7 +36,7 @@ describe('buildParticipantDirectory', () => {
         id: 'ari',
         name: 'Ari Analyst',
         kind: 'agent',
-        detail: 'Analyst · 可用',
+        detail: 'Analyst · Available',
         active: true,
       },
     ]);
@@ -47,7 +47,7 @@ describe('buildParticipantDirectory', () => {
       agents: [coworker('ari', 'Ari', 'available', null)],
       principalIds: [],
     });
-    expect(participant?.detail).toBe('AI 同事 · 可用');
+    expect(participant?.detail).toBe('AI Coworker · Available');
   });
 
   it('marks an unavailable Coworker inactive', () => {

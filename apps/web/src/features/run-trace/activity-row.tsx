@@ -7,11 +7,13 @@ import type {
 export function ActivityRow({
   entry,
   nested = false,
+  terminalRun = false,
 }: {
   readonly entry: ProjectedTranscriptEntry;
   readonly nested?: boolean;
+  readonly terminalRun?: boolean;
 }) {
-  const presentation = buildEntryPresentation(entry.event);
+  const presentation = buildEntryPresentation(entry.event, { terminalRun });
   const children = entry.children?.length ? (
     <div className="transcript__children">
       {entry.children.map((child) => (
@@ -19,6 +21,7 @@ export function ActivityRow({
           entry={child}
           key={child.sourceOrdinals.join(':')}
           nested
+          terminalRun={terminalRun}
         />
       ))}
     </div>
@@ -43,7 +46,13 @@ export function ActivityRow({
         }
       : {}),
   } as const;
-  const content = <RowContent event={entry.event} expandable={expandable} />;
+  const content = (
+    <RowContent
+      event={entry.event}
+      expandable={expandable}
+      terminalRun={terminalRun}
+    />
+  );
   const platformStatus =
     entry.event.kind === 'tool_status' ? entry.event.status : '';
   if (!expandable)
@@ -86,11 +95,13 @@ export function ActivityRow({
 function RowContent({
   event,
   expandable,
+  terminalRun,
 }: {
   readonly event: TranscriptEntry;
   readonly expandable: boolean;
+  readonly terminalRun: boolean;
 }) {
-  const presentation = buildEntryPresentation(event);
+  const presentation = buildEntryPresentation(event, { terminalRun });
   return (
     <>
       <span className="transcript__icon-slot">

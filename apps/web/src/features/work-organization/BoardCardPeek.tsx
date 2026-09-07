@@ -20,9 +20,11 @@ import {
   StatusBadge,
 } from './WorkItemMeta';
 
-const PEEK_LOAD_ERROR = '这张卡片的详情加载失败，请重试。';
-const CLAIM_UNSUPPORTED = '当前部署还没有开启任务领取。';
-const CLAIM_FAILED = '领取没有成功，可能已经有人先领了。请刷新后再试。';
+const PEEK_LOAD_ERROR = 'Unable to load this card’s details. Please try again.';
+const CLAIM_UNSUPPORTED =
+  'Task claiming is not enabled in this deployment yet.';
+const CLAIM_FAILED =
+  'Unable to claim this Task. Someone else may have claimed it first. Refresh and try again.';
 
 type Comments = Awaited<ReturnType<typeof workOrganizationClient.listComments>>;
 type PeekStatus = 'loading' | 'ready' | 'error';
@@ -113,29 +115,29 @@ export function BoardCardPeek({
       setComments((current) => [...current, created]);
       setComment('');
     } catch {
-      setNotice('评论没能发出去，请重试。');
+      setNotice('Unable to post your comment. Please try again.');
     }
   }
 
   return (
     <aside
       className="work-board-peek"
-      aria-label="卡片详情"
+      aria-label="Card details"
       data-testid="work-board-peek"
     >
       <header className="work-board-peek-head">
-        <span className="eyebrow">卡片详情</span>
-        <button type="button" aria-label="关闭卡片详情" onClick={onClose}>
+        <span className="eyebrow">Card details</span>
+        <button type="button" aria-label="Close card details" onClick={onClose}>
           ×
         </button>
       </header>
       {status === 'loading' ? (
-        <p className="work-org-muted">正在加载卡片详情…</p>
+        <p className="work-org-muted">Loading card details…</p>
       ) : status === 'error' ? (
         <div className="work-org-error" role="alert">
           <p>{PEEK_LOAD_ERROR}</p>
           <button type="button" onClick={() => void load()}>
-            重试
+            Try again
           </button>
         </div>
       ) : detail ? (
@@ -157,8 +159,8 @@ export function BoardCardPeek({
             />
           </h2>
           <p className="work-org-muted">
-            由 {participantLabel(participants, detail.work_item.created_by)}{' '}
-            创建
+            Created by{' '}
+            {participantLabel(participants, detail.work_item.created_by)}
           </p>
           {detail.work_item.description ? (
             <p className="work-board-peek-description">
@@ -168,7 +170,9 @@ export function BoardCardPeek({
               />
             </p>
           ) : (
-            <p className="work-org-muted">这张卡片还没有描述。</p>
+            <p className="work-org-muted">
+              This card does not have a description yet.
+            </p>
           )}
           <MentionRow
             ids={readMentionIds(detail.work_item)}
@@ -200,16 +204,19 @@ export function BoardCardPeek({
                 navigate(`/tasks/${encodeURIComponent(workItemId)}`)
               }
             >
-              打开任务
+              Open Task
             </button>
           </div>
-          <section className="work-board-peek-comments" aria-label="卡片评论">
+          <section
+            className="work-board-peek-comments"
+            aria-label="Card comments"
+          >
             <div className="work-board-peek-comments-head">
-              <span className="eyebrow">评论</span>
+              <span className="eyebrow">Comments</span>
               <CommentCount count={comments.length} />
             </div>
             {comments.length === 0 ? (
-              <p className="work-org-muted">还没有评论。</p>
+              <p className="work-org-muted">No comments yet.</p>
             ) : null}
             {comments.map((entry) => (
               <div key={entry.id} className="work-org-comment">
@@ -234,20 +241,20 @@ export function BoardCardPeek({
               </div>
             ))}
             <MentionTextField
-              ariaLabel="添加评论"
+              ariaLabel="Add a comment"
               value={comment}
               onChange={setComment}
               participants={participants}
               multiline
               rows={3}
-              placeholder="写下评论。用 @ 提及的成员会留在共享的工作记录里。"
+              placeholder="Write a comment. Your @mentions will be saved in the shared work record."
             />
             <button
               type="button"
               disabled={!comment.trim()}
               onClick={() => void addComment()}
             >
-              评论
+              Comment
             </button>
           </section>
         </>
@@ -289,7 +296,7 @@ function ClaimButton({
       disabled={claiming}
       onClick={onClaim}
     >
-      {claiming ? '正在领取…' : '领取任务'}
+      {claiming ? 'Claiming…' : 'Claim Task'}
     </button>
   );
 }

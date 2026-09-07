@@ -137,8 +137,24 @@ export function ChatTranscript({
   onRetry,
   onOpenWork,
 }: ChatTranscriptProps) {
+  const navigate = useNavigate();
+
   if (!hasConversations) {
-    return <StateMessage>No conversations are available.</StateMessage>;
+    return (
+      <div className="empty-chat conversation-empty-state" role="status">
+        <div className="empty-chat-icon" aria-hidden="true">
+          <span>✦</span>
+        </div>
+        <h1>Ready when you are</h1>
+        <p>
+          Start with a Coworker, then this is where your shared context and
+          replies will live.
+        </p>
+        <button type="button" onClick={() => navigate('/agents')}>
+          Meet your Coworkers
+        </button>
+      </div>
+    );
   }
 
   if (conversationId === null) {

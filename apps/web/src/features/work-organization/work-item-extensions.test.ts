@@ -103,15 +103,10 @@ describe('readColumnKind / columnKind', () => {
     expect(readColumnKind(column('Doing', { kind: 'blocked' }))).toBeNull();
   });
 
-  it('guesses from the title while the field is absent', () => {
-    expect(columnKind(column('In Progress'))).toBe('doing');
-    expect(columnKind(column('WIP'))).toBe('doing');
-    expect(columnKind(column('In Review'))).toBe('doing');
-    expect(columnKind(column('Completed'))).toBe('done');
-    expect(columnKind(column('Backlog'))).toBe('todo');
-  });
-
-  it('answers null for a title it cannot read', () => {
+  it('does not infer a kind from a column title', () => {
+    expect(columnKind(column('In Progress'))).toBeNull();
+    expect(columnKind(column('Completed'))).toBeNull();
+    expect(columnKind(column('Backlog'))).toBeNull();
     expect(columnKind(column('Icebox'))).toBeNull();
   });
 });
@@ -190,7 +185,7 @@ describe('claimBlockedReason', () => {
 
   it('explains a done Task', () => {
     expect(claimBlockedReason(item({ status: 'done' }), now, [])).toBe(
-      '这个任务已经完成了。',
+      'This Task is already complete.',
     );
   });
 
@@ -201,7 +196,7 @@ describe('claimBlockedReason', () => {
         now,
         [participant],
       ),
-    ).toBe('这个任务已被 Ari Analyst 领取。');
+    ).toBe('This Task has already been claimed by Ari Analyst.');
   });
 
   it('falls back without exposing the raw id when the holder is unresolved', () => {
@@ -212,6 +207,6 @@ describe('claimBlockedReason', () => {
         now,
         [],
       ),
-    ).toBe('这个任务已被 该同事 领取。');
+    ).toBe('This Task has already been claimed by this Coworker.');
   });
 });

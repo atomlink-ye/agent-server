@@ -38,7 +38,7 @@ export function MentionedText({
         title={
           participant
             ? `${participant.name} · ${span.id}`
-            : `${span.id} 不在当前工作区的成员目录中`
+            : `${span.id} is not in this workspace's member directory.`
         }
       >
         @{participant?.name ?? span.id}

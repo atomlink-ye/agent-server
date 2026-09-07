@@ -64,26 +64,9 @@ export function readColumnKind(
     : null;
 }
 
-const TITLE_KINDS: readonly (readonly [BoardColumnKind, RegExp])[] = [
-  [
-    'doing',
-    /\b(doing|in[\s_-]?progress|wip|active|review|in[\s_-]?review|qa)\b/i,
-  ],
-  ['done', /\b(done|complete[d]?|shipped)\b/i],
-  ['todo', /\b(todo|to[\s_-]?do|backlog|inbox|ready)\b/i],
-];
-
-/**
- * A column's kind, falling back to its title while the backend field is
- * absent. The fallback is a guess and is only used to pick a claim target,
- * never to relabel what the user typed.
- */
+/** A column's kind is meaningful only when it was explicitly declared. */
 export function columnKind(column: WorkBoardColumnDto): BoardColumnKind | null {
-  const declared = readColumnKind(column);
-  if (declared) return declared;
-  for (const [kind, pattern] of TITLE_KINDS)
-    if (pattern.test(column.title)) return kind;
-  return null;
+  return readColumnKind(column);
 }
 
 /** The column a claimed card belongs in, or null when the Board has none. */
@@ -134,9 +117,9 @@ export function claimBlockedReason(
   participants: readonly Participant[],
 ): string | null {
   if (isClaimable(item, now)) return null;
-  if (item.status === 'done') return '这个任务已经完成了。';
+  if (item.status === 'done') return 'This Task is already complete.';
   const claim = readClaimState(item);
   const holderId = claim?.claimedBy ?? item.assignee_id;
-  if (!holderId) return '当前无法领取这个任务。';
-  return `这个任务已被 ${participantLabelSafe(participants, holderId)} 领取。`;
+  if (!holderId) return 'This Task cannot be claimed right now.';
+  return `This Task has already been claimed by ${participantLabelSafe(participants, holderId)}.`;
 }

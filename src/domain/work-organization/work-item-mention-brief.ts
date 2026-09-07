@@ -6,9 +6,9 @@
  * the brief carries the identifiers it needs to act and the exact tool call that
  * takes ownership, and nothing else.
  *
- * The prose is Chinese because a human or a Coworker reads it verbatim in chat;
- * identifiers, tool refs, and the JSON argument stay literal so they can be
- * copied into a call unchanged.
+ * The prose is English to match the product surface a human or a Coworker reads
+ * it in; identifiers, tool refs, and the JSON argument stay literal so they can
+ * be copied into a call unchanged.
  *
  * It is pure so the wording is testable without a database, a runtime, or a
  * model, and so re-waking on the same event produces byte-identical prose.
@@ -39,39 +39,45 @@ export interface WorkItemMentionBriefInput {
 }
 
 export function workItemMentionBrief(input: WorkItemMentionBriefInput): string {
-  const actor = compact(input.actorLabel, 120) || '有人';
+  const actor = compact(input.actorLabel, 120) || 'Someone';
   const title = compact(input.workItem.title, MAX_TITLE);
   const onBoard = Boolean(input.workItem.boardId && input.workItem.columnId);
   const lines: string[] = [opening(input.reason, actor, title)];
 
-  lines.push(`WorkItem：${input.workItem.id}`);
+  lines.push(`WorkItem: ${input.workItem.id}`);
   if (onBoard)
     lines.push(
-      `看板：${input.workItem.boardId}（列 ${input.workItem.columnId}）`,
+      `Board: ${input.workItem.boardId} (column ${input.workItem.columnId})`,
     );
 
   const quote = input.quote ? compact(input.quote, MAX_QUOTE) : '';
-  if (quote) lines.push(`对方写道：“${quote}”`);
+  if (quote) lines.push(`They wrote: "${quote}"`);
 
   // Claiming is what makes the work yours, and it is also what tells everyone
   // else to leave it alone — so it is stated as the first step, not an option.
   // The board sentence is omitted off-board rather than hedged: telling an agent
   // about a Doing column that cannot exist invites it to go looking for one.
   lines.push(
-    `要接手这项工作，请调用 ${CLAIM_TOOL_REF}，参数为 {"work_item_id":"${input.workItem.id}"}。` +
-      '认领是原子操作：如果返回“已被他人认领”，说明已经有人在做，你不要开始。' +
+    `To take this work, call ${CLAIM_TOOL_REF} with {"work_item_id":"${input.workItem.id}"}. ` +
+      'Claiming is atomic: if it returns that someone else already claimed it, ' +
+      'they are on it and you must not start.' +
       (onBoard
-        ? '认领成功后，如果该看板声明了 Doing 列，这个 WorkItem 会同时被移动到该列。'
+        ? ' On a successful claim, if this board declares a Doing column, the WorkItem moves there too.'
         : ''),
   );
-  lines.push('如果你不是合适的执行者，请在这里回复说明原因，不要认领。');
+  lines.push(
+    'If you are not the right one to do this, reply here explaining why and do not claim it.',
+  );
   // Mirrors an incident we already fixed once (a WorkRun that succeeded but
   // showed nothing on Files/Overview): the wake should not let it recur by
   // omission, so it says the sentence out loud instead of assuming an agent
   // will think to close the loop on its own.
   lines.push(
-    '如果工作在这里就做完了，请确保 WorkItem 的状态真实反映“已完成”，不要停留在过时的“进行中”' +
-      (onBoard ? '——看板显示进行中而工作其实做完了，比没有看板还糟糕。' : '。'),
+    'When you finish the work, post the result as a comment on the WorkItem and ' +
+      'set its status to done rather than leaving it in progress' +
+      (onBoard
+        ? ' — a board that disagrees with reality is worse than no board at all.'
+        : '.'),
   );
   return lines.join('\n');
 }
@@ -83,11 +89,11 @@ function opening(
 ): string {
   switch (reason) {
     case 'assignment':
-      return `${actor} 把一个 WorkItem 指派给了你：${title}`;
+      return `${actor} assigned a WorkItem to you: ${title}`;
     case 'comment':
-      return `${actor} 在一个 WorkItem 的评论里提到了你：${title}`;
+      return `${actor} mentioned you in a comment on a WorkItem: ${title}`;
     default:
-      return `${actor} 在一个 WorkItem 上提到了你：${title}`;
+      return `${actor} mentioned you on a WorkItem: ${title}`;
   }
 }
 

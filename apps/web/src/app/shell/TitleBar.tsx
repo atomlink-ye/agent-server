@@ -4,18 +4,11 @@ export interface TitleBarProps {
 
 export function TitleBar({ section }: TitleBarProps) {
   return (
-    <header className="title-bar">
-      <div className="title-bar-lights" aria-hidden="true">
-        <span />
-        <span />
-        <span />
-      </div>
-      <div className="title-bar-brand">
-        <span className="title-bar-mark" aria-hidden="true">
-          ✦
-        </span>
-        <span>Agent Chat</span>
-      </div>
+    <header className="title-bar" aria-label={`${section} workspace`}>
+      <span className="title-bar-crumb">Agent Server</span>
+      <span className="title-bar-divider" aria-hidden="true">
+        /
+      </span>
       <span className="title-bar-section">{section}</span>
     </header>
   );

@@ -5,10 +5,10 @@ export function ArtifactsPane() {
       data-testid="artifacts-unavailable"
     >
       <p className="work-shell-kicker">Artifacts</p>
-      <h2>Artifact delivery is not available in the current Product API.</h2>
+      <h2>Delivered Artifacts are not available yet.</h2>
       <p>
-        This surface stays intentionally empty. Assistant text, arbitrary files,
-        and tool output are not promoted to delivered Artifacts by the browser.
+        Use Overview to open the result from a completed Run. This area will
+        show delivered Artifacts when Work supports them.
       </p>
     </section>
   );

@@ -3,7 +3,6 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { Pool } from 'pg';
 import {
-  managedAgentYaml,
   managedEnvironmentYaml,
   mixedTeamWorkerYaml,
   mixedTeamYaml,
@@ -110,8 +109,8 @@ export async function main() {
       check: (id) => readPublished(`${baseUrl}/api/v1/worker-versions/${id}`),
       recreate: () =>
         bootstrapPublishedWorker(
-          `apiVersion: agent-server/v1alpha1\nkind: Worker\nmetadata:\n  name: web-bootstrap-work-worker\nspec:\n  description: Formal execution role for Web sample Work\n  instructions: Complete the requested Work safely.\n  runtime:\n    provider: paseo\n    modelPolicyRef: free-only\n    mode: isolated\n  tools: []\n  skills: []\n  input:\n    schema:\n      type: object\n      properties: {}\n      additionalProperties: false\n    prompt: Complete the Work.\n  session:\n    invocation: fresh_per_invocation\n    followUps: queued\n    binding: reusable\n  memory:\n    policy: workspace_snapshot\n    proposalLimit: 0\n  permissions:\n    network: read_only\n    filesystem: workspace_read\n  completion:\n    type: executable\n    command: done\n`,
-          'web-bootstrap-work-worker',
+          `apiVersion: agent-server/v1alpha1\nkind: Worker\nmetadata:\n  name: research-brief-worker\nspec:\n  description: Researches a topic and writes a concise brief\n  instructions: Complete the requested Work safely.\n  runtime:\n    provider: paseo\n    modelPolicyRef: free-only\n    mode: isolated\n  tools: []\n  skills: []\n  input:\n    schema:\n      type: object\n      properties: {}\n      additionalProperties: false\n    prompt: Complete the Work.\n  session:\n    invocation: fresh_per_invocation\n    followUps: queued\n    binding: reusable\n  memory:\n    policy: workspace_snapshot\n    proposalLimit: 0\n  permissions:\n    network: read_only\n    filesystem: workspace_read\n  completion:\n    type: executable\n    command: done\n`,
+          'research-brief-worker',
         ),
     });
     const { definitionId, definitionVersionId } = await bootstrapWorkDefinition(
@@ -185,10 +184,26 @@ async function readPublished(url) {
 }
 
 async function bootstrapAgentVersion() {
-  return bootstrapPublishedAgent(
-    managedAgentYaml(),
-    'web-chat-mve-agent-work-tools',
-  );
+  // Seed the demo Coworker through the same product facade a real user goes
+  // through (Agents -> New Coworker), not the raw package import path. The
+  // facade is what records role_label/summary, so a seeded Coworker that
+  // skipped it rendered as a nameless row with "No summary provided." in the
+  // roster while a user-created one looked complete.
+  const created = await request(`${baseUrl}/api/v1/coworkers`, {
+    method: 'POST',
+    idempotencyKey: 'web-chat-mve-coworker-v1',
+    body: {
+      name: 'Maya',
+      role: 'Research Analyst',
+      summary: 'Researches markets and writes concise briefs.',
+      model_policy_ref: 'free-only',
+    },
+    expectedStatus: 201,
+  });
+  const versionId = created.agent_version_id;
+  if (typeof versionId !== 'string')
+    fail('Coworker bootstrap returned no agent version id.');
+  return versionId;
 }
 
 async function bootstrapPublishedAgent(source, key) {
@@ -319,7 +334,7 @@ async function bootstrapWorkDefinition(workerVersionId, environmentVersionId) {
   const workDefinitionSource = `apiVersion: agentserver.dev/v1alpha1
 kind: WorkDefinition
 metadata:
-  name: web-bootstrap-single-worker
+  name: research-brief
 spec:
   kind: single_worker
   worker_version_id: ${workerVersionId}
@@ -369,7 +384,7 @@ async function bootstrapWork(definitionId, definitionVersionId) {
     body: {
       definition_id: definitionId,
       definition_version_id: definitionVersionId,
-      title: 'Web Bootstrap Sample',
+      title: 'Launch brief research',
     },
     expectedStatus: 201,
   });

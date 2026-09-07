@@ -19,7 +19,7 @@ describe('workItemMentionBrief', () => {
     expect(body).toContain('审查注册转化漏斗');
     expect(body).toContain(workItem.id);
     expect(body).toContain('丹娜');
-    expect(body).toContain('提到了你');
+    expect(body).toContain('mentioned you');
   });
 
   it('says it was assigned when the wake came from an assignment', () => {
@@ -28,8 +28,8 @@ describe('workItemMentionBrief', () => {
       actorLabel: '丹娜',
       workItem,
     });
-    expect(body).toContain('指派给了你');
-    expect(body).not.toContain('提到了你');
+    expect(body).toContain('assigned a WorkItem to you');
+    expect(body).not.toContain('mentioned you');
   });
 
   it('tells the agent the exact tool it has to take the WorkItem', () => {
@@ -58,7 +58,7 @@ describe('workItemMentionBrief', () => {
       actorLabel: '丹娜',
       workItem: { id: workItem.id, title: workItem.title },
     });
-    expect(body).not.toContain('看板');
+    expect(body).not.toContain('Board:');
     expect(body).toContain(workItem.id);
   });
 
@@ -68,7 +68,7 @@ describe('workItemMentionBrief', () => {
       actorLabel: '   ',
       workItem,
     });
-    expect(body.startsWith('有人 ')).toBe(true);
+    expect(body.startsWith('Someone ')).toBe(true);
   });
 
   it('quotes the comment that carried the mention, trimmed', () => {
@@ -88,7 +88,9 @@ describe('workItemMentionBrief', () => {
       workItem: { ...workItem, title: '标'.repeat(400) },
       quote: '文'.repeat(4000),
     });
-    expect(body.length).toBeLessThan(1200);
+    // English prose is longer than the Chinese it replaced; the bound still
+    // holds the brief to a size an agent reads in one turn.
+    expect(body.length).toBeLessThan(1500);
     expect(body).toContain('…');
   });
 
@@ -98,8 +100,8 @@ describe('workItemMentionBrief', () => {
       actorLabel: '丹娜',
       workItem,
     });
-    expect(body).toContain('已完成');
-    expect(body).toContain('进行中');
+    expect(body).toContain('set its status to done');
+    expect(body).toContain('in progress');
   });
 
   it('is pure: the same input always produces the same brief', () => {

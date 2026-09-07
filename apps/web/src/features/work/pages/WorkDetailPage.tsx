@@ -1,3 +1,6 @@
+import { useEffect } from 'react';
+import type { WorkListItem } from '@atomlink-ye/agent-server/product-contract';
+
 import { ArtifactsPane } from '../components/panes/artifacts-pane';
 import { DefinitionPane } from '../components/panes/definition-pane';
 import { OverviewPane } from '../components/panes/overview-pane';
@@ -19,12 +22,20 @@ export function WorkDetailPage({
   selectedRunId,
   selectedSessionIndex,
   originConversationId,
+  onSelectedLatestRunState,
 }: {
   readonly workId: string;
   readonly tab?: string;
   readonly selectedRunId?: string;
   readonly selectedSessionIndex?: number;
   readonly originConversationId?: string | null;
+  readonly onSelectedLatestRunState?: (
+    state: {
+      readonly workId: string;
+      readonly runId: string;
+      readonly state: WorkListItem['product_state'];
+    } | null,
+  ) => void;
 }) {
   const activeTab = normalizeWorkTab(tab);
   const preferCurrentDefinition = activeTab === 'definition' && !selectedRunId;
@@ -37,6 +48,24 @@ export function WorkDetailPage({
   const detail = query.detail;
   const runId = detail?.run?.work_run.id;
   const latestRunId = detail?.runs[0]?.id;
+  useEffect(() => {
+    const selectedRun = detail?.run?.work_run;
+    onSelectedLatestRunState?.(
+      detail?.work.id === workId &&
+        selectedRun &&
+        selectedRun.id === latestRunId &&
+        (!selectedRunId || selectedRun.id === selectedRunId)
+        ? { workId, runId: selectedRun.id, state: selectedRun.product_state }
+        : null,
+    );
+  }, [
+    detail?.work.id,
+    detail?.run?.work_run,
+    latestRunId,
+    onSelectedLatestRunState,
+    selectedRunId,
+    workId,
+  ]);
   const pane = detail
     ? (() => {
         switch (activeTab) {

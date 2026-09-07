@@ -83,7 +83,7 @@ export function participantLabel(
 export function participantLabelSafe(
   directory: readonly Participant[],
   id: string,
-  fallback = '该同事',
+  fallback = 'this Coworker',
 ): string {
   return findParticipant(directory, id)?.name ?? fallback;
 }

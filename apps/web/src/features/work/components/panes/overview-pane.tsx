@@ -11,7 +11,7 @@ import {
   productStatePresentation,
   resultCaptureLabel,
 } from '../work-presentation';
-import { workTabPath } from '@/app/routes';
+import { workRunResultFilePath, workTabPath } from '@/app/routes';
 import { outcomeBody, outcomeHeadline } from './outcome-headline';
 
 export function OverviewPane({
@@ -25,8 +25,11 @@ export function OverviewPane({
     return (
       <section className="work-detail-state" data-testid="work-no-runs">
         <p className="work-shell-kicker">Overview</p>
-        <h2>No Run has been recorded yet.</h2>
-        <p>The Work exists, but there is no execution history to project.</p>
+        <h2>Your first Run starts here.</h2>
+        <p>
+          When a Run starts, its outcome, trace, and collaborator activity
+          appear here.
+        </p>
       </section>
     );
 
@@ -36,6 +39,10 @@ export function OverviewPane({
   const outcomeDocument = outcome ? outcomeBody(outcome) : '';
   const stateView = productStatePresentation(run.work_run.product_state);
   const live = run.work_run.product_state === 'running';
+  // `complete` is the Product projection for an execution whose runs all
+  // succeeded. Other terminal states can have summaries, but cannot promise
+  // the stable final result file.
+  const hasSuccessfulResult = run.work_run.product_state === 'complete';
   return (
     <section className="work-overview" data-testid="work-overview">
       <div className="work-overview__summary">
@@ -46,7 +53,7 @@ export function OverviewPane({
           {stateView.label}
         </span>
         <div data-testid="outcome-summary">
-          <p className="work-shell-kicker">Latest recorded outcome</p>
+          <p className="work-shell-kicker">Run outcome</p>
           <h2>
             {outcome
               ? outcomeHeadline(outcome)
@@ -59,9 +66,19 @@ export function OverviewPane({
             </div>
           ) : null}
           {live ? (
-            <p className="work-live-note">
-              Refreshing captured Product facts while this Run is active.
-            </p>
+            <p className="work-live-note">Updating while this Run is active.</p>
+          ) : null}
+          {hasSuccessfulResult ? (
+            <a
+              className="work-result-link"
+              href={workRunResultFilePath(
+                data.work.id,
+                run.work_run.id,
+                originConversationId ?? null,
+              )}
+            >
+              Open this run’s result
+            </a>
           ) : null}
         </div>
       </div>
@@ -108,7 +125,6 @@ function RunRoleCards({
     <div className="work-role-cards" data-testid="run-role-cards">
       {sessions.map((session, index) => {
         const action = session.summary.last_meaningful?.action;
-        const title = action ? action : 'No meaningful action captured';
         return (
           <button
             className="work-role-card"
@@ -124,14 +140,17 @@ function RunRoleCards({
                 ),
               );
             }}
-            title={title}
+            title={action ?? undefined}
             type="button"
           >
             <strong>{session.label.name}</strong>
             {session.label.role !== null ? (
               <span>{session.label.role}</span>
             ) : null}
-            <span>{session.summary.entry_count} entries</span>
+            <span>
+              Session {session.label.status} · {session.summary.entry_count}{' '}
+              entries
+            </span>
           </button>
         );
       })}

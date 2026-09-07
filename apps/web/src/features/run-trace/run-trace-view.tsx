@@ -45,6 +45,10 @@ export function RunTrace({
     [trace],
   );
   const activeView = model.state.view;
+  const showInspector =
+    model.inspector.selectedAttempt !== null ||
+    (model.state.inspectorMode === 'conversation' &&
+      model.inspector.messages.length > 0);
   return (
     <section className="run-trace" aria-labelledby="run-trace-heading">
       <header className="run-trace__header">
@@ -57,7 +61,7 @@ export function RunTrace({
         </span>
       </header>
       <p className="run-trace__subhead">
-        Captured collaboration and MCP dispatch facts
+        A chronological record of this Run’s captured activity
         {trace.timeline.startedAt !== null && trace.timeline.endedAt !== null
           ? ` · recorded ${formatTimestamp(new Date(trace.timeline.startedAt).toISOString())} → ${formatTimestamp(new Date(trace.timeline.endedAt).toISOString())}`
           : ''}
@@ -76,7 +80,9 @@ export function RunTrace({
           </button>
         ))}
       </div>
-      <div className="run-trace__body">
+      <div
+        className={`run-trace__body${showInspector ? ' run-trace__body--with-inspector' : ''}`}
+      >
         <div className="run-trace__canvas">
           {activeView === 'timeline' ? (
             <Timeline
@@ -104,27 +110,30 @@ export function RunTrace({
             />
           ) : null}
         </div>
-        <Inspector
-          mode={model.state.inspectorMode}
-          model={model.inspector}
-          onMode={model.setInspectorMode}
-        />
+        {showInspector ? (
+          <Inspector
+            mode={model.state.inspectorMode}
+            model={model.inspector}
+            onMode={model.setInspectorMode}
+          />
+        ) : null}
       </div>
-      <aside
+      <details
         className="run-trace__coverage"
         data-testid="trace-coverage-disclosure"
       >
-        <strong data-testid="mcp-only-warning">
-          MCP-only execution coverage.
-        </strong>{' '}
-        Timeline execution detail is {humanize(trace.coverage.scope)}; excluded
-        execution: {trace.coverage.excludedExecution.map(humanize).join(', ')}.
-        Collaboration Work Items, Attempts, assignments, dependencies and
-        observed messages are projected from durable control-plane facts.
-        {recordedFeedbackCount
-          ? ` ${recordedFeedbackCount} recorded feedback edge${recordedFeedbackCount === 1 ? '' : 's'} present.`
-          : ''}
-      </aside>
+        <summary>About this activity record</summary>
+        <p>
+          The activity list records event sequence, type, time, and Run only. It
+          does not expose output bodies. Read the Transcript for captured Worker
+          messages and tool details. Structured collaboration detail covers{' '}
+          {humanize(trace.coverage.scope)}; excluded execution:{' '}
+          {trace.coverage.excludedExecution.map(humanize).join(', ')}.
+          {recordedFeedbackCount
+            ? ` ${recordedFeedbackCount} recorded feedback edge${recordedFeedbackCount === 1 ? '' : 's'} present.`
+            : ''}
+        </p>
+      </details>
       <p className="run-trace__longest-attempt" data-testid="longest-attempt">
         Longest captured attempt:{' '}
         {longestAttemptMs(trace) ?? 'timing not captured'}

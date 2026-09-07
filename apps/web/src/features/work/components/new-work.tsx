@@ -397,7 +397,7 @@ export function NewWork({
               className="new-work-form__status new-work-form__status--error"
               role="status"
             >
-              <p>No Coworkers are available yet. Create one to begin.</p>
+              <p>Create a Coworker before starting Work.</p>
               <button type="button" onClick={() => navigate('/agents')}>
                 Create a Coworker
               </button>

@@ -1,10 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import type { WorkListItem } from '@atomlink-ye/agent-server/product-contract';
 
 import { NewWork } from './components/new-work';
+import {
+  formatWorkListTime,
+  latestRunSummary,
+  productStatePresentation,
+} from './components/work-presentation';
 import { WorkDetailPage } from './pages/WorkDetailPage';
 import type { WorkListQuery } from './queries/use-work-list';
-import { workRootPath } from '../../app/routes';
+import { workPath, workRootPath } from '../../app/routes';
 import { TitleBar } from '../../app/shell/TitleBar';
 import WorkPane from './WorkPane';
 import './work-page.css';
@@ -42,6 +48,12 @@ export function WorkPage({
   // instead of this page racing a second, independent fetch.
   const [workListStatus, setWorkListStatus] =
     useState<WorkListQuery['status']>('loading');
+  const [works, setWorks] = useState<readonly WorkListItem[]>([]);
+  const [selectedLatestRunState, setSelectedLatestRunState] = useState<{
+    readonly workId: string;
+    readonly runId: string;
+    readonly state: WorkListItem['product_state'];
+  } | null>(null);
   // WorkPane owns the Work list fetch and hands its `refresh` back up here
   // once mounted, so a successful create elsewhere in this page can
   // invalidate the same list instead of leaving the nav stale until a full
@@ -52,6 +64,10 @@ export function WorkPage({
   const handleRefreshReady = useCallback((refresh: () => void) => {
     setRefreshWorkList(() => refresh);
   }, []);
+  const openNewWork = useCallback(() => {
+    navigate(workRootPath(returnConversationId));
+    setShowNewWork(true);
+  }, [navigate, returnConversationId]);
 
   useEffect(() => {
     if (selectedWorkId) setShowNewWork(false);
@@ -84,14 +100,13 @@ export function WorkPage({
   return (
     <>
       <WorkPane
-        onCreateNew={() => {
-          navigate(workRootPath(returnConversationId));
-          setShowNewWork(true);
-        }}
+        onCreateNew={openNewWork}
         originConversationId={returnConversationId}
         selectedWorkId={selectedWorkId}
         onStatusChange={setWorkListStatus}
         onRefreshReady={handleRefreshReady}
+        onWorksChange={setWorks}
+        selectedLatestRunState={selectedLatestRunState}
       />
       <main className="chat-panel work-main">
         <TitleBar section="Work" />
@@ -122,13 +137,23 @@ export function WorkPage({
               onWorkCreated={() => refreshWorkList?.()}
             />
           ) : null}
+          {!workUnavailable && !showNewWork && workListStatus === 'ready' ? (
+            <MobileWorkPicker
+              works={works}
+              selectedWorkId={selectedWorkId}
+              originConversationId={returnConversationId}
+              onCreate={openNewWork}
+            />
+          ) : null}
           {!workUnavailable && !showNewWork && selectedWorkId ? (
             <WorkDetailPage
+              key={`${selectedWorkId}:${selectedRunId ?? 'latest'}`}
               workId={selectedWorkId}
               tab={workTab ?? undefined}
               selectedRunId={selectedRunId ?? undefined}
               selectedSessionIndex={selectedSessionIndex ?? undefined}
               originConversationId={returnConversationId}
+              onSelectedLatestRunState={setSelectedLatestRunState}
             />
           ) : null}
           {isEmpty && workUnavailable ? (
@@ -139,8 +164,8 @@ export function WorkPage({
               <span className="work-main-icon" aria-hidden="true">
                 ✓
               </span>
-              <h1>Work isn&apos;t available</h1>
-              <p>This workspace doesn&apos;t currently offer Work execution.</p>
+              <h1>Work isn&apos;t set up here</h1>
+              <p>This workspace doesn&apos;t have Work execution enabled.</p>
             </div>
           ) : isEmpty && workListFailed ? (
             <div className="work-main-empty" data-testid="work-page-error">
@@ -149,27 +174,165 @@ export function WorkPage({
               </span>
               <h1>Work could not be loaded</h1>
               <p>
-                This is a connection problem, not a statement about the status
-                of any Work.
+                We couldn&apos;t retrieve Work right now. Try again when the
+                connection is ready.
               </p>
-            </div>
-          ) : isEmpty ? (
-            <div className="work-main-empty">
-              <span className="work-main-icon" aria-hidden="true">
-                ✓
-              </span>
-              <h1>Choose Work</h1>
-              <p>
-                Select existing formal Work from the pane, or create new Work.
-              </p>
-              <button type="button" onClick={() => setShowNewWork(true)}>
-                New Work
+              <button type="button" onClick={() => refreshWorkList?.()}>
+                Try again
               </button>
             </div>
+          ) : isEmpty ? (
+            <WorkLanding
+              works={works}
+              status={workListStatus}
+              originConversationId={returnConversationId}
+              onCreate={openNewWork}
+            />
           ) : null}
         </section>
       </main>
     </>
+  );
+}
+
+function WorkLanding({
+  works,
+  status,
+  originConversationId,
+  onCreate,
+}: {
+  readonly works: readonly WorkListItem[];
+  readonly status: WorkListQuery['status'];
+  readonly originConversationId: string | null;
+  readonly onCreate: () => void;
+}) {
+  if (status === 'loading')
+    return (
+      <div className="work-main-empty work-main-empty--loading" role="status">
+        <span className="work-main-icon" aria-hidden="true">
+          …
+        </span>
+        <h1>Loading your Work</h1>
+        <p>Checking the current objectives and their latest activity.</p>
+      </div>
+    );
+
+  if (works.length === 0)
+    return (
+      <div className="work-main-empty work-main-empty--first">
+        <span className="work-main-icon" aria-hidden="true">
+          +
+        </span>
+        <p className="eyebrow">Formal execution</p>
+        <h1>Start a piece of Work</h1>
+        <p>
+          Define an objective, choose its execution setup, then start a Run when
+          it is ready.
+        </p>
+        <button type="button" onClick={onCreate}>
+          Create Work
+        </button>
+      </div>
+    );
+
+  return (
+    <div className="work-landing">
+      <div className="work-landing__intro">
+        <p className="eyebrow">Work</p>
+        <h1>Choose where to continue</h1>
+        <p>
+          Open a recent objective to review its Run, trace, transcript, or
+          definition.
+        </p>
+        <button type="button" onClick={onCreate}>
+          Create Work
+        </button>
+      </div>
+      <ol className="work-landing__recent" aria-label="Recent Work">
+        {[...works]
+          .sort((left, right) => {
+            const leftTime =
+              left.latest_run_summary?.updated_at ?? left.updated_at;
+            const rightTime =
+              right.latest_run_summary?.updated_at ?? right.updated_at;
+            return rightTime.localeCompare(leftTime);
+          })
+          .slice(0, 4)
+          .map((work) => {
+            const latestRun = work.latest_run_summary;
+            const state = productStatePresentation(work.product_state);
+            const timestamp = latestRun?.updated_at ?? work.updated_at;
+            return (
+              <li key={work.id}>
+                <a href={workPath(work.id, originConversationId)}>
+                  {latestRun ? (
+                    <span
+                      className={`work-state-pill work-state-pill--${work.product_state}`}
+                    >
+                      {state.label}
+                    </span>
+                  ) : (
+                    <span className="work-landing__no-run">No runs yet</span>
+                  )}
+                  <strong>{work.title}</strong>
+                  <span className="work-landing__summary">
+                    {latestRun
+                      ? latestRunSummary(work)
+                      : 'Open Work to review its setup.'}
+                  </span>
+                  <time dateTime={timestamp}>
+                    {latestRun
+                      ? `Run ${formatWorkListTime(timestamp)}`
+                      : `Updated ${formatWorkListTime(timestamp)}`}
+                  </time>
+                </a>
+              </li>
+            );
+          })}
+      </ol>
+    </div>
+  );
+}
+
+function MobileWorkPicker({
+  works,
+  selectedWorkId,
+  originConversationId,
+  onCreate,
+}: {
+  readonly works: readonly WorkListItem[];
+  readonly selectedWorkId: string | null;
+  readonly originConversationId: string | null;
+  readonly onCreate: () => void;
+}) {
+  const navigate = useNavigate();
+  return (
+    <div className="work-mobile-picker">
+      <label>
+        <span>Work</span>
+        <select
+          aria-label="Select Work"
+          value={selectedWorkId ?? ''}
+          onChange={(event) =>
+            navigate(
+              event.target.value
+                ? workPath(event.target.value, originConversationId)
+                : workRootPath(originConversationId),
+            )
+          }
+        >
+          <option value="">Choose Work</option>
+          {works.map((work) => (
+            <option key={work.id} value={work.id}>
+              {work.title}
+            </option>
+          ))}
+        </select>
+      </label>
+      <button type="button" onClick={onCreate}>
+        Create Work
+      </button>
+    </div>
   );
 }
 

@@ -14,7 +14,8 @@ import {
   type RowInteractions,
   type TimelineModel,
 } from './selectors';
-import type { NormalizedTrace } from './normalized';
+import type { NormalizedTrace, TraceExecutionEvent } from './normalized';
+import { formatTimestamp, humanize } from './selectors';
 
 export function Timeline({
   model,
@@ -33,6 +34,8 @@ export function Timeline({
 }) {
   return (
     <div className="run-trace__timeline" data-testid="trace-timeline">
+      <ActivityTimeline events={trace.events} />
+      <p className="run-trace__supporting-label">Execution lanes</p>
       <TimeAxis range={model.range} />
       <div className="run-trace__lanes">
         {model.actorRows.map((actor) => (
@@ -98,6 +101,83 @@ export function Timeline({
       />
     </div>
   );
+}
+
+function ActivityTimeline({
+  events,
+}: {
+  readonly events: readonly TraceExecutionEvent[];
+}) {
+  const chronological = [...events].sort(
+    (left, right) =>
+      left.createdAt.localeCompare(right.createdAt) ||
+      left.sequence - right.sequence,
+  );
+  return (
+    <section className="run-trace__activity-timeline" aria-label="Run activity">
+      <header>
+        <div>
+          <strong>Activity</strong>
+          <p>All captured events, in recorded order.</p>
+        </div>
+        <span>{chronological.length} events</span>
+      </header>
+      {chronological.length ? (
+        <ol>
+          {chronological.map((event) => (
+            <li key={`${event.runId}:${event.sequence}:${event.createdAt}`}>
+              <time dateTime={event.createdAt}>
+                {formatTimestamp(event.createdAt)}
+              </time>
+              <span
+                className={`run-trace__event-dot run-trace__event-dot--${eventTone(event.type)}`}
+              />
+              <div>
+                <strong>{eventLabel(event.type)}</strong>
+                <small>Event {event.sequence}</small>
+              </div>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className="run-trace__empty-activity">
+          No activity events were captured for this Run.
+        </p>
+      )}
+    </section>
+  );
+}
+
+function eventLabel(type: string): string {
+  const normalized = type.toLocaleLowerCase();
+  if (normalized.includes('output')) return 'Output update';
+  if (normalized.includes('start')) return 'Run started';
+  if (
+    normalized.includes('succeed') ||
+    normalized.includes('complete') ||
+    normalized.includes('finish')
+  )
+    return 'Run finished';
+  if (normalized.includes('fail')) return 'Run stopped with a problem';
+  if (normalized.includes('cancel')) return 'Run cancelled';
+  return humanize(type);
+}
+
+function eventTone(
+  type: string,
+): 'start' | 'output' | 'finish' | 'problem' | 'other' {
+  const normalized = type.toLocaleLowerCase();
+  if (normalized.includes('output')) return 'output';
+  if (normalized.includes('start')) return 'start';
+  if (
+    normalized.includes('succeed') ||
+    normalized.includes('complete') ||
+    normalized.includes('finish')
+  )
+    return 'finish';
+  if (normalized.includes('fail') || normalized.includes('cancel'))
+    return 'problem';
+  return 'other';
 }
 
 const shownToolNames = 3;

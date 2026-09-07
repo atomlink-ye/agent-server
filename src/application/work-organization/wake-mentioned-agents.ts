@@ -67,6 +67,7 @@ export interface WakeMentionedAgentsInput {
   readonly workItem: {
     readonly id: string;
     readonly title: string;
+    readonly description?: string | null;
     readonly boardId?: string;
     readonly columnId?: string;
   };
@@ -116,7 +117,10 @@ export async function wakeMentionedAgents(
   const skipped: string[] = [];
 
   for (const mention of mentions) {
-    const agent = resolveAgent(roster, mention);
+    const agent =
+      input.reason === 'assignment'
+        ? resolveAgentById(roster, mention)
+        : resolveAgent(roster, mention);
     if (!agent || agent.id === input.actorId) {
       skipped.push(mention);
       continue;
@@ -203,7 +207,7 @@ async function wakeOne(
   agent: MentionableAgent,
 ): Promise<boolean> {
   try {
-    if (!agent.runtimeAvailable) {
+    if (input.reason !== 'assignment' && !agent.runtimeAvailable) {
       dependencies.logger?.log(
         'warn',
         'work_item.mention.runtime_unavailable',
@@ -219,7 +223,14 @@ async function wakeOne(
       tenantId: input.tenantId,
       agentDefinitionId: agent.id,
     });
-    if (!runtime || runtime.status !== 'available') {
+    const runtimeWakeable =
+      runtime !== null &&
+      (input.reason === 'assignment'
+        ? runtime.status === 'available' ||
+          runtime.status === 'working' ||
+          runtime.status === 'thinking'
+        : runtime.status === 'available');
+    if (!runtimeWakeable) {
       dependencies.logger?.log(
         'warn',
         'work_item.mention.runtime_unavailable',
@@ -242,6 +253,25 @@ async function wakeOne(
       agentDefinitionId: agent.id,
     });
 
+    const brief = workItemMentionBrief({
+      reason: input.reason ?? 'mention',
+      actorLabel: input.actorLabel ?? input.actorId,
+      workItem: input.workItem,
+      ...(input.quote === undefined ? {} : { quote: input.quote }),
+    });
+    const body =
+      input.reason === 'assignment'
+        ? [
+            brief,
+            'This is an assignment wake. Call work_item_claim (tool ' +
+              'agent-server/work-item-claim) to claim this WorkItem, then carry ' +
+              'out the task below and reply in this conversation with the result.',
+            input.workItem.description?.trim()
+              ? `Task: \n${input.workItem.description.trim()}`
+              : 'Task: complete the work described by the WorkItem title.',
+          ].join('\n\n')
+        : brief;
+
     const message = await dependencies.conversations.appendMessage({
       author: {
         type: 'principal',
@@ -255,25 +285,25 @@ async function wakeOne(
           reason: input.reason ?? 'mention',
         },
       },
-      body: workItemMentionBrief({
-        reason: input.reason ?? 'mention',
-        actorLabel: input.actorLabel ?? input.actorId,
-        workItem: input.workItem,
-        ...(input.quote === undefined ? {} : { quote: input.quote }),
-      }),
+      body,
     });
 
-    const unread = await dependencies.conversations.getUnread({
-      tenantId: input.tenantId,
-      conversationId: conversation.id,
-      principalType: input.actorType,
-      principalId: input.actorId,
-    });
+    const lastReadSequence =
+      input.reason === 'assignment'
+        ? Math.max(0, message.sequence - 1)
+        : (
+            await dependencies.conversations.getUnread({
+              tenantId: input.tenantId,
+              conversationId: conversation.id,
+              principalType: input.actorType,
+              principalId: input.actorId,
+            })
+          ).lastReadSequence;
     await enqueueChatDispatchForMessage(dependencies.dispatches, {
       tenantId: input.tenantId,
       conversationId: conversation.id,
       agentDefinitionId: agent.id,
-      lastReadSequence: unread.lastReadSequence,
+      lastReadSequence,
       latestMessageSequence: message.sequence,
       latestMessageAuthorType: message.authorType,
       latestMessageId: message.id,
@@ -323,10 +353,17 @@ function resolveAgent(
   );
 }
 
+function resolveAgentById(
+  roster: readonly MentionableAgent[],
+  mention: string,
+): MentionableAgent | null {
+  return roster.find((agent) => agent.id === mention) ?? null;
+}
+
 function dedupe(values: readonly string[]): readonly string[] {
   return [...new Set(values.filter((value) => value.trim().length > 0))];
 }
 
 function errorReason(error: unknown): string {
-  return error instanceof Error ? error.message : 'unknown';
+  return error instanceof Error ? error.name : 'unknown';
 }

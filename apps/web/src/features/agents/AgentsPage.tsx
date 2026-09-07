@@ -340,7 +340,7 @@ export function AgentsPage() {
                       className="agents-whisper"
                       type="button"
                       disabled
-                      title="Whisper is being built separately and will land here."
+                      title="Whispers are read-only."
                     >
                       Whisper
                     </button>

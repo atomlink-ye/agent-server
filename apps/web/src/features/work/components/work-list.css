@@ -13,6 +13,55 @@
 .work-list-card {
   grid-template-columns: minmax(150px, 0.34fr) minmax(0, 1fr);
 }
+
+.work-pane .work-list-item {
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-2);
+}
+
+.work-pane .work-list-copy {
+  gap: 3px;
+}
+
+.work-pane .work-list-copy strong {
+  font-size: var(--text-sm);
+}
+
+.work-pane .work-list-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--ink-500);
+  font-size: var(--text-xs);
+}
+
+.work-pane .work-list-meta > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 700;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.work-pane .work-list-meta time {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-300);
+  font-size: var(--text-eyebrow);
+  font-variant-numeric: tabular-nums;
+}
+
+.work-pane .work-list-mark {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+}
 .work-list-card__state p {
   color: var(--ink-500);
   font-size: var(--text-xs);

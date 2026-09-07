@@ -12,8 +12,8 @@ export function TranscriptPane({
     return (
       <section className="work-detail-state" data-testid="work-no-runs">
         <p className="work-shell-kicker">Transcript</p>
-        <h2>No Run has been recorded yet.</h2>
-        <p>The Work exists, but there is no execution history to project.</p>
+        <h2>No conversation to show yet.</h2>
+        <p>Start a Run to follow the activity and messages it produces.</p>
       </section>
     );
   const live = data.run.work_run.product_state === 'running';
@@ -33,6 +33,7 @@ export function TranscriptPane({
         live={live}
         trace={data.trace}
         initialSelectedIndex={selectedSessionIndex}
+        productState={data.run.work_run.product_state}
       />
     </section>
   );

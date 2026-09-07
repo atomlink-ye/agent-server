@@ -61,13 +61,14 @@ export function RunTrigger({
   const hasUnavailableReason =
     blockedByCapability || availability.status === 'unavailable';
   const reasonId = `run-unavailable-${workId}`;
-  const friendlyCapability = availability.missingCapability
+  const missingCapability =
+    availability.status === 'ready' ? availability.missingCapability : null;
+  const friendlyCapability = missingCapability
     ? ({
         external_workspace: 'External workspace',
         reusable_session: 'Reusable session',
         platform_mcp: 'Platform tools',
-      }[availability.missingCapability] ??
-      availability.missingCapability.replaceAll('_', ' '))
+      }[missingCapability] ?? missingCapability.replaceAll('_', ' '))
     : null;
 
   return (

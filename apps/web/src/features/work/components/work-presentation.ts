@@ -37,33 +37,33 @@ export function workTabHref(
 export function productStatePresentation(state: WorkListItem['product_state']) {
   switch (state) {
     case 'running':
-      return { label: 'Running', description: 'The latest Run is active.' };
+      return { label: 'Running', description: 'This Run is active.' };
     case 'needs_you':
       return {
         label: 'Needs You',
-        description: 'Your action is required before Work can safely progress.',
+        description: 'Your action is required before this Work can progress.',
       };
     case 'complete':
       return {
         label: 'Complete',
-        description: 'The latest Run reached a completed product state.',
+        description: 'This Run is complete. Open its result to review.',
       };
     case 'problem':
       return {
         label: 'Problem',
-        description: 'The latest Run needs review before Work can progress.',
+        description: 'This Run needs review before Work can progress.',
       };
     case 'not_captured':
       return {
-        label: 'State unavailable',
-        description: 'Product state was not captured.',
+        label: 'Status unknown',
+        description: 'We don’t have a status update for this Work.',
       };
   }
 }
 
 export function latestRunSummary(work: WorkListItem) {
   const latest = work.latest_run_summary;
-  if (!latest) return 'No Run has been recorded yet.';
+  if (!latest) return 'No runs yet.';
   if (latest.result_summary !== null) return latest.result_summary;
   return resultCaptureLabel(latest.result_capture_status);
 }
@@ -75,18 +75,30 @@ export function resultCaptureLabel(
 ): string {
   switch (status) {
     case 'present':
-      return 'Result summary captured.';
+      return 'Result summary is ready.';
     case 'redacted':
-      return 'Result was captured but is redacted.';
+      return 'A result is available, but its summary is redacted.';
     case 'not_present':
-      return 'No result summary is present.';
+      return 'This Run has no result summary.';
     case 'not_captured':
-      return 'Result capture is unavailable.';
+      return 'The result summary is still unavailable.';
   }
 }
 
 export function formatTimestamp(value: string) {
   return `${value.replace('T', ' ').slice(0, 16)} UTC`;
+}
+
+/** A compact, locale-aware timestamp for the navigation index. */
+export function formatWorkListTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Updated time unavailable';
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(date);
 }
 
 export function humanize(value: string) {

@@ -18,7 +18,7 @@ export function RunsPane({
     return (
       <section className="work-detail-state">
         <p className="work-shell-kicker">Runs</p>
-        <h2>No Run history yet.</h2>
+        <h2>Start the first Run when this Work is ready.</h2>
       </section>
     );
 

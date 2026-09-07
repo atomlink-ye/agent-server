@@ -16,7 +16,7 @@ export function WorkDetailHeader({
   readonly originConversationId?: string | null;
 }) {
   const runContext = !run
-    ? 'No Run recorded'
+    ? 'No runs yet'
     : run.work_run.id === latestRunId
       ? 'Latest Run'
       : 'Historical Run';
@@ -40,8 +40,7 @@ export function WorkDetailHeader({
               : ''}
           </p>
           <p className="work-detail-surface-note">
-            Define, run, inspect collaboration, and review through Product
-            facts.
+            Start a Run, then follow its outcome, trace, and conversation here.
           </p>
         </div>
       </header>

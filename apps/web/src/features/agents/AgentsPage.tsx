@@ -15,13 +15,15 @@ import type { Coworker } from './contracts';
 import { CapabilityBuilder, NewCoworkerForm } from './AuthoringPanels';
 import { CoworkerHomeFiles } from './CoworkerHomeFiles';
 import { CoworkerRecentActivity } from './CoworkerRecentActivity';
+import { CoworkerRoster } from './CoworkerRoster';
+import {
+  BUSY_CHAT_HINT,
+  BUSY_RUNTIME_STATUSES,
+  RUNTIME_STATUS_LABEL,
+  STATUS_FILTERS,
+} from './runtime-status';
 import TitleBar from '../../app/shell/TitleBar';
 import './agents.css';
-
-const BUSY_RUNTIME_STATUSES: ReadonlySet<Coworker['runtimeStatus']> = new Set([
-  'working',
-  'thinking',
-]);
 
 function describeOpenConversationError(reason: unknown): string {
   if (
@@ -32,28 +34,6 @@ function describeOpenConversationError(reason: unknown): string {
   }
   return reason instanceof Error ? reason.message : String(reason);
 }
-
-/**
- * Cumora shows four status chips (working/thinking/available/resting) and
- * omits its rarely-set fifth state ("waiting") from that row. `draining`
- * plays the same rarely-set role here (nothing in this codebase writes it
- * today), so it keeps the same treatment: a real status, but not a filter
- * pill.
- */
-const STATUS_FILTERS: readonly Coworker['runtimeStatus'][] = [
-  'working',
-  'thinking',
-  'available',
-  'unavailable',
-];
-
-const RUNTIME_STATUS_LABEL: Record<Coworker['runtimeStatus'], string> = {
-  working: 'Working',
-  thinking: 'Thinking',
-  available: 'Available',
-  draining: 'Draining',
-  unavailable: 'Unavailable',
-};
 
 export function AgentsPage() {
   const navigate = useNavigate();
@@ -67,7 +47,7 @@ export function AgentsPage() {
     'idle' | 'loading' | 'ready' | 'not_found' | 'error'
   >('idle');
   const [loading, setLoading] = useState(true);
-  const [opening, setOpening] = useState(false);
+  const [openingAgentId, setOpeningAgentId] = useState<string | null>(null);
   const [authoring, setAuthoring] = useState<'coworker' | 'capability' | null>(
     null,
   );
@@ -95,12 +75,8 @@ export function AgentsPage() {
         if (!active) return;
         setAgents(items);
         setLoading(false);
-        if (!selectedAgentId && items[0] && authoring !== 'coworker')
-          navigate(`/agents/${encodeURIComponent(items[0].id)}`, {
-            replace: true,
-          });
       },
-      (reason: unknown) => {
+      () => {
         if (!active) return;
         setError('Unable to load Agents. Check your connection and try again.');
         setLoading(false);
@@ -109,7 +85,7 @@ export function AgentsPage() {
     return () => {
       active = false;
     };
-  }, [navigate, selectedAgentId, reload, authoring]);
+  }, [reload]);
 
   useEffect(() => {
     if (!selectedAgentId || invalidAgentId) {
@@ -138,16 +114,16 @@ export function AgentsPage() {
     };
   }, [invalidAgentId, selectedAgentId, reload]);
 
-  async function openConversation(): Promise<void> {
-    if (!selectedAgentId || opening) return;
-    setOpening(true);
+  async function openConversation(agentId: string): Promise<void> {
+    if (openingAgentId) return;
+    setOpeningAgentId(agentId);
     setError(null);
     try {
-      const conversation = await createConversation(selectedAgentId);
+      const conversation = await createConversation(agentId);
       navigate(`/conversations/${encodeURIComponent(conversation.id)}`);
     } catch (reason) {
       setError(describeOpenConversationError(reason));
-      setOpening(false);
+      setOpeningAgentId(null);
     }
   }
 
@@ -158,9 +134,61 @@ export function AgentsPage() {
     );
   }
 
+  /*
+    Nothing selected is the team view, not an empty detail pane: the roster
+    takes the full width and the Coworker list rail only appears once a
+    profile is open, where it is the way back to the rest of the team.
+  */
+  if (!selectedAgentId) {
+    return (
+      <main className="chat-panel agents-main agents-roster-main">
+        <TitleBar section="Agents" />
+        {error ? (
+          <p className="agents-error" role="alert">
+            {error}
+          </p>
+        ) : null}
+        {authoring === 'coworker' ? (
+          <NewCoworkerForm
+            onCancel={() => setAuthoring(null)}
+            onCreated={({ conversationId }) =>
+              navigate(`/conversations/${encodeURIComponent(conversationId)}`)
+            }
+          />
+        ) : (
+          <CoworkerRoster
+            agents={agents}
+            loading={loading}
+            statusFilter={statusFilter}
+            openingAgentId={openingAgentId}
+            onFilter={setStatusFilter}
+            onOpenProfile={(agentId) =>
+              navigate(`/agents/${encodeURIComponent(agentId)}`)
+            }
+            onChat={(agentId) => void openConversation(agentId)}
+            onNewCoworker={() => {
+              setAuthoring('coworker');
+              setError(null);
+            }}
+          />
+        )}
+      </main>
+    );
+  }
+
   return (
     <>
       <aside className="sidebar agents-pane" aria-label="Agents navigation">
+        <button
+          className="agents-roster-back"
+          type="button"
+          onClick={() => {
+            setAuthoring(null);
+            navigate('/agents');
+          }}
+        >
+          ← All Coworkers
+        </button>
         <div className="pane-heading">
           <div>
             <span className="eyebrow">Coworkers</span>
@@ -317,34 +345,13 @@ export function AgentsPage() {
               >
                 Try again in a moment, or return to Agents.
               </NotFoundContent>
-            ) : profileStatus === 'loading' ? (
+            ) : profileStatus === 'loading' || !profile ? (
               <div className="work-main-empty" role="status">
                 <span className="work-main-icon" aria-hidden="true">
                   ◎
                 </span>
                 <h1>Loading Agent…</h1>
                 <p>Opening this Agent&apos;s profile.</p>
-              </div>
-            ) : !profile ? (
-              <div className="work-main-empty">
-                <span className="work-main-icon">◎</span>
-                <h1>
-                  {agents.length ? 'Choose a Coworker' : 'Create a Coworker'}
-                </h1>
-                <p>
-                  {agents.length
-                    ? 'Open a Coworker profile.'
-                    : 'Start with a name, role, and the kind of help you want.'}
-                </p>
-                {!agents.length ? (
-                  <button
-                    className="agents-primary"
-                    type="button"
-                    onClick={() => setAuthoring('coworker')}
-                  >
-                    New Coworker
-                  </button>
-                ) : null}
               </div>
             ) : (
               <>
@@ -383,20 +390,20 @@ export function AgentsPage() {
                     <button
                       className="agents-primary"
                       type="button"
-                      onClick={() => void openConversation()}
+                      onClick={() => void openConversation(profile.agent.id)}
                       disabled={
-                        opening ||
+                        openingAgentId !== null ||
                         profile.agent.runtimeStatus === 'draining' ||
                         profile.agent.runtimeStatus === 'unavailable' ||
                         BUSY_RUNTIME_STATUSES.has(profile.agent.runtimeStatus)
                       }
                       title={
                         BUSY_RUNTIME_STATUSES.has(profile.agent.runtimeStatus)
-                          ? 'This Coworker is handling another conversation right now. Try again once it finishes.'
+                          ? BUSY_CHAT_HINT
                           : undefined
                       }
                     >
-                      {opening
+                      {openingAgentId !== null
                         ? 'Opening…'
                         : BUSY_RUNTIME_STATUSES.has(profile.agent.runtimeStatus)
                           ? 'Busy'

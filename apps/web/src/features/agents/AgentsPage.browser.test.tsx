@@ -238,3 +238,65 @@ it('states the Coworker summary once and puts Capabilities above Context files',
     host.remove();
   }
 });
+
+it('lands on a card per Coworker instead of redirecting into the first profile', async () => {
+  loadCoworkers.mockReset();
+  loadCoworkerProfile.mockReset();
+  const maya = {
+    ...profileFor('available').agent,
+    displayName: 'Maya',
+    roleLabel: 'Research Analyst',
+    summary: 'Researches markets and writes concise briefs.',
+  };
+  const nova = {
+    ...profileFor('available').agent,
+    id: '123e4567-e89b-42d3-a456-426614174001',
+    displayName: 'Nova',
+    roleLabel: 'Project Researcher',
+    summary: null,
+  };
+  loadCoworkers.mockResolvedValue([maya, nova]);
+  loadCoworkerProfile.mockResolvedValue({
+    ...profileFor('available'),
+    agent: maya,
+  });
+
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  await act(async () => {
+    root.render(routed('/agents'));
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  try {
+    const cards = host.querySelectorAll('.agents-roster-card');
+    expect(cards.length).toBe(2);
+    // The roster is the landing view, so nothing has opened a profile yet.
+    expect(loadCoworkerProfile).not.toHaveBeenCalled();
+    expect(host.querySelector('.agents-roster')?.textContent).toContain(
+      'Your team',
+    );
+    // A Coworker with no summary must not borrow anyone else's words.
+    expect(cards[1]?.textContent).toContain('No summary yet.');
+    // Chat starts from the card, without a detour through the profile.
+    expect(
+      cards[0]?.querySelector<HTMLButtonElement>(
+        '.agents-roster-actions button.agents-primary',
+      )?.disabled,
+    ).toBe(false);
+
+    await act(async () => {
+      cards[0]
+        ?.querySelector<HTMLButtonElement>('.agents-roster-identity')
+        ?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(loadCoworkerProfile).toHaveBeenCalledWith(maya.id);
+    expect(host.querySelector('.agents-profile-header')).not.toBeNull();
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+  }
+});

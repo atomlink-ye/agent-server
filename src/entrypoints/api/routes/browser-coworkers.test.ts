@@ -99,6 +99,10 @@ describe('browser-safe Coworker facade', () => {
         expect(headers.get('idempotency-key')).toMatch(
           /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
         );
+        // Hiring opens the first Conversation. Drop the human identifier here
+        // and the API opens it for the service account, so the person who
+        // just hired the Coworker lands on a Conversation they cannot read.
+        expect(headers.get('x-agent-server-user-id')).toBe('user-maya-hirer');
         expect(JSON.parse(String(init?.body))).toEqual({
           name: 'Maya',
           role: 'Research Analyst',
@@ -122,7 +126,10 @@ describe('browser-safe Coworker facade', () => {
 
     const response = await appWithCoworkerRoutes().request('/api/agents', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        'x-agent-server-user-id': 'user-maya-hirer',
+      },
       body: JSON.stringify({
         name: 'Maya',
         role: 'Research Analyst',
@@ -135,6 +142,38 @@ describe('browser-safe Coworker facade', () => {
       agent_version_id: VERSION_ID,
       conversation_id: CONVERSATION_ID,
     });
+  });
+
+  it('sends no human identifier upstream when the caller offered none', async () => {
+    enableServiceAccount();
+    const upstream = vi.fn(
+      async (_input: string | URL | Request, init?: RequestInit) => {
+        expect(new Headers(init?.headers).has('x-agent-server-user-id')).toBe(
+          false,
+        );
+        return new Response(
+          JSON.stringify({
+            agent_id: AGENT_ID,
+            agent_version_id: VERSION_ID,
+            conversation_id: CONVERSATION_ID,
+          }),
+          { status: 201, headers: { 'content-type': 'application/json' } },
+        );
+      },
+    );
+    vi.stubGlobal('fetch', upstream);
+
+    const response = await appWithCoworkerRoutes().request('/api/agents', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Maya',
+        role: 'Research Analyst',
+        summary: 'Research competitors.',
+      }),
+    });
+    expect(response.status).toBe(201);
+    expect(upstream).toHaveBeenCalledOnce();
   });
 
   it('projects the authoritative Work Catalog on the Coworker profile', async () => {

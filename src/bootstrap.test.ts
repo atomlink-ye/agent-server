@@ -277,6 +277,114 @@ describe('closeServiceResources', () => {
     await closeServiceResources(resources);
   });
 
+  it('binds the runtime MCP listener before dispatch so resumed sessions keep their tools', async () => {
+    const events: string[] = [];
+    const runtimeMcpServer = {
+      startEndpoint: vi.fn(async () => {
+        events.push('mcp.start');
+        return { url: 'http://127.0.0.1:39117/mcp/agent-runtime', epoch: 'e' };
+      }),
+      stop: vi.fn(async () => {
+        events.push('mcp.stop');
+      }),
+    };
+    const resources = {
+      dispatcher: {
+        start: vi.fn(() => events.push('dispatcher.start')),
+        stop: vi.fn(async () => {
+          events.push('dispatcher.stop');
+        }),
+      },
+      runtimeProvider: {
+        ensureReady: vi.fn(async () => {
+          events.push('runtime.ensureReady');
+          return true;
+        }),
+        health: vi.fn(async () => ({
+          plane: 'paseo',
+          ready: true,
+          checks: [],
+        })),
+        close: vi.fn(async () => {
+          events.push('runtime.close');
+        }),
+      },
+      runtimeEnabled: true,
+      runtimeMcpServer,
+      pool: {
+        end: vi.fn(async () => {
+          events.push('pool.end');
+        }),
+      },
+    };
+
+    await startServiceResources(resources);
+
+    expect(events).toEqual([
+      'runtime.ensureReady',
+      'mcp.start',
+      'dispatcher.start',
+    ]);
+
+    await closeServiceResources(resources);
+    expect(runtimeMcpServer.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves the runtime MCP listener unbound when the runtime is disabled', async () => {
+    const runtimeMcpServer = {
+      startEndpoint: vi.fn(async () => ({ url: 'http://unused', epoch: 'e' })),
+      stop: vi.fn(async () => undefined),
+    };
+    const resources = {
+      dispatcher: { start: vi.fn(), stop: vi.fn(async () => undefined) },
+      runtimeProvider: {
+        ensureReady: vi.fn(async () => true),
+        health: vi.fn(async () => ({ plane: 'test', ready: true, checks: [] })),
+        close: vi.fn(async () => undefined),
+      },
+      runtimeEnabled: false,
+      runtimeMcpServer,
+      pool: { end: vi.fn(async () => undefined) },
+    };
+
+    await startServiceResources(resources);
+
+    expect(runtimeMcpServer.startEndpoint).not.toHaveBeenCalled();
+    await closeServiceResources(resources);
+  });
+
+  it('fails startup when the runtime MCP listener cannot bind', async () => {
+    const dispatcherStart = vi.fn();
+    const resources = {
+      dispatcher: {
+        start: dispatcherStart,
+        stop: vi.fn(async () => undefined),
+      },
+      runtimeProvider: {
+        ensureReady: vi.fn(async () => true),
+        health: vi.fn(async () => ({
+          plane: 'paseo',
+          ready: true,
+          checks: [],
+        })),
+        close: vi.fn(async () => undefined),
+      },
+      runtimeEnabled: true,
+      runtimeMcpServer: {
+        startEndpoint: vi.fn(async () => {
+          throw new Error('EADDRINUSE 39117');
+        }),
+        stop: vi.fn(async () => undefined),
+      },
+      pool: { end: vi.fn(async () => undefined) },
+    };
+
+    await expect(startServiceResources(resources)).rejects.toThrow(
+      'runtime MCP server startup failed',
+    );
+    expect(dispatcherStart).not.toHaveBeenCalled();
+  });
+
   it('reports failed runtime readiness without starting dispatch', async () => {
     const dispatcherStart = vi.fn();
     const runtimeProvider = {

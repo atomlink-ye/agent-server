@@ -14,7 +14,7 @@ export function createApplicationLifecycle(input: {
     'ensureReady' | 'health' | 'close'
   >;
   readonly runtimeEnabled: boolean;
-  readonly runtimeMcpServer: Pick<RuntimeMcpServer, 'stop'>;
+  readonly runtimeMcpServer: Pick<RuntimeMcpServer, 'startEndpoint' | 'stop'>;
   readonly pool: Pick<Pool, 'end'>;
 }) {
   return createLifecycleSupervisor({

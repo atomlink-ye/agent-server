@@ -29,6 +29,10 @@ export type StartableLifecycleResources = LifecycleResources & {
   >;
   /** Runtime mode initializes Paseo before the dispatcher and HTTP server run. */
   readonly runtimeEnabled: boolean;
+  readonly runtimeMcpServer?: {
+    startEndpoint(): Promise<unknown>;
+    stop(): Promise<void>;
+  };
   readonly larkWorker?: Pick<LarkIngressWorker, 'start' | 'stop'>;
   readonly larkOutboxWorker?: Pick<LarkOutboxWorker, 'start' | 'stop'>;
   readonly chatWorker?: Pick<ChatDeliveryWorker, 'start' | 'stop'>;
@@ -108,8 +112,14 @@ export async function startServiceResources(
   resources: StartableLifecycleResources,
 ): Promise<void> {
   try {
-    if (resources.runtimeEnabled)
+    if (resources.runtimeEnabled) {
       await ensureRuntimeProviderReady(resources.runtimeProvider);
+      // The MCP listener is the endpoint every already-bootstrapped provider
+      // session was configured with. Binding it here — symmetrically with the
+      // stop below — keeps a restarted process reachable at the same URL, so
+      // resumed sessions keep the platform tools they were granted.
+      await startRuntimeMcpServer(resources.runtimeMcpServer);
+    }
     resources.dispatcher.start();
     await resources.larkReceiver?.start();
     resources.larkWorker?.start();
@@ -130,6 +140,20 @@ export async function startServiceResources(
       );
     }
     throw startupFailure;
+  }
+}
+
+async function startRuntimeMcpServer(
+  server: { startEndpoint(): Promise<unknown> } | undefined,
+): Promise<void> {
+  if (!server) return;
+  try {
+    await server.startEndpoint();
+  } catch (error: unknown) {
+    throw lifecycleError(
+      'runtime MCP server startup',
+      error instanceof Error ? error.name : typeof error,
+    );
   }
 }
 

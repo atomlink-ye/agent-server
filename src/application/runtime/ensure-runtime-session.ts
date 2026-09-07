@@ -113,6 +113,11 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
 
     if (effectivePlan.kind === 'reuse') {
       if (!current) throw new Error('runtime_provider_session_missing');
+      // A reused provider session keeps the MCP endpoint it was bootstrapped
+      // with. That endpoint is a live listener owned by this process, so it
+      // must be up before the turn runs; otherwise the provider resumes
+      // against a dead URL and the Agent silently loses every granted tool.
+      await this.mcpEndpoint.current();
       return {
         generation: current,
         session: await this.provider.open(

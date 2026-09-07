@@ -1,0 +1,16 @@
+.not-found button {
+  margin-top: var(--space-2);
+  border: 1px solid var(--ink-200);
+  border-radius: var(--radius-md);
+  background: var(--cloud);
+  color: var(--ink-900);
+  cursor: pointer;
+  padding: 10px 14px;
+  font-size: var(--text-sm);
+  font-weight: 800;
+}
+
+.not-found button:hover {
+  border-color: var(--skype);
+  color: var(--skype-deep);
+}

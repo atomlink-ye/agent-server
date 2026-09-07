@@ -11,6 +11,7 @@ import {
 } from '../clients/work-run-client';
 import { workClient } from '../clients/work-client';
 import { workDefinitionClient } from '../clients/work-definition-client';
+import { ProductReadError } from '../clients/errors';
 import type { NormalizedTrace } from '@/features/run-trace/normalized';
 
 export type WorkDetailData = {
@@ -23,16 +24,34 @@ export type WorkDetailData = {
   readonly currentDefinitionVersion: ProductWorkDefinitionVersionResponse | null;
 };
 
+/** Marks a missing root Work without treating missing child resources alike. */
+export class WorkDetailRootNotFoundError extends Error {
+  constructor() {
+    super('The selected Work is not available.');
+    this.name = 'WorkDetailRootNotFoundError';
+  }
+}
+
 export async function loadWorkDetail(
   workId: string,
   selectedRunId: string | undefined,
   preferCurrentDefinition: boolean,
   includeTrace = true,
 ): Promise<WorkDetailData> {
-  const [work, runsResponse] = await Promise.all([
-    workClient.get(workId),
-    workRunClient.list(workId),
-  ]);
+  let work: WorkResponse;
+  try {
+    work = await workClient.get(workId);
+  } catch (error) {
+    if (
+      error instanceof ProductReadError &&
+      error.status === 404 &&
+      error.code === 'work_not_found'
+    ) {
+      throw new WorkDetailRootNotFoundError();
+    }
+    throw error;
+  }
+  const runsResponse = await workRunClient.list(workId);
   const runs = runsResponse.work_runs;
   const selectedSummary = selectedRunId
     ? runs.find((run) => run.id === selectedRunId)

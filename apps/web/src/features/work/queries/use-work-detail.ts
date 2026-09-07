@@ -6,6 +6,7 @@ import { loadWorkDetail, type WorkDetailData } from './load-work-detail';
 export type WorkDetailQuery = {
   readonly status: 'loading' | 'starting' | 'available' | 'error';
   readonly detail: WorkDetailData | null;
+  readonly error: unknown | null;
 };
 
 export function useWorkDetail({
@@ -21,12 +22,14 @@ export function useWorkDetail({
 }): WorkDetailQuery {
   const [status, setStatus] = useState<WorkDetailQuery['status']>('loading');
   const [detail, setDetail] = useState<WorkDetailData | null>(null);
+  const [error, setError] = useState<unknown | null>(null);
 
   useEffect(() => {
     let active = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let firstLoad = true;
     let hasDetail = false;
+    setError(null);
 
     const scheduleRefresh = () => {
       if (timer) clearTimeout(timer);
@@ -44,6 +47,7 @@ export function useWorkDetail({
         );
         if (!active) return;
         setDetail(loaded);
+        setError(null);
         setStatus('available');
         firstLoad = false;
         hasDetail = true;
@@ -58,6 +62,7 @@ export function useWorkDetail({
         } else if (projectionUnavailable || hasDetail) {
           scheduleRefresh();
         } else {
+          setError(error);
           setStatus('error');
         }
       }
@@ -72,5 +77,5 @@ export function useWorkDetail({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workId, selectedRunId, preferCurrentDefinition, includeTrace]);
 
-  return { status, detail };
+  return { status, detail, error };
 }

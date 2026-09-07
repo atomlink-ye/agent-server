@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import type {
   WorkBoardDto,
   WorkBoardSnapshotDto,
@@ -8,6 +8,7 @@ import type {
 import { WORK_BOARD_NOT_FOUND_CODE } from '@atomlink-ye/agent-server/product-contract';
 
 import TitleBar from '../../app/shell/TitleBar';
+import { NotFoundContent } from '../../app/router/NotFoundPage';
 import { loadCoworkers } from '../agents/agents-gateway';
 import type { Coworker } from '../agents/contracts';
 import {
@@ -395,18 +396,15 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
               <h1>Loading the selected Board…</h1>
             </div>
           ) : selectionStatus === 'not_found' ? (
-            <div className="work-main-empty" data-testid="boards-not-found">
-              <span className="work-main-icon" aria-hidden="true">
-                ▦
-              </span>
-              <h1>The selected Board is unavailable.</h1>
-              <p>
-                This Board may have been deleted or moved out of the current
-                workspace.
-              </p>
-              <button type="button" onClick={() => navigate('/boards')}>
-                Back to Boards
-              </button>
+            <div data-testid="boards-not-found">
+              <NotFoundContent
+                title="This Board is unavailable."
+                to="/boards"
+                linkLabel="Back to Boards"
+                eyebrow="Board unavailable"
+              >
+                It may have been removed, or you may not have access.
+              </NotFoundContent>
             </div>
           ) : selectionStatus === 'error' ? (
             <div
@@ -418,6 +416,7 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
               </span>
               <h1>Unable to load Boards</h1>
               <p>{BOARDS_LOAD_ERROR}</p>
+              <Link to="/boards">Back to Boards</Link>
               <button type="button" onClick={() => void loadSnapshot()}>
                 Try again
               </button>

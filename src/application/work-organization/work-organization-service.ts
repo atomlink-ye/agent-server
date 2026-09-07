@@ -475,7 +475,7 @@ export class WorkOrganizationService {
         id: randomUUID(),
         workItemId: transitioned.id,
         authorId: claimantId,
-        body: '已认领此 WorkItem，开始处理。',
+        body: 'Claimed this task and started working on it.',
         mentions: [],
         now: this.now().toISOString(),
       });

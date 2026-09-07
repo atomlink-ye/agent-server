@@ -234,12 +234,24 @@ export class WorkOrganizationService {
   public async updateWorkItem(
     input: UpdateWorkItemInput,
   ): Promise<WorkItemDetail> {
-    if (input.title !== undefined) validateText(input.title, 1, 200, 'title');
-    validateOptionalText(input.description, 16 * 1024, 'description');
-    validateOptionalId(input.assigneeId, 'assigneeId');
     const owner = WorkOrganizationService.ownerFromAccessContext(
       input.accessContext,
     );
+    // WorkItem mutations share this repository lock with promotion.
+    return this.repository.withPromotionLock(
+      owner,
+      input.workItemId,
+      () => this.updateWorkItemUnlocked(input, owner),
+    );
+  }
+
+  private async updateWorkItemUnlocked(
+    input: UpdateWorkItemInput,
+    owner: WorkOrganizationOwnerScope,
+  ): Promise<WorkItemDetail> {
+    if (input.title !== undefined) validateText(input.title, 1, 200, 'title');
+    validateOptionalText(input.description, 16 * 1024, 'description');
+    validateOptionalId(input.assigneeId, 'assigneeId');
     // Re-parsing needs the prose as it will BE, not as it was, so the previous
     // row is read first. Its stored mentions are what makes a re-save silent:
     // only tokens that were not there before are woken. Reading it
@@ -286,20 +298,25 @@ export class WorkOrganizationService {
       ? { boardId: placement.boardId, columnId: placement.columnId }
       : {};
     const added = mentions ? newMentions(previous.mentions, mentions) : [];
-    if (added.length > 0)
+    const assignmentId =
+      input.assigneeId !== undefined &&
+      item.assigneeId !== null &&
+      item.assigneeId !== previous.assigneeId
+        ? item.assigneeId
+        : null;
+    const mentionWakeTargets = assignmentId
+      ? added.filter((mention) => mention !== assignmentId)
+      : added;
+    if (mentionWakeTargets.length > 0)
       await this.wakeFor(input.accessContext, item, {
-        mentions: added,
+        mentions: mentionWakeTargets,
         reason: 'mention',
         ...board,
       });
     // A newly set assignee is woken even when nothing in the prose changed.
-    if (
-      input.assigneeId !== undefined &&
-      item.assigneeId &&
-      item.assigneeId !== previous.assigneeId
-    )
+    if (assignmentId)
       await this.wakeFor(input.accessContext, item, {
-        mentions: [item.assigneeId],
+        mentions: [assignmentId],
         reason: 'assignment',
         ...board,
       });
@@ -388,9 +405,8 @@ export class WorkOrganizationService {
   }
 
   /**
-   * Take ownership of a WorkItem. The atomic UPDATE in the repository is the
-   * whole mechanism: this method only turns "no row matched" into the error the
-   * loser sees, and reports where the winner's card ended up.
+   * Take ownership of a WorkItem. The repository's atomic claim decides the
+   * holder; a successful first claim also records progress and visible ownership.
    *
    * Callable by a person through the UI button and by a Coworker through the
    * claim tool; both arrive here, so both obey the same one-holder rule.
@@ -407,6 +423,24 @@ export class WorkOrganizationService {
     const owner = WorkOrganizationService.ownerFromAccessContext(
       input.accessContext,
     );
+    return this.repository.withPromotionLock(
+      owner,
+      input.workItemId,
+      () => this.claimWorkItemUnlocked(input, owner),
+    );
+  }
+
+  private async claimWorkItemUnlocked(
+    input: {
+      readonly accessContext: AccessContext;
+      readonly workItemId: string;
+      readonly claimantId?: string;
+    },
+    owner: WorkOrganizationOwnerScope,
+  ): Promise<{
+    readonly workItem: WorkItem;
+    readonly movedToColumnId: string | null;
+  }> {
     const claimantId = (
       input.claimantId ?? input.accessContext.principalId
     ).trim();
@@ -425,8 +459,29 @@ export class WorkOrganizationService {
       now: this.now().toISOString(),
     });
     if (!result.workItem) throw new WorkItemClaimConflictError(result.holderId);
+
+    let workItem = result.workItem;
+    if (result.workItem.status === 'todo') {
+      const transitioned = await this.repository.updateWorkItem({
+        ...owner,
+        id: result.workItem.id,
+        status: 'in_progress',
+        now: this.now().toISOString(),
+      });
+      if (!transitioned) throw new WorkItemNotFoundError();
+      workItem = transitioned;
+      await this.repository.createComment({
+        ...owner,
+        id: randomUUID(),
+        workItemId: transitioned.id,
+        authorId: claimantId,
+        body: '已认领此 WorkItem，开始处理。',
+        mentions: [],
+        now: this.now().toISOString(),
+      });
+    }
     return {
-      workItem: result.workItem,
+      workItem,
       movedToColumnId: result.movedToColumnId,
     };
   }
@@ -654,6 +709,7 @@ export class WorkOrganizationService {
         workItem: {
           id: workItem.id,
           title: workItem.title,
+          description: workItem.description,
           ...(input.boardId ? { boardId: input.boardId } : {}),
           ...(input.columnId ? { columnId: input.columnId } : {}),
         },

@@ -663,6 +663,246 @@
 .agents-technical-details {
   border-top: 1px solid var(--ink-100);
 }
+/* Roster — the Agents landing view. Desktop only: the grid reflows on its own
+   track sizing, so there is no breakpoint here. */
+.agents-roster-main {
+  /* The roster owns the sidebar column too; the Coworker rail only exists
+     alongside an open profile. */
+  grid-column: 2 / -1;
+  padding: 20px 28px 32px;
+}
+/* Authoring keeps the width it had beside the Coworker rail; the roster route
+   is wider, and a four-across field grid is not an improvement. */
+.agents-roster-main > .agents-authoring {
+  max-width: 1000px;
+}
+.agents-roster {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding-top: 8px;
+}
+.agents-roster-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+.agents-roster-copy {
+  min-width: 0;
+}
+.agents-roster-copy h1 {
+  margin: 0;
+  color: var(--ink-900);
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1.15;
+}
+.agents-roster-copy h1 em {
+  color: var(--skype-deep);
+  font-weight: 600;
+}
+.agents-roster-copy p {
+  max-width: 74ch;
+  margin: 8px 0 0;
+  color: var(--ink-500);
+  font-size: var(--text-lg);
+  line-height: 1.5;
+}
+/* Manrope ships no italic face and the shell turns synthesis off globally, so
+   the roster's spoken-voice text opts synthesis back in for itself. */
+.agents-roster-copy h1 em,
+.agents-roster-copy p,
+.agents-roster-identity-copy small,
+.agents-roster-bio,
+.agents-roster-add small {
+  font-style: italic;
+  font-synthesis: style;
+}
+.agents-roster-new {
+  flex: none;
+  padding: 10px 18px;
+}
+.agents-roster-note {
+  margin: 0;
+  color: var(--ink-500);
+  font-size: var(--text-md);
+}
+.agents-roster-grid {
+  display: grid;
+  /* Three cards across at 1440, two on a narrower window, without a
+     breakpoint doing the deciding. */
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: var(--space-4);
+  max-width: 1280px;
+  align-items: stretch;
+}
+.agents-roster-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5) var(--space-5);
+  border: 1px solid var(--ink-100);
+  border-radius: var(--radius-lg);
+  background: var(--cloud);
+  box-shadow: var(--shadow-soft);
+  transition: box-shadow var(--transition-base);
+}
+.agents-roster-card:hover {
+  box-shadow: var(--shadow-pop);
+}
+.agents-roster-identity {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+}
+.agents-roster-identity-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  min-width: 0;
+}
+.agents-roster-identity-copy strong {
+  color: var(--ink-900);
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.agents-roster-identity:hover strong {
+  color: var(--skype-deep);
+}
+.agents-roster-identity-copy small {
+  color: var(--ink-500);
+  font-size: var(--text-md);
+  font-style: italic;
+}
+.agents-roster-avatar {
+  position: relative;
+  display: grid;
+  flex: none;
+  width: 54px;
+  height: 54px;
+  place-items: center;
+  border: 1px solid var(--sky-200);
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--sky-100), var(--cloud));
+  color: var(--skype-deep);
+  font-size: 22px;
+  font-weight: 700;
+}
+/* Presence dot. Cumora carries it on a photo; the initial block is ours, so
+   the dot is the part worth copying. */
+.agents-roster-avatar::after {
+  position: absolute;
+  right: 1px;
+  bottom: 1px;
+  width: 13px;
+  height: 13px;
+  border: 2px solid var(--cloud);
+  border-radius: 999px;
+  background: var(--ink-300);
+  content: '';
+}
+.agents-roster-avatar--available::after {
+  background: var(--grass);
+}
+.agents-roster-avatar--working::after {
+  background: var(--skype);
+}
+.agents-roster-avatar--thinking::after {
+  background: var(--sky-300);
+}
+.agents-roster-avatar--draining::after {
+  background: var(--gold);
+}
+.agents-roster-bio {
+  flex: 1;
+  margin: 0;
+  padding-left: 11px;
+  border-left: 2px solid var(--sky-200);
+  color: var(--ink-700);
+  font-size: var(--text-md);
+  font-style: italic;
+  line-height: 1.55;
+  /* Three lines keeps every card in a row the same height. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+.agents-roster-bio--empty {
+  border-left-color: var(--ink-100);
+  color: var(--ink-300);
+}
+.agents-roster-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+}
+.agents-roster-actions button {
+  justify-content: center;
+  text-align: center;
+}
+.agents-roster-add {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: var(--space-2);
+  min-height: 220px;
+  padding: var(--space-5);
+  border: 1px dashed var(--ink-200);
+  border-radius: var(--radius-lg);
+  background: rgb(255 255 255 / 40%);
+  text-align: center;
+}
+.agents-roster-add:hover {
+  border-color: var(--sky-300);
+  background: var(--sky-50);
+}
+.agents-roster-add strong {
+  color: var(--ink-900);
+  font-size: var(--text-title);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.agents-roster-add small {
+  max-width: 26ch;
+  color: var(--ink-500);
+  font-size: var(--text-md);
+  font-style: italic;
+  line-height: 1.45;
+}
+.agents-roster-add-mark {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--sky-100);
+  color: var(--skype-deep);
+  font-size: 22px;
+  font-weight: 700;
+}
+.agents-roster-back {
+  align-self: flex-start;
+  margin-bottom: 10px;
+  padding: 5px 9px;
+  border-radius: var(--radius-sm);
+  color: var(--ink-500);
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+.agents-roster-back:hover {
+  background: var(--ink-100);
+  color: var(--skype-deep);
+}
 @media (max-width: 1180px) {
   .agents-first-screen {
     grid-template-columns: minmax(0, 1fr);

@@ -7,6 +7,7 @@ import {
   AGENT_SERVER_MEMORY_API_SKILL_REF,
   AGENT_SERVER_MEMORY_READ_TOOL_REF,
 } from '../application/agents/built-in-skills.js';
+import { EnsureCoworkerDefaultCapability } from '../application/agents/ensure-coworker-default-capability.js';
 import { EnsureCoworkerConversation } from '../application/chat/ensure-coworker-conversation.js';
 import { ReconcileCoworkerConversations } from '../application/chat/reconcile-coworker-conversations.js';
 import type { AgentResolutionApi } from '../application/ports/agent-resolution-api.js';
@@ -45,6 +46,7 @@ import { PostgresWorkDefinitionSourceRepository } from '../infrastructure/postgr
 import { PostgresWorkRunResourceManifestRead } from '../infrastructure/postgres/postgres-work-run-resource-manifest-read.js';
 import { registerSkill } from '../application/extensions/skill-registry.js';
 import type { AppConfig } from '../shared/config.js';
+import type { Logger } from '../shared/observability/logger.js';
 
 export interface ResourceModuleDatabase {
   query<Row = Record<string, unknown>>(
@@ -92,6 +94,7 @@ export interface ResourceModule {
 export interface CreateResourceModuleOptions {
   readonly database: ResourceModuleDatabase;
   readonly config: AppConfig;
+  readonly logger?: Logger;
 }
 
 export async function createResourceModule(
@@ -165,6 +168,14 @@ export async function createResourceModule(
 
   const directChatEnabled = options.config.directChatPlane !== 'absent';
   const productWorkEnabled = options.config.productWorkSurface === 'composed';
+  // Only where Product Work is composed: a Capability this deployment could
+  // not execute is worse than none, because the Coworker would offer it.
+  const coworkerDefaultCapability = productWorkEnabled
+    ? new EnsureCoworkerDefaultCapability(
+        productWorkDefinitions,
+        workDefinitionSources,
+      )
+    : undefined;
   const conversationRepository = directChatEnabled
     ? new PostgresConversationRepository(options.database)
     : undefined;
@@ -227,6 +238,10 @@ export async function createResourceModule(
         ...(httpOptions?.workspaceMembers
           ? { workspaceMembers: httpOptions.workspaceMembers }
           : {}),
+        ...(coworkerDefaultCapability
+          ? { defaultCapability: coworkerDefaultCapability }
+          : {}),
+        ...(options.logger ? { logger: options.logger } : {}),
       });
       registerWorkerRoutes(app, { config, workerRegistry });
       registerAgentProfileRoute(app, {

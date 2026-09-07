@@ -174,6 +174,58 @@ describe('ExecutionRuntimeChatTurnProvider', () => {
     ]);
   });
 
+  it('grants a human actor the same platform tools as the Agent owner', async () => {
+    const toolRefs = [
+      'agent-server/workspace-list',
+      'agent-server/workspace-read',
+      'agent-server/workspace-write',
+    ];
+    const creator = new RecordingDesiredSpec([
+      runtimeSession('runtime-session-1'),
+      runtimeSession('runtime-session-2'),
+    ]);
+    const executor = new RecordingTurnExecutor();
+    const provider = new ExecutionRuntimeChatTurnProvider(
+      creator,
+      executor,
+      recordingConfiguration,
+    );
+
+    await provider.runTurn({
+      ...turnIdentity('agent-definition-1', 'agent-version-1'),
+      brain: chatBrain({ toolRefs }),
+      messages: [
+        { authorType: 'principal', authorId: 'principal-1', body: 'hello' },
+      ],
+    });
+    await provider.runTurn({
+      ...turnIdentity(
+        'agent-definition-1',
+        'agent-version-1',
+        'conversation-2',
+      ),
+      brain: chatBrain({
+        conversationId: 'conversation-2',
+        toolRefs,
+        actor: { type: 'user', id: 'user-bfc57cb5' },
+      }),
+      messages: [
+        { authorType: 'principal', authorId: 'user-bfc57cb5', body: 'hello' },
+      ],
+    });
+
+    const [asOwner, asHuman] = creator.calls;
+    // Who is talking never narrows what the Agent may reach for: the grant
+    // follows the Agent definition, so a real person's DM asks the Runtime for
+    // exactly the tools a service-account DM does.
+    expect(asHuman?.toolRefs).toEqual(asOwner?.toolRefs);
+    expect(asHuman?.toolRefs).toContain('agent-server/workspace-write');
+    // The Runtime session still belongs to the Agent owner, which is what the
+    // tool grant is issued against.
+    expect(asHuman?.owner.principalType).toBe('service_account');
+    expect(executor.calls[1]?.prompt).toContain('- workspace_write');
+  });
+
   it('passes delta and canonical recovery prompts so runtime Ensure chooses reuse or replacement', async () => {
     const creator = new RecordingDesiredSpec([
       runtimeSession('runtime-session-1'),
@@ -415,6 +467,7 @@ function chatBrain(
     capabilitySummary?: Record<string, unknown>;
     agentHome?: Record<string, unknown>;
     toolRefs?: readonly string[];
+    actor?: { readonly type: string; readonly id: string };
   } = {},
 ): ResolvedChatBrain {
   const agentDefinitionId = input.agentDefinitionId ?? 'agent-definition-1';
@@ -428,8 +481,15 @@ function chatBrain(
     tenantId: 'tenant-1',
     workspaceId: 'workspace-1',
   } as const;
-  const actor = { type: 'service_account', id: 'principal-1' } as const;
-  const agentOwner = { scope: productScope, principal: actor } as const;
+  const agentOwnerPrincipal = {
+    type: 'service_account',
+    id: 'principal-1',
+  } as const;
+  const actor = input.actor ?? agentOwnerPrincipal;
+  const agentOwner = {
+    scope: productScope,
+    principal: agentOwnerPrincipal,
+  } as const;
   return {
     turnContext: {
       productScope,

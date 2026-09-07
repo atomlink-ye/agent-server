@@ -13,6 +13,7 @@ import {
 import type { AgentRegistry } from '../../../application/ports/agent-registry.js';
 import type { WorkspaceMembershipRepository } from '../../../application/ports/workspace-membership-repository.js';
 import type { EnsureCoworkerConversation } from '../../../application/chat/ensure-coworker-conversation.js';
+import type { EnsureCoworkerDefaultCapability } from '../../../application/agents/ensure-coworker-default-capability.js';
 import { AdmitWorkspaceMember } from '../../../application/workspaces/admit-workspace-member.js';
 import {
   CreateCoworkerRequestSchema,
@@ -20,6 +21,7 @@ import {
 } from '../../../contracts/agents.js';
 import { HttpError } from '../../../contracts/http.js';
 import type { AppConfig } from '../../../shared/config.js';
+import type { Logger } from '../../../shared/observability/logger.js';
 import { ServiceAccountAuthenticator } from '../../../application/control-plane/service-account-authenticator.js';
 import {
   getAuthenticatedAccessContext,
@@ -41,6 +43,17 @@ export function registerCoworkerAuthoringRoute(
     readonly agentRegistry: AgentRegistry;
     readonly coworkerProvisioning?: Pick<EnsureCoworkerConversation, 'execute'>;
     readonly workspaceMembers?: WorkspaceMembershipRepository;
+    /**
+     * Present only where the Product Work surface is composed. A deployment
+     * without it still hires Coworkers; they simply have no Work to run, and
+     * `list_agent_workflows` says so honestly instead of listing a Capability
+     * this deployment could never execute.
+     */
+    readonly defaultCapability?: Pick<
+      EnsureCoworkerDefaultCapability,
+      'execute'
+    >;
+    readonly logger?: Logger;
   },
 ): void {
   const auth = requireServiceAccountAccess(
@@ -124,6 +137,47 @@ export function registerCoworkerAuthoringRoute(
         accessContext: requester,
         definition: imported.definition,
       });
+      // Work is what makes this Coworker more than a chat persona, so it is
+      // attached at hire time rather than left for a later authoring visit.
+      // A failure here does not un-hire the Coworker: the Agent, its version
+      // and its Conversation are already durable, and returning 500 would
+      // strand them behind an error the person cannot act on. The Coworker
+      // simply starts with no Capability, which every Work surface already
+      // reports truthfully.
+      if (dependencies.defaultCapability) {
+        try {
+          const capability = await dependencies.defaultCapability.execute({
+            draft: {
+              name: parsed.data.name,
+              role: parsed.data.role,
+              summary: parsed.data.summary,
+              ...(parsed.data.instructions
+                ? { instructions: parsed.data.instructions }
+                : {}),
+              modelPolicyRef: parsed.data.model_policy_ref,
+            },
+            agentDefinitionId: imported.definition.id,
+            accessContext: owner,
+            idempotencyKey: `${idempotencyRoot}:capability`,
+          });
+          if (capability)
+            dependencies.logger?.log('info', 'coworker.default_capability', {
+              agent_definition_id: imported.definition.id,
+              work_definition_id: capability.definitionId,
+              work_definition_version_id: capability.definitionVersionId,
+            });
+        } catch (error) {
+          dependencies.logger?.log(
+            'error',
+            'coworker.default_capability_failed',
+            {
+              agent_definition_id: imported.definition.id,
+              error_name: error instanceof Error ? error.name : 'unknown',
+              error_message: error instanceof Error ? error.message : undefined,
+            },
+          );
+        }
+      }
       return c.json(
         CreateCoworkerResponseSchema.parse({
           agent_id: imported.definition.id,

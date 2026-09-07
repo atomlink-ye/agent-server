@@ -86,6 +86,7 @@ export async function createApplication(
   const resourceModule = await createResourceCapabilities({
     database: pool,
     config,
+    logger,
   });
 
   const directChatPlane = config.directChatPlane;

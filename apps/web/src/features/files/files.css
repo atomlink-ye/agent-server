@@ -54,7 +54,7 @@
 .files-mono {
   margin: 0;
   overflow: auto;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
   line-height: 1.55;
   white-space: pre-wrap;
@@ -66,15 +66,29 @@
 }
 .files-notice,
 .files-error {
+  margin: 0;
+  border: 1px solid var(--ink-100);
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-size: 13px;
+  line-height: 1.45;
 }
 .files-notice {
-  background: var(--ink-100);
+  background: var(--sky-50);
   color: var(--ink-700);
 }
 .files-error {
-  background: var(--coral-soft);
-  color: var(--ink-900);
+  border-color: var(--coral-soft);
+  background: #fff8f6;
+  color: var(--coral-deep);
+}
+
+@media (max-width: 768px) {
+  .files-main {
+    padding: 16px;
+  }
+
+  .files-files-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

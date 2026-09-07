@@ -1,5 +1,4 @@
 import {
-  Navigate,
   Route,
   Routes,
   useLocation,
@@ -9,6 +8,7 @@ import {
 import { useAppRuntime } from '../providers';
 import AppShell from '../shell/AppShell';
 import { parseSessionIndex } from '../routes';
+import NotFoundPage from './NotFoundPage';
 
 export function AppRouter() {
   return (
@@ -29,7 +29,7 @@ export function AppRouter() {
       <Route path="/agents/:agentId" element={<WorkspaceRoute />} />
       <Route path="/files" element={<WorkspaceRoute />} />
       <Route path="/whispers" element={<WorkspaceRoute />} />
-      <Route path="*" element={<Navigate replace to="/" />} />
+      <Route path="*" element={<NotFoundPage />} />
     </Routes>
   );
 }

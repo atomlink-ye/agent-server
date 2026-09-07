@@ -100,6 +100,7 @@ export const durableKernelMigrationFileNames = [
   '0066_whisper_channels.sql',
   '0067_agent_chat_runtime_busy_statuses.sql',
   '0068_chat_message_work_item_dispatch.sql',
+  '0069_workspace_membership.sql',
 ] as const;
 const durableKernelMigrationRegistryTable = 'durable_kernel_schema_migrations';
 const durableKernelMigrationAdvisoryLock = [

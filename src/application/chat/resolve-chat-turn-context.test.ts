@@ -70,6 +70,40 @@ describe('ResolveChatTurnContext', () => {
     expect(context?.recoveryMessages.at(-1)?.sequence).toBe(4);
   });
 
+  it('carries a human owner through the turn instead of failing the entitlement match', async () => {
+    const humanMessages = [
+      message(1, 'principal', 'person-a', 'write me a note'),
+    ];
+    const resolver = new ResolveChatTurnContext(
+      humanConversations(humanMessages),
+      { getRuntimeWatermark: async () => 0 },
+      {
+        async resolveForChatTurn() {
+          return {
+            tenantId: 'tenant-n2',
+            conversationId: '00000000-0000-4000-8000-00000000c201',
+            workspaceId: '00000000-0000-4000-8000-00000000w001',
+            principalType: 'user' as const,
+            principalId: 'person-a',
+            createdAt: '2026-08-22T00:00:00.000Z',
+            updatedAt: '2026-08-22T00:00:00.000Z',
+          };
+        },
+      } as any,
+    );
+
+    const context = await resolver.execute(dispatch(1));
+
+    // Actor and entitlement have to agree, or the turn aborts before the
+    // Agent ever reaches its tools.
+    expect(context?.actor).toEqual({ type: 'user', id: 'person-a' });
+    expect(context?.workEntitlement).toMatchObject({
+      principalType: 'user',
+      principalId: 'person-a',
+      workspaceId: '00000000-0000-4000-8000-00000000w001',
+    });
+  });
+
   it('does not execute an activation already covered by the durable watermark', async () => {
     const resolver = new ResolveChatTurnContext(conversations(), {
       getRuntimeWatermark: async () => 4,
@@ -93,6 +127,19 @@ function conversations(source: readonly ChatMessage[] = messages) {
         memberId: input.principalId,
         memberType: 'principal' as const,
         memberPrincipalType: 'service_account' as const,
+      };
+    },
+  } as any;
+}
+
+function humanConversations(source: readonly ChatMessage[]) {
+  return {
+    ...conversations(source),
+    async findPrincipalMember(input: { principalId: string }) {
+      return {
+        memberId: input.principalId,
+        memberType: 'principal' as const,
+        memberPrincipalType: 'user' as const,
       };
     },
   } as any;

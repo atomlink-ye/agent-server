@@ -79,6 +79,7 @@ export async function createHostComposition(input: HostCompositionInput) {
             input.kernel.conversationWorkEntitlements,
         }
       : {}),
+    workspaceMembers: input.kernel.workspaceMembers,
     submitSessionTurn: input.kernel.submitSessionTurn,
     events: input.kernel.events,
     cancelTask: input.taskConsumers.cancelTask,

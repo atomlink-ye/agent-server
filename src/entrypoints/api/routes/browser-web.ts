@@ -1,4 +1,4 @@
-import type { Hono } from 'hono';
+import type { Context, Hono } from 'hono';
 import { z, type ZodType } from 'zod';
 
 import {
@@ -46,6 +46,7 @@ import {
 } from '../../../contracts/runtime-capabilities.js';
 import { createConfiguredRuntimeCapabilities } from '../../../composition/create-runtime-capabilities.js';
 import type { ApiEnvironment } from '../http-types.js';
+import { USER_ID_HEADER } from '../access-context.js';
 import type { AppConfig } from '../../../shared/config.js';
 import type { Logger } from '../../../shared/observability/logger.js';
 import { decodeProductResponse } from '../browser-product-decoder.js';
@@ -119,8 +120,9 @@ export function registerBrowserWebRoutes(
     ),
   );
 
-  app.get('/api/conversations', async () =>
+  app.get('/api/conversations', async (c) =>
     readBrowserJson(
+      c,
       config,
       logger,
       '/api/v1/conversations',
@@ -133,6 +135,7 @@ export function registerBrowserWebRoutes(
     );
     if (!parsed.success) return invalidRequest();
     return writeBrowserJson(
+      c,
       config,
       logger,
       '/api/v1/conversations',
@@ -145,6 +148,7 @@ export function registerBrowserWebRoutes(
     const id = c.req.param('conversationId');
     if (!isId(id)) return invalidRequest();
     return readBrowserJson(
+      c,
       config,
       logger,
       `/api/v1/conversations/${encodeURIComponent(id)}`,
@@ -155,6 +159,7 @@ export function registerBrowserWebRoutes(
     const id = c.req.param('conversationId');
     if (!isId(id)) return invalidRequest();
     return readBrowserJson(
+      c,
       config,
       logger,
       `/api/v1/conversations/${encodeURIComponent(id)}/messages`,
@@ -169,6 +174,7 @@ export function registerBrowserWebRoutes(
     );
     if (!parsed.success) return invalidRequest();
     return writeBrowserJson(
+      c,
       config,
       logger,
       `/api/v1/conversations/${encodeURIComponent(id)}/messages`,
@@ -181,8 +187,9 @@ export function registerBrowserWebRoutes(
   // Whisper is peek-only for humans: GET routes exist, no POST does. That
   // asymmetry -- not a role/permission check -- is what keeps a human from
   // ever writing into an agent-to-agent whisper channel.
-  app.get('/api/whispers', async () =>
+  app.get('/api/whispers', async (c) =>
     readBrowserJson(
+      c,
       config,
       logger,
       '/api/v1/whispers',
@@ -193,6 +200,7 @@ export function registerBrowserWebRoutes(
     const id = c.req.param('whisperChannelId');
     if (!isId(id)) return invalidRequest();
     return readBrowserJson(
+      c,
       config,
       logger,
       `/api/v1/whispers/${encodeURIComponent(id)}`,
@@ -203,6 +211,7 @@ export function registerBrowserWebRoutes(
     const id = c.req.param('whisperChannelId');
     if (!isId(id)) return invalidRequest();
     return readBrowserJson(
+      c,
       config,
       logger,
       `/api/v1/whispers/${encodeURIComponent(id)}/messages`,
@@ -210,8 +219,9 @@ export function registerBrowserWebRoutes(
     );
   });
 
-  app.get('/api/works', async () =>
+  app.get('/api/works', async (c) =>
     readProductJson(
+      c,
       config,
       logger,
       '/api/v1/works?limit=100&order=updated_desc',
@@ -224,6 +234,7 @@ export function registerBrowserWebRoutes(
     );
     if (!parsed.success) return invalidProductRequest();
     return writeProductJson(
+      c,
       config,
       logger,
       '/api/v1/works',
@@ -235,6 +246,7 @@ export function registerBrowserWebRoutes(
     const workId = c.req.param('workId');
     if (!isUuid(workId)) return invalidProductRequest();
     return readProductJson(
+      c,
       config,
       logger,
       `/api/v1/works/${encodeURIComponent(workId)}`,
@@ -245,6 +257,7 @@ export function registerBrowserWebRoutes(
     const workId = c.req.param('workId');
     if (!isUuid(workId)) return invalidRequest();
     return readBrowserJson(
+      c,
       config,
       logger,
       `/api/v1/works/${encodeURIComponent(workId)}/chat-card`,
@@ -255,6 +268,7 @@ export function registerBrowserWebRoutes(
     const workId = c.req.param('workId');
     if (!isUuid(workId)) return invalidProductRequest();
     return readProductJson(
+      c,
       config,
       logger,
       `/api/v1/works/${encodeURIComponent(workId)}/definition`,
@@ -269,6 +283,7 @@ export function registerBrowserWebRoutes(
     );
     if (!parsed.success) return invalidProductRequest();
     return writeProductJson(
+      c,
       config,
       logger,
       `/api/v1/works/${encodeURIComponent(workId)}/definition-version`,
@@ -280,6 +295,7 @@ export function registerBrowserWebRoutes(
     const workId = c.req.param('workId');
     if (!isUuid(workId)) return invalidProductRequest();
     return readProductJson(
+      c,
       config,
       logger,
       `/api/v1/works/${encodeURIComponent(workId)}/runs?limit=100&order=created_desc`,
@@ -294,6 +310,7 @@ export function registerBrowserWebRoutes(
     );
     if (!parsed.success) return invalidProductRequest();
     return writeProductJson(
+      c,
       config,
       logger,
       `/api/v1/works/${encodeURIComponent(workId)}/runs`,
@@ -306,6 +323,7 @@ export function registerBrowserWebRoutes(
     const { workId, workRunId } = workParams(c.req.param());
     if (!workId || !workRunId) return invalidProductRequest();
     return readProductJson(
+      c,
       config,
       logger,
       `/api/v1/works/${encodeURIComponent(workId)}/runs/${encodeURIComponent(workRunId)}`,
@@ -316,6 +334,7 @@ export function registerBrowserWebRoutes(
     const { workId, workRunId } = workParams(c.req.param());
     if (!workId || !workRunId) return invalidProductRequest();
     return readProductJson(
+      c,
       config,
       logger,
       `/api/v1/works/${encodeURIComponent(workId)}/runs/${encodeURIComponent(workRunId)}/trace`,
@@ -328,6 +347,7 @@ export function registerBrowserWebRoutes(
     if (!workId || !workRunId || !attemptId || !isUuid(attemptId))
       return invalidProductRequest();
     return readProductJson(
+      c,
       config,
       logger,
       `/api/v1/works/${encodeURIComponent(workId)}/runs/${encodeURIComponent(workRunId)}/execution-detail?attempt_id=${encodeURIComponent(attemptId)}`,
@@ -340,6 +360,7 @@ export function registerBrowserWebRoutes(
       const { workId, workRunId } = workParams(c.req.param());
       if (!workId || !workRunId) return invalidProductRequest();
       return readProductJson(
+        c,
         config,
         logger,
         `/api/v1/works/${encodeURIComponent(workId)}/runs/${encodeURIComponent(workRunId)}/session-transcripts`,
@@ -352,17 +373,25 @@ export function registerBrowserWebRoutes(
     const versionId = c.req.param('versionId');
     if (!isUuid(versionId)) return invalidProductRequest();
     return readProductJson(
+      c,
       config,
       logger,
       `/api/v1/work-definition-versions/${encodeURIComponent(versionId)}`,
       GetProductWorkDefinitionVersionResponseSchema,
     );
   });
-  app.get('/api/skills', async () =>
-    readProductJson(config, logger, '/api/v1/skills', SkillListResponseSchema),
+  app.get('/api/skills', async (c) =>
+    readProductJson(
+      c,
+      config,
+      logger,
+      '/api/v1/skills',
+      SkillListResponseSchema,
+    ),
   );
-  app.get('/api/work-definitions', async () =>
+  app.get('/api/work-definitions', async (c) =>
     forwardDecoded(
+      c,
       config,
       logger,
       '/api/v1/work-definitions?limit=100',
@@ -420,6 +449,7 @@ async function writeWorkDefinition(
   );
   if (!parsed.success) return invalidProductRequest();
   return writeProductJson(
+    c,
     config,
     logger,
     `/api/v1/work-definitions:${action}`,
@@ -433,12 +463,14 @@ async function writeWorkDefinition(
 }
 
 async function readProductJson(
+  context: Context<ApiEnvironment>,
   config: AppConfig,
   logger: Logger,
   path: string,
   schema: ZodType<unknown>,
 ): Promise<Response> {
   return forwardDecoded(
+    context,
     config,
     logger,
     path,
@@ -449,6 +481,7 @@ async function readProductJson(
 }
 
 async function writeProductJson(
+  context: Context<ApiEnvironment>,
   config: AppConfig,
   logger: Logger,
   path: string,
@@ -460,6 +493,7 @@ async function writeProductJson(
   } = {},
 ): Promise<Response> {
   return forwardDecoded(
+    context,
     config,
     logger,
     path,
@@ -479,12 +513,14 @@ async function writeProductJson(
 }
 
 async function readBrowserJson(
+  context: Context<ApiEnvironment>,
   config: AppConfig,
   logger: Logger,
   path: string,
   schema: ZodType<unknown>,
 ): Promise<Response> {
   return forwardDecoded(
+    context,
     config,
     logger,
     path,
@@ -496,6 +532,7 @@ async function readBrowserJson(
 }
 
 async function writeBrowserJson(
+  context: Context<ApiEnvironment>,
   config: AppConfig,
   logger: Logger,
   path: string,
@@ -504,6 +541,7 @@ async function writeBrowserJson(
   options: { readonly successStatus?: number } = {},
 ): Promise<Response> {
   return forwardDecoded(
+    context,
     config,
     logger,
     path,
@@ -519,6 +557,7 @@ async function writeBrowserJson(
 }
 
 async function forwardDecoded(
+  context: Context<ApiEnvironment>,
   config: AppConfig,
   logger: Logger,
   path: string,
@@ -532,7 +571,18 @@ async function forwardDecoded(
 ): Promise<Response> {
   let upstream: Response;
   try {
-    upstream = await fetchAuthenticated(config, path, init);
+    // The browser's human identifier has to survive the gateway hop, or every
+    // browser-originated call reaches the API as the shared service account
+    // and each person sees -- and can open -- everyone else's conversations.
+    // This mirrors what the work-organization gateway already forwards.
+    const userId = context.req.header(USER_ID_HEADER)?.trim();
+    upstream = await fetchAuthenticated(config, path, {
+      ...init,
+      headers: {
+        ...init.headers,
+        ...(userId ? { [USER_ID_HEADER]: userId } : {}),
+      },
+    });
   } catch {
     return unavailable();
   }

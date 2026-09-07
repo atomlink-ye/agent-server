@@ -117,6 +117,15 @@
   font-size: var(--text-eyebrow);
   margin: var(--space-2) 0 0;
 }
+.work-result-link {
+  display: inline-flex;
+  margin-top: var(--space-4);
+  color: var(--ink-900);
+  font-size: var(--text-sm);
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
 
 .work-run-list {
   border-top: 1px solid var(--ink-200);

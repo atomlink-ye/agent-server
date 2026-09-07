@@ -1,9 +1,17 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 import { loadConversations } from '../conversations/conversations-gateway';
 import { loadCoworkers } from '../agents/agents-gateway';
 import { workClient } from '../work/clients/work-client';
 import { isFeatureUnavailable } from '../../api/feature-availability';
+import { ApiTransportError } from '../../api/transport';
+import {
+  parseWorkRunResultFileRoute,
+  workFilePath,
+  workTabPath,
+} from '../../app/routes';
+import { AssistantMarkdown } from '../conversations/components/assistant-markdown';
 import {
   admitConversationToWork,
   loadContextFile,
@@ -34,6 +42,9 @@ type ScopeChoice = Readonly<{
 }>;
 
 export function FilesPage() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const resultRoute = parseWorkRunResultFileRoute(location.search);
   const [coworkers, setCoworkers] = useState<readonly Coworker[]>([]);
   const [conversations, setConversations] = useState<readonly Conversation[]>(
     [],
@@ -42,9 +53,17 @@ export function FilesPage() {
   const [selectedKey, setSelectedKey] = useState('workspace');
   const [listing, setListing] = useState<ContextFileListing | null>(null);
   const [file, setFile] = useState<ContextFileDetail | null>(null);
+  const [fileScopeKey, setFileScopeKey] = useState<string | null>(null);
   const [targetWorkId, setTargetWorkId] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [fileState, setFileState] = useState<
+    'idle' | 'loading' | 'missing' | 'error' | 'loaded'
+  >('idle');
+  const [viewerMode, setViewerMode] = useState<'markdown' | 'source'>(
+    'markdown',
+  );
+  const fileRequest = useRef(0);
 
   useEffect(() => {
     // Coworkers, conversations and Work are three independent scope
@@ -134,13 +153,34 @@ export function FilesPage() {
     }
     return result;
   }, [conversations, coworkers, works]);
+  const requestedWorkChoice = resultRoute
+    ? (choices.find((choice) => choice.key === `work:${resultRoute.workId}`) ?? {
+        key: `work:${resultRoute.workId}`,
+        label: 'Work result',
+        kind: 'Work',
+        request: { scope: 'work' as const, workId: resultRoute.workId },
+      })
+    : null;
   const selected =
-    choices.find((choice) => choice.key === selectedKey) ?? choices[0]!;
+    requestedWorkChoice ??
+    choices.find((choice) => choice.key === selectedKey) ??
+    choices[0]!;
+  const selectedWorkId =
+    selected.request.scope === 'work' ? selected.request.workId : null;
+  const visibleFile =
+    file &&
+    fileScopeKey === selected.key &&
+    (!resultRoute || file.path === resultRoute.path)
+      ? file
+      : null;
 
   useEffect(() => {
     if (!selected) return;
     let active = true;
+    fileRequest.current += 1;
     setFile(null);
+    setFileScopeKey(null);
+    setFileState('idle');
     setListing(null);
     setError(null);
     void loadContextFiles(selected.request).then(
@@ -152,15 +192,113 @@ export function FilesPage() {
     return () => {
       active = false;
     };
-  }, [selected?.key]);
+  }, [selected.key]);
 
-  async function openFile(path: string): Promise<void> {
+  useEffect(() => {
+    if (!resultRoute || !selectedWorkId) return;
+    let active = true;
+    const requestId = ++fileRequest.current;
+    setFile(null);
+    setFileScopeKey(null);
+    setFileState('loading');
+    setError(null);
+    void loadContextFile(
+      { scope: 'work', workId: selectedWorkId },
+      resultRoute.path,
+    ).then(
+      (next) => {
+        if (!active || requestId !== fileRequest.current) return;
+        setFile(next);
+        setFileScopeKey(selected.key);
+        setFileState('loaded');
+      },
+      (reason: unknown) => {
+        if (!active || requestId !== fileRequest.current) return;
+        setFileState(
+          reason instanceof ApiTransportError && reason.status === 404
+            ? 'missing'
+            : 'error',
+        );
+        if (!(reason instanceof ApiTransportError && reason.status === 404))
+          setError(reason instanceof Error ? reason.message : String(reason));
+      },
+    );
+    return () => {
+      active = false;
+      fileRequest.current += 1;
+    };
+  }, [resultRoute?.path, selected.key, selectedWorkId]);
+
+  function openFile(path: string): void {
+    if (selectedWorkId) {
+      navigate(
+        workFilePath(
+          selectedWorkId,
+          path,
+          resultRoute?.workRunId ?? null,
+          resultRoute?.originConversationId ?? null,
+        ),
+      );
+      return;
+    }
+    const requestId = ++fileRequest.current;
+    setError(null);
+    setFileState('loading');
+    setFile(null);
+    setFileScopeKey(null);
+    void loadContextFile(selected.request, path).then(
+      (next) => {
+        if (requestId !== fileRequest.current) return;
+        setFile(next);
+        setFileScopeKey(selected.key);
+        setFileState('loaded');
+      },
+      (reason: unknown) => {
+        if (requestId !== fileRequest.current) return;
+        setFileState('error');
+        setError(reason instanceof Error ? reason.message : String(reason));
+      },
+    );
+  }
+
+  async function copyRawContent(): Promise<void> {
+    if (!visibleFile) return;
     setError(null);
     try {
-      setFile(await loadContextFile(selected.request, path));
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+      await navigator.clipboard.writeText(visibleFile.content);
+      setNotice('Raw Markdown copied.');
+    } catch {
+      setError('Raw Markdown could not be copied.');
     }
+  }
+
+  function downloadRawContent(): void {
+    if (!visibleFile) return;
+    const url = URL.createObjectURL(
+      new Blob([visibleFile.content], { type: 'text/markdown;charset=utf-8' }),
+    );
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = basename(visibleFile.path);
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function backToWork(): void {
+    if (!resultRoute || !resultRoute.workRunId) return;
+    navigate(
+      workTabPath(
+        resultRoute.workId,
+        'overview',
+        resultRoute.workRunId,
+        resultRoute.originConversationId,
+      ),
+    );
+  }
+
+  function selectScope(key: string): void {
+    setSelectedKey(key);
+    if (resultRoute) navigate('/files');
   }
 
   async function promoteToRelationship(): Promise<void> {
@@ -232,7 +370,7 @@ export function FilesPage() {
               type="button"
               key={choice.key}
               data-active={choice.key === selected.key ? 'true' : 'false'}
-              onClick={() => setSelectedKey(choice.key)}
+              onClick={() => selectScope(choice.key)}
             >
               <small>{choice.kind}</small>
               <strong>{choice.label}</strong>
@@ -249,6 +387,11 @@ export function FilesPage() {
               <span className="eyebrow">{selected.kind}</span>
               <h1>{selected.label}</h1>
             </div>
+            {resultRoute?.workRunId ? (
+              <button type="button" className="files-back" onClick={backToWork}>
+                Back to Work
+              </button>
+            ) : null}
             <span className="files-access">
               {listing?.access === 'read_only' ? 'Read only' : 'Read / write'}
             </span>
@@ -277,8 +420,8 @@ export function FilesPage() {
                 <button
                   type="button"
                   key={entry.id}
-                  data-active={file?.id === entry.id ? 'true' : 'false'}
-                  onClick={() => void openFile(entry.path)}
+                  data-active={visibleFile?.id === entry.id ? 'true' : 'false'}
+                  onClick={() => openFile(entry.path)}
                 >
                   <strong>{entry.path}</strong>
                   <small>
@@ -288,10 +431,24 @@ export function FilesPage() {
               ))}
             </div>
             <article className="files-file-viewer">
-              {!file ? (
+              {fileState === 'missing' && resultRoute ? (
+                <div
+                  className="work-main-empty"
+                  data-testid="result-file-missing"
+                >
+                  <span className="work-main-icon">▱</span>
+                  <h1>Result file unavailable</h1>
+                  <p>
+                    <code>{resultRoute.path}</code> is not available in this
+                    Work scope.
+                  </p>
+                </div>
+              ) : !visibleFile ? (
                 <div className="work-main-empty">
                   <span className="work-main-icon">▱</span>
-                  <h1>Choose a file</h1>
+                  <h1>
+                    {fileState === 'loading' ? 'Loading file…' : 'Choose a file'}
+                  </h1>
                   <p>
                     This surface shows ContextFS product facts, never a provider
                     cwd.
@@ -302,14 +459,51 @@ export function FilesPage() {
                   <header>
                     <div>
                       <span className="eyebrow">Canonical ContextFS</span>
-                      <h2>{file.path}</h2>
+                      <h2>{visibleFile.path}</h2>
                     </div>
                     <span className="files-mono">
-                      {shortHash(file.contentSha256)}
+                      {shortHash(visibleFile.contentSha256)}
                     </span>
                   </header>
-                  <pre>{file.content}</pre>
+                  <div
+                    className="files-viewer-toolbar"
+                    aria-label="File format"
+                  >
+                    <div role="group" aria-label="View mode">
+                      <button
+                        type="button"
+                        data-active={
+                          viewerMode === 'markdown' ? 'true' : 'false'
+                        }
+                        onClick={() => setViewerMode('markdown')}
+                      >
+                        Markdown
+                      </button>
+                      <button
+                        type="button"
+                        data-active={
+                          viewerMode === 'source' ? 'true' : 'false'
+                        }
+                        onClick={() => setViewerMode('source')}
+                      >
+                        Source
+                      </button>
+                    </div>
+                  </div>
+                  <div className="files-rendered-markdown">
+                    {viewerMode === 'markdown' ? (
+                      <AssistantMarkdown text={visibleFile.content} />
+                    ) : (
+                      <pre>{visibleFile.content}</pre>
+                    )}
+                  </div>
                   <div className="files-file-actions">
+                    <button type="button" onClick={() => void copyRawContent()}>
+                      Copy raw Markdown
+                    </button>
+                    <button type="button" onClick={downloadRawContent}>
+                      Download .md
+                    </button>
                     {selected.conversation?.directAgent ? (
                       <button
                         type="button"
@@ -364,6 +558,7 @@ export function FilesPage() {
 function basename(path: string): string {
   return path.split('/').filter(Boolean).at(-1) ?? 'context.txt';
 }
+
 function shortHash(value: string): string {
   return value.startsWith('sha256:')
     ? `${value.slice(0, 15)}…`

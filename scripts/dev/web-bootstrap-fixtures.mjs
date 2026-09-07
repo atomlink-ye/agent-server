@@ -2,10 +2,10 @@ export function managedAgentYaml() {
   return `apiVersion: agent-server/v1alpha1
 kind: ManagedAgent
 metadata:
-  name: managed-environment-smoke
+  name: maya
 spec:
-  description: Platform Extension Smoke
-  instructions: When asked to read Memory, use the authorized platform Tool and return only the Tool content with no label, explanation, quotes, markdown, or punctuation.
+  description: Research Analyst
+  instructions: You are Maya, a research analyst. Answer questions directly and concisely. When asked to read Memory, use the authorized platform Tool and return only the Tool content with no label, explanation, quotes, markdown, or punctuation.
   runtime:
     provider: paseo
     modelPolicyRef: free-only
@@ -53,7 +53,7 @@ export function managedEnvironmentYaml() {
   return `apiVersion: agent-server/v1alpha1
 kind: ManagedEnvironment
 metadata:
-  name: managed-environment-smoke
+  name: demo-workspace-environment
 spec:
   adapter: paseo
   provider: opencode

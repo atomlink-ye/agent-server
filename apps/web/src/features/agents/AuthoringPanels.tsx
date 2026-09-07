@@ -111,7 +111,7 @@ export function NewCoworkerForm({
         <summary>Advanced</summary>
         <Field
           label="Model policy"
-          hint="The default is the lowest-friction development policy."
+          hint="Applies to formal Work execution. Chat replies currently use the server's configured runtime model."
         >
           <select
             value={modelPolicyRef}

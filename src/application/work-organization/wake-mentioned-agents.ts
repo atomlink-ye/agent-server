@@ -263,10 +263,12 @@ async function wakeOne(
       input.reason === 'assignment'
         ? [
             brief,
-            '这是一次指派唤醒。请调用 work_item_claim（工具 agent-server/work-item-claim）认领此 WorkItem；认领成功后按任务说明执行，并在本对话回复执行结果。',
+            'This is an assignment wake. Call work_item_claim (tool ' +
+              'agent-server/work-item-claim) to claim this WorkItem, then carry ' +
+              'out the task below and reply in this conversation with the result.',
             input.workItem.description?.trim()
-              ? `任务说明：\n${input.workItem.description.trim()}`
-              : '任务说明：请根据 WorkItem 标题完成任务。',
+              ? `Task: \n${input.workItem.description.trim()}`
+              : 'Task: complete the work described by the WorkItem title.',
           ].join('\n\n')
         : brief;
 

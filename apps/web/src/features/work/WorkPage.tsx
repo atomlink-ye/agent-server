@@ -11,6 +11,8 @@ import {
 import { WorkDetailPage } from './pages/WorkDetailPage';
 import type { WorkListQuery } from './queries/use-work-list';
 import { workPath, workRootPath } from '../../app/routes';
+import { isValidDetailId } from '../../app/router/detail-id';
+import { NotFoundContent } from '../../app/router/NotFoundPage';
 import { TitleBar } from '../../app/shell/TitleBar';
 import WorkPane from './WorkPane';
 import './work-page.css';
@@ -89,13 +91,12 @@ export function WorkPage({
 
   const workUnavailable = workListStatus === 'unavailable';
   const workListFailed = workListStatus === 'error';
-  // Unavailable must win over any requested authoring or selection state: a
-  // workspace that does not compose the Work surface cannot honor "start new
-  // Work" (including the ?new=1 golden-path deep link) or "open this Work",
-  // so the centred placeholder applies whenever Work is unavailable, not
-  // only when nothing else is selected. A transport blip (workListFailed)
-  // must NOT gate authoring the same way, since a retry there can succeed.
-  const isEmpty = workUnavailable || (!showNewWork && !selectedWorkId);
+  const invalidWorkId =
+    selectedWorkId !== null && !isValidDetailId('work', selectedWorkId);
+  // Invalid links have their own state. Valid selections and authoring need
+  // a composed Work surface; transient list failures still allow authoring.
+  const isEmpty =
+    !invalidWorkId && (workUnavailable || (!showNewWork && !selectedWorkId));
 
   return (
     <>
@@ -129,7 +130,19 @@ export function WorkPage({
               </button>
             </div>
           ) : null}
-          {!workUnavailable && showNewWork ? (
+          {selectedWorkId && invalidWorkId ? (
+            <NotFoundContent
+              title="This Work link is invalid."
+              to="/work"
+              linkLabel="Back to Work"
+              eyebrow="Work link"
+              mark="!"
+              variant="detail"
+            >
+              Check the link, or return to Work.
+            </NotFoundContent>
+          ) : null}
+          {!invalidWorkId && !workUnavailable && showNewWork ? (
             <NewWork
               originConversationId={returnConversationId}
               initialAgentId={authoringRequest.agentId}
@@ -137,7 +150,10 @@ export function WorkPage({
               onWorkCreated={() => refreshWorkList?.()}
             />
           ) : null}
-          {!workUnavailable && !showNewWork && workListStatus === 'ready' ? (
+          {!invalidWorkId &&
+          !workUnavailable &&
+          !showNewWork &&
+          workListStatus === 'ready' ? (
             <MobileWorkPicker
               works={works}
               selectedWorkId={selectedWorkId}
@@ -145,7 +161,10 @@ export function WorkPage({
               onCreate={openNewWork}
             />
           ) : null}
-          {!workUnavailable && !showNewWork && selectedWorkId ? (
+          {!invalidWorkId &&
+          !workUnavailable &&
+          !showNewWork &&
+          selectedWorkId ? (
             <WorkDetailPage
               key={`${selectedWorkId}:${selectedRunId ?? 'latest'}`}
               workId={selectedWorkId}
@@ -156,7 +175,7 @@ export function WorkPage({
               onSelectedLatestRunState={setSelectedLatestRunState}
             />
           ) : null}
-          {isEmpty && workUnavailable ? (
+          {!invalidWorkId && isEmpty && workUnavailable ? (
             <div
               className="work-main-empty"
               data-testid="work-page-unavailable"

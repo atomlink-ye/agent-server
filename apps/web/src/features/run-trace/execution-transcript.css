@@ -296,3 +296,15 @@
 .execution-transcript__last-meaningful p {
   margin: 2px 0;
 }
+.execution-transcript__last-meaningful details {
+  color: var(--trace-muted);
+  font-size: 10px;
+  margin-top: 8px;
+}
+.execution-transcript__last-meaningful summary {
+  cursor: pointer;
+}
+.execution-transcript__last-meaningful details p {
+  line-height: 1.45;
+  margin-top: 5px;
+}

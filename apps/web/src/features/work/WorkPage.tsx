@@ -49,6 +49,11 @@ export function WorkPage({
   const [workListStatus, setWorkListStatus] =
     useState<WorkListQuery['status']>('loading');
   const [works, setWorks] = useState<readonly WorkListItem[]>([]);
+  const [selectedLatestRunState, setSelectedLatestRunState] = useState<{
+    readonly workId: string;
+    readonly runId: string;
+    readonly state: WorkListItem['product_state'];
+  } | null>(null);
   // WorkPane owns the Work list fetch and hands its `refresh` back up here
   // once mounted, so a successful create elsewhere in this page can
   // invalidate the same list instead of leaving the nav stale until a full
@@ -101,6 +106,7 @@ export function WorkPage({
         onStatusChange={setWorkListStatus}
         onRefreshReady={handleRefreshReady}
         onWorksChange={setWorks}
+        selectedLatestRunState={selectedLatestRunState}
       />
       <main className="chat-panel work-main">
         <TitleBar section="Work" />
@@ -141,11 +147,13 @@ export function WorkPage({
           ) : null}
           {!workUnavailable && !showNewWork && selectedWorkId ? (
             <WorkDetailPage
+              key={`${selectedWorkId}:${selectedRunId ?? 'latest'}`}
               workId={selectedWorkId}
               tab={workTab ?? undefined}
               selectedRunId={selectedRunId ?? undefined}
               selectedSessionIndex={selectedSessionIndex ?? undefined}
               originConversationId={returnConversationId}
+              onSelectedLatestRunState={setSelectedLatestRunState}
             />
           ) : null}
           {isEmpty && workUnavailable ? (

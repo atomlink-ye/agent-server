@@ -15,6 +15,7 @@ export type EntryPresentation = {
 
 export function buildEntryPresentation(
   event: TranscriptEntry,
+  options: { readonly terminalRun?: boolean } = {},
 ): EntryPresentation {
   if (event.kind === 'reasoning_progress')
     return {
@@ -40,7 +41,7 @@ export function buildEntryPresentation(
         tone:
           event.status === 'failed' || event.status === 'cancelled'
             ? 'failed'
-            : event.status === 'running'
+            : event.status === 'running' && !options.terminalRun
               ? 'running'
               : 'normal',
         detailText: null,
@@ -48,8 +49,12 @@ export function buildEntryPresentation(
         exitCode: null,
         expandable: true,
       };
-    const hasToolIdentity = event.label !== null || event.tool_name !== null;
-    const label = event.label ?? humanize(event.tool_name ?? event.category);
+    const hasToolIdentity =
+      event.label !== null ||
+      event.tool_name !== null ||
+      event.detail_text !== null;
+    const label = toolActivityLabel(event);
+    const detailText = toolDetail(event);
     return {
       icon: iconForTool(event.category),
       label,
@@ -59,15 +64,14 @@ export function buildEntryPresentation(
       tone:
         event.status === 'failed' || event.status === 'cancelled'
           ? 'failed'
-          : event.status === 'running'
+          : event.status === 'running' && !options.terminalRun
             ? 'running'
             : 'normal',
-      detailText: hasToolIdentity ? event.detail_text : null,
+      detailText: hasToolIdentity ? detailText : null,
       detailKind: hasToolIdentity ? event.detail_kind : null,
       exitCode: hasToolIdentity ? event.exit_code : null,
       expandable:
-        hasToolIdentity &&
-        (Boolean(event.detail_text) || event.exit_code !== null),
+        hasToolIdentity && (Boolean(detailText) || event.exit_code !== null),
     };
   }
   if (event.kind === 'child_timeline_item')
@@ -125,6 +129,37 @@ export function buildEntryPresentation(
     exitCode: null,
     expandable: false,
   };
+}
+
+function toolActivityLabel(
+  event: Extract<TranscriptEntry, { readonly kind: 'tool_status' }>,
+): string {
+  if (event.category === 'shell') {
+    const command = shellCommand(event.label);
+    if (/\brg\s+--files\b/u.test(command) || /\bfind\b/u.test(command))
+      return 'Searched the workspace';
+    if (/\b(?:sed|cat|head|tail)\b/u.test(command))
+      return 'Read workspace files';
+    if (/\bpaseo\s+(?:ls|inspect)\b/u.test(command))
+      return 'Checked agent work';
+    return 'Ran a command';
+  }
+  return event.label ?? humanize(event.tool_name ?? event.category);
+}
+
+function toolDetail(
+  event: Extract<TranscriptEntry, { readonly kind: 'tool_status' }>,
+): string | null {
+  if (event.category !== 'shell') return event.detail_text;
+  const command = shellCommand(event.label);
+  if (!command) return event.detail_text;
+  return event.detail_text
+    ? `Recorded command\n${command}\n\nOutput\n${event.detail_text}`
+    : `Recorded command\n${command}`;
+}
+
+function shellCommand(label: string | null): string {
+  return label?.replace(/^Shell activity:\s*/u, '').trim() ?? '';
 }
 
 export function humanize(value: string | null | undefined): string {

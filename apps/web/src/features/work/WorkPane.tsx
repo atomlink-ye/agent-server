@@ -16,6 +16,11 @@ export interface WorkPaneProps {
   readonly onStatusChange?: (status: WorkListQuery['status']) => void;
   readonly onRefreshReady?: (refresh: () => void) => void;
   readonly onWorksChange?: (works: readonly WorkListItem[]) => void;
+  readonly selectedLatestRunState?: {
+    readonly workId: string;
+    readonly runId: string;
+    readonly state: WorkListItem['product_state'];
+  } | null;
 }
 
 export function WorkPane({
@@ -25,6 +30,7 @@ export function WorkPane({
   onStatusChange,
   onRefreshReady,
   onWorksChange,
+  selectedLatestRunState = null,
 }: WorkPaneProps) {
   const { status, works, refresh } = useWorkList();
 
@@ -166,6 +172,7 @@ export function WorkPane({
               work={work}
               selected={selectedWorkId === work.id}
               originConversationId={originConversationId}
+              stateOverride={selectedLatestRunState}
             />
           ))}
         </ul>
@@ -178,13 +185,19 @@ function WorkListRow({
   work,
   selected,
   originConversationId,
+  stateOverride,
 }: {
   readonly work: WorkListItem;
   readonly selected: boolean;
   readonly originConversationId: string | null;
+  readonly stateOverride: WorkPaneProps['selectedLatestRunState'];
 }) {
   const latestRun = work.latest_run_summary;
-  const stateView = productStatePresentation(work.product_state);
+  const productState =
+    stateOverride?.workId === work.id && stateOverride.runId === latestRun?.id
+      ? stateOverride.state
+      : work.product_state;
+  const stateView = productStatePresentation(productState);
   const timestamp = latestRun?.updated_at ?? work.updated_at;
   return (
     <li>
@@ -200,10 +213,10 @@ function WorkListRow({
           <strong>{work.title}</strong>
           <span className="work-list-meta">
             {latestRun ? (
-              <span data-product-state={work.product_state}>
+              <span data-product-state={productState}>
                 <span
                   aria-hidden="true"
-                  className={`work-status-dot work-status-dot--${work.product_state}`}
+                  className={`work-status-dot work-status-dot--${productState}`}
                 />
                 {stateView.label}
               </span>

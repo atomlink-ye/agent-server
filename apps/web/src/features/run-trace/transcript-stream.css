@@ -150,9 +150,20 @@ details.transcript__row:focus-within .transcript__chevron {
   margin-left: 0;
 }
 .transcript__prose {
+  border-left: 2px solid var(--sky-ink);
+  color: var(--trace-ink);
   font-size: 14px;
   line-height: 1.65;
-  padding: 12px 0;
+  padding: 12px 0 12px 14px;
+}
+.transcript__speaker {
+  color: var(--trace-muted);
+  display: block;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  margin-bottom: 5px;
+  text-transform: uppercase;
 }
 .transcript__prose .assistant-markdown > :first-child {
   margin-top: 0;

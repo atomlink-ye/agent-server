@@ -13,7 +13,7 @@ import { parseRecordedTrace } from '@/test-support/run-trace-recording-test-help
   }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-it('keeps MCP-only coverage disclosure present across views and selection', async () => {
+it('keeps the activity coverage disclosure present across views and selection', async () => {
   for (const recording of [parallelRecording, reworkRecording]) {
     const trace = parseRecordedTrace(recording);
     const host = document.createElement('div');
@@ -30,7 +30,7 @@ it('keeps MCP-only coverage disclosure present across views and selection', asyn
       expect(coverage).not.toBeNull();
       if (!coverage) continue;
       expect(trace.coverage.completeness).toBe('mcp_only');
-      expect(coverage.textContent).toContain('MCP-only');
+      expect(coverage.textContent).toContain('About this activity record');
       expect(coverage.textContent?.toLowerCase()).toContain(
         'mcp dispatch and confirmation',
       );
@@ -60,7 +60,7 @@ it('keeps MCP-only coverage disclosure present across views and selection', asyn
       expect(
         host.querySelector('[data-testid="trace-coverage-disclosure"]'),
       ).toBe(coverage);
-      expect(coverage.textContent).toContain('MCP-only');
+      expect(coverage.textContent).toContain('About this activity record');
       for (const excluded of trace.coverage.excludedExecution) {
         expect(coverage.textContent?.toLowerCase()).toContain(
           excluded.replaceAll('_', ' '),

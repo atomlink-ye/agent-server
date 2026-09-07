@@ -125,7 +125,6 @@ function RunRoleCards({
     <div className="work-role-cards" data-testid="run-role-cards">
       {sessions.map((session, index) => {
         const action = session.summary.last_meaningful?.action;
-        const title = action ? action : 'No meaningful action captured';
         return (
           <button
             className="work-role-card"
@@ -141,14 +140,17 @@ function RunRoleCards({
                 ),
               );
             }}
-            title={title}
+            title={action ?? undefined}
             type="button"
           >
             <strong>{session.label.name}</strong>
             {session.label.role !== null ? (
               <span>{session.label.role}</span>
             ) : null}
-            <span>{session.summary.entry_count} entries</span>
+            <span>
+              Session {session.label.status} · {session.summary.entry_count}{' '}
+              entries
+            </span>
           </button>
         );
       })}

@@ -33,6 +33,7 @@ export function TranscriptPane({
         live={live}
         trace={data.trace}
         initialSelectedIndex={selectedSessionIndex}
+        productState={data.run.work_run.product_state}
       />
     </section>
   );

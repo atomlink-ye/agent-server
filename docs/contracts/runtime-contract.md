@@ -44,6 +44,10 @@ The tools access only that Coworker's canonical ContextFS `agent` scope through 
 
 Existing published Coworker versions do not acquire new tool declarations automatically. General UI file editing and access to conversation, Work, or other Agents' scopes are outside these tools.
 
+### Reaching a granted tool
+
+A grant is not exposure. The provider reads MCP tool names from the Runtime MCP endpoint, and Codex 0.153 keeps MCP tools out of the model's directly-visible tool list; a model that reads only that list reports its granted platform tools as unavailable, or does the work outside the Runtime. Chat turns and Work runs therefore name their granted tools in the system prompt, rendered from the same catalog `src/entrypoints/mcp` registers, alongside the MCP server the provider connects to. The names are derived from the granted refs, so the prompt can never advertise a tool the Runtime would refuse.
+
 ## Observation and safety
 
 Runtime observations are normalized before Application persists them as RunEvent data. Provider-native identifiers, credentials, raw payloads, and unsafe host paths remain outside product responses and ordinary logs. Memory policy and product persistence remain outside the provider boundary.

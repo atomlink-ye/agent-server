@@ -15,7 +15,7 @@ import {
 export function ParticipantChip({
   participants,
   id,
-  fallback = '未分配',
+  fallback = 'Unassigned',
   compact = false,
 }: {
   readonly participants: readonly Participant[];

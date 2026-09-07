@@ -190,7 +190,7 @@ describe('claimBlockedReason', () => {
 
   it('explains a done Task', () => {
     expect(claimBlockedReason(item({ status: 'done' }), now, [])).toBe(
-      '这个任务已经完成了。',
+      'This Task is already complete.',
     );
   });
 
@@ -201,7 +201,7 @@ describe('claimBlockedReason', () => {
         now,
         [participant],
       ),
-    ).toBe('这个任务已被 Ari Analyst 领取。');
+    ).toBe('This Task has already been claimed by Ari Analyst.');
   });
 
   it('falls back without exposing the raw id when the holder is unresolved', () => {
@@ -212,6 +212,6 @@ describe('claimBlockedReason', () => {
         now,
         [],
       ),
-    ).toBe('这个任务已被 该同事 领取。');
+    ).toBe('This Task has already been claimed by this Coworker.');
   });
 });

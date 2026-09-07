@@ -94,7 +94,7 @@ it('puts a card back where the Board says it is when the move is rejected', asyn
     await act(settle);
 
     expect(mounted.host.querySelector('[role="alert"]')?.textContent).toContain(
-      '这次看板改动没能保存，请重试。',
+      'Unable to save this Board change. Please try again.',
     );
     expect(cardTitlesIn(mounted.host, doingColumnId)).toEqual([]);
     expect(cardTitlesIn(mounted.host, todoColumnId)).toEqual([
@@ -154,7 +154,7 @@ it('says a claim is held rather than offering one that cannot succeed', async ()
     expect(
       mounted.host.querySelector('[data-testid="work-board-claim-blocked"]')
         ?.textContent,
-    ).toBe('这个任务已被 Ari Analyst 领取。');
+    ).toBe('This Task has already been claimed by Ari Analyst.');
     expect(
       mounted.host.querySelector('[data-testid="work-board-claim"]'),
     ).toBeNull();
@@ -170,10 +170,12 @@ it('stops offering a claim once the deployment answers that it has no claim rout
     await openPeek(mounted.host, cardOneId);
     await clickTestId(mounted.host, 'work-board-claim');
 
-    expect(mounted.host.textContent).toContain('当前部署还没有开启任务领取。');
+    expect(mounted.host.textContent).toContain(
+      'Task claiming is not enabled in this deployment yet.',
+    );
     expect(api.placements).toEqual([]);
 
-    await clickButton(mounted.host, '关闭卡片详情');
+    await clickButton(mounted.host, 'Close card details');
     await openPeek(mounted.host, cardOneId);
     expect(
       mounted.host.querySelector('[data-testid="work-board-claim"]'),
@@ -187,8 +189,8 @@ it('completes an @ mention in the Board card form and posts the participant id',
   const api = createCanvasApi();
   const mounted = await mountBoard(api.fetch);
   try {
-    await clickButton(mounted.host, '+ 新建任务');
-    const title = inputByLabel(mounted.host, '任务标题');
+    await clickButton(mounted.host, '+ New Task');
+    const title = inputByLabel(mounted.host, 'Task title');
     await typeInto(title, 'ask @ari');
 
     const suggestions = mounted.host.querySelector(
@@ -210,7 +212,7 @@ it('completes an @ mention in the Board card form and posts the participant id',
       mounted.host.querySelector('[data-testid="mention-suggestions"]'),
     ).toBeNull();
 
-    await clickButton(mounted.host, '添加任务');
+    await clickButton(mounted.host, 'Add Task');
     expect(api.createdWorkItems).toEqual([
       { title: 'ask @coworker-1', column_id: todoColumnId },
     ]);
@@ -223,8 +225,8 @@ it('offers no mention list until an @ is typed', async () => {
   const api = createCanvasApi();
   const mounted = await mountBoard(api.fetch);
   try {
-    await clickButton(mounted.host, '+ 新建任务');
-    const title = inputByLabel(mounted.host, '任务标题');
+    await clickButton(mounted.host, '+ New Task');
+    const title = inputByLabel(mounted.host, 'Task title');
     await typeInto(title, 'plain title');
     expect(
       mounted.host.querySelector('[data-testid="mention-suggestions"]'),
@@ -238,8 +240,8 @@ it('leaves the card form open on plain Enter and submits only on Cmd/Ctrl+Enter'
   const api = createCanvasApi();
   const mounted = await mountBoard(api.fetch);
   try {
-    await clickButton(mounted.host, '+ 新建任务');
-    const title = inputByLabel(mounted.host, '任务标题');
+    await clickButton(mounted.host, '+ New Task');
+    const title = inputByLabel(mounted.host, 'Task title');
     await typeInto(title, 'Multiline title');
 
     await act(async () => {
@@ -589,9 +591,9 @@ function dragColumnOnto(
 async function openPeek(host: HTMLElement, workItemId: string): Promise<void> {
   const card = cardOf(host, workItemId);
   const detail = [...card.querySelectorAll<HTMLButtonElement>('button')].find(
-    (button) => button.textContent === '卡片详情',
+    (button) => button.textContent === 'Card details',
   );
-  if (!detail) throw new Error('Expected a 卡片详情 button.');
+  if (!detail) throw new Error('Expected a Card details button.');
   await act(async () => {
     detail.click();
     await settle();

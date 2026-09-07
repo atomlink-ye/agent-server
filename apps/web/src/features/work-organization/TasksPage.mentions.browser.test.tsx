@@ -23,10 +23,10 @@ it('completes an @ mention on the Task form with the keyboard and posts the part
   const api = createTasksApi();
   const mounted = await mountTasks(api.fetch);
   try {
-    await clickButton(mounted.host, '+ 新建任务');
+    await clickButton(mounted.host, '+ New Task');
     const title = controlByLabel<HTMLInputElement>(
       mounted.host,
-      '标题',
+      'Title',
       'input',
     );
     await typeInto(title, 'ping @ari');
@@ -44,7 +44,7 @@ it('completes an @ mention on the Task form with the keyboard and posts the part
       mounted.host.querySelector('[data-testid="mention-suggestions"]'),
     ).toBeNull();
 
-    await clickButton(mounted.host, '创建任务');
+    await clickButton(mounted.host, 'Create Task');
     expect(api.createdTitles).toEqual(['ping @coworker-1']);
   } finally {
     await mounted.dispose();
@@ -55,10 +55,10 @@ it('offers the Coworker roster from the description field too, and gives up on E
   const api = createTasksApi();
   const mounted = await mountTasks(api.fetch);
   try {
-    await clickButton(mounted.host, '+ 新建任务');
+    await clickButton(mounted.host, '+ New Task');
     const description = controlByLabel<HTMLTextAreaElement>(
       mounted.host,
-      '描述',
+      'Description',
       'textarea',
     );
     await typeInto(description, 'handing to @a');
@@ -82,7 +82,7 @@ it('completes an @ mention in a comment and renders the posted mention as a chip
   const mounted = await mountTasks(api.fetch, workItemId);
   try {
     const comment = mounted.host.querySelector<HTMLTextAreaElement>(
-      'textarea[aria-label="添加评论"]',
+      'textarea[aria-label="Add a comment"]',
     );
     if (!comment) throw new Error('Expected a comment box.');
     await typeInto(comment, '@ari');
@@ -97,7 +97,7 @@ it('completes an @ mention in a comment and renders the posted mention as a chip
     });
     expect(comment.value).toBe('@coworker-1 ');
 
-    await clickButton(mounted.host, '评论');
+    await clickButton(mounted.host, 'Comment');
     expect(api.commentBodies).toEqual(['@coworker-1']);
 
     const chip = mounted.host.querySelector('[data-testid="work-org-mention"]');

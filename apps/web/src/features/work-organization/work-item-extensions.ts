@@ -134,9 +134,9 @@ export function claimBlockedReason(
   participants: readonly Participant[],
 ): string | null {
   if (isClaimable(item, now)) return null;
-  if (item.status === 'done') return '这个任务已经完成了。';
+  if (item.status === 'done') return 'This Task is already complete.';
   const claim = readClaimState(item);
   const holderId = claim?.claimedBy ?? item.assignee_id;
-  if (!holderId) return '当前无法领取这个任务。';
-  return `这个任务已被 ${participantLabelSafe(participants, holderId)} 领取。`;
+  if (!holderId) return 'This Task cannot be claimed right now.';
+  return `This Task has already been claimed by ${participantLabelSafe(participants, holderId)}.`;
 }

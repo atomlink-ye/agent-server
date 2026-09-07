@@ -9,6 +9,8 @@ const WORK_TOOLS = [
   'agent-server/list-agent-workflows',
   'agent-server/describe-workflow',
   'agent-server/work-item-claim',
+  'agent-server/work-item-comment',
+  'agent-server/work-item-status',
   'agent-server/whisper-open',
   'agent-server/whisper-send',
 ];

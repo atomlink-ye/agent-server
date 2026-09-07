@@ -36,6 +36,8 @@ import { createHostComposition } from './create-host-composition.js';
 import { recordExecutionTrace } from '../shared/observability/execution-trace.js';
 import { PostgresWhisperRepository } from '../infrastructure/postgres/postgres-whisper-repository.js';
 import { PostgresConversationAgentIdentityResolver } from '../infrastructure/postgres/postgres-conversation-agent-identity-resolver.js';
+import { PostgresAgentHomeRepository } from '../infrastructure/postgres/postgres-agent-home-repository.js';
+import { PostgresAgentHomeDefinitionSource } from '../infrastructure/postgres/postgres-agent-home-definition-source.js';
 
 export interface SingleRunDebugControl {
   claimAndExecute(runId: string): Promise<{
@@ -96,6 +98,12 @@ export async function createApplication(
     : undefined;
   const whisperAgentIdentities = directChatEnabled
     ? new PostgresConversationAgentIdentityResolver(pool)
+    : undefined;
+  const agentWorkspaceRepository = directChatEnabled
+    ? new PostgresAgentHomeRepository(pool)
+    : undefined;
+  const agentWorkspaceDefinitionSource = directChatEnabled
+    ? new PostgresAgentHomeDefinitionSource(pool)
     : undefined;
   const kernel = createKernelCapabilities({
     pool,
@@ -207,6 +215,17 @@ export async function createApplication(
       ? {
           whisper: {
             repository: whisperRepository,
+            agentIdentities: whisperAgentIdentities,
+          },
+        }
+      : {}),
+    ...(agentWorkspaceRepository &&
+    agentWorkspaceDefinitionSource &&
+    whisperAgentIdentities
+      ? {
+          workspace: {
+            repository: agentWorkspaceRepository,
+            definitionSource: agentWorkspaceDefinitionSource,
             agentIdentities: whisperAgentIdentities,
           },
         }

@@ -13,6 +13,9 @@ const WORK_TOOLS = [
   'agent-server/work-item-status',
   'agent-server/whisper-open',
   'agent-server/whisper-send',
+  'agent-server/workspace-list',
+  'agent-server/workspace-read',
+  'agent-server/workspace-write',
 ];
 
 describe('compileCoworkerDraft', () => {

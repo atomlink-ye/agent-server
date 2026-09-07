@@ -20,6 +20,7 @@ import type { EnvironmentReadApi } from '../application/ports/environment-read-a
 import type { MemoryVersionReadApi } from '../application/ports/memory-version-read-api.js';
 import type { WorkDefinitionSourceRepository } from '../application/ports/work-definition-source-repository.js';
 import type { WorkDefinitionResolutionPort } from '../application/ports/work-definition-resolution.js';
+import type { WorkspaceMembershipRepository } from '../application/ports/workspace-membership-repository.js';
 import { ProductWorkDefinitionApi } from '../application/work/product-work-definition-api.js';
 import { ResolveWorkDefinition } from '../application/work/resolve-work-definition.js';
 import type { ApiEnvironment } from '../entrypoints/api/http-types.js';
@@ -54,6 +55,12 @@ export interface ResourceModuleDatabase {
 
 export interface ResourceModuleHttpOptions {
   readonly coworkerProvisioning?: Pick<EnsureCoworkerConversation, 'execute'>;
+  /**
+   * Lets Coworker authoring admit the person doing the hiring into the
+   * workspace, the same way the Conversation routes already do, so their
+   * first Conversation with the new Coworker carries Work context.
+   */
+  readonly workspaceMembers?: WorkspaceMembershipRepository;
 }
 
 export interface ResourceModule {
@@ -216,6 +223,9 @@ export async function createResourceModule(
         agentRegistry,
         ...(configuredCoworkerProvisioning
           ? { coworkerProvisioning: configuredCoworkerProvisioning }
+          : {}),
+        ...(httpOptions?.workspaceMembers
+          ? { workspaceMembers: httpOptions.workspaceMembers }
           : {}),
       });
       registerWorkerRoutes(app, { config, workerRegistry });

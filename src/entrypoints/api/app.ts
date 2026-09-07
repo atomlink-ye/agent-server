@@ -130,7 +130,11 @@ export function createHttpApp(
     );
   }
   dependencies.memoryModule.installHttp(app, dependencies.config);
-  dependencies.resourceModule.installHttp(app, dependencies.config);
+  dependencies.resourceModule.installHttp(app, dependencies.config, {
+    ...(dependencies.workspaceMembers
+      ? { workspaceMembers: dependencies.workspaceMembers }
+      : {}),
+  });
   registerTeamRunRoutes(app, {
     config: dependencies.config,
     teamExecutions: dependencies.teamExecutions,

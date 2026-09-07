@@ -11,7 +11,9 @@ import {
   InvalidIdempotencyKeyError,
 } from '../../../application/agents/errors.js';
 import type { AgentRegistry } from '../../../application/ports/agent-registry.js';
+import type { WorkspaceMembershipRepository } from '../../../application/ports/workspace-membership-repository.js';
 import type { EnsureCoworkerConversation } from '../../../application/chat/ensure-coworker-conversation.js';
+import { AdmitWorkspaceMember } from '../../../application/workspaces/admit-workspace-member.js';
 import {
   CreateCoworkerRequestSchema,
   CreateCoworkerResponseSchema,
@@ -19,7 +21,10 @@ import {
 import { HttpError } from '../../../contracts/http.js';
 import type { AppConfig } from '../../../shared/config.js';
 import { ServiceAccountAuthenticator } from '../../../application/control-plane/service-account-authenticator.js';
-import { getAuthenticatedAccessContext } from '../access-context.js';
+import {
+  getAuthenticatedAccessContext,
+  getRequestAccessContext,
+} from '../access-context.js';
 import { requireServiceAccountAccess } from '../authentication.js';
 import type { ApiEnvironment } from '../http-types.js';
 import { readBoundedJson } from '../read-bounded-json.js';
@@ -35,12 +40,16 @@ export function registerCoworkerAuthoringRoute(
     readonly config: AppConfig;
     readonly agentRegistry: AgentRegistry;
     readonly coworkerProvisioning?: Pick<EnsureCoworkerConversation, 'execute'>;
+    readonly workspaceMembers?: WorkspaceMembershipRepository;
   },
 ): void {
   const auth = requireServiceAccountAccess(
     new ServiceAccountAuthenticator(dependencies.config.serviceAccounts ?? []),
   );
   app.use('/api/v1/coworkers', auth);
+  const admission = dependencies.workspaceMembers
+    ? new AdmitWorkspaceMember(dependencies.workspaceMembers)
+    : null;
 
   app.post('/api/v1/coworkers', async (c) => {
     const parsed = CreateCoworkerRequestSchema.safeParse(
@@ -83,9 +92,16 @@ export function registerCoworkerAuthoringRoute(
 
     try {
       validateAgentPackage(source);
-      const access = getAuthenticatedAccessContext(c);
+      // Two principals, deliberately. The Agent itself is registered by the
+      // service account so the whole tenant keeps seeing it on the roster --
+      // hiring a Coworker adds a teammate, not a private pet. The first
+      // Conversation is opened as the person who hired them, because that
+      // Conversation is a direct message and a direct message has exactly one
+      // human on the other end: whoever just clicked Create.
+      const owner = getAuthenticatedAccessContext(c);
+      const requester = getRequestAccessContext(c);
       const imported = await importAgent(dependencies.agentRegistry, {
-        accessContext: access,
+        accessContext: owner,
         idempotencyKey: `${idempotencyRoot}:import`,
         source,
         roleLabel: parsed.data.role,
@@ -95,12 +111,17 @@ export function registerCoworkerAuthoringRoute(
         imported.version.status === 'published'
           ? imported.version
           : await publishAgentVersion(dependencies.agentRegistry, {
-              accessContext: access,
+              accessContext: owner,
               idempotencyKey: `${idempotencyRoot}:publish`,
               versionId: imported.version.id,
             });
+      // Admission before provisioning: Work context is granted only to a
+      // workspace member, and a first-time visitor whose first action is
+      // hiring a Coworker has no membership row yet. Without this their new
+      // Conversation would open without Work, silently.
+      await admission?.execute(requester);
       const provisioned = await dependencies.coworkerProvisioning.execute({
-        accessContext: access,
+        accessContext: requester,
         definition: imported.definition,
       });
       return c.json(

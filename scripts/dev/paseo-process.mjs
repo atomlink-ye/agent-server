@@ -239,6 +239,30 @@ export async function startPaseo({
   environmentVariableNames = [],
   onChild,
 }) {
+  // Reuse an already-running daemon instead of nesting a second one.
+  //
+  // A repo-local daemon on top of the machine's global daemon means two full
+  // provider process trees: on a 16 GB host that combination exhausted RAM and
+  // took the window server down with it. Set PASEO_SERVER_URL to the daemon you
+  // already trust and this returns a handle to it without forking anything.
+  const existingServerUrl = process.env.PASEO_SERVER_URL?.trim();
+  if (existingServerUrl) {
+    process.stderr.write(
+      `Paseo: reusing the daemon at ${existingServerUrl} (PASEO_SERVER_URL); not starting a nested one.\n`,
+    );
+    return {
+      serverUrl: existingServerUrl,
+      port: Number(new URL(existingServerUrl).port) || port,
+      child: null,
+      // The nested-daemon path returns the environment it prepared for the app.
+      // Reuse has no such daemon, so inherit this process's environment instead;
+      // without it the spawned app loses PATH and fails with `spawn node ENOENT`.
+      environment: { ...process.env },
+      wsUrl: `${existingServerUrl.replace(/^http/, 'ws').replace(/\/+$/, '')}/ws`,
+      async stop() {},
+    };
+  }
+
   const startupTimeoutMs = parsePositiveSafeIntegerEnvironmentVariable(
     'PASEO_DAEMON_STARTUP_TIMEOUT_MS',
     process.env.PASEO_DAEMON_STARTUP_TIMEOUT_MS,

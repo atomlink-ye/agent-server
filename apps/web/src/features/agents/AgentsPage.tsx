@@ -13,6 +13,7 @@ import {
 } from './agents-gateway';
 import type { Coworker } from './contracts';
 import { CapabilityBuilder, NewCoworkerForm } from './AuthoringPanels';
+import { CoworkerHomeFiles } from './CoworkerHomeFiles';
 import TitleBar from '../../app/shell/TitleBar';
 import './agents.css';
 
@@ -404,6 +405,11 @@ export function AgentsPage() {
                   <h2>About</h2>
                   <p>{profile.agent.summary ?? 'No summary provided.'}</p>
                 </article>
+
+                <CoworkerHomeFiles
+                  key={profile.agent.id}
+                  agent={profile.agent}
+                />
 
                 <div className="agents-section-heading">
                   <div>

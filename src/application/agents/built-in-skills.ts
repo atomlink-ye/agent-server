@@ -29,6 +29,12 @@ export const AGENT_SERVER_LIST_AGENT_WORKFLOWS_TOOL_REF =
   'agent-server/list-agent-workflows';
 export const AGENT_SERVER_DESCRIBE_WORKFLOW_TOOL_REF =
   'agent-server/describe-workflow';
+export const AGENT_SERVER_WORKSPACE_LIST_TOOL_REF =
+  'agent-server/workspace-list';
+export const AGENT_SERVER_WORKSPACE_READ_TOOL_REF =
+  'agent-server/workspace-read';
+export const AGENT_SERVER_WORKSPACE_WRITE_TOOL_REF =
+  'agent-server/workspace-write';
 /**
  * Canonical definition. `src/entrypoints/mcp/whisper-mcp-tools.ts`
  * re-exports these rather than defining them, so `application` stays the
@@ -57,6 +63,9 @@ export const SUPPORTED_MANAGED_AGENT_TOOL_REFS = new Set([
   AGENT_SERVER_WORK_ITEM_STATUS_TOOL_REF,
   AGENT_SERVER_LIST_AGENT_WORKFLOWS_TOOL_REF,
   AGENT_SERVER_DESCRIBE_WORKFLOW_TOOL_REF,
+  AGENT_SERVER_WORKSPACE_LIST_TOOL_REF,
+  AGENT_SERVER_WORKSPACE_READ_TOOL_REF,
+  AGENT_SERVER_WORKSPACE_WRITE_TOOL_REF,
   AGENT_SERVER_WHISPER_OPEN_TOOL_REF,
   AGENT_SERVER_WHISPER_SEND_TOOL_REF,
 ]);

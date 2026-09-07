@@ -4,6 +4,9 @@ import {
   AGENT_SERVER_WORK_ITEM_CLAIM_TOOL_REF,
   AGENT_SERVER_WORK_ITEM_COMMENT_TOOL_REF,
   AGENT_SERVER_WORK_ITEM_STATUS_TOOL_REF,
+  AGENT_SERVER_WORKSPACE_LIST_TOOL_REF,
+  AGENT_SERVER_WORKSPACE_READ_TOOL_REF,
+  AGENT_SERVER_WORKSPACE_WRITE_TOOL_REF,
 } from '../../application/agents/built-in-skills.js';
 import { createRuntimeToolCatalog } from './runtime-tool-composition.js';
 
@@ -35,5 +38,30 @@ describe('runtime MCP tool composition', () => {
         AGENT_SERVER_WORK_ITEM_STATUS_TOOL_REF,
       ]),
     );
+  });
+
+  it('publishes Coworker workspace refs under the workspace contributor', () => {
+    const catalog = createRuntimeToolCatalog({
+      memory: () => undefined,
+      collaboration: {
+        contextResolver: {} as never,
+        kernel: {} as never,
+      },
+      logger: {} as never,
+      workspace: {
+        repository: {} as never,
+        definitionSource: {} as never,
+        agentIdentities: {} as never,
+      },
+    });
+
+    const definition = catalog
+      .list()
+      .find((entry) => entry.ref === 'workspace');
+    expect(definition?.toolRefs).toEqual([
+      AGENT_SERVER_WORKSPACE_LIST_TOOL_REF,
+      AGENT_SERVER_WORKSPACE_READ_TOOL_REF,
+      AGENT_SERVER_WORKSPACE_WRITE_TOOL_REF,
+    ]);
   });
 });

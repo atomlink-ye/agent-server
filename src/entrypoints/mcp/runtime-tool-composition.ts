@@ -22,6 +22,9 @@ import {
   AGENT_SERVER_WORK_ITEM_CLAIM_TOOL_REF,
   AGENT_SERVER_WORK_ITEM_COMMENT_TOOL_REF,
   AGENT_SERVER_WORK_ITEM_STATUS_TOOL_REF,
+  AGENT_SERVER_WORKSPACE_LIST_TOOL_REF,
+  AGENT_SERVER_WORKSPACE_READ_TOOL_REF,
+  AGENT_SERVER_WORKSPACE_WRITE_TOOL_REF,
 } from '../../application/agents/built-in-skills.js';
 import {
   createCollaborationRuntimeContributor,
@@ -34,6 +37,14 @@ import {
 } from './whisper-mcp-tools.js';
 import type { WhisperRepository } from '../../application/ports/whisper-repository.js';
 import type { ConversationAgentIdentityResolver } from '../../application/work-organization/conversation-agent-identity.js';
+import type { AgentHomeRepository } from '../../application/ports/agent-home-repository.js';
+import type { AgentHomeDefinitionSource } from '../../application/ports/agent-home-definition-source.js';
+import {
+  ListAgentHomeEntries,
+  ReadAgentHomeEntry,
+  WriteAgentHomeEntry,
+} from '../../application/agents/agent-home.js';
+import { registerAgentWorkspaceMcpTools } from './agent-workspace-mcp-tools.js';
 
 export function createRuntimeToolCatalog(input: {
   readonly memory: RuntimeToolContributor;
@@ -49,6 +60,12 @@ export function createRuntimeToolCatalog(input: {
   /** Agent-initiated private coordination; composed only when Chat is enabled. */
   readonly whisper?: {
     readonly repository: WhisperRepository;
+    readonly agentIdentities: ConversationAgentIdentityResolver;
+  };
+  /** Coworker-owned durable workspace files; composed only when Chat is enabled. */
+  readonly workspace?: {
+    readonly repository: AgentHomeRepository;
+    readonly definitionSource: AgentHomeDefinitionSource;
     readonly agentIdentities: ConversationAgentIdentityResolver;
   };
 }): RuntimeToolCatalog {
@@ -122,7 +139,45 @@ export function createRuntimeToolCatalog(input: {
           },
         ]
       : []),
+    ...(input.workspace
+      ? [
+          {
+            ref: 'workspace',
+            toolRefs: [
+              AGENT_SERVER_WORKSPACE_LIST_TOOL_REF,
+              AGENT_SERVER_WORKSPACE_READ_TOOL_REF,
+              AGENT_SERVER_WORKSPACE_WRITE_TOOL_REF,
+            ],
+            contribute: createAgentWorkspaceRuntimeContributor(input.workspace),
+          },
+        ]
+      : []),
   ]);
+}
+
+function createAgentWorkspaceRuntimeContributor(workspace: {
+  readonly repository: AgentHomeRepository;
+  readonly definitionSource: AgentHomeDefinitionSource;
+  readonly agentIdentities: ConversationAgentIdentityResolver;
+}): RuntimeToolContributor {
+  const list = new ListAgentHomeEntries(
+    workspace.repository,
+    workspace.definitionSource,
+  );
+  const read = new ReadAgentHomeEntry(
+    workspace.repository,
+    workspace.definitionSource,
+  );
+  const write = new WriteAgentHomeEntry(workspace.repository);
+  return ({ server, grant, authorize }) => {
+    registerAgentWorkspaceMcpTools({
+      server,
+      grant,
+      authorize,
+      agentHome: { list, read, write },
+      agentIdentities: workspace.agentIdentities,
+    });
+  };
 }
 
 function createWhisperRuntimeToolsContributor(whisper: {

@@ -223,12 +223,25 @@ export class WorkOrganizationService {
     accessContext: AccessContext,
     workItemId: string,
   ): Promise<WorkItemDetail> {
+    const item = await this.getWorkItemRecord(accessContext, workItemId);
+    return this.hydrateWorkItem(accessContext, item);
+  }
+
+  /**
+   * Read the scoped WorkItem row without hydrating linked Work projections.
+   * Callers that need to authorize a mutation must use this side-effect-free
+   * read before deciding whether the mutation is allowed.
+   */
+  public async getWorkItemRecord(
+    accessContext: AccessContext,
+    workItemId: string,
+  ): Promise<WorkItem> {
     const item = await this.repository.findWorkItemById(
       WorkOrganizationService.ownerFromAccessContext(accessContext),
       workItemId,
     );
     if (!item) throw new WorkItemNotFoundError();
-    return this.hydrateWorkItem(accessContext, item);
+    return item;
   }
 
   public async updateWorkItem(

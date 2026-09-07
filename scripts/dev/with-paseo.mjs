@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { chmod, mkdir, writeFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -50,6 +51,10 @@ const paseoEnvironmentNames = [
   'OPENCODE_BIN',
   'CLAUDE_CODE_BIN',
   'CODEX_BIN',
+  // Host-authenticated Codex. The daemon environment is the isolated safe set
+  // plus the names listed here, so CODEX_HOME must be listed for a developer's
+  // existing ChatGPT-subscription login to survive the HOME isolation.
+  'CODEX_HOME',
 ];
 
 const realProviderDefaults = loadRealProviderDefaults();
@@ -252,21 +257,39 @@ if (command.length === 0) {
   });
   await chmod(claudeSettingsPath, 0o600);
   const codexHome = join(runtimeRoot, 'home', '.codex');
-  await mkdir(codexHome, { recursive: true, mode: 0o700 });
-  await writeFile(
-    join(codexHome, 'config.toml'),
-    [
-      'model_provider = "opencode-go"',
-      '',
-      '[model_providers.opencode-go]',
-      'name = "OpenCode Go"',
-      'base_url = "https://opencode.ai/zen/go/v1"',
-      'env_key = "OPENCODE_GO_API_KEY"',
-      'wire_api = "responses"',
-      '',
-    ].join('\n'),
-    { mode: 0o600 },
-  );
+  // Two ways to authenticate Codex, in priority order:
+  //
+  // 1. A host developer login. `codex login` stores a ChatGPT-subscription
+  //    OAuth token under the real CODEX_HOME, and the runtime isolates HOME,
+  //    so pointing CODEX_HOME back at the host directory is what carries that
+  //    login across the isolation boundary. No gateway key is involved.
+  // 2. The opencode-go gateway key, which needs a generated provider config.
+  //
+  // Selection is explicit: honor a caller-provided CODEX_HOME, otherwise fall
+  // back to the host login when no gateway key is configured.
+  const hostCodexHome = process.env.CODEX_HOME?.trim();
+  const useHostCodexAuth =
+    Boolean(hostCodexHome) || !process.env.OPENCODE_GO_API_KEY?.trim();
+  if (useHostCodexAuth) {
+    process.env.CODEX_HOME =
+      hostCodexHome || join(process.env.HOME ?? homedir(), '.codex');
+  } else {
+    await mkdir(codexHome, { recursive: true, mode: 0o700 });
+    await writeFile(
+      join(codexHome, 'config.toml'),
+      [
+        'model_provider = "opencode-go"',
+        '',
+        '[model_providers.opencode-go]',
+        'name = "OpenCode Go"',
+        'base_url = "https://opencode.ai/zen/go/v1"',
+        'env_key = "OPENCODE_GO_API_KEY"',
+        'wire_api = "responses"',
+        '',
+      ].join('\n'),
+      { mode: 0o600 },
+    );
+  }
   let paseo;
   let child;
   let cleanupStarted = false;

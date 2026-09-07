@@ -138,6 +138,104 @@ async function assertLinuxPrerequisites(
   }
 }
 
+/**
+ * Host-native provider resolution.
+ *
+ * The pinned `provider-toolchain` exists so a container image can materialize a
+ * byte-identical provider set. That is a packaging concern, not a requirement
+ * of the runtime: Paseo and the provider CLIs are ordinary executables, and a
+ * developer machine that already has them installed can run the real runtime
+ * directly. When the managed toolchain is unavailable for this platform we fall
+ * back to whatever the host provides, resolved from an explicit `*_BIN`
+ * override first and then from PATH.
+ */
+const hostProviderBinaryNames = Object.freeze({
+  paseo: 'PASEO_BIN',
+  opencode: 'OPENCODE_BIN',
+  claude: 'CLAUDE_CODE_BIN',
+  codex: 'CODEX_BIN',
+} as const);
+
+async function findExecutableInPath(
+  command: string,
+  environment: NodeJS.ProcessEnv,
+): Promise<string | undefined> {
+  for (const directory of (environment.PATH ?? '').split(delimiter)) {
+    if (!directory) continue;
+    const candidate = join(directory, command);
+    try {
+      await access(candidate, constants.X_OK);
+      return candidate;
+    } catch {
+      // Try the next PATH entry.
+    }
+  }
+  return undefined;
+}
+
+async function resolveHostProviderBinary(
+  name: keyof typeof hostProviderBinaryNames,
+  environment: NodeJS.ProcessEnv,
+): Promise<string | undefined> {
+  const override = environment[hostProviderBinaryNames[name]]?.trim();
+  if (override) {
+    try {
+      await access(override, constants.X_OK);
+      return resolve(override);
+    } catch {
+      throw new Error(
+        `${hostProviderBinaryNames[name]} is set but not executable: ${override}`,
+      );
+    }
+  }
+  return findExecutableInPath(name, environment);
+}
+
+export async function resolveHostProviderToolchain(
+  environment: NodeJS.ProcessEnv = process.env,
+): Promise<typeof providerToolchainPaths> {
+  const names = Object.keys(
+    hostProviderBinaryNames,
+  ) as (keyof typeof hostProviderBinaryNames)[];
+  const resolved = await Promise.all(
+    names.map(async (name) => [
+      name,
+      await resolveHostProviderBinary(name, environment),
+    ]),
+  );
+  const missing = resolved
+    .filter(([, path]) => !path)
+    .map(([name]) => `${name} (${hostProviderBinaryNames[name as keyof typeof hostProviderBinaryNames]})`);
+  if (missing.length) {
+    throw new Error(
+      `host provider toolchain incomplete: missing ${missing.join(', ')}. Install the CLI or set the listed environment variable to an executable path.`,
+    );
+  }
+  const binaries = Object.fromEntries(resolved) as Record<
+    keyof typeof hostProviderBinaryNames,
+    string
+  >;
+  return Object.freeze({
+    root: providerToolchainRoot,
+    paseo: binaries.paseo,
+    opencode: binaries.opencode,
+    claude: binaries.claude,
+    codex: binaries.codex,
+  });
+}
+
+/**
+ * The managed toolchain only publishes Linux artifacts, so any other platform
+ * uses the host's own provider CLIs. An explicit opt-in/opt-out keeps both
+ * paths reachable from either platform.
+ */
+function useHostProviderToolchain(environment: NodeJS.ProcessEnv): boolean {
+  const configured = environment.AGENT_SERVER_HOST_PROVIDERS?.trim();
+  if (configured === '1' || configured === 'true') return true;
+  if (configured === '0' || configured === 'false') return false;
+  return process.platform !== 'linux';
+}
+
 function runProviderToolchainCommand(
   command: string,
   environment: NodeJS.ProcessEnv,
@@ -229,6 +327,8 @@ export async function findInstalledProviderToolchain(): Promise<
 export async function setupProviders(
   environment: NodeJS.ProcessEnv = process.env,
 ): Promise<typeof providerToolchainPaths> {
+  if (useHostProviderToolchain(environment))
+    return resolveHostProviderToolchain(environment);
   await assertLinuxPrerequisites(environment);
   await mkdir(providerToolchainRoot, { recursive: true });
   await runProviderToolchainCommand(
@@ -242,6 +342,8 @@ export async function setupProviders(
 export async function validateProviders(
   environment: NodeJS.ProcessEnv = process.env,
 ): Promise<typeof providerToolchainPaths> {
+  if (useHostProviderToolchain(environment))
+    return resolveHostProviderToolchain(environment);
   await assertLinuxPrerequisites(environment);
   await runProviderToolchainCommand(
     'validate',

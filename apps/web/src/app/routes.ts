@@ -2,6 +2,15 @@ export function conversationPath(conversationId: string): string {
   return `/conversations/${encodeURIComponent(conversationId)}`;
 }
 
+/**
+ * The conversations list has two equivalent addresses: the workspace root and
+ * `/conversations`. Both must resolve an initial selection, otherwise landing
+ * on one of them leaves the chat pane with nothing selected.
+ */
+export function isConversationsRootPath(pathname: string): boolean {
+  return pathname === '/' || pathname === '/conversations';
+}
+
 export function workRootPath(
   originConversationId: string | null = null,
 ): string {

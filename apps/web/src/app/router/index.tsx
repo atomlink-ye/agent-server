@@ -9,6 +9,10 @@ export function AppRouter() {
   return (
     <Routes>
       <Route path="/" element={<WorkspaceRoute />} />
+      {/* The conversations list is reachable both as the workspace root and
+          under its own path, so a shared or typed /conversations link lands on
+          the list instead of falling through to the catch-all 404. */}
+      <Route path="/conversations" element={<WorkspaceRoute />} />
       <Route
         path="/conversations/:conversationId"
         element={<WorkspaceRoute />}

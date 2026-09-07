@@ -4,6 +4,7 @@ import { createRuntimeMcpHttpHandler } from '../../adapters/mcp/runtime-mcp-http
 import type { AuthorizeRuntimeTool } from '../../application/runtime/authorize-runtime-tool.js';
 import type { RuntimeToolCatalog } from '../../application/extensions/runtime-tool-catalog.js';
 import type { Logger } from '../../shared/observability/logger.js';
+import { installProcessCrashGuards } from './process-crash-guard.js';
 
 export interface RuntimeMcpEndpoint {
   readonly url: string;
@@ -25,6 +26,7 @@ export class RuntimeMcpServer {
     private readonly logger?: Logger,
   ) {
     this.authorize = authorize;
+    installProcessCrashGuards(logger);
   }
 
   public endpoint(): RuntimeMcpEndpoint | null {
@@ -40,13 +42,32 @@ export class RuntimeMcpServer {
     if (this.#starting) return this.#starting;
     this.#starting = (async () => {
       return new Promise<RuntimeMcpEndpoint>((resolve, reject) => {
-        const server = createServer(
-          createRuntimeMcpHttpHandler({
-            authorize: this.authorize,
-            toolCatalog: this.toolCatalog,
-            ...(this.logger ? { logger: this.logger } : {}),
-          }),
-        );
+        const handler = createRuntimeMcpHttpHandler({
+          authorize: this.authorize,
+          toolCatalog: this.toolCatalog,
+          ...(this.logger ? { logger: this.logger } : {}),
+        });
+        const server = createServer((request, response) => {
+          void handler(request, response).catch(() => {
+            try {
+              this.logger?.log('error', 'runtime.mcp.request.failed');
+            } catch {
+              // The process guard below remains the last line of defense when
+              // an application logger is unavailable during error handling.
+            }
+            try {
+              if (response.headersSent) {
+                if (!response.writableEnded) response.destroy();
+                return;
+              }
+              response.writeHead(500, { 'content-type': 'application/json' });
+              response.end(JSON.stringify({ error: 'internal_error' }));
+            } catch {
+              // The client may have disconnected while the rejection was
+              // being converted into a controlled response.
+            }
+          });
+        });
         this.#server = server;
         server.once('error', reject);
         server.listen(this.listenPort, this.listenHost, () => {

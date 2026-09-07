@@ -465,15 +465,20 @@ function terminateCommandTree(child: ChildProcess): void {
 
 export async function connectablePostgres(
   connectionString: string,
-): Promise<{ ok: true } | { ok: false; error: unknown }> {
+): Promise<
+  { ok: true; backend: HostDatabaseBackend } | { ok: false; error: unknown }
+> {
   const pool = new Pool({
     connectionString,
     max: 1,
     connectionTimeoutMillis: 1_500,
   });
   try {
-    await pool.query('SELECT 1');
-    return { ok: true };
+    const result = await pool.query<{ version?: unknown }>('SELECT version()');
+    const version = result.rows[0]?.version;
+    if (typeof version !== 'string')
+      throw new Error('PostgreSQL version probe returned no version.');
+    return { ok: true, backend: classifyDatabaseVersion(version) };
   } catch (error) {
     return { ok: false, error };
   } finally {
@@ -481,15 +486,32 @@ export async function connectablePostgres(
   }
 }
 
+/** Classifies the server implementation without exposing the version string. */
+export function classifyDatabaseVersion(version: string): HostDatabaseBackend {
+  return /(?:pglite|emscripten|wasm)/iu.test(version) ? 'pglite' : 'postgres';
+}
+
 export async function ensureDevelopmentDatabase(
   environment: NodeJS.ProcessEnv,
 ): Promise<string> {
   if (environment.HOST_NATIVE_FORCE_PGLITE === '1') {
+    if (requireNativePostgres(environment)) {
+      throw new Error(
+        'CANARY_REQUIRE_NATIVE_POSTGRES=1 cannot be combined with HOST_NATIVE_FORCE_PGLITE=1.',
+      );
+    }
     return ensurePGliteDatabase(environment);
   }
   const connectionString = defaultHostDatabaseUrl(environment);
   const initial = await connectablePostgres(connectionString);
-  if (initial.ok) return connectionString;
+  if (initial.ok) {
+    if (initial.backend === 'pglite' && requireNativePostgres(environment)) {
+      throw new Error(
+        'CANARY_REQUIRE_NATIVE_POSTGRES=1 requires native PostgreSQL; the configured server is PGlite.',
+      );
+    }
+    return connectionString;
+  }
 
   const explicitlyConfigured = Boolean(
     environment.DATABASE_URL?.trim() || environment.POSTGRES_URL?.trim(),
@@ -522,7 +544,7 @@ export async function ensureDevelopmentDatabase(
     try {
       await runCommand('createdb', args, { environment: createdbEnv });
       const after = await connectablePostgres(connectionString);
-      if (after.ok) return connectionString;
+      if (after.ok && after.backend === 'postgres') return connectionString;
     } catch {
       // The default URL is only a convenience. If local Postgres cannot create
       // it, continue to the PGlite fallback below.

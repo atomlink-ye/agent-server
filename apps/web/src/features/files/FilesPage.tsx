@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 import { loadConversations } from '../conversations/conversations-gateway';
 import { loadCoworkers } from '../agents/agents-gateway';
@@ -11,6 +11,11 @@ import {
   workFilePath,
   workTabPath,
 } from '../../app/routes';
+import {
+  coworkerFilePath,
+  hasCoworkerFileScopeQuery,
+  parseCoworkerFileRoute,
+} from './coworker-file-route';
 import { AssistantMarkdown } from '../conversations/components/assistant-markdown';
 import {
   admitConversationToWork,
@@ -45,7 +50,18 @@ export function FilesPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const resultRoute = parseWorkRunResultFileRoute(location.search);
+  const coworkerRoute = resultRoute
+    ? null
+    : parseCoworkerFileRoute(location.search);
+  const malformedCoworkerRoute =
+    !resultRoute &&
+    hasCoworkerFileScopeQuery(location.search) &&
+    coworkerRoute === null;
   const [coworkers, setCoworkers] = useState<readonly Coworker[]>([]);
+  const [coworkersState, setCoworkersState] = useState<
+    'loading' | 'ready' | 'error'
+  >('loading');
+  const [rosterReload, setRosterReload] = useState(0);
   const [conversations, setConversations] = useState<readonly Conversation[]>(
     [],
   );
@@ -72,10 +88,16 @@ export function FilesPage() {
     // that would collapse all three results to the single rejection.
     let active = true;
     void loadCoworkers().then(
-      (next) => active && setCoworkers(next),
-      (reason: unknown) =>
-        active &&
-        setError(reason instanceof Error ? reason.message : String(reason)),
+      (next) => {
+        if (!active) return;
+        setCoworkers(next);
+        setCoworkersState('ready');
+      },
+      (reason: unknown) => {
+        if (!active) return;
+        setCoworkersState('error');
+        setError(reason instanceof Error ? reason.message : String(reason));
+      },
     );
     void loadConversations().then(
       (next) => active && setConversations(next),
@@ -103,7 +125,7 @@ export function FilesPage() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [rosterReload]);
 
   const choices = useMemo<readonly ScopeChoice[]>(() => {
     const result: ScopeChoice[] = [
@@ -154,15 +176,40 @@ export function FilesPage() {
     return result;
   }, [conversations, coworkers, works]);
   const requestedWorkChoice = resultRoute
-    ? (choices.find((choice) => choice.key === `work:${resultRoute.workId}`) ?? {
+    ? (choices.find(
+        (choice) => choice.key === `work:${resultRoute.workId}`,
+      ) ?? {
         key: `work:${resultRoute.workId}`,
         label: 'Work result',
         kind: 'Work',
         request: { scope: 'work' as const, workId: resultRoute.workId },
       })
     : null;
+  const requestedCoworkerChoice = coworkerRoute
+    ? (choices.find(
+        (choice) =>
+          choice.key ===
+          `${coworkerRoute.scope.replace('_', '-')}:${coworkerRoute.agentDefinitionId}`,
+      ) ?? null)
+    : null;
+  const pendingCoworkerRoute =
+    coworkerRoute !== null &&
+    requestedCoworkerChoice === null &&
+    coworkersState === 'loading';
+  const coworkerRosterError =
+    coworkerRoute !== null &&
+    requestedCoworkerChoice === null &&
+    coworkersState === 'error';
+  const unavailableCoworkerRoute =
+    malformedCoworkerRoute ||
+    (coworkerRoute !== null &&
+      requestedCoworkerChoice === null &&
+      coworkersState === 'ready');
+  const showingCoworkerRouteState =
+    pendingCoworkerRoute || coworkerRosterError || unavailableCoworkerRoute;
   const selected =
     requestedWorkChoice ??
+    requestedCoworkerChoice ??
     choices.find((choice) => choice.key === selectedKey) ??
     choices[0]!;
   const selectedWorkId =
@@ -170,12 +217,15 @@ export function FilesPage() {
   const visibleFile =
     file &&
     fileScopeKey === selected.key &&
-    (!resultRoute || file.path === resultRoute.path)
+    (!resultRoute || file.path === resultRoute.path) &&
+    (!coworkerRoute ||
+      (coworkerRoute.path !== null && file.path === coworkerRoute.path))
       ? file
       : null;
 
   useEffect(() => {
-    if (!selected) return;
+    if (pendingCoworkerRoute || coworkerRosterError || unavailableCoworkerRoute)
+      return;
     let active = true;
     fileRequest.current += 1;
     setFile(null);
@@ -192,7 +242,12 @@ export function FilesPage() {
     return () => {
       active = false;
     };
-  }, [selected.key]);
+  }, [
+    coworkerRosterError,
+    pendingCoworkerRoute,
+    selected.key,
+    unavailableCoworkerRoute,
+  ]);
 
   useEffect(() => {
     if (!resultRoute || !selectedWorkId) return;
@@ -229,6 +284,48 @@ export function FilesPage() {
     };
   }, [resultRoute?.path, selected.key, selectedWorkId]);
 
+  useEffect(() => {
+    if (!coworkerRoute || !requestedCoworkerChoice) return;
+    if (!coworkerRoute.path) {
+      fileRequest.current += 1;
+      setFile(null);
+      setFileScopeKey(null);
+      setFileState('idle');
+      return;
+    }
+    let active = true;
+    const requestId = ++fileRequest.current;
+    setFile(null);
+    setFileScopeKey(null);
+    setFileState('loading');
+    setError(null);
+    void loadContextFile(
+      requestedCoworkerChoice.request,
+      coworkerRoute.path,
+    ).then(
+      (next) => {
+        if (!active || requestId !== fileRequest.current) return;
+        setFile(next);
+        setFileScopeKey(requestedCoworkerChoice.key);
+        setFileState('loaded');
+      },
+      (reason: unknown) => {
+        if (!active || requestId !== fileRequest.current) return;
+        setFileState(
+          reason instanceof ApiTransportError && reason.status === 404
+            ? 'missing'
+            : 'error',
+        );
+        if (!(reason instanceof ApiTransportError && reason.status === 404))
+          setError(reason instanceof Error ? reason.message : String(reason));
+      },
+    );
+    return () => {
+      active = false;
+      fileRequest.current += 1;
+    };
+  }, [coworkerRoute?.path, requestedCoworkerChoice?.key]);
+
   function openFile(path: string): void {
     if (selectedWorkId) {
       navigate(
@@ -237,6 +334,19 @@ export function FilesPage() {
           path,
           resultRoute?.workRunId ?? null,
           resultRoute?.originConversationId ?? null,
+        ),
+      );
+      return;
+    }
+    if (
+      selected.request.scope === 'agent' ||
+      selected.request.scope === 'agent_user'
+    ) {
+      navigate(
+        coworkerFilePath(
+          selected.request.scope,
+          selected.request.agentDefinitionId!,
+          path,
         ),
       );
       return;
@@ -298,7 +408,21 @@ export function FilesPage() {
 
   function selectScope(key: string): void {
     setSelectedKey(key);
-    if (resultRoute) navigate('/files');
+    const choice = choices.find((item) => item.key === key);
+    if (
+      choice?.request.scope === 'agent' ||
+      choice?.request.scope === 'agent_user'
+    ) {
+      navigate(
+        coworkerFilePath(
+          choice.request.scope,
+          choice.request.agentDefinitionId!,
+        ),
+      );
+      return;
+    }
+    if (resultRoute || coworkerRoute || malformedCoworkerRoute)
+      navigate('/files');
   }
 
   async function promoteToRelationship(): Promise<void> {
@@ -369,7 +493,11 @@ export function FilesPage() {
             <button
               type="button"
               key={choice.key}
-              data-active={choice.key === selected.key ? 'true' : 'false'}
+              data-active={
+                !showingCoworkerRouteState && choice.key === selected.key
+                  ? 'true'
+                  : 'false'
+              }
               onClick={() => selectScope(choice.key)}
             >
               <small>{choice.kind}</small>
@@ -381,175 +509,258 @@ export function FilesPage() {
 
       <main className="chat-panel files-main">
         <TitleBar section="Files" />
-        <section className="files-files" aria-label="Context files">
-          <header className="files-files-header">
-            <div>
-              <span className="eyebrow">{selected.kind}</span>
-              <h1>{selected.label}</h1>
+        {pendingCoworkerRoute ? (
+          <section className="files-files files-route-state" aria-live="polite">
+            <div className="work-main-empty">
+              <span className="work-main-icon" aria-hidden="true">
+                ◎
+              </span>
+              <h1>Loading Coworker files…</h1>
+              <p>Checking whether this Coworker is available to you.</p>
             </div>
-            {resultRoute?.workRunId ? (
-              <button type="button" className="files-back" onClick={backToWork}>
-                Back to Work
+          </section>
+        ) : coworkerRosterError ? (
+          <section className="files-files files-route-state">
+            <div className="work-main-empty">
+              <span className="work-main-icon" aria-hidden="true">
+                !
+              </span>
+              <h1>Coworker files couldn&apos;t be loaded</h1>
+              <p>Try again in a moment.</p>
+              <button
+                type="button"
+                className="files-back"
+                onClick={() => {
+                  setError(null);
+                  setCoworkersState('loading');
+                  setRosterReload((value) => value + 1);
+                }}
+              >
+                Retry
               </button>
-            ) : null}
-            <span className="files-access">
-              {listing?.access === 'read_only' ? 'Read only' : 'Read / write'}
-            </span>
-          </header>
-          {error ? (
-            <p className="files-error" role="alert">
-              {error}
-            </p>
-          ) : null}
-          {notice ? (
-            <p className="files-notice" role="status">
-              {notice}
-            </p>
-          ) : null}
-          <div className="files-files-grid">
-            <div className="files-file-list">
-              {listing === null ? (
-                <p className="pane-placeholder">Loading context…</p>
-              ) : null}
-              {listing?.entries.length === 0 ? (
-                <p className="pane-placeholder">
-                  No files in this canonical scope.
-                </p>
-              ) : null}
-              {listing?.entries.map((entry) => (
+            </div>
+          </section>
+        ) : unavailableCoworkerRoute ? (
+          <section className="files-files files-route-state">
+            <div className="work-main-empty">
+              <span className="work-main-icon" aria-hidden="true">
+                !
+              </span>
+              <h1>Coworker files unavailable</h1>
+              <p>
+                This link is invalid, or the Coworker is no longer available to
+                you.
+              </p>
+              <Link className="files-back" to="/agents">
+                Back to Coworkers
+              </Link>
+            </div>
+          </section>
+        ) : (
+          <section className="files-files" aria-label="Context files">
+            <header className="files-files-header">
+              <div>
+                <span className="eyebrow">{selected.kind}</span>
+                <h1>{selected.label}</h1>
+              </div>
+              {resultRoute?.workRunId ? (
                 <button
                   type="button"
-                  key={entry.id}
-                  data-active={visibleFile?.id === entry.id ? 'true' : 'false'}
-                  onClick={() => openFile(entry.path)}
+                  className="files-back"
+                  onClick={backToWork}
                 >
-                  <strong>{entry.path}</strong>
-                  <small>
-                    v{entry.currentVersion} · {shortHash(entry.contentSha256)}
-                  </small>
+                  Back to Work
                 </button>
-              ))}
-            </div>
-            <article className="files-file-viewer">
-              {fileState === 'missing' && resultRoute ? (
-                <div
-                  className="work-main-empty"
-                  data-testid="result-file-missing"
+              ) : null}
+              {selected.request.scope === 'agent' ||
+              selected.request.scope === 'agent_user' ? (
+                <Link
+                  className="files-back"
+                  to={`/agents/${encodeURIComponent(selected.request.agentDefinitionId!)}`}
                 >
-                  <span className="work-main-icon">▱</span>
-                  <h1>Result file unavailable</h1>
-                  <p>
-                    <code>{resultRoute.path}</code> is not available in this
-                    Work scope.
+                  Back to Coworker Home
+                </Link>
+              ) : null}
+              <span className="files-access">
+                {selected.request.scope === 'agent' ||
+                selected.request.scope === 'agent_user'
+                  ? 'Preview only'
+                  : listing?.access === 'read_only'
+                    ? 'Read only'
+                    : 'Read / write'}
+              </span>
+            </header>
+            {error ? (
+              <p className="files-error" role="alert">
+                {error}
+              </p>
+            ) : null}
+            {notice ? (
+              <p className="files-notice" role="status">
+                {notice}
+              </p>
+            ) : null}
+            <div className="files-files-grid">
+              <div className="files-file-list">
+                {listing === null ? (
+                  <p className="pane-placeholder">Loading context…</p>
+                ) : null}
+                {listing?.entries.length === 0 ? (
+                  <p className="pane-placeholder">
+                    No files in this canonical scope.
                   </p>
-                </div>
-              ) : !visibleFile ? (
-                <div className="work-main-empty">
-                  <span className="work-main-icon">▱</span>
-                  <h1>
-                    {fileState === 'loading' ? 'Loading file…' : 'Choose a file'}
-                  </h1>
-                  <p>
-                    This surface shows ContextFS product facts, never a provider
-                    cwd.
-                  </p>
-                </div>
-              ) : (
-                <>
-                  <header>
-                    <div>
-                      <span className="eyebrow">Canonical ContextFS</span>
-                      <h2>{visibleFile.path}</h2>
-                    </div>
-                    <span className="files-mono">
-                      {shortHash(visibleFile.contentSha256)}
-                    </span>
-                  </header>
-                  <div
-                    className="files-viewer-toolbar"
-                    aria-label="File format"
+                ) : null}
+                {listing?.entries.map((entry) => (
+                  <button
+                    type="button"
+                    key={entry.id}
+                    data-active={
+                      visibleFile?.id === entry.id ? 'true' : 'false'
+                    }
+                    onClick={() => openFile(entry.path)}
                   >
-                    <div role="group" aria-label="View mode">
-                      <button
-                        type="button"
-                        data-active={
-                          viewerMode === 'markdown' ? 'true' : 'false'
-                        }
-                        onClick={() => setViewerMode('markdown')}
-                      >
-                        Markdown
-                      </button>
-                      <button
-                        type="button"
-                        data-active={
-                          viewerMode === 'source' ? 'true' : 'false'
-                        }
-                        onClick={() => setViewerMode('source')}
-                      >
-                        Source
-                      </button>
-                    </div>
+                    <strong>{entry.path}</strong>
+                    <small>
+                      v{entry.currentVersion} · {shortHash(entry.contentSha256)}
+                    </small>
+                  </button>
+                ))}
+              </div>
+              <article className="files-file-viewer">
+                {fileState === 'missing' && resultRoute ? (
+                  <div
+                    className="work-main-empty"
+                    data-testid="result-file-missing"
+                  >
+                    <span className="work-main-icon">▱</span>
+                    <h1>Result file unavailable</h1>
+                    <p>
+                      <code>{resultRoute.path}</code> is not available in this
+                      Work scope.
+                    </p>
                   </div>
-                  <div className="files-rendered-markdown">
-                    {viewerMode === 'markdown' ? (
-                      <AssistantMarkdown text={visibleFile.content} />
-                    ) : (
-                      <pre>{visibleFile.content}</pre>
-                    )}
+                ) : fileState === 'missing' && coworkerRoute?.path ? (
+                  <div className="work-main-empty">
+                    <span className="work-main-icon">▱</span>
+                    <h1>File unavailable</h1>
+                    <p>
+                      <code>{coworkerRoute.path}</code> is not available in this
+                      Coworker scope.
+                    </p>
                   </div>
-                  <div className="files-file-actions">
-                    <button type="button" onClick={() => void copyRawContent()}>
-                      Copy raw Markdown
-                    </button>
-                    <button type="button" onClick={downloadRawContent}>
-                      Download .md
-                    </button>
-                    {selected.conversation?.directAgent ? (
-                      <button
-                        type="button"
-                        onClick={() => void promoteToRelationship()}
-                      >
-                        Promote to my memory
-                      </button>
-                    ) : null}
-                    {selected.conversation && works.length ? (
-                      <label>
-                        Admit to Work
-                        <select
-                          value={targetWorkId}
-                          onChange={(event) =>
-                            setTargetWorkId(event.target.value)
-                          }
-                        >
-                          {works.map((work) => (
-                            <option key={work.id} value={work.id}>
-                              {work.title}
-                            </option>
-                          ))}
-                        </select>
+                ) : !visibleFile ? (
+                  <div className="work-main-empty">
+                    <span className="work-main-icon">▱</span>
+                    <h1>
+                      {fileState === 'loading'
+                        ? 'Loading file…'
+                        : 'Choose a file'}
+                    </h1>
+                    <p>
+                      This surface shows ContextFS product facts, never a
+                      provider cwd.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <header>
+                      <div>
+                        <span className="eyebrow">Canonical ContextFS</span>
+                        <h2>{visibleFile.path}</h2>
+                      </div>
+                      <span className="files-mono">
+                        {shortHash(visibleFile.contentSha256)}
+                      </span>
+                    </header>
+                    <div
+                      className="files-viewer-toolbar"
+                      aria-label="File format"
+                    >
+                      <div role="group" aria-label="View mode">
                         <button
                           type="button"
-                          disabled={!targetWorkId}
-                          onClick={() => void admitToWork()}
+                          data-active={
+                            viewerMode === 'markdown' ? 'true' : 'false'
+                          }
+                          onClick={() => setViewerMode('markdown')}
                         >
-                          Admit input
+                          Markdown
                         </button>
-                      </label>
-                    ) : null}
-                    {selected.work && !file.path.startsWith('artifacts/') ? (
+                        <button
+                          type="button"
+                          data-active={
+                            viewerMode === 'source' ? 'true' : 'false'
+                          }
+                          onClick={() => setViewerMode('source')}
+                        >
+                          Source
+                        </button>
+                      </div>
+                    </div>
+                    <div className="files-rendered-markdown">
+                      {viewerMode === 'markdown' ? (
+                        <AssistantMarkdown text={visibleFile.content} />
+                      ) : (
+                        <pre>{visibleFile.content}</pre>
+                      )}
+                    </div>
+                    <div className="files-file-actions">
                       <button
                         type="button"
-                        onClick={() => void publishResult()}
+                        onClick={() => void copyRawContent()}
                       >
-                        Publish as Work result
+                        Copy raw Markdown
                       </button>
-                    ) : null}
-                  </div>
-                </>
-              )}
-            </article>
-          </div>
-        </section>
+                      <button type="button" onClick={downloadRawContent}>
+                        Download .md
+                      </button>
+                      {selected.conversation?.directAgent ? (
+                        <button
+                          type="button"
+                          onClick={() => void promoteToRelationship()}
+                        >
+                          Promote to my memory
+                        </button>
+                      ) : null}
+                      {selected.conversation && works.length ? (
+                        <label>
+                          Admit to Work
+                          <select
+                            value={targetWorkId}
+                            onChange={(event) =>
+                              setTargetWorkId(event.target.value)
+                            }
+                          >
+                            {works.map((work) => (
+                              <option key={work.id} value={work.id}>
+                                {work.title}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            disabled={!targetWorkId}
+                            onClick={() => void admitToWork()}
+                          >
+                            Admit input
+                          </button>
+                        </label>
+                      ) : null}
+                      {selected.work && !file.path.startsWith('artifacts/') ? (
+                        <button
+                          type="button"
+                          onClick={() => void publishResult()}
+                        >
+                          Publish as Work result
+                        </button>
+                      ) : null}
+                    </div>
+                  </>
+                )}
+              </article>
+            </div>
+          </section>
+        )}
       </main>
     </>
   );

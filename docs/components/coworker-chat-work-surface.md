@@ -13,6 +13,23 @@ The browser does not own Agent identity, Work state, service-account credentials
 
 A Direct Chat is addressable at `/conversations/:conversationId`. The in-memory AppStore mirrors the route; it is not the durable navigation source. The compatibility root `/` selects an available conversation and replaces the URL with the canonical deep-link.
 
+The Coworker profile exposes its Context files in two scopes: shared Coworker
+files (`agent`) and the authenticated user's private relationship files
+(`agent_user`). Counts and paths come from the existing ContextFS listing API;
+an empty listing means no files have been saved, while a failed listing offers
+a retry. These are Chat context scopes, not the Coworker's immutable definition
+or a Work execution directory.
+
+Links into `/files?scope=agent&agent_definition_id=:agentId` and the equivalent
+`scope=agent_user` route preserve the selected Coworker across reloads. An
+optional `path` selects a file. Files provides a link back to that Coworker's
+profile. This surface previews existing files; it does not create or edit them.
+
+Agent Home uses the same `context_entries` store through
+`AgentHomeContextAdapter`: `agent-shared` maps to `agent`, and `user` maps to
+`agent_user`. The definition namespace is computed from AgentVersion. The
+historical `agent_home_entries` table is not the current production write target.
+
 When a Chat message carries a Work reference, `Open Work` navigates to:
 
 ```text

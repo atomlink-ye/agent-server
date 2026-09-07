@@ -9,6 +9,16 @@ import type {
 } from './product-projection.js';
 
 /**
+ * A Chat card is a handle on a Work, not on a Run, so it has two stages a Run
+ * state cannot name: a Work that exists but has never been run, and a Run that
+ * has been requested but is not yet bound to its root Task. Both were once
+ * reported as `not_captured`, which reads as "we could not read the status" —
+ * a failure — when in fact the status was read perfectly and the Work simply
+ * had not started. `not_captured` now means only what it says.
+ */
+export type ChatWorkCardState = ProductState | 'not_started' | 'starting';
+
+/**
  * The deliberately small read model used when Work state is surfaced in Chat.
  * Technical Task/Run, provider, event, and reasoning identities do not cross
  * this boundary.
@@ -17,7 +27,7 @@ export interface ChatWorkCard {
   readonly workId: string;
   readonly workRef: string;
   readonly title: string;
-  readonly productState: ProductState;
+  readonly productState: ChatWorkCardState;
   readonly problemKind: 'failed' | 'cancelled' | 'not_captured' | null;
   readonly attentionReason:
     'completion_approval_pending' | 'not_captured' | null;
@@ -54,12 +64,12 @@ export class ChatWorkCardProjection {
       work.id,
       owner,
     );
-    if (
-      !latestRun ||
-      latestRun.rootTaskId === null ||
-      latestRun.boundAt === null
-    )
-      return notCapturedCard(work);
+    // A Work with no Run at all has not failed to report anything: it is
+    // waiting to be started. A Run that exists but is not yet bound to its
+    // root Task is starting. Neither is a status-read failure.
+    if (!latestRun) return stageCard(work, 'not_started');
+    if (latestRun.rootTaskId === null || latestRun.boundAt === null)
+      return stageCard(work, 'starting');
 
     const response = await this.options.productProjection.getWorkRun({
       ...owner,
@@ -106,15 +116,23 @@ export class ChatWorkCardUnavailableError extends Error {
   }
 }
 
-function notCapturedCard(work: Work): ChatWorkCard {
+/**
+ * A Work that has not produced a result yet has no result to report, which is
+ * `not_present`. Reporting `not_captured` here claimed we had tried to read a
+ * result and could not.
+ */
+function stageCard(
+  work: Work,
+  productState: 'not_started' | 'starting',
+): ChatWorkCard {
   return {
     workId: work.id,
     workRef: work.id,
     title: work.title,
-    productState: 'not_captured',
-    problemKind: 'not_captured',
-    attentionReason: 'not_captured',
+    productState,
+    problemKind: null,
+    attentionReason: null,
     resultSummary: null,
-    resultCaptureStatus: 'not_captured',
+    resultCaptureStatus: 'not_present',
   };
 }

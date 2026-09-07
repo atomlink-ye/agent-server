@@ -6,7 +6,14 @@ import type {
 } from './contracts';
 import { apiTransport, ApiTransportError } from '../../api/transport';
 
-export type WorkProductState = 'running' | 'needs_you' | 'complete' | 'problem';
+/**
+ * The stages a Work Card can honestly report. `not_started` and `starting` are
+ * Work-level stages, not Run states: the first is a Work that has never been
+ * run, the second a Run that has been requested but is not yet bound. Neither
+ * is a failure to read status — that case alone maps to a null productState.
+ */
+export type WorkProductState =
+  'not_started' | 'starting' | 'running' | 'needs_you' | 'complete' | 'problem';
 
 export type WorkResultCaptureStatus =
   'present' | 'not_present' | 'redacted' | 'not_captured';
@@ -267,6 +274,8 @@ function nullableEnum<T extends string>(
 
 function isWorkProductState(value: unknown): value is WorkProductState {
   return (
+    value === 'not_started' ||
+    value === 'starting' ||
     value === 'running' ||
     value === 'needs_you' ||
     value === 'complete' ||

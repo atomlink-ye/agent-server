@@ -35,7 +35,9 @@ The query parameter is not a database link and does not replace the durable `con
 
 Background refresh must not clear message drafts or switch a still-valid selected conversation. Refresh is active only while its owning product surface is visible.
 
-A Work Card is live while its safe product state is `running` or `needs_you`. The client may poll the bounded chat-card projection. `complete`, `problem`, and unavailable cards are terminal for browser polling.
+A Work Card reports a Work stage, not only a Run state. `not_started` means the Work exists and has never been run; `starting` means a Run has been requested but is not yet bound to its root Task. `not_captured` is reserved for a status the server genuinely could not read, and is the only state the browser renders as unavailable.
+
+A Work Card is live while its safe product state is `not_started`, `starting`, `running`, or `needs_you` — a Work that has not started can be started by its Coworker at any moment. The client may poll the bounded chat-card projection. `complete`, `problem`, and unavailable cards are terminal for browser polling.
 
 ## Coworker provisioning contract
 

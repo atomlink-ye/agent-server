@@ -76,7 +76,13 @@ export const ChatWorkCardSchema = z.object({
   workId: z.string().min(1),
   workRef: z.string().min(1),
   title: z.string().min(1),
+  // 'not_started' and 'starting' are Work-level stages the Run states cannot
+  // express: a Work that has never been run, and a Run that has been requested
+  // but not yet bound. 'not_captured' is reserved for a status we genuinely
+  // could not read.
   productState: z.enum([
+    'not_started',
+    'starting',
     'running',
     'needs_you',
     'complete',

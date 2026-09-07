@@ -65,8 +65,77 @@ it('refreshes a live Work Card and stops polling once the Work becomes terminal'
   }
 });
 
+it('shows a Work that has not been run as ready to start, and follows it into its Run', async () => {
+  vi.useFakeTimers();
+  const load = vi.mocked(loadWorkCard);
+  load
+    .mockResolvedValueOnce(card('not_started', null))
+    .mockResolvedValueOnce(card('running', null))
+    .mockResolvedValueOnce(card('complete', 'Two release risks found.'));
+
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(<WorkCard workRef={workId} onOpen={() => undefined} />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // A Work that was just created is at a stage, not in a fault. Nothing on
+    // the card may read as unavailable.
+    expect(host.textContent).toContain('Ready to start');
+    expect(host.textContent).not.toContain('unavailable');
+    expect(host.textContent).not.toContain('not available');
+    expect(host.querySelector('.work-status--not_started')).not.toBeNull();
+
+    // The Coworker can start this Work at any moment, so the card that says
+    // "Ready to start" has to keep watching for the Run it invites.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000);
+      await Promise.resolve();
+    });
+    expect(host.textContent).toContain('Running');
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000);
+      await Promise.resolve();
+    });
+    expect(host.textContent).toContain('Complete');
+    expect(host.textContent).toContain('Two release risks found.');
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+  }
+});
+
+it('reserves the unavailable wording for a status the server could not read', async () => {
+  vi.mocked(loadWorkCard).mockResolvedValue({
+    ...card('running', null),
+    availability: 'unavailable',
+    productState: null,
+    resultCaptureStatus: 'not_captured',
+  });
+
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(<WorkCard workRef={workId} onOpen={() => undefined} />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(host.textContent).toContain('Status unavailable');
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+  }
+});
+
 function card(
-  state: 'running' | 'complete',
+  state: 'not_started' | 'running' | 'complete',
   resultSummary: string | null,
 ): WorkChatCard {
   return {

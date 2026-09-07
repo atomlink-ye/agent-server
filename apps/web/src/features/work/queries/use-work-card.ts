@@ -81,9 +81,22 @@ export function useWorkCard(workRef: string | null): WorkCardQuery {
   return state;
 }
 
+/**
+ * Polling follows the stages that can still change on their own. A Work that
+ * has not started yet belongs here too: it is started from the Work page or by
+ * the Coworker itself, and a card that stopped polling would sit on "Ready to
+ * start" through the whole Run. `complete` and `problem` are terminal, and a
+ * status we could not read is not made readable by asking again on a timer.
+ */
 function shouldRefresh(card: WorkChatCard): boolean {
-  return (
-    card.availability === 'available' &&
-    (card.productState === 'running' || card.productState === 'needs_you')
-  );
+  if (card.availability !== 'available') return false;
+  switch (card.productState) {
+    case 'not_started':
+    case 'starting':
+    case 'running':
+    case 'needs_you':
+      return true;
+    default:
+      return false;
+  }
 }

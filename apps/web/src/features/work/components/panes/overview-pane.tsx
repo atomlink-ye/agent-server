@@ -11,7 +11,7 @@ import {
   productStatePresentation,
   resultCaptureLabel,
 } from '../work-presentation';
-import { workTabPath } from '@/app/routes';
+import { workRunResultFilePath, workTabPath } from '@/app/routes';
 import { outcomeBody, outcomeHeadline } from './outcome-headline';
 
 export function OverviewPane({
@@ -36,6 +36,10 @@ export function OverviewPane({
   const outcomeDocument = outcome ? outcomeBody(outcome) : '';
   const stateView = productStatePresentation(run.work_run.product_state);
   const live = run.work_run.product_state === 'running';
+  // `complete` is the Product projection for an execution whose runs all
+  // succeeded. Other terminal states can have summaries, but cannot promise
+  // the stable final result file.
+  const hasSuccessfulResult = run.work_run.product_state === 'complete';
   return (
     <section className="work-overview" data-testid="work-overview">
       <div className="work-overview__summary">
@@ -62,6 +66,18 @@ export function OverviewPane({
             <p className="work-live-note">
               Refreshing captured Product facts while this Run is active.
             </p>
+          ) : null}
+          {hasSuccessfulResult ? (
+            <a
+              className="work-result-link"
+              href={workRunResultFilePath(
+                data.work.id,
+                run.work_run.id,
+                originConversationId ?? null,
+              )}
+            >
+              Open this run’s result
+            </a>
           ) : null}
         </div>
       </div>

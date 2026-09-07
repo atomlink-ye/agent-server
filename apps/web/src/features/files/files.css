@@ -31,6 +31,9 @@
   align-items: center;
   gap: 10px;
 }
+.files-back {
+  margin-left: auto;
+}
 .files-files-grid {
   display: grid;
   grid-template-columns: minmax(240px, 320px) 1fr;
@@ -50,6 +53,65 @@
   border: 1px solid var(--ink-100);
   border-radius: 12px;
   background: var(--cloud);
+}
+.files-viewer-toolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+.files-viewer-toolbar [role='group'] {
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid var(--ink-100);
+  border-radius: var(--radius-sm);
+}
+.files-viewer-toolbar button {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink-500);
+  font-size: 12px;
+}
+.files-viewer-toolbar button[data-active='true'] {
+  background: var(--ink-900);
+  color: var(--cloud);
+}
+.files-rendered-markdown {
+  min-height: 0;
+  color: var(--ink-700);
+  font-size: 14px;
+  line-height: 1.65;
+}
+.files-rendered-markdown .assistant-markdown > :first-child {
+  margin-top: 0;
+}
+.files-rendered-markdown .assistant-markdown > :last-child {
+  margin-bottom: 0;
+}
+.files-rendered-markdown .assistant-markdown table {
+  display: block;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+.files-rendered-markdown .assistant-markdown th,
+.files-rendered-markdown .assistant-markdown td {
+  border: 1px solid var(--ink-100);
+  padding: var(--space-1) var(--space-2);
+  text-align: left;
+}
+.files-rendered-markdown .assistant-markdown pre,
+.files-rendered-markdown > pre {
+  margin: 0;
+  overflow: auto;
+  border: 1px solid var(--ink-100);
+  border-radius: var(--radius-md);
+  background: var(--paper);
+  padding: var(--space-3);
+  color: var(--ink-900);
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 .files-mono {
   margin: 0;

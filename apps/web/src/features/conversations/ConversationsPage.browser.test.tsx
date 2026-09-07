@@ -280,7 +280,8 @@ it('keeps the conversation rail and pane aligned across roster states', async ()
       await conversationsStore.load(async () => []);
     });
     expect(host.textContent).toContain('No conversations yet.');
-    expect(host.textContent).toContain('No conversations are available.');
+    expect(host.textContent).toContain('Ready when you are');
+    expect(host.textContent).toContain('Meet your Coworkers');
   } finally {
     await act(async () => root.unmount());
     host.remove();

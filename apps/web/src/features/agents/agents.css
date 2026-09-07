@@ -11,17 +11,18 @@
 }
 .agents-new-coworker-cta {
   padding: 6px 10px;
-  border-color: var(--coral);
+  border-color: var(--sky-200);
   border-radius: var(--radius-sm);
-  background: var(--coral-soft);
-  color: var(--ink-900);
+  background: var(--sky-50);
+  color: var(--skype-deep);
   font-size: var(--text-sm);
   font-weight: 650;
   white-space: nowrap;
 }
 .agents-new-coworker-cta:hover:not(:disabled) {
-  background: var(--coral);
-  color: var(--ink-900);
+  border-color: var(--skype);
+  background: var(--sky-100);
+  color: var(--skype-deep);
 }
 .agents-status-filters {
   display: flex;
@@ -53,8 +54,8 @@
   background: var(--ink-100);
 }
 .agents-list-item[data-active='true'] {
-  border-color: var(--coral);
-  background: var(--cloud);
+  border-color: var(--sky-200);
+  background: var(--sky-50);
 }
 .agents-list-copy {
   display: grid;
@@ -70,8 +71,9 @@
   flex: none;
   place-items: center;
   border-radius: 999px;
-  background: var(--coral-soft);
-  color: var(--ink-900);
+  border: 1px solid var(--sky-200);
+  background: var(--sky-100);
+  color: var(--skype-deep);
   font-weight: 600;
 }
 .agents-avatar {
@@ -125,7 +127,9 @@
   gap: 8px;
 }
 .agents-whisper {
+  padding: 8px 12px;
   border: 1px solid var(--ink-100);
+  border-radius: var(--radius-sm);
   background: var(--cloud);
   color: var(--ink-500);
   font-weight: 600;
@@ -141,8 +145,8 @@
   text-transform: uppercase;
 }
 .agents-runtime--available {
-  background: var(--coral-soft);
-  color: var(--ink-900);
+  background: var(--sky-100);
+  color: var(--skype-deep);
 }
 .agents-runtime--draining {
   background: var(--gold);
@@ -268,10 +272,18 @@
   color: var(--ink-700);
 }
 .agents-primary {
-  border-color: var(--ink-900);
-  background: var(--ink-900);
+  padding: 8px 12px;
+  border-color: var(--skype);
+  border-radius: var(--radius-sm);
+  background: linear-gradient(135deg, var(--skype), var(--skype-deep));
   color: var(--cloud);
+  box-shadow: 0 8px 18px -12px rgb(0 120 200 / 72%);
   font-weight: 600;
+}
+.agents-primary:hover:not(:disabled) {
+  border-color: var(--skype-deep);
+  background: linear-gradient(135deg, #16b4f4, var(--skype-deep));
+  color: var(--cloud);
 }
 .agents-form-grid {
   display: grid;

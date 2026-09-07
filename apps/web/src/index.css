@@ -607,30 +607,6 @@ textarea {
   white-space: nowrap;
 }
 
-.icon-button,
-.composer-tool {
-  border-color: transparent;
-  color: var(--ink-500);
-}
-.disabled-conversation-action {
-  display: inline-grid;
-  justify-items: end;
-  gap: 4px;
-}
-.disabled-conversation-action [role='tooltip'] {
-  max-width: 260px;
-  color: var(--ink-500);
-  font-size: var(--text-eyebrow);
-  line-height: 1.35;
-  text-align: right;
-}
-
-.icon-button {
-  padding: 7px 3px 10px 10px;
-  font-size: 18px;
-  letter-spacing: 2px;
-}
-
 .chat-content {
   display: flex;
   width: min(100%, 920px);
@@ -811,6 +787,20 @@ textarea {
   font-size: 14px;
 }
 
+.conversation-empty-state h1 {
+  margin: 2px 0 0;
+  color: var(--ink-900);
+  font-size: var(--text-display);
+  letter-spacing: -0.04em;
+}
+
+.conversation-empty-state p {
+  max-width: 330px;
+  color: var(--ink-500);
+  font-style: italic;
+  line-height: 1.55;
+}
+
 .empty-chat button {
   border-color: var(--ink-200);
   background: var(--cloud);
@@ -885,17 +875,6 @@ textarea {
   display: flex;
   align-items: center;
   gap: 9px;
-}
-
-.composer-tool {
-  display: grid;
-  padding: 3px;
-  place-items: center;
-}
-
-.composer-tool svg {
-  width: 20px;
-  height: 20px;
 }
 
 .send-button {
@@ -1387,9 +1366,9 @@ textarea {
 
   .rail-tab {
     width: auto;
-    min-width: 44px;
+    min-width: 48px;
     min-height: 56px;
-    flex: 1 0 44px;
+    flex: 0 0 48px;
     gap: 1px;
     padding: 4px 2px;
     font-size: 9px;
@@ -1401,12 +1380,7 @@ textarea {
   }
 
   .rail-tab-label {
-    position: static;
-    width: auto;
-    height: auto;
-    overflow: visible;
-    clip: auto;
-    white-space: normal;
+    display: none;
   }
 
   .rail-tab-icon svg {

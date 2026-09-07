@@ -162,7 +162,7 @@ export function ConversationsPane({
           <span className="eyebrow">Choose a coworker</span>
           {coworkerStatus === 'pending' ? <p>Loading coworkers…</p> : null}
           {coworkerStatus === 'ready' && coworkers.length === 0 ? (
-            <p>No published coworkers are available yet.</p>
+            <p>No published Coworkers found.</p>
           ) : null}
           {coworkerStatus === 'ready' ? (
             <div className="new-conversation-actions">

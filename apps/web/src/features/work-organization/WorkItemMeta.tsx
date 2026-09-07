@@ -59,7 +59,9 @@ export function CommentCount({ count }: { readonly count: number | null }) {
     >
       <span aria-hidden="true">💬</span>
       {count}
-      <span className="work-org-visually-hidden">条评论</span>
+      <span className="work-org-visually-hidden">
+        {count === 1 ? ' comment' : ' comments'}
+      </span>
     </span>
   );
 }

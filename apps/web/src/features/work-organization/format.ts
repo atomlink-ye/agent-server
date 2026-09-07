@@ -1,10 +1,10 @@
 import type { WorkItemStatus } from '@atomlink-ye/agent-server/product-contract';
 
 export const STATUS_LABELS: Record<WorkItemStatus, string> = {
-  todo: '待处理',
-  in_progress: '进行中',
-  in_review: '待评审',
-  done: '已完成',
+  todo: 'To do',
+  in_progress: 'In progress',
+  in_review: 'In review',
+  done: 'Done',
 };
 
 /**
@@ -12,11 +12,11 @@ export const STATUS_LABELS: Record<WorkItemStatus, string> = {
  * value stays the canonical English enum; only the label is localized.
  */
 export const PRODUCT_STATE_LABELS: Record<string, string> = {
-  running: '进行中',
-  needs_you: '待你处理',
-  complete: '已完成',
-  problem: '出现问题',
-  not_captured: '未纳管',
+  running: 'Running',
+  needs_you: 'Needs You',
+  complete: 'Complete',
+  problem: 'Problem',
+  not_captured: 'State unavailable',
 };
 
 export function productStateLabel(state: string): string {
@@ -25,9 +25,9 @@ export function productStateLabel(state: string): string {
 
 /** A Coworker's reachability, in the words a reader understands. */
 export const RUNTIME_STATUS_LABELS: Record<string, string> = {
-  available: '可用',
-  draining: '收尾中',
-  unavailable: '不可用',
+  available: 'Available',
+  draining: 'Draining',
+  unavailable: 'Unavailable',
 };
 
 export function runtimeStatusLabel(status: string): string {
@@ -35,7 +35,7 @@ export function runtimeStatusLabel(status: string): string {
 }
 
 /** What a Coworker without a declared role is called on screen. */
-export const COWORKER_ROLE_FALLBACK = 'AI 同事';
+export const COWORKER_ROLE_FALLBACK = 'AI Coworker';
 
 /**
  * Timestamps read the way `ConversationsList` already formats them — time of

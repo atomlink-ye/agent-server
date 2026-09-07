@@ -83,17 +83,17 @@ it('adds a Task card through the in-app form instead of a native dialog', async 
 
     const addCardButton = [
       ...host.querySelectorAll<HTMLButtonElement>('button'),
-    ].find((button) => button.textContent === '+ 新建任务');
-    if (!addCardButton) throw new Error('Expected a "+ 新建任务" button.');
+    ].find((button) => button.textContent === '+ New Task');
+    if (!addCardButton) throw new Error('Expected a "+ New Task" button.');
 
     await act(async () => {
       addCardButton.click();
       await settle();
     });
 
-    expect(host.textContent).toContain('添加任务卡片');
+    expect(host.textContent).toContain('Add a Task card');
     const title = host.querySelector<HTMLTextAreaElement>(
-      'textarea[placeholder="任务标题…"]',
+      'textarea[placeholder="Task title…"]',
     );
     if (!title) throw new Error('Expected an in-app Task title textarea.');
     await act(async () => {
@@ -102,8 +102,8 @@ it('adds a Task card through the in-app form instead of a native dialog', async 
     });
     const addTaskButton = [
       ...host.querySelectorAll<HTMLButtonElement>('button'),
-    ].find((button) => button.textContent === '添加任务');
-    if (!addTaskButton) throw new Error('Expected an "添加任务" button.');
+    ].find((button) => button.textContent === 'Add Task');
+    if (!addTaskButton) throw new Error('Expected an "Add Task" button.');
     await act(async () => {
       addTaskButton.click();
       await settle();
@@ -147,7 +147,7 @@ it('keeps a failed Board mutation visible to the user', async () => {
     await act(settle);
     const renameButton = [
       ...host.querySelectorAll<HTMLButtonElement>('button'),
-    ].find((button) => button.textContent === '重命名');
+    ].find((button) => button.textContent === 'Rename');
     if (!renameButton) throw new Error('Expected a Board rename button.');
     await act(async () => {
       renameButton.click();
@@ -161,17 +161,17 @@ it('keeps a failed Board mutation visible to the user', async () => {
     });
     const saveButton = [
       ...host.querySelectorAll<HTMLButtonElement>('button'),
-    ].find((button) => button.textContent === '保存');
-    if (!saveButton) throw new Error('Expected a 保存 button.');
+    ].find((button) => button.textContent === 'Save');
+    if (!saveButton) throw new Error('Expected a Save button.');
     await act(async () => {
       saveButton.click();
       await settle();
     });
 
     expect(host.querySelector('[role="alert"]')?.textContent).toContain(
-      '这次看板改动没能保存，请重试。',
+      'Unable to save this Board change. Please try again.',
     );
-    expect(host.textContent).toContain('重命名这个看板');
+    expect(host.textContent).toContain('Rename this Board');
     expectNoNativeDialogs();
   } finally {
     await act(async () => root.unmount());
@@ -183,42 +183,46 @@ it('completes every Board authoring action in-app and requires confirmed deletio
   const api = createBoardApi();
   const mounted = await mountRoutedBoards(api.fetch);
   try {
-    await clickButton(mounted.host, '+ 新建看板');
-    await setInputValueByAriaLabel(mounted.host, '新看板标题', 'Release Board');
-    await clickButton(mounted.host, '创建');
+    await clickButton(mounted.host, '+ New Board');
+    await setInputValueByAriaLabel(
+      mounted.host,
+      'New Board title',
+      'Release Board',
+    );
+    await clickButton(mounted.host, 'Create');
     await expectText(mounted.host, 'Release Board');
 
-    await clickButton(mounted.host, '重命名');
+    await clickButton(mounted.host, 'Rename');
     await setInputValueByLabel(
       mounted.host,
-      '看板标题',
+      'Board title',
       'Release Board renamed',
     );
-    await clickButton(mounted.host, '保存');
+    await clickButton(mounted.host, 'Save');
     await expectText(mounted.host, 'Release Board renamed');
 
-    await clickButton(mounted.host, '+ 新建列');
-    await setInputValueByPlaceholder(mounted.host, '列标题', 'Backlog');
-    await clickButton(mounted.host, '添加');
+    await clickButton(mounted.host, '+ New column');
+    await setInputValueByPlaceholder(mounted.host, 'Column title', 'Backlog');
+    await clickButton(mounted.host, 'Add');
     await expectText(mounted.host, 'Backlog · 0');
 
-    await clickButton(mounted.host, '重命名 Backlog');
-    await setInputValueByLabel(mounted.host, '列标题', 'Ready');
-    await clickButton(mounted.host, '保存');
+    await clickButton(mounted.host, 'Rename Backlog');
+    await setInputValueByLabel(mounted.host, 'Column title', 'Ready');
+    await clickButton(mounted.host, 'Save');
     await expectText(mounted.host, 'Ready · 0');
 
-    await clickButton(mounted.host, '+ 新建任务');
+    await clickButton(mounted.host, '+ New Task');
     await setTextareaValueByLabel(
       mounted.host,
-      '任务标题',
+      'Task title',
       'Release checklist',
     );
     await setTextareaValueByLabel(
       mounted.host,
-      '描述（可选）',
+      'Description (optional)',
       'Verify the release in the Board.',
     );
-    await clickButton(mounted.host, '添加任务');
+    await clickButton(mounted.host, 'Add Task');
     await expectText(mounted.host, 'Release checklist');
     expect(api.requests).toContainEqual(
       expect.objectContaining({
@@ -231,28 +235,34 @@ it('completes every Board authoring action in-app and requires confirmed deletio
       }),
     );
 
-    await clickButton(mounted.host, '删除 Ready');
-    await expectText(mounted.host, '卡片会作为任务保留，但会离开这个看板。');
-    await clickButton(mounted.host, '取消');
+    await clickButton(mounted.host, 'Delete Ready');
+    await expectText(
+      mounted.host,
+      'Cards will remain as Tasks, but will be removed from this Board.',
+    );
+    await clickButton(mounted.host, 'Cancel');
     await expectAuthoringAbsent(mounted.host);
     await expectText(mounted.host, 'Ready · 1');
     expect(api.deleteColumnRequests).toBe(0);
 
-    await clickButton(mounted.host, '删除 Ready');
-    await clickAuthoringButton(mounted.host, '删除');
+    await clickButton(mounted.host, 'Delete Ready');
+    await clickAuthoringButton(mounted.host, 'Delete');
     await expectAbsent(mounted.host, 'Ready · 1');
     expect(api.deleteColumnRequests).toBe(1);
 
-    await clickToolbarButton(mounted.host, '删除');
-    await expectText(mounted.host, '任务本身会保留，只移除这个看板视图。');
-    await clickButton(mounted.host, '取消');
+    await clickToolbarButton(mounted.host, 'Delete');
+    await expectText(
+      mounted.host,
+      'Tasks will remain; only this Board view will be removed.',
+    );
+    await clickButton(mounted.host, 'Cancel');
     await expectAuthoringAbsent(mounted.host);
     await expectText(mounted.host, 'Release Board renamed');
     expect(api.deleteBoardRequests).toBe(0);
 
-    await clickToolbarButton(mounted.host, '删除');
-    await clickAuthoringButton(mounted.host, '删除');
-    await expectText(mounted.host, '选择一个看板');
+    await clickToolbarButton(mounted.host, 'Delete');
+    await clickAuthoringButton(mounted.host, 'Delete');
+    await expectText(mounted.host, 'Select a Board');
     expect(api.deleteBoardRequests).toBe(1);
     expectNoNativeDialogs();
   } finally {
@@ -264,25 +274,37 @@ it('disables authoring controls until a title can succeed', async () => {
   const api = createBoardApi({ initialBoard: true });
   const mounted = await mountRoutedBoards(api.fetch);
   try {
-    await clickButton(mounted.host, '重命名');
+    await clickButton(mounted.host, 'Rename');
     await expectAuthoringSubmitDisabled(mounted.host, true);
-    await setInputValueByLabel(mounted.host, '看板标题', 'Changed Board title');
+    await setInputValueByLabel(
+      mounted.host,
+      'Board title',
+      'Changed Board title',
+    );
     await expectAuthoringSubmitDisabled(mounted.host, false);
-    await setInputValueByLabel(mounted.host, '看板标题', '');
+    await setInputValueByLabel(mounted.host, 'Board title', '');
     await expectAuthoringSubmitDisabled(mounted.host, true);
-    await clickButton(mounted.host, '取消');
+    await clickButton(mounted.host, 'Cancel');
 
-    await clickButton(mounted.host, '重命名 Todo');
+    await clickButton(mounted.host, 'Rename Todo');
     await expectAuthoringSubmitDisabled(mounted.host, true);
-    await setInputValueByLabel(mounted.host, '列标题', 'Changed Column title');
+    await setInputValueByLabel(
+      mounted.host,
+      'Column title',
+      'Changed Column title',
+    );
     await expectAuthoringSubmitDisabled(mounted.host, false);
-    await setInputValueByLabel(mounted.host, '列标题', '');
+    await setInputValueByLabel(mounted.host, 'Column title', '');
     await expectAuthoringSubmitDisabled(mounted.host, true);
-    await clickButton(mounted.host, '取消');
+    await clickButton(mounted.host, 'Cancel');
 
-    await clickButton(mounted.host, '+ 新建任务');
+    await clickButton(mounted.host, '+ New Task');
     await expectAuthoringSubmitDisabled(mounted.host, true);
-    await setTextareaValueByLabel(mounted.host, '任务标题', 'Valid Task title');
+    await setTextareaValueByLabel(
+      mounted.host,
+      'Task title',
+      'Valid Task title',
+    );
     await expectAuthoringSubmitDisabled(mounted.host, false);
     expectNoNativeDialogs();
   } finally {
@@ -294,91 +316,92 @@ for (const failure of [
   {
     name: 'Board creation',
     begin: async (host: HTMLElement) => {
-      await clickButton(host, '+ 新建看板');
-      await setInputValueByAriaLabel(host, '新看板标题', 'Unsent Board');
-      await clickButton(host, '创建');
+      await clickButton(host, '+ New Board');
+      await setInputValueByAriaLabel(host, 'New Board title', 'Unsent Board');
+      await clickButton(host, 'Create');
     },
     failedRequest: { method: 'POST', path: '/api/boards' },
     preserved: 'Unsent Board',
-    panel: '给这个看板起个名字',
+    panel: 'Name this Board',
   },
   {
     name: 'Board rename',
     begin: async (host: HTMLElement) => {
-      await clickButton(host, '重命名');
-      await setInputValueByLabel(host, '看板标题', 'Unsent Board rename');
-      await clickButton(host, '保存');
+      await clickButton(host, 'Rename');
+      await setInputValueByLabel(host, 'Board title', 'Unsent Board rename');
+      await clickButton(host, 'Save');
     },
     failedRequest: { method: 'PATCH', path: `/api/boards/${boardId}` },
     preserved: 'Unsent Board rename',
-    panel: '重命名这个看板',
+    panel: 'Rename this Board',
   },
   {
     name: 'Column creation',
     begin: async (host: HTMLElement) => {
-      await clickButton(host, '+ 新建列');
-      await setInputValueByPlaceholder(host, '列标题', 'Unsent Column');
-      await clickButton(host, '添加');
+      await clickButton(host, '+ New column');
+      await setInputValueByPlaceholder(host, 'Column title', 'Unsent Column');
+      await clickButton(host, 'Add');
     },
     failedRequest: {
       method: 'POST',
       path: `/api/boards/${boardId}/columns`,
     },
     preserved: 'Unsent Column',
-    panel: '添加',
+    panel: 'Add',
   },
   {
     name: 'Column rename',
     begin: async (host: HTMLElement) => {
-      await clickButton(host, '重命名 Todo');
-      await setInputValueByLabel(host, '列标题', 'Unsent Column rename');
-      await clickButton(host, '保存');
+      await clickButton(host, 'Rename Todo');
+      await setInputValueByLabel(host, 'Column title', 'Unsent Column rename');
+      await clickButton(host, 'Save');
     },
     failedRequest: {
       method: 'PATCH',
       path: `/api/boards/${boardId}/columns/${columnId}`,
     },
     preserved: 'Unsent Column rename',
-    panel: '重命名这一列',
+    panel: 'Rename this column',
   },
   {
     name: 'Task creation',
     begin: async (host: HTMLElement) => {
-      await clickButton(host, '+ 新建任务');
-      await setTextareaValueByLabel(host, '任务标题', 'Unsent Task');
+      await clickButton(host, '+ New Task');
+      await setTextareaValueByLabel(host, 'Task title', 'Unsent Task');
       await setTextareaValueByLabel(
         host,
-        '描述（可选）',
+        'Description (optional)',
         'Unsent Task description',
       );
-      await clickButton(host, '添加任务');
+      await clickButton(host, 'Add Task');
     },
     failedRequest: { method: 'POST', path: '/api/work-items' },
     preserved: ['Unsent Task', 'Unsent Task description'],
-    panel: '添加任务卡片',
+    panel: 'Add a Task card',
   },
   {
     name: 'Column deletion',
     begin: async (host: HTMLElement) => {
-      await clickButton(host, '删除 Todo');
-      await clickAuthoringButton(host, '删除');
+      await clickButton(host, 'Delete Todo');
+      await clickAuthoringButton(host, 'Delete');
     },
     failedRequest: {
       method: 'DELETE',
       path: `/api/boards/${boardId}/columns/${columnId}`,
     },
-    preserved: '卡片会作为任务保留，但会离开这个看板。',
-    panel: '删除列“Todo”？',
+    preserved:
+      'Cards will remain as Tasks, but will be removed from this Board.',
+    panel: 'Delete the “Todo” column?',
   },
   {
     name: 'Board deletion',
     begin: async (host: HTMLElement) => {
-      await clickToolbarButton(host, '删除');
-      await clickAuthoringButton(host, '删除');
+      await clickToolbarButton(host, 'Delete');
+      await clickAuthoringButton(host, 'Delete');
     },
     failedRequest: { method: 'DELETE', path: `/api/boards/${boardId}` },
-    preserved: '任务本身会保留，只移除这个看板视图。',
-    panel: '删除“Launch board”？',
+    preserved: 'Tasks will remain; only this Board view will be removed.',
+    panel: 'Delete “Launch board”?',
   },
 ]) {
   it(`keeps ${failure.name} visible when its mutation fails`, async () => {
@@ -427,11 +450,11 @@ it('shows a missing selected Board without Retry, while a snapshot transport fai
       );
     });
     await act(settle);
-    expect(host.textContent).toContain('所选看板已不可用。');
-    expect(host.textContent).toContain('返回看板列表');
+    expect(host.textContent).toContain('The selected Board is unavailable.');
+    expect(host.textContent).toContain('Back to Boards');
     expect(
       [...host.querySelectorAll('button')].some(
-        (button) => button.textContent === '重试',
+        (button) => button.textContent === 'Try again',
       ),
     ).toBe(false);
   } finally {
@@ -466,10 +489,10 @@ it('keeps Retry for a selected Board transport failure', async () => {
       ),
     );
     await act(settle);
-    expect(host.textContent).toContain('看板加载失败');
+    expect(host.textContent).toContain('Unable to load Boards');
     expect(
       [...host.querySelectorAll('button')].some(
-        (button) => button.textContent === '重试',
+        (button) => button.textContent === 'Try again',
       ),
     ).toBe(true);
   } finally {
@@ -504,7 +527,7 @@ it('shows selected Board loading instead of an empty state', async () => {
       ),
     );
     await act(settle);
-    expect(host.textContent).toContain('正在加载所选看板…');
+    expect(host.textContent).toContain('Loading the selected Board…');
     expect(
       host.querySelector('[data-testid="boards-selected-loading"]'),
     ).not.toBeNull();
@@ -907,7 +930,7 @@ async function expectAbsent(host: HTMLElement, text: string) {
 async function expectAlert(host: HTMLElement) {
   await act(settle);
   expect(host.querySelector('[role="alert"]')?.textContent).toContain(
-    '这次看板改动没能保存，请重试。',
+    'Unable to save this Board change. Please try again.',
   );
 }
 

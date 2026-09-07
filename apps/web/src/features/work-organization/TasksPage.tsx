@@ -40,10 +40,13 @@ import {
 import { readCommentCount, readMentionIds } from './work-item-extensions';
 import './work-organization.css';
 
-const TASKS_LOAD_ERROR = '任务加载失败，请检查网络连接后重试。';
-const TASKS_UNAVAILABLE = '当前工作区暂未开启任务管理。';
-const TASKS_ACTION_ERROR = '这次任务改动没能保存，请重试。';
-const DEFINITIONS_UNAVAILABLE = '当前工作区暂未开启 Work 执行。';
+const TASKS_LOAD_ERROR =
+  'Unable to load Tasks. Check your connection and try again.';
+const TASKS_UNAVAILABLE =
+  'Task management is not enabled in this workspace yet.';
+const TASKS_ACTION_ERROR = 'Unable to save this Task change. Please try again.';
+const DEFINITIONS_UNAVAILABLE =
+  'Work execution is not enabled in this workspace yet.';
 
 type RecoverableError = {
   readonly source: 'comments' | 'action';
@@ -143,7 +146,7 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
       if (request !== commentsRequest.current) return;
       setError({
         source: 'comments',
-        message: '这个任务的评论加载失败，请重试。',
+        message: 'Unable to load comments for this Task. Please try again.',
         retry: () => void loadComments(),
       });
     }
@@ -207,11 +210,11 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
 
   return (
     <>
-      <aside className="sidebar work-org-pane" aria-label="任务导航">
+      <aside className="sidebar work-org-pane" aria-label="Task navigation">
         <div className="pane-heading work-org-heading">
           <div>
-            <span className="eyebrow">AI 同事工作区</span>
-            <h1>任务</h1>
+            <span className="eyebrow">AI Coworker workspace</span>
+            <h1>Tasks</h1>
           </div>
           <button
             type="button"
@@ -219,10 +222,10 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
             disabled={listStatus === 'unavailable' || listStatus === 'error'}
             onClick={() => setCreating(true)}
           >
-            + 新建任务
+            + New Task
           </button>
         </div>
-        <div className="work-org-filters" aria-label="任务状态筛选">
+        <div className="work-org-filters" aria-label="Filter Tasks by status">
           {(['all', 'todo', 'in_progress', 'in_review', 'done'] as const).map(
             (value) => (
               <button
@@ -231,14 +234,14 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
                 data-active={filter === value ? 'true' : 'false'}
                 onClick={() => setFilter(value)}
               >
-                {value === 'all' ? '全部' : STATUS_LABELS[value]}
+                {value === 'all' ? 'All' : STATUS_LABELS[value]}
               </button>
             ),
           )}
         </div>
         <div className="work-org-list">
           {listStatus === 'loading' && items.length === 0 ? (
-            <p className="pane-placeholder">正在加载任务…</p>
+            <p className="pane-placeholder">Loading Tasks…</p>
           ) : null}
           {listStatus === 'unavailable' ? (
             <div className="pane-placeholder" role="status">
@@ -249,16 +252,16 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
             <div className="pane-placeholder" role="alert">
               <p>{TASKS_LOAD_ERROR}</p>
               <button type="button" onClick={() => void load()}>
-                重试
+                Try again
               </button>
             </div>
           ) : null}
           {listStatus === 'ready' && visibleItems.length === 0 ? (
             <div className="pane-placeholder">
-              <p>当前视图里没有任务。</p>
+              <p>There are no Tasks in this view.</p>
               {filter !== 'all' ? (
                 <button type="button" onClick={() => setFilter('all')}>
-                  查看全部任务
+                  View all Tasks
                 </button>
               ) : null}
             </div>
@@ -280,13 +283,13 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
       </aside>
 
       <main className="chat-panel work-org-main">
-        <TitleBar section="任务" />
-        <section className="work-org-content" aria-label="任务详情">
+        <TitleBar section="Tasks" />
+        <section className="work-org-content" aria-label="Task details">
           <div className="work-org-mobile-picker">
             <label>
-              <span>任务</span>
+              <span>Task</span>
               <select
-                aria-label="选择任务"
+                aria-label="Select a Task"
                 value={selectedWorkItemId ?? ''}
                 onChange={(event) =>
                   navigate(
@@ -296,7 +299,7 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
                   )
                 }
               >
-                <option value="">选择任务</option>
+                <option value="">Select a Task</option>
                 {visibleItems.map((entry) => (
                   <option key={entry.work_item.id} value={entry.work_item.id}>
                     {entry.work_item.title}
@@ -310,7 +313,7 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
               disabled={listStatus === 'unavailable' || listStatus === 'error'}
               onClick={() => setCreating(true)}
             >
-              + 新建任务
+              + New Task
             </button>
           </div>
           {error && selectionStatus !== 'not_found' ? (
@@ -318,7 +321,7 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
               <p>{error.message}</p>
               {error.retry ? (
                 <button type="button" onClick={error.retry}>
-                  重试
+                  Try again
                 </button>
               ) : null}
             </div>
@@ -328,7 +331,7 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
               <span className="work-main-icon" aria-hidden="true">
                 ☑
               </span>
-              <h1>任务功能未开启</h1>
+              <h1>Tasks are unavailable</h1>
               <p>{TASKS_UNAVAILABLE}</p>
             </div>
           ) : listStatus === 'error' ? (
@@ -336,10 +339,10 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
               <span className="work-main-icon" aria-hidden="true">
                 ☑
               </span>
-              <h1>任务加载失败</h1>
+              <h1>Unable to load Tasks</h1>
               <p>{TASKS_LOAD_ERROR}</p>
               <button type="button" onClick={() => void load()}>
-                重试
+                Try again
               </button>
             </div>
           ) : selectionStatus === 'loading' ? (
@@ -350,17 +353,20 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
               <span className="work-main-icon" aria-hidden="true">
                 ☑
               </span>
-              <h1>正在加载所选任务…</h1>
+              <h1>Loading the selected Task…</h1>
             </div>
           ) : selectionStatus === 'not_found' ? (
             <div className="work-main-empty" data-testid="tasks-not-found">
               <span className="work-main-icon" aria-hidden="true">
                 ☑
               </span>
-              <h1>所选任务已不可用。</h1>
-              <p>这个任务可能已被删除，或已移出当前工作区。</p>
+              <h1>The selected Task is unavailable.</h1>
+              <p>
+                This Task may have been deleted or moved out of the current
+                workspace.
+              </p>
               <button type="button" onClick={() => navigate('/tasks')}>
-                返回任务列表
+                Back to Tasks
               </button>
             </div>
           ) : selectionStatus === 'error' ? (
@@ -368,10 +374,10 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
               <span className="work-main-icon" aria-hidden="true">
                 ☑
               </span>
-              <h1>任务加载失败</h1>
+              <h1>Unable to load Tasks</h1>
               <p>{TASKS_LOAD_ERROR}</p>
               <button type="button" onClick={() => void load()}>
-                重试
+                Try again
               </button>
             </div>
           ) : creating ? (
@@ -420,10 +426,10 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
               <span className="work-main-icon" aria-hidden="true">
                 ☑
               </span>
-              <h1>选择一个任务</h1>
-              <p>在工作正式变成 Work 之前，先把它记录下来。</p>
+              <h1>Select a Task</h1>
+              <p>Capture the work here before it becomes a formal Work.</p>
               <button type="button" onClick={() => setCreating(true)}>
-                新建任务
+                New Task
               </button>
             </div>
           )}
@@ -554,13 +560,15 @@ function CreateTaskForm({
       className="work-org-card work-org-form"
       onSubmit={(event) => void submit(event)}
     >
-      <span className="eyebrow">新建任务</span>
-      <h1>记录工作</h1>
+      <span className="eyebrow">New Task</span>
+      <h1>Capture work</h1>
       {sourceConversationId ? (
-        <p className="work-org-source-note">已关联来源会话中的那条消息。</p>
+        <p className="work-org-source-note">
+          Linked to the source message in this conversation.
+        </p>
       ) : null}
       <MentionTextField
-        label="标题"
+        label="Title"
         value={title}
         onChange={setTitle}
         participants={participants}
@@ -568,7 +576,7 @@ function CreateTaskForm({
         autoFocus
       />
       <MentionTextField
-        label="描述"
+        label="Description"
         value={description}
         onChange={setDescription}
         participants={participants}
@@ -576,7 +584,7 @@ function CreateTaskForm({
         rows={5}
         hint={
           <small className="work-org-muted">
-            输入 @ 可以提及 AI 同事或团队成员。
+            Type @ to mention an AI Coworker or team member.
           </small>
         }
       />
@@ -587,14 +595,14 @@ function CreateTaskForm({
       />
       <div className="work-org-actions">
         <button type="button" onClick={onCancel}>
-          取消
+          Cancel
         </button>
         <button
           type="submit"
           className="work-org-primary"
           disabled={saving || !title.trim()}
         >
-          {saving ? '正在创建…' : '创建任务'}
+          {saving ? 'Creating…' : 'Create Task'}
         </button>
       </div>
     </form>
@@ -723,7 +731,7 @@ function TaskDetail({
       <article className="work-org-card work-org-form">
         <div className="work-org-detail-header">
           <div>
-            <span className="eyebrow">任务</span>
+            <span className="eyebrow">Task</span>
             <h1>
               <MentionedText text={item.title} participants={participants} />
             </h1>
@@ -733,7 +741,7 @@ function TaskDetail({
                 id={item.assignee_id}
               />
               <span className="work-org-muted">
-                由 {participantLabel(participants, item.created_by)} 创建 ·{' '}
+                Created by {participantLabel(participants, item.created_by)} ·{' '}
                 {formatWorkTime(item.created_at)}
               </span>
               <MentionRow
@@ -744,7 +752,7 @@ function TaskDetail({
             </div>
           </div>
           <select
-            aria-label="任务状态"
+            aria-label="Task status"
             value={item.status}
             disabled={saving}
             onChange={(event) =>
@@ -759,14 +767,14 @@ function TaskDetail({
           </select>
         </div>
         <MentionTextField
-          label="标题"
+          label="Title"
           value={title}
           onChange={setTitle}
           participants={participants}
           maxLength={200}
         />
         <MentionTextField
-          label="描述"
+          label="Description"
           value={description}
           onChange={setDescription}
           participants={participants}
@@ -774,7 +782,7 @@ function TaskDetail({
           rows={6}
           hint={
             <small className="work-org-muted">
-              输入 @ 可以提及 AI 同事或团队成员。
+              Type @ to mention an AI Coworker or team member.
             </small>
           }
         />
@@ -790,7 +798,7 @@ function TaskDetail({
             disabled={saving || !title.trim()}
             onClick={() => void saveFields()}
           >
-            {saving ? '正在保存…' : '保存'}
+            {saving ? 'Saving…' : 'Save'}
           </button>
           {item.source_conversation_id ? (
             <button
@@ -801,7 +809,7 @@ function TaskDetail({
                 )
               }
             >
-              返回会话
+              Back to conversation
             </button>
           ) : null}
         </div>
@@ -809,7 +817,7 @@ function TaskDetail({
 
       <aside className="work-org-stack">
         <article className="work-org-card">
-          <span className="eyebrow">正式执行</span>
+          <span className="eyebrow">Formal execution</span>
           {detail.linked_work ? (
             <>
               <h2>{detail.linked_work.title}</h2>
@@ -828,15 +836,15 @@ function TaskDetail({
                   )
                 }
               >
-                打开 Work
+                Open Work
               </button>
             </>
           ) : (
             <>
-              <h2>启动 Work</h2>
+              <h2>Start Work</h2>
               <p className="work-org-muted">
-                选择一个已发布的 Definition 来创建规范的 Work。需要新建或修改
-                Definition，请到「新建 Work」。
+                Select a published Definition to create a formal Work. To create
+                or edit a Definition, go to “New Work”.
               </p>
               <PublishedDefinitionField
                 definitions={definitions}
@@ -855,7 +863,7 @@ function TaskDetail({
                 }
                 onClick={() => void promote()}
               >
-                创建 Work
+                Create Work
               </button>
             </>
           )}
@@ -863,10 +871,11 @@ function TaskDetail({
 
         {item.status === 'in_review' ? (
           <article className="work-org-card work-org-review-card">
-            <span className="eyebrow">人工评审</span>
-            <h2>等你来决定</h2>
+            <span className="eyebrow">Human review</span>
+            <h2>Your decision is needed</h2>
             <p className="work-org-muted">
-              先看看关联的 Work 和会话，协作完成后把这个任务标记为已完成。
+              Review the linked Work and conversation, then mark this Task
+              complete once the collaboration is finished.
             </p>
             <div className="work-org-actions">
               <button
@@ -875,7 +884,7 @@ function TaskDetail({
                 disabled={saving}
                 onClick={() => void update({ status: 'done' })}
               >
-                标记任务完成
+                Mark Task complete
               </button>
               {detail.linked_work ? (
                 <button
@@ -886,7 +895,7 @@ function TaskDetail({
                     )
                   }
                 >
-                  评审 Work
+                  Review Work
                 </button>
               ) : null}
               {item.source_conversation_id ? (
@@ -898,7 +907,7 @@ function TaskDetail({
                     )
                   }
                 >
-                  打开会话
+                  Open conversation
                 </button>
               ) : null}
             </div>
@@ -906,10 +915,10 @@ function TaskDetail({
         ) : null}
 
         <article className="work-org-card">
-          <span className="eyebrow">评论</span>
+          <span className="eyebrow">Comments</span>
           <div className="work-org-comments">
             {comments.length === 0 ? (
-              <p className="work-org-muted">还没有评论。</p>
+              <p className="work-org-muted">No comments yet.</p>
             ) : null}
             {comments.map((entry) => (
               <div key={entry.id} className="work-org-comment">
@@ -939,20 +948,20 @@ function TaskDetail({
             ))}
           </div>
           <MentionTextField
-            ariaLabel="添加评论"
+            ariaLabel="Add a comment"
             value={comment}
             onChange={setComment}
             participants={participants}
             multiline
             rows={3}
-            placeholder="写下评论。用 @ 提及的成员会留在共享的工作记录里。"
+            placeholder="Write a comment. Your @mentions will be saved in the shared work record."
           />
           <button
             type="button"
             disabled={!comment.trim()}
             onClick={() => void addComment()}
           >
-            评论
+            Comment
           </button>
         </article>
       </aside>
@@ -971,16 +980,16 @@ function AssigneeField({
 }) {
   return (
     <label>
-      负责人
+      Assignee
       <select value={value} onChange={(event) => onChange(event.target.value)}>
-        <option value="">未分配</option>
+        <option value="">Unassigned</option>
         {agents.map((agent) => (
           <option value={agent.id} key={agent.id}>
             {coworkerOptionLabel(agent)}
           </option>
         ))}
         {value && !agents.some((agent) => agent.id === value) ? (
-          <option value={value}>已不可用的成员</option>
+          <option value={value}>Unavailable member</option>
         ) : null}
       </select>
     </label>
@@ -1001,7 +1010,7 @@ function PublishedDefinitionField({
   readonly onRetry: () => void;
 }) {
   if (state === 'loading')
-    return <p className="work-org-muted">正在加载已发布的 Definition…</p>;
+    return <p className="work-org-muted">Loading published Definitions…</p>;
   if (state === 'unavailable')
     // feature_unavailable means this workspace does not compose the
     // Product Work surface at all, so reloading can never succeed. No
@@ -1010,27 +1019,27 @@ function PublishedDefinitionField({
   if (state === 'error')
     return (
       <div className="work-org-error" role="alert">
-        <p>已发布的 Definition 加载失败。</p>
+        <p>Unable to load published Definitions.</p>
         <button type="button" onClick={onRetry}>
-          重试
+          Try again
         </button>
       </div>
     );
   if (definitions.length === 0)
     return (
       <p className="work-org-muted">
-        还没有已发布的 Definition，请先到「新建 Work」里创建一个。
+        There are no published Definitions yet. Create one in “New Work” first.
       </p>
     );
   return (
     <label>
-      已发布的 Definition
+      Published Definitions
       <select
         aria-label="Published Work Definition"
         value={value}
         onChange={(event) => onChange(event.target.value)}
       >
-        <option value="">选择一个已发布的 Definition</option>
+        <option value="">Select a published Definition</option>
         {definitions.map((definition) => (
           <option key={definition.definitionId} value={definition.definitionId}>
             {definition.displayName}

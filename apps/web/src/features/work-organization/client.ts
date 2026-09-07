@@ -11,6 +11,7 @@ import {
   WorkBoardColumnSchema,
   WorkBoardPlacementSchema,
   type WorkBoardDto,
+  type WorkBoardColumnKind,
   type WorkBoardSnapshotDto,
   type WorkItemDetailDto,
   type WorkItemDto,
@@ -412,7 +413,11 @@ export const workOrganizationClient = {
 
   async createColumn(
     boardId: string,
-    input: { readonly title: string; readonly position?: number },
+    input: {
+      readonly title: string;
+      readonly position?: number;
+      readonly kind?: WorkBoardColumnKind | null;
+    },
   ) {
     const response = parse(
       columnResponseSchema,
@@ -431,7 +436,11 @@ export const workOrganizationClient = {
   async updateColumn(
     boardId: string,
     columnId: string,
-    input: { readonly title?: string; readonly position?: number },
+    input: {
+      readonly title?: string;
+      readonly position?: number;
+      readonly kind?: WorkBoardColumnKind | null;
+    },
   ) {
     const response = parse(
       columnResponseSchema,

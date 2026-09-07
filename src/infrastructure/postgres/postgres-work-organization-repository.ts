@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import type {
   ClaimWorkItemRecordInput,
   ClaimWorkItemRecordResult,
@@ -375,11 +377,33 @@ export class PostgresWorkOrganizationRepository implements WorkOrganizationRepos
   }
 
   public async createBoard(input: CreateBoardRecordInput): Promise<WorkBoard> {
+    const todoColumnId = randomUUID();
+    const doingColumnId = randomUUID();
+    const doneColumnId = randomUUID();
     const result = await this.db.query<BoardRow>(
-      `INSERT INTO product_work_boards
-        (id,tenant_id,workspace_id,title,description,created_by,created_at,updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$7)
-       RETURNING *`,
+      `WITH created_board AS (
+         INSERT INTO product_work_boards
+           (id,tenant_id,workspace_id,title,description,created_by,created_at,updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$7)
+         RETURNING *
+       ), created_columns AS (
+         INSERT INTO product_work_board_columns
+           (id,tenant_id,workspace_id,board_id,title,position,kind,created_at,updated_at)
+         SELECT defaults.id,created_board.tenant_id,created_board.workspace_id,
+                created_board.id,defaults.title,defaults.position,defaults.kind,
+                created_board.created_at,created_board.updated_at
+           FROM created_board
+           CROSS JOIN (
+             VALUES
+               ($8::uuid,'Todo'::text,0::integer,'todo'::text),
+               ($9::uuid,'Doing'::text,1::integer,'doing'::text),
+               ($10::uuid,'Done'::text,2::integer,'done'::text)
+           ) AS defaults(id,title,position,kind)
+         RETURNING id
+       )
+       SELECT created_board.*
+         FROM created_board
+        WHERE EXISTS (SELECT 1 FROM created_columns)`,
       [
         input.id,
         input.tenantId,
@@ -388,6 +412,9 @@ export class PostgresWorkOrganizationRepository implements WorkOrganizationRepos
         input.description,
         input.createdBy,
         input.now,
+        todoColumnId,
+        doingColumnId,
+        doneColumnId,
       ],
     );
     return mapBoard(requireRow(result.rows));

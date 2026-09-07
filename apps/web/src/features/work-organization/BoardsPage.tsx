@@ -24,9 +24,10 @@ import ParticipantChip from './ParticipantChip';
 import { buildParticipantDirectory, type Participant } from './participants';
 import {
   columnKind,
-  findDoingColumn,
   readCommentCount,
+  readColumnKind,
   readMentionIds,
+  type BoardColumnKind,
 } from './work-item-extensions';
 import { CommentCount, MentionRow, StatusBadge } from './WorkItemMeta';
 import './work-organization.css';
@@ -52,6 +53,16 @@ const BOARD_REFRESH_INTERVAL_MS = 5000;
 /** What a card drag carries; a column drag carries its own type. */
 const CARD_MIME = 'application/x-agent-server-work-item';
 const COLUMN_MIME = 'application/x-agent-server-board-column';
+
+const COLUMN_KIND_OPTIONS: readonly {
+  readonly value: BoardColumnKind | '';
+  readonly label: string;
+}[] = [
+  { value: 'todo', label: 'Todo' },
+  { value: 'doing', label: 'Doing' },
+  { value: 'done', label: 'Done' },
+  { value: '', label: 'Not declared' },
+];
 
 type RecoverableError = {
   readonly source: 'snapshot' | 'action';
@@ -585,6 +596,9 @@ function BoardCanvas({
 }) {
   const navigate = useNavigate();
   const [newColumnTitle, setNewColumnTitle] = useState('');
+  const [newColumnKind, setNewColumnKind] = useState<BoardColumnKind | null>(
+    null,
+  );
   const [addingColumn, setAddingColumn] = useState(false);
   const [authoring, setAuthoring] = useState<
     | {
@@ -595,6 +609,7 @@ function BoardCanvas({
         readonly kind: 'rename-column';
         readonly columnId: string;
         readonly title: string;
+        readonly columnKind: BoardColumnKind | null;
       }
     | {
         readonly kind: 'create-card';
@@ -634,6 +649,11 @@ function BoardCanvas({
       ),
     [snapshot.columns],
   );
+
+  function declaredColumnKind(columnId: string): BoardColumnKind | null {
+    const column = snapshot.columns.find((entry) => entry.id === columnId);
+    return column ? readColumnKind(column) : null;
+  }
 
   // The Board's own mention/assignee directory: the Coworker roster plus every
   // principal these cards have actually shown us.
@@ -682,8 +702,10 @@ function BoardCanvas({
       await workOrganizationClient.createColumn(snapshot.board.id, {
         title: newColumnTitle.trim(),
         position: snapshot.columns.length,
+        kind: newColumnKind,
       });
       setNewColumnTitle('');
+      setNewColumnKind(null);
       setAddingColumn(false);
       await refresh();
     } catch {
@@ -708,11 +730,16 @@ function BoardCanvas({
         const column = snapshot.columns.find(
           (entry) => entry.id === authoring.columnId,
         );
-        if (!title || title === column?.title) return;
+        if (
+          !title ||
+          (title === column?.title &&
+            authoring.columnKind === (column ? readColumnKind(column) : null))
+        )
+          return;
         await workOrganizationClient.updateColumn(
           snapshot.board.id,
           authoring.columnId,
-          { title },
+          { title, kind: authoring.columnKind },
         );
         await refresh();
       } else if (authoring.kind === 'delete-column') {
@@ -816,23 +843,9 @@ function BoardCanvas({
     }
   }
 
-  /** After a claim, the card belongs where work in progress lives. */
-  async function moveClaimedCard(workItemId: string) {
-    const doing = findDoingColumn(columns);
-    const holding = columns.find((column) =>
-      (placementsByColumn.get(column.id) ?? []).some(
-        (entry) => entry.item.id === workItemId,
-      ),
-    );
-    if (!doing || holding?.id === doing.id) {
-      await refresh().catch(() => onError(BOARDS_ACTION_ERROR));
-      return;
-    }
-    await moveCard(
-      workItemId,
-      doing.id,
-      (placementsByColumn.get(doing.id) ?? []).length,
-    );
+  /** The server owns the claim transition, including any Board placement. */
+  async function refreshAfterClaim() {
+    await refresh().catch(() => onError(BOARDS_ACTION_ERROR));
   }
 
   function readDragKind(event: React.DragEvent): 'card' | 'column' | null {
@@ -895,7 +908,7 @@ function BoardCanvas({
             authoring.kind === 'rename-board'
               ? 'Rename this Board'
               : authoring.kind === 'rename-column'
-                ? 'Rename this column'
+                ? 'Edit this column'
                 : authoring.kind === 'create-card'
                   ? 'Add a Task card'
                   : authoring.kind === 'delete-board'
@@ -917,10 +930,12 @@ function BoardCanvas({
                   authoring.title.trim() === snapshot.board.title
                 : authoring.kind === 'rename-column'
                   ? !authoring.title.trim() ||
-                    authoring.title.trim() ===
+                    (authoring.title.trim() ===
                       snapshot.columns.find(
                         (column) => column.id === authoring.columnId,
-                      )?.title
+                      )?.title &&
+                      authoring.columnKind ===
+                        declaredColumnKind(authoring.columnId))
                   : false
           }
           onCancel={() => setAuthoring(null)}
@@ -928,24 +943,53 @@ function BoardCanvas({
         >
           {authoring.kind === 'rename-board' ||
           authoring.kind === 'rename-column' ? (
-            <label>
-              {authoring.kind === 'rename-board'
-                ? 'Board title'
-                : 'Column title'}
-              <input
-                autoFocus
-                value={authoring.title}
-                onChange={(event) =>
-                  setAuthoring((current) =>
-                    current &&
-                    (current.kind === 'rename-board' ||
-                      current.kind === 'rename-column')
-                      ? { ...current, title: event.target.value }
-                      : current,
-                  )
-                }
-              />
-            </label>
+            <>
+              <label>
+                {authoring.kind === 'rename-board'
+                  ? 'Board title'
+                  : 'Column title'}
+                <input
+                  autoFocus
+                  value={authoring.title}
+                  onChange={(event) =>
+                    setAuthoring((current) =>
+                      current &&
+                      (current.kind === 'rename-board' ||
+                        current.kind === 'rename-column')
+                        ? { ...current, title: event.target.value }
+                        : current,
+                    )
+                  }
+                />
+              </label>
+              {authoring.kind === 'rename-column' ? (
+                <label>
+                  Workflow stage
+                  <select
+                    aria-label="Workflow stage"
+                    value={authoring.columnKind ?? ''}
+                    onChange={(event) =>
+                      setAuthoring((current) =>
+                        current?.kind === 'rename-column'
+                          ? {
+                              ...current,
+                              columnKind:
+                                (event.target.value as BoardColumnKind) ||
+                                null,
+                            }
+                          : current,
+                      )
+                    }
+                  >
+                    {COLUMN_KIND_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+            </>
           ) : authoring.kind === 'create-card' ? (
             <>
               <MentionTextField
@@ -1077,12 +1121,13 @@ function BoardCanvas({
                   <div className="work-board-column-actions">
                     <button
                       type="button"
-                      aria-label={`Rename ${column.title}`}
+                      aria-label={`Edit ${column.title}`}
                       onClick={() =>
                         setAuthoring({
                           kind: 'rename-column',
                           columnId: column.id,
                           title: column.title,
+                          columnKind: readColumnKind(column),
                         })
                       }
                     >
@@ -1189,11 +1234,36 @@ function BoardCanvas({
                 onChange={(event) => setNewColumnTitle(event.target.value)}
                 placeholder="Column title"
               />
+              <label>
+                Workflow stage
+                <select
+                  aria-label="Workflow stage"
+                  value={newColumnKind ?? ''}
+                  onChange={(event) =>
+                    setNewColumnKind(
+                      (event.target.value as BoardColumnKind) || null,
+                    )
+                  }
+                >
+                  {COLUMN_KIND_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <div className="work-org-actions">
                 <button type="submit" className="work-org-primary">
                   Add
                 </button>
-                <button type="button" onClick={() => setAddingColumn(false)}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewColumnTitle('');
+                    setNewColumnKind(null);
+                    setAddingColumn(false);
+                  }}
+                >
                   Cancel
                 </button>
               </div>
@@ -1213,7 +1283,7 @@ function BoardCanvas({
             workItemId={peekWorkItemId}
             participants={participants}
             claimSupported={claimSupported}
-            onClaimed={(workItemId) => void moveClaimedCard(workItemId)}
+            onClaimed={() => void refreshAfterClaim()}
             onClaimUnsupported={() => setClaimSupported(false)}
             onClose={() => setPeekWorkItemId(null)}
           />

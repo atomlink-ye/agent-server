@@ -34,8 +34,29 @@ export function workTabHref(
   return workTabPath(workId, tab, runId ?? null, originConversationId ?? null);
 }
 
-export function productStatePresentation(state: WorkListItem['product_state']) {
+/**
+ * Every stage a Work Card or a Run row can be in. The two Work-level stages a
+ * Run state cannot express are named here so no surface has to invent a label
+ * for them.
+ */
+export type WorkStage =
+  WorkListItem['product_state'] | 'not_started' | 'starting';
+
+export function productStatePresentation(state: WorkStage) {
   switch (state) {
+    case 'not_started':
+      return {
+        label: 'Ready to start',
+        // A Work that has just been created has not failed at anything. The
+        // honest line names the next move, not a missing result.
+        description:
+          'This Work is set up and hasn’t run yet. Open it to start the first Run.',
+      };
+    case 'starting':
+      return {
+        label: 'Starting',
+        description: 'This Run has been requested and is starting.',
+      };
     case 'running':
       return { label: 'Running', description: 'This Run is active.' };
     case 'needs_you':

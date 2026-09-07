@@ -75,6 +75,8 @@ function WorkCardContent({ card }: { readonly card: WorkChatCard }) {
 
 // The same Work is named the same way wherever it appears: the Work list, the
 // Work page, and this tile all read their label from productStatePresentation.
+// A null state is the one case the server could not read at all; every other
+// stage, including a Work that has not started, has a name of its own.
 function statusLabel(state: WorkChatCard['productState']): string {
   if (state === null) return 'Status unavailable';
   return productStatePresentation(state).label;

@@ -1010,6 +1010,10 @@ textarea {
 .work-status-dot--problem {
   background: var(--coral);
 }
+.work-status-dot--not_started,
+.work-status-dot--starting {
+  background: var(--skype);
+}
 .work-status-dot--not_captured {
   background: var(--ink-300);
 }
@@ -1166,6 +1170,18 @@ textarea {
   font-weight: 800;
 }
 
+/* "Ready to start" is a stage, not a fault: it reads in the product's own blue
+   rather than the grey reserved for a status we could not read. The outline
+   keeps it distinct from the filled pill Complete already owns. */
+.work-status--not_started {
+  background: var(--cloud);
+  box-shadow: inset 0 0 0 1px var(--skype);
+  color: var(--skype-deep);
+}
+.work-status--starting {
+  background: var(--sky-100);
+  color: var(--skype-ink);
+}
 .work-status--running {
   background: #e4f5e3;
   color: #3e8b3a;

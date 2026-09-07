@@ -4,7 +4,7 @@ import type { WorkListItem } from '@atomlink-ye/agent-server/product-contract';
 
 import { workPath } from '../../app/routes';
 import {
-  latestRunSummary,
+  formatWorkListTime,
   productStatePresentation,
 } from './components/work-presentation';
 import { useWorkList, type WorkListQuery } from './queries/use-work-list';
@@ -15,6 +15,7 @@ export interface WorkPaneProps {
   readonly originConversationId?: string | null;
   readonly onStatusChange?: (status: WorkListQuery['status']) => void;
   readonly onRefreshReady?: (refresh: () => void) => void;
+  readonly onWorksChange?: (works: readonly WorkListItem[]) => void;
 }
 
 export function WorkPane({
@@ -23,6 +24,7 @@ export function WorkPane({
   originConversationId = null,
   onStatusChange,
   onRefreshReady,
+  onWorksChange,
 }: WorkPaneProps) {
   const { status, works, refresh } = useWorkList();
 
@@ -41,6 +43,10 @@ export function WorkPane({
   useEffect(() => {
     onRefreshReady?.(refresh);
   }, [refresh, onRefreshReady]);
+
+  useEffect(() => {
+    onWorksChange?.(works);
+  }, [works, onWorksChange]);
 
   const controlsDisabled = status === 'unavailable' || status === 'error';
 
@@ -96,7 +102,7 @@ export function WorkPane({
           role="status"
           aria-live="polite"
         >
-          Getting your Work records…
+          Loading Work…
         </p>
       ) : null}
       {works.length === 0 && status === 'unavailable' ? (
@@ -105,11 +111,11 @@ export function WorkPane({
           data-testid="work-list-unavailable"
           role="status"
         >
-          <p className="eyebrow">Work isn&apos;t available here</p>
+          <p className="eyebrow">Work unavailable</p>
           {/* feature_unavailable means this workspace does not compose the
               Product Work surface at all. Offering Retry would be a false
               promise, so this state has no Retry control. */}
-          <p>This workspace doesn&apos;t currently offer Work execution.</p>
+          <p>This workspace doesn&apos;t have Work execution enabled.</p>
         </div>
       ) : null}
       {works.length === 0 && status === 'error' ? (
@@ -118,15 +124,15 @@ export function WorkPane({
           data-testid="work-list-error"
           role="alert"
         >
-          <p className="eyebrow">Couldn&apos;t load Work</p>
+          <p className="eyebrow">Connection interrupted</p>
           {/* A failed read must not be mistaken for a statement about any
               Work's own state, and must not leak the upstream error string
               (which can be control-plane prose). The backend owns product
               state; an empty pane here means "we could not ask", not
               "nothing needs you". */}
           <p>
-            This is a connection problem, not a statement about the status of
-            any Work.
+            This is a connection problem. Your existing Work may still be
+            available when the connection returns.
           </p>
           <button type="button" onClick={refresh}>
             Retry
@@ -139,7 +145,10 @@ export function WorkPane({
           data-testid="work-list-empty"
           role="status"
         >
-          <p>No Work records yet.</p>
+          <p>
+            No formal Work yet. Start with an objective you want an Agent to
+            run.
+          </p>
           <button type="button" onClick={onCreateNew}>
             New Work
           </button>
@@ -174,7 +183,9 @@ function WorkListRow({
   readonly selected: boolean;
   readonly originConversationId: string | null;
 }) {
+  const latestRun = work.latest_run_summary;
   const stateView = productStatePresentation(work.product_state);
+  const timestamp = latestRun?.updated_at ?? work.updated_at;
   return (
     <li>
       <Link
@@ -187,18 +198,24 @@ function WorkListRow({
         </span>
         <span className="work-list-copy">
           <strong>{work.title}</strong>
-          <span className="work-list-description">{stateView.description}</span>
-          <span className="work-list-summary">{latestRunSummary(work)}</span>
-        </span>
-        <span
-          className="work-list-status"
-          data-product-state={work.product_state}
-        >
-          <span
-            aria-hidden="true"
-            className={`work-status-dot work-status-dot--${work.product_state}`}
-          />
-          {stateView.label}
+          <span className="work-list-meta">
+            {latestRun ? (
+              <span data-product-state={work.product_state}>
+                <span
+                  aria-hidden="true"
+                  className={`work-status-dot work-status-dot--${work.product_state}`}
+                />
+                {stateView.label}
+              </span>
+            ) : (
+              <span>No runs yet</span>
+            )}
+            <time dateTime={timestamp}>
+              {latestRun
+                ? `Run ${formatWorkListTime(timestamp)}`
+                : `Updated ${formatWorkListTime(timestamp)}`}
+            </time>
+          </span>
         </span>
       </Link>
     </li>

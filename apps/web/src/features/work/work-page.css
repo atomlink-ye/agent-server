@@ -188,11 +188,221 @@
 .new-work-form__advanced-editor {
   margin-top: 10px;
 }
-@media (max-width: 720px) {
+
+/* The shared shell centres generic empty states. Work needs room for an
+ * actionable landing and mobile selector, so it owns this layout locally. */
+.work-main .work-main-content[data-empty='true'] {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  padding: 0;
+}
+
+.work-main-empty--first,
+.work-main-empty--loading {
+  padding: var(--space-8);
+  border: 1px solid var(--ink-100);
+  border-radius: var(--radius-xl);
+  background: color-mix(in srgb, var(--cloud) 90%, var(--sky-50));
+  box-shadow: var(--shadow-soft);
+}
+
+.work-main .work-main-empty button,
+.work-landing__intro button,
+.work-mobile-picker button {
+  border-color: var(--skype);
+  background: linear-gradient(135deg, var(--skype), var(--skype-deep));
+  box-shadow: var(--shadow-soft);
+  color: var(--cloud);
+  font-size: var(--text-sm);
+  font-weight: 800;
+  padding: var(--space-2) var(--space-4);
+}
+
+.work-main .work-main-empty button:hover:not(:disabled),
+.work-landing__intro button:hover:not(:disabled),
+.work-mobile-picker button:hover:not(:disabled) {
+  color: var(--cloud);
+}
+
+.work-main-empty--first .work-main-icon,
+.work-main-empty--loading .work-main-icon {
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--sky-200);
+  background: var(--sky-100);
+  color: var(--skype-deep);
+}
+
+.work-landing {
+  width: 100%;
+  max-width: 840px;
+  margin: auto;
+  padding: var(--space-8);
+}
+
+.work-landing__intro {
+  padding-bottom: var(--space-6);
+  border-bottom: 1px solid var(--ink-100);
+}
+
+.work-landing__intro h1 {
+  margin: var(--space-2) 0 0;
+  color: var(--ink-900);
+  font-size: var(--text-display);
+  letter-spacing: -0.04em;
+}
+
+.work-landing__intro > p:not(.eyebrow) {
+  max-width: 520px;
+  margin: var(--space-3) 0 var(--space-5);
+  color: var(--ink-500);
+  font-size: var(--text-md);
+  line-height: 1.5;
+}
+
+.work-landing__recent {
+  display: grid;
+  gap: var(--space-2);
+  margin: var(--space-5) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.work-landing__recent a {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr) max-content;
+  gap: var(--space-2) var(--space-3);
+  align-items: center;
+  padding: var(--space-4);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  color: var(--ink-900);
+  text-decoration: none;
+}
+
+.work-landing__recent a:hover {
+  border-color: var(--sky-200);
+  background: var(--sky-50);
+}
+
+.work-landing__recent strong,
+.work-landing__summary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.work-landing__summary,
+.work-landing__recent time {
+  color: var(--ink-500);
+  font-size: var(--text-sm);
+}
+
+.work-landing__no-run {
+  display: inline-flex;
+  color: var(--ink-500);
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.work-landing__summary {
+  grid-column: 2;
+}
+
+.work-landing__recent time {
+  grid-column: 3;
+  grid-row: 1;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.work-mobile-picker {
+  display: none;
+}
+
+.work-main .work-main-content[data-empty='true'] .work-landing,
+.work-main .work-main-content[data-empty='true'] .work-mobile-picker {
+  flex: 0 0 auto;
+}
+
+.work-main .work-main-content[data-empty='true'] .work-main-empty {
+  align-self: center;
+  width: min(100% - var(--space-8), 420px);
+  margin: auto;
+  flex-shrink: 0;
+}
+
+@media (max-width: 920px) {
+  .work-landing__recent a {
+    grid-template-columns: max-content minmax(0, 1fr);
+  }
+
+  .work-landing__recent time {
+    grid-column: 2;
+    grid-row: auto;
+  }
+}
+
+@media (max-width: 768px) {
+  .work-main .work-main-content[data-empty='true'] {
+    justify-content: flex-start;
+  }
+
   .work-main .new-work-form {
     padding-inline: var(--space-4);
   }
   .new-work-form__diagnostics li {
     grid-template-columns: 1fr;
+  }
+
+  .work-landing {
+    margin: 0 auto;
+    padding: var(--space-5);
+  }
+
+  .work-landing__recent a {
+    grid-template-columns: max-content minmax(0, 1fr);
+  }
+
+  .work-landing__recent time {
+    grid-column: 2;
+    grid-row: auto;
+  }
+
+  .work-mobile-picker {
+    display: flex;
+    align-items: end;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid var(--ink-100);
+    background: var(--cloud);
+    width: 100%;
+    flex-shrink: 0;
+  }
+
+  .work-mobile-picker label {
+    display: grid;
+    flex: 1;
+    min-width: 0;
+    gap: var(--space-1);
+    color: var(--ink-500);
+    font-size: var(--text-xs);
+    font-weight: 700;
+  }
+
+  .work-mobile-picker select {
+    width: 100%;
+    min-width: 0;
+    border: 1px solid var(--ink-200);
+    border-radius: var(--radius-sm);
+    background: var(--cloud);
+    color: var(--ink-900);
+    padding: var(--space-2);
+  }
+
+  .work-mobile-picker button {
+    white-space: nowrap;
   }
 }

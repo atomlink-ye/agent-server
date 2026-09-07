@@ -25,8 +25,11 @@ export function OverviewPane({
     return (
       <section className="work-detail-state" data-testid="work-no-runs">
         <p className="work-shell-kicker">Overview</p>
-        <h2>No Run has been recorded yet.</h2>
-        <p>The Work exists, but there is no execution history to project.</p>
+        <h2>Your first Run starts here.</h2>
+        <p>
+          When a Run starts, its outcome, trace, and collaborator activity
+          appear here.
+        </p>
       </section>
     );
 
@@ -50,7 +53,7 @@ export function OverviewPane({
           {stateView.label}
         </span>
         <div data-testid="outcome-summary">
-          <p className="work-shell-kicker">Latest recorded outcome</p>
+          <p className="work-shell-kicker">Run outcome</p>
           <h2>
             {outcome
               ? outcomeHeadline(outcome)
@@ -63,9 +66,7 @@ export function OverviewPane({
             </div>
           ) : null}
           {live ? (
-            <p className="work-live-note">
-              Refreshing captured Product facts while this Run is active.
-            </p>
+            <p className="work-live-note">Updating while this Run is active.</p>
           ) : null}
           {hasSuccessfulResult ? (
             <a

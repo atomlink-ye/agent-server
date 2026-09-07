@@ -36,10 +36,12 @@ export function SessionTranscripts({
   live,
   trace,
   initialSelectedIndex,
+  productState = trace.workRun.productState,
 }: {
   readonly live?: boolean;
   readonly trace: Trace;
   readonly initialSelectedIndex?: number;
+  readonly productState?: string;
 }) {
   const [state, setState] = useState<FetchState>({ status: 'idle' });
   // Neither name nor role is unique inside a Run: a team can run several
@@ -213,9 +215,8 @@ export function SessionTranscripts({
           <p className="work-shell-kicker">Session transcripts</p>
           <h2>Session conversation and execution activity</h2>
           <p>
-            Each session&apos;s real provider transcript, addressed by session.
-            Roles repeat inside one Run. Derived summaries are marked; they are
-            not provider original text.
+            This Work Run is {humanize(productState)}. Captured messages and
+            activity are grouped by Worker.
           </p>
         </div>
         <span>
@@ -245,7 +246,7 @@ export function SessionTranscripts({
                   <span>{session.label.role}</span>
                 ) : null}
                 <small>
-                  {humanize(session.label.status)} ·{' '}
+                  Session {humanize(session.label.status)} ·{' '}
                   {session.summary.entry_count} entries
                 </small>
               </button>
@@ -262,7 +263,7 @@ export function SessionTranscripts({
                     {selected.label.role !== null
                       ? `Role: ${selected.label.role} · `
                       : ''}
-                    {humanize(selected.label.status)}
+                    Session {humanize(selected.label.status)}
                   </span>
                 </div>
                 <span>{selected.summary.entry_count} entries</span>
@@ -331,12 +332,12 @@ export function SessionTranscripts({
                 data-testid="session-entries"
               >
                 <h3>Session conversation</h3>
-                <p className="execution-transcript__notice">
-                  Platform tool calls are shown with their real names; their
-                  arguments and results are not captured.
-                </p>
                 {selected.entries.length ? (
-                  <TranscriptStream entries={selected.entries} />
+                  <TranscriptStream
+                    entries={selected.entries}
+                    speaker={selected.label.name}
+                    terminalRun={!live}
+                  />
                 ) : (
                   <p className="execution-transcript__notice">
                     No entries were captured for this session.
@@ -367,8 +368,12 @@ export function SessionTranscripts({
 
 function TranscriptStream({
   entries,
+  speaker,
+  terminalRun,
 }: {
   readonly entries: readonly SessionEntry[];
+  readonly speaker: string;
+  readonly terminalRun: boolean;
 }) {
   const projected = projectTranscript(entries as readonly TranscriptEntry[]);
   const stream = buildVisibleStream(projected);
@@ -387,10 +392,13 @@ function TranscriptStream({
         >
           {item.kind === 'assistant' ? (
             <div className="transcript__prose" data-testid="transcript-prose">
+              <span className="transcript__speaker">{speaker}</span>
               <AssistantMarkdown text={assistantText(item.entry)} />
             </div>
           ) : null}
-          {item.kind === 'activity' ? <ActivityRow entry={item.entry} /> : null}
+          {item.kind === 'activity' ? (
+            <ActivityRow entry={item.entry} terminalRun={terminalRun} />
+          ) : null}
           {item.kind === 'lifecycle' ? (
             <LifecycleRow entry={item.entry} />
           ) : null}
@@ -542,10 +550,6 @@ function SessionSummaryBlock({
     >
       <dl>
         <div>
-          <dt>Status</dt>
-          <dd>{humanize(summary.status)}</dd>
-        </div>
-        <div>
           <dt>Entries</dt>
           <dd>{summary.entry_count}</dd>
         </div>
@@ -570,18 +574,22 @@ function SessionSummaryBlock({
           </div>
         ) : null}
       </dl>
-      {summary.last_meaningful ? (
+      {summary.last_meaningful?.action || summary.last_meaningful?.result ? (
         <aside className="execution-transcript__last-meaningful">
-          <strong>
-            Last meaningful action (derived summary — not provider text):
-          </strong>
-          <span>{summary.last_meaningful.kind}</span>
+          <strong>Latest activity summary</strong>
           {summary.last_meaningful.action ? (
             <p>Action: {summary.last_meaningful.action}</p>
           ) : null}
           {summary.last_meaningful.result ? (
             <p>Result: {summary.last_meaningful.result}</p>
           ) : null}
+          <details>
+            <summary>About this summary</summary>
+            <p>
+              This is assembled from captured messages and actions. Original
+              wording appears in the conversation below.
+            </p>
+          </details>
         </aside>
       ) : null}
     </div>

@@ -125,7 +125,7 @@ it('reorders columns by dragging a column handle', async () => {
   }
 });
 
-it('claims a card from its detail panel and moves it into the doing column', async () => {
+it('claims a card without moving it when the Board declares no workflow stage', async () => {
   const api = createCanvasApi();
   const mounted = await mountBoard(api.fetch);
   try {
@@ -135,12 +135,11 @@ it('claims a card from its detail panel and moves it into the doing column', asy
     await clickTestId(mounted.host, 'work-board-claim');
 
     expect(api.claims).toEqual([cardOneId]);
-    expect(api.placements).toEqual([
-      { column_id: doingColumnId, work_item_id: cardOneId, position: 1000 },
-    ]);
-    expect(cardTitlesIn(mounted.host, doingColumnId)).toEqual([
+    expect(api.placements).toEqual([]);
+    expect(cardTitlesIn(mounted.host, todoColumnId)).toContain(
       'Draft the brief',
-    ]);
+    );
+    expect(cardTitlesIn(mounted.host, doingColumnId)).toEqual([]);
   } finally {
     await mounted.dispose();
   }

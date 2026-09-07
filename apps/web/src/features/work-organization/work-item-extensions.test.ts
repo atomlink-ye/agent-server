@@ -103,15 +103,10 @@ describe('readColumnKind / columnKind', () => {
     expect(readColumnKind(column('Doing', { kind: 'blocked' }))).toBeNull();
   });
 
-  it('guesses from the title while the field is absent', () => {
-    expect(columnKind(column('In Progress'))).toBe('doing');
-    expect(columnKind(column('WIP'))).toBe('doing');
-    expect(columnKind(column('In Review'))).toBe('doing');
-    expect(columnKind(column('Completed'))).toBe('done');
-    expect(columnKind(column('Backlog'))).toBe('todo');
-  });
-
-  it('answers null for a title it cannot read', () => {
+  it('does not infer a kind from a column title', () => {
+    expect(columnKind(column('In Progress'))).toBeNull();
+    expect(columnKind(column('Completed'))).toBeNull();
+    expect(columnKind(column('Backlog'))).toBeNull();
     expect(columnKind(column('Icebox'))).toBeNull();
   });
 });

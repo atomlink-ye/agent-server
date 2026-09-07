@@ -206,7 +206,7 @@ it('completes every Board authoring action in-app and requires confirmed deletio
     await clickButton(mounted.host, 'Add');
     await expectText(mounted.host, 'Backlog · 0');
 
-    await clickButton(mounted.host, 'Rename Backlog');
+    await clickButton(mounted.host, 'Edit Backlog');
     await setInputValueByLabel(mounted.host, 'Column title', 'Ready');
     await clickButton(mounted.host, 'Save');
     await expectText(mounted.host, 'Ready · 0');
@@ -286,7 +286,7 @@ it('disables authoring controls until a title can succeed', async () => {
     await expectAuthoringSubmitDisabled(mounted.host, true);
     await clickButton(mounted.host, 'Cancel');
 
-    await clickButton(mounted.host, 'Rename Todo');
+    await clickButton(mounted.host, 'Edit Todo');
     await expectAuthoringSubmitDisabled(mounted.host, true);
     await setInputValueByLabel(
       mounted.host,
@@ -352,7 +352,7 @@ for (const failure of [
   {
     name: 'Column rename',
     begin: async (host: HTMLElement) => {
-      await clickButton(host, 'Rename Todo');
+      await clickButton(host, 'Edit Todo');
       await setInputValueByLabel(host, 'Column title', 'Unsent Column rename');
       await clickButton(host, 'Save');
     },
@@ -361,7 +361,7 @@ for (const failure of [
       path: `/api/boards/${boardId}/columns/${columnId}`,
     },
     preserved: 'Unsent Column rename',
-    panel: 'Rename this column',
+    panel: 'Edit this column',
   },
   {
     name: 'Task creation',

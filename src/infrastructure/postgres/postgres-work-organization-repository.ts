@@ -12,6 +12,7 @@ import type {
 } from '../../application/ports/work-organization-repository.js';
 import {
   claimTargetColumn,
+  isDoneColumn,
   isWorkBoardColumnKind,
 } from '../../domain/work-organization/board-column-kinds.js';
 import type {
@@ -96,6 +97,14 @@ type PlacementRow = {
   updated_at: string | Date;
 };
 
+interface WorkItemStatusMove {
+  readonly boardId: string;
+  readonly fromColumnId: string;
+  readonly fromKind: Exclude<WorkBoardColumn['kind'], null>;
+  readonly toColumnId: string;
+  readonly toKind: Exclude<WorkBoardColumn['kind'], null>;
+}
+
 export class PostgresWorkOrganizationRepository implements WorkOrganizationRepository {
   private readonly promotionQueues = new Map<string, Promise<void>>();
 
@@ -156,16 +165,89 @@ export class PostgresWorkOrganizationRepository implements WorkOrganizationRepos
   public async updateWorkItem(
     input: UpdateWorkItemRecordInput,
   ): Promise<WorkItem | null> {
+    let move: WorkItemStatusMove | null = null;
+    if (input.status === 'in_progress' || input.status === 'done') {
+      const placement = await this.findWorkItemPlacement(input, input.id);
+      if (placement) {
+        const columns = await this.listBoardColumns(input, placement.boardId);
+        const current = columns.find(
+          (column) => column.id === placement.columnId,
+        );
+        if (current) {
+          const targetColumnId =
+            input.status === 'in_progress'
+              ? claimTargetColumn({
+                  columns: columns.map((column) => ({
+                    id: column.id,
+                    position: column.position,
+                    kind: column.kind,
+                  })),
+                  currentColumnId: current.id,
+                })
+              : columns
+                  .filter((column) => isDoneColumn(column))
+                  .sort((left, right) => left.position - right.position)[0]
+                  ?.id ?? null;
+          const target = targetColumnId
+            ? columns.find((column) => column.id === targetColumnId)
+            : undefined;
+          const canMoveToDone =
+            input.status !== 'done' ||
+            current.kind === 'todo' ||
+            current.kind === 'doing';
+          if (
+            target &&
+            current.kind !== null &&
+            target.kind !== null &&
+            canMoveToDone
+          )
+            move = {
+              boardId: placement.boardId,
+              fromColumnId: current.id,
+              fromKind: current.kind,
+              toColumnId: target.id,
+              toKind: target.kind,
+            };
+        }
+      }
+    }
+
     const result = await this.db.query<WorkItemRow>(
-      `UPDATE product_work_items SET
-         title=COALESCE($4,title),
-         description=CASE WHEN $5::boolean THEN $6 ELSE description END,
-         status=COALESCE($7,status),
-         assignee_id=CASE WHEN $8::boolean THEN $9 ELSE assignee_id END,
-         mentions=COALESCE($10::jsonb,mentions),
-         updated_at=$11
-       WHERE tenant_id=$1 AND workspace_id=$2 AND id=$3
-       RETURNING *`,
+      `WITH updated AS (
+         UPDATE product_work_items SET
+           title=COALESCE($4,title),
+           description=CASE WHEN $5::boolean THEN $6 ELSE description END,
+           status=COALESCE($7,status),
+           assignee_id=CASE WHEN $8::boolean THEN $9 ELSE assignee_id END,
+           mentions=COALESCE($10::jsonb,mentions),
+           updated_at=$11
+         WHERE tenant_id=$1 AND workspace_id=$2 AND id=$3
+         RETURNING *
+       ), moved AS (
+         UPDATE product_work_board_placements p
+            SET column_id=$13,updated_at=$11
+          WHERE $12::boolean
+            AND p.tenant_id=$1 AND p.workspace_id=$2 AND p.work_item_id=$3
+            AND p.board_id=$14 AND p.column_id=$15
+            AND EXISTS (SELECT 1 FROM updated)
+            AND EXISTS (
+              SELECT 1
+                FROM product_work_board_columns source
+               WHERE source.tenant_id=$1 AND source.workspace_id=$2
+                 AND source.board_id=$14 AND source.id=$15
+                 AND source.kind=$17
+            )
+            AND EXISTS (
+              SELECT 1
+                FROM product_work_board_columns target
+               WHERE target.tenant_id=$1 AND target.workspace_id=$2
+                 AND target.board_id=$14 AND target.id=$13
+                 AND target.kind=$16
+            )
+         RETURNING p.column_id
+       )
+       SELECT updated.*,(SELECT column_id FROM moved) AS moved_to_column_id
+         FROM updated`,
       [
         input.tenantId,
         input.workspaceId,
@@ -178,6 +260,12 @@ export class PostgresWorkOrganizationRepository implements WorkOrganizationRepos
         input.assigneeId ?? null,
         input.mentions ? JSON.stringify(input.mentions) : null,
         input.now,
+        move !== null,
+        move?.toColumnId ?? null,
+        move?.boardId ?? null,
+        move?.fromColumnId ?? null,
+        move?.toKind ?? null,
+        move?.fromKind ?? null,
       ],
     );
     const row = result.rows?.[0];

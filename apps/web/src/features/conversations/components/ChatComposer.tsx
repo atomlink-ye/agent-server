@@ -1,4 +1,4 @@
-import { IClip, ISend } from '../../../components/icons';
+import { ISend } from '../../../components/icons';
 
 export interface ChatComposerProps {
   readonly draft: string;
@@ -65,20 +65,6 @@ export function ChatComposer({
           }}
         />
         <div className="composer-actions">
-          <div className="disabled-conversation-action">
-            <button
-              className="composer-tool"
-              type="button"
-              aria-label="Attach a file"
-              aria-describedby="conversation-attachments-reason"
-              disabled
-            >
-              <IClip aria-hidden="true" />
-            </button>
-            <span id="conversation-attachments-reason" role="tooltip">
-              File attachments aren’t available in conversations yet.
-            </span>
-          </div>
           <button
             className="send-button"
             type="submit"

@@ -10,7 +10,7 @@ import { ChatComposer } from './ChatComposer';
   }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-it('explains why disabled conversation actions cannot be used', async () => {
+it('does not expose an attachment control without an attachment action', async () => {
   const host = document.createElement('div');
   document.body.append(host);
   const root = createRoot(host);
@@ -29,14 +29,8 @@ it('explains why disabled conversation actions cannot be used', async () => {
     );
   });
   try {
-    const attach = host.querySelector<HTMLButtonElement>('.composer-tool');
-    expect(attach?.disabled).toBe(true);
-    expect(attach?.getAttribute('aria-describedby')).toBe(
-      'conversation-attachments-reason',
-    );
-    expect(host.textContent).toContain(
-      'File attachments aren’t available in conversations yet.',
-    );
+    expect(host.querySelector('.composer-tool')).toBeNull();
+    expect(host.querySelector('[role="tooltip"]')).toBeNull();
   } finally {
     await act(async () => root.unmount());
     host.remove();

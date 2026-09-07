@@ -139,7 +139,7 @@ export function WorkPane({
           data-testid="work-list-empty"
           role="status"
         >
-          <p>Nothing is available yet.</p>
+          <p>No Work records yet.</p>
           <button type="button" onClick={onCreateNew}>
             New Work
           </button>

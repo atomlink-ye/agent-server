@@ -37,6 +37,7 @@ import type { ResourceModule } from '../../composition/create-resource-capabilit
 import type { ConversationRepository } from '../../application/ports/conversation-repository.js';
 import type { ChatDispatchRepository } from '../../application/ports/chat-dispatch-repository.js';
 import type { ConversationWorkEntitlementRepository } from '../../application/ports/conversation-work-entitlement-repository.js';
+import type { WorkspaceMembershipRepository } from '../../application/ports/workspace-membership-repository.js';
 import { registerConversationRoutes } from './routes/conversations.js';
 import type { WhisperRepository } from '../../application/ports/whisper-repository.js';
 import { registerWhisperRoutes } from './routes/whispers.js';
@@ -59,6 +60,7 @@ export interface AppDependencies {
   readonly conversations?: ConversationRepository;
   readonly chatDispatches?: ChatDispatchRepository;
   readonly conversationWorkEntitlements?: ConversationWorkEntitlementRepository;
+  readonly workspaceMembers?: WorkspaceMembershipRepository;
   readonly whispers?: WhisperRepository;
   readonly submitSessionTurn: SubmitSessionTurn;
   readonly events: RunEventRepository;
@@ -168,6 +170,9 @@ export function createHttpApp(
       ...(productWorkSurfaceComposed &&
       dependencies.conversationWorkEntitlements
         ? { workEntitlements: dependencies.conversationWorkEntitlements }
+        : {}),
+      ...(dependencies.workspaceMembers
+        ? { workspaceMembers: dependencies.workspaceMembers }
         : {}),
     });
   }

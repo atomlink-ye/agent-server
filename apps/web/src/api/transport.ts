@@ -1,24 +1,34 @@
 const USER_ID_HEADER = 'x-agent-server-user-id';
 const USER_ID_STORAGE_KEY = 'agent-server.user-id';
 
+let pageUserId: string | null = null;
+
 /**
- * There is no real login/session mechanism yet -- this is a stable
- * per-browser identifier so writes made through the UI can be attributed to
- * a human principal (`principalType: 'user'`) instead of the shared
- * service-account token every browser request otherwise authenticates as.
- * Falls back to a fixed dev id when `localStorage` is unavailable (SSR,
- * private-mode restrictions).
+ * Identifies the person using this browser. There is no login yet, so the
+ * identifier is minted here and kept in `localStorage`; the API treats it as a
+ * real human principal (`principalType: 'user'`) and admits them to the
+ * workspace on first contact.
+ *
+ * When `localStorage` is unavailable the identifier lives only as long as the
+ * page. It is deliberately never a fixed constant: two people whose browsers
+ * both refuse storage must not collapse into one principal and inherit each
+ * other's conversations.
  */
 function resolveUserId(): string {
   try {
     const existing = window.localStorage.getItem(USER_ID_STORAGE_KEY);
     if (existing) return existing;
-    const generated = `local-dev-user-${crypto.randomUUID()}`;
+    const generated = newUserId();
     window.localStorage.setItem(USER_ID_STORAGE_KEY, generated);
     return generated;
   } catch {
-    return 'local-dev-user';
+    pageUserId ??= newUserId();
+    return pageUserId;
   }
+}
+
+function newUserId(): string {
+  return `user-${crypto.randomUUID()}`;
 }
 
 export class ApiTransportError extends Error {

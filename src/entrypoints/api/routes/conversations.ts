@@ -1,4 +1,4 @@
-import type { Hono } from 'hono';
+import type { Hono, MiddlewareHandler } from 'hono';
 import { z } from 'zod';
 import type { Conversation } from '../../../domain/chat/conversation.js';
 import type { ChatMessage } from '../../../domain/chat/chat-message.js';
@@ -7,10 +7,12 @@ import type { ChatDispatchRepository } from '../../../application/ports/chat-dis
 import type { ConversationWorkEntitlementRepository } from '../../../application/ports/conversation-work-entitlement-repository.js';
 import type { ManagedAgentDefinitionRead } from '../../../application/ports/agent-registry.js';
 import { EnsureCoworkerConversation } from '../../../application/chat/ensure-coworker-conversation.js';
+import { AdmitWorkspaceMember } from '../../../application/workspaces/admit-workspace-member.js';
+import type { WorkspaceMembershipRepository } from '../../../application/ports/workspace-membership-repository.js';
 import { postConversationMessage } from '../../../application/chat/post-conversation-message.js';
 import { enqueueChatDispatchForMessage } from '../../../application/chat/enqueue-chat-dispatch.js';
 import { ServiceAccountAuthenticator } from '../../../application/control-plane/service-account-authenticator.js';
-import { getAuthenticatedAccessContext } from '../access-context.js';
+import { getRequestAccessContext } from '../access-context.js';
 import { requireServiceAccountAccess } from '../authentication.js';
 import { readBoundedJson } from '../read-bounded-json.js';
 import type { ApiEnvironment } from '../http-types.js';
@@ -44,6 +46,7 @@ export interface ConversationRouteDependencies {
     'findManagedDefinitionByTenant'
   >;
   readonly workEntitlements?: ConversationWorkEntitlementRepository;
+  readonly workspaceMembers?: WorkspaceMembershipRepository;
 }
 
 export function registerConversationRoutes(
@@ -60,9 +63,17 @@ export function registerConversationRoutes(
   );
   app.use(BASE, auth);
   app.use(`${BASE}/*`, auth);
+  // Registered after `auth` so the effective principal is already resolved,
+  // and before every handler below so a first-time visitor is a workspace
+  // member by the time anything tries to give them Work context.
+  const admission = workspaceAdmission(dependencies.workspaceMembers);
+  if (admission) {
+    app.use(BASE, admission);
+    app.use(`${BASE}/*`, admission);
+  }
 
   app.get(BASE, async (c) => {
-    const access = getAuthenticatedAccessContext(c);
+    const access = getRequestAccessContext(c);
     const conversations = await dependencies.conversations.listConversations({
       tenantId: access.tenantId,
       memberType: 'principal',
@@ -76,7 +87,7 @@ export function registerConversationRoutes(
       await readBoundedJson(c.req.raw, MAX_REQUEST_BYTES),
     );
     if (!parsed.success) throw invalidRequest();
-    const access = getAuthenticatedAccessContext(c);
+    const access = getRequestAccessContext(c);
     const definition =
       await dependencies.managedAgentDefinitions.findManagedDefinitionByTenant({
         tenantId: access.tenantId,
@@ -107,7 +118,7 @@ export function registerConversationRoutes(
 
   app.get(`${BASE}/:conversationId/messages`, async (c) => {
     await requireConversation(c, dependencies);
-    const access = getAuthenticatedAccessContext(c);
+    const access = getRequestAccessContext(c);
     const afterSequence = parseAfterSequence(c.req.query('after_sequence'));
     const messages = await dependencies.conversations.listMessages({
       tenantId: access.tenantId,
@@ -130,7 +141,7 @@ export function registerConversationRoutes(
       await readBoundedJson(c.req.raw, MAX_REQUEST_BYTES),
     );
     if (!parsed.success) throw invalidRequest();
-    const access = getAuthenticatedAccessContext(c);
+    const access = getRequestAccessContext(c);
     const agentDefinitionId = deriveDirectAgentDefinitionId(
       conversation,
       access.principalId,
@@ -198,7 +209,7 @@ export function registerConversationRoutes(
       await readBoundedJson(c.req.raw, MAX_REQUEST_BYTES),
     );
     if (!parsed.success) throw invalidRequest();
-    const access = getAuthenticatedAccessContext(c);
+    const access = getRequestAccessContext(c);
     await dependencies.conversations.markRead({
       tenantId: access.tenantId,
       conversationId: c.req.param('conversationId'),
@@ -214,11 +225,22 @@ export function registerConversationRoutes(
   });
 }
 
+function workspaceAdmission(
+  members: WorkspaceMembershipRepository | undefined,
+): MiddlewareHandler<ApiEnvironment> | null {
+  if (!members) return null;
+  const admit = new AdmitWorkspaceMember(members);
+  return async (c, next) => {
+    await admit.execute(getRequestAccessContext(c));
+    await next();
+  };
+}
+
 async function requireConversation(
   c: any,
   dependencies: ConversationRouteDependencies,
 ): Promise<Conversation> {
-  const access = getAuthenticatedAccessContext(c);
+  const access = getRequestAccessContext(c);
   const conversation = await dependencies.conversations.getConversation({
     tenantId: access.tenantId,
     conversationId: c.req.param('conversationId'),
@@ -236,7 +258,7 @@ async function unreadFor(
   readonly lastReadSequence: number;
   readonly unreadCount: number;
 }> {
-  const access = getAuthenticatedAccessContext(c);
+  const access = getRequestAccessContext(c);
   return dependencies.conversations.getUnread({
     tenantId: access.tenantId,
     conversationId: c.req.param('conversationId'),
@@ -319,7 +341,7 @@ async function enableConversationWorkContext(
       'conversation_work_context_unavailable',
       'Work context is available only for direct conversations.',
     );
-  const access = getAuthenticatedAccessContext(c);
+  const access = getRequestAccessContext(c);
   const entitlement = await dependencies.workEntitlements.enable({
     tenantId: access.tenantId,
     conversationId: conversation.id,
@@ -347,7 +369,7 @@ async function revokeConversationWorkContext(
       'The requested route does not exist.',
     );
   await requireConversation(c, dependencies);
-  const access = getAuthenticatedAccessContext(c);
+  const access = getRequestAccessContext(c);
   await dependencies.workEntitlements.revoke({
     tenantId: access.tenantId,
     conversationId: c.req.param('conversationId'),

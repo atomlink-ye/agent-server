@@ -1,4 +1,7 @@
-import { SERVICE_ACCOUNT_PRINCIPAL_TYPE } from '../../domain/access-context.js';
+import {
+  SERVICE_ACCOUNT_PRINCIPAL_TYPE,
+  USER_PRINCIPAL_TYPE,
+} from '../../domain/access-context.js';
 import type { ConversationWorkEntitlement } from '../../domain/chat/conversation-work-entitlement.js';
 import type { ConversationWorkEntitlementRepository } from '../../application/ports/conversation-work-entitlement-repository.js';
 
@@ -32,7 +35,7 @@ export class PostgresConversationWorkEntitlementRepository implements Conversati
     readonly principalType: string;
     readonly principalId: string;
   }): Promise<ConversationWorkEntitlement | null> {
-    if (input.principalType !== SERVICE_ACCOUNT_PRINCIPAL_TYPE) return null;
+    if (!isEntitlementPrincipalType(input.principalType)) return null;
     const now = new Date().toISOString();
     // The admission predicates are deliberately in the write query. A route
     // pre-read cannot substitute for these direct/member/workspace checks.
@@ -57,9 +60,9 @@ export class PostgresConversationWorkEntitlementRepository implements Conversati
                AND agent.member_type='agent_definition'
           )
           AND EXISTS (
-            SELECT 1 FROM workspaces w
-             WHERE w.id=$3 AND w.tenant_id=$1
-               AND w.principal_type=$4 AND w.principal_id=$5
+            SELECT 1 FROM workspace_members m
+             WHERE m.workspace_id=$3 AND m.tenant_id=$1
+               AND m.principal_type=$4 AND m.principal_id=$5
           )
        ON CONFLICT (tenant_id,conversation_id) DO UPDATE
          SET workspace_id=EXCLUDED.workspace_id,
@@ -128,7 +131,6 @@ export class PostgresConversationWorkEntitlementRepository implements Conversati
            ON c.id=e.conversation_id AND c.tenant_id=e.tenant_id
         WHERE e.tenant_id=$1 AND e.conversation_id=$2
           AND c.kind='direct'
-          AND e.principal_type='service_account'
           AND EXISTS (
             SELECT 1 FROM conversation_members principal
              WHERE principal.conversation_id=e.conversation_id
@@ -145,10 +147,10 @@ export class PostgresConversationWorkEntitlementRepository implements Conversati
                AND agent.member_id=$3
           )
           AND EXISTS (
-            SELECT 1 FROM workspaces w
-             WHERE w.id=e.workspace_id AND w.tenant_id=e.tenant_id
-               AND w.principal_type=e.principal_type
-               AND w.principal_id=e.principal_id
+            SELECT 1 FROM workspace_members m
+             WHERE m.workspace_id=e.workspace_id AND m.tenant_id=e.tenant_id
+               AND m.principal_type=e.principal_type
+               AND m.principal_id=e.principal_id
           )`,
       [input.tenantId, input.conversationId, input.agentDefinitionId],
     );
@@ -162,11 +164,32 @@ function mapEntitlement(row: EntitlementRow): ConversationWorkEntitlement {
     tenantId: row.tenant_id,
     conversationId: row.conversation_id,
     workspaceId: row.workspace_id,
-    principalType: SERVICE_ACCOUNT_PRINCIPAL_TYPE,
+    principalType: entitlementPrincipalType(row.principal_type),
     principalId: row.principal_id,
     createdAt: toIso(row.created_at),
     updatedAt: toIso(row.updated_at),
   });
+}
+
+type EntitlementPrincipalType =
+  typeof SERVICE_ACCOUNT_PRINCIPAL_TYPE | typeof USER_PRINCIPAL_TYPE;
+
+function isEntitlementPrincipalType(
+  value: string,
+): value is EntitlementPrincipalType {
+  return (
+    value === SERVICE_ACCOUNT_PRINCIPAL_TYPE || value === USER_PRINCIPAL_TYPE
+  );
+}
+
+/**
+ * The stored value is constrained by the table CHECK, so anything else means
+ * the row was written outside the schema and must not be trusted as an actor.
+ */
+function entitlementPrincipalType(value: string): EntitlementPrincipalType {
+  if (!isEntitlementPrincipalType(value))
+    throw new Error('conversation_work_entitlement_principal_type_unknown');
+  return value;
 }
 
 function toIso(value: string | Date): string {

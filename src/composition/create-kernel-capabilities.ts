@@ -13,6 +13,7 @@ import { PostgresChatDispatchRepository } from '../infrastructure/postgres/postg
 import { PostgresChannelRepository } from '../infrastructure/postgres/postgres-channel-repository.js';
 import { PostgresConversationRepository } from '../infrastructure/postgres/postgres-conversation-repository.js';
 import { PostgresConversationWorkEntitlementRepository } from '../infrastructure/postgres/postgres-conversation-work-entitlement-repository.js';
+import { PostgresWorkspaceMembershipRepository } from '../infrastructure/postgres/postgres-workspace-membership-repository.js';
 import { PostgresLarkReviewSurfaceRepository } from '../infrastructure/postgres/postgres-lark-review-surface-repository.js';
 import { PostgresRunEventRepository } from '../infrastructure/postgres/postgres-run-event-repository.js';
 import { PostgresRunRepository } from '../infrastructure/postgres/postgres-run-repository.js';
@@ -31,6 +32,7 @@ export interface KernelCapabilities {
   readonly sessions: PostgresSessionRepository;
   readonly conversations?: PostgresConversationRepository;
   readonly conversationWorkEntitlements?: PostgresConversationWorkEntitlementRepository;
+  readonly workspaceMembers: PostgresWorkspaceMembershipRepository;
   readonly chatDispatches?: PostgresChatDispatchRepository;
   readonly submitSessionTurn: SubmitSessionTurn;
   readonly channelRepository: PostgresChannelRepository;
@@ -67,6 +69,9 @@ export function createKernelCapabilities(
     directChatEnabled && productWorkEnabled
       ? new PostgresConversationWorkEntitlementRepository(options.pool)
       : undefined;
+  const workspaceMembers = new PostgresWorkspaceMembershipRepository(
+    options.pool,
+  );
   const chatDispatches = directChatEnabled
     ? new PostgresChatDispatchRepository(options.pool)
     : undefined;
@@ -97,6 +102,7 @@ export function createKernelCapabilities(
     sessions,
     ...(conversations ? { conversations } : {}),
     ...(conversationWorkEntitlements ? { conversationWorkEntitlements } : {}),
+    workspaceMembers,
     ...(chatDispatches ? { chatDispatches } : {}),
     submitSessionTurn,
     channelRepository,

@@ -127,6 +127,41 @@ describe('browser-safe Vite facade', () => {
     expect(JSON.stringify(body)).not.toContain('provider_session');
   });
 
+  it('carries the browser human identity upstream instead of collapsing everyone into the service account', async () => {
+    process.env.AGENT_SERVER_SERVICE_TOKEN = SERVICE_TOKEN;
+    const seen: (string | null)[] = [];
+    const upstream = vi.fn(
+      async (_input: string | URL | Request, init?: RequestInit) => {
+        seen.push(new Headers(init?.headers).get('x-agent-server-user-id'));
+        return new Response(JSON.stringify({ conversations: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      },
+    );
+    vi.stubGlobal('fetch', upstream);
+    const app = appWithBrowserRoutes();
+
+    expect(
+      (
+        await app.request('/api/conversations', {
+          headers: { 'x-agent-server-user-id': 'person-a' },
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await app.request('/api/conversations', {
+          headers: { 'x-agent-server-user-id': '   ' },
+        })
+      ).status,
+    ).toBe(200);
+    expect((await app.request('/api/conversations')).status).toBe(200);
+
+    // A blank header is no identity at all, so it must not travel as one.
+    expect(seen).toEqual(['person-a', null, null]);
+  });
+
   it('preserves dispatch presentation and the original brief through the browser facade', async () => {
     process.env.AGENT_SERVER_SERVICE_TOKEN = SERVICE_TOKEN;
     const dispatch = {

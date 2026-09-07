@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import type {
   WorkItemDetailDto,
   WorkItemStatus,
@@ -7,6 +7,7 @@ import type {
 import { WORK_ITEM_NOT_FOUND_CODE } from '@atomlink-ye/agent-server/product-contract';
 
 import TitleBar from '../../app/shell/TitleBar';
+import { NotFoundContent } from '../../app/router/NotFoundPage';
 import { loadCoworkers } from '../agents/agents-gateway';
 import type { Coworker } from '../agents/contracts';
 import {
@@ -356,18 +357,15 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
               <h1>Loading the selected Task…</h1>
             </div>
           ) : selectionStatus === 'not_found' ? (
-            <div className="work-main-empty" data-testid="tasks-not-found">
-              <span className="work-main-icon" aria-hidden="true">
-                ☑
-              </span>
-              <h1>The selected Task is unavailable.</h1>
-              <p>
-                This Task may have been deleted or moved out of the current
-                workspace.
-              </p>
-              <button type="button" onClick={() => navigate('/tasks')}>
-                Back to Tasks
-              </button>
+            <div data-testid="tasks-not-found">
+              <NotFoundContent
+                title="This Task is unavailable."
+                to="/tasks"
+                linkLabel="Back to Tasks"
+                eyebrow="Task unavailable"
+              >
+                It may have been removed, or you may not have access.
+              </NotFoundContent>
             </div>
           ) : selectionStatus === 'error' ? (
             <div className="work-main-empty" data-testid="tasks-selected-error">
@@ -376,6 +374,7 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
               </span>
               <h1>Unable to load Tasks</h1>
               <p>{TASKS_LOAD_ERROR}</p>
+              <Link to="/tasks">Back to Tasks</Link>
               <button type="button" onClick={() => void load()}>
                 Try again
               </button>

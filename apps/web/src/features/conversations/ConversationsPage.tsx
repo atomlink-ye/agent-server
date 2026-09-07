@@ -18,6 +18,7 @@ import {
 } from './stores/conversations';
 import { createMessagesStore, type MessagesStore } from './stores/messages';
 import { conversationPath, workPath } from '../../app/routes';
+import { NotFoundContent } from '../../app/router/NotFoundPage';
 
 export interface ConversationsPageProps {
   readonly commands: ChatCommands;
@@ -70,19 +71,39 @@ export function ConversationsPage({
     messageStore.subscribe,
     messageStore.getSnapshot,
   );
-  const conversationId = selection.selectedConversationId;
+  const hasCompletedConversationList = useRef(false);
+  if (conversationState.status === 'ready') {
+    hasCompletedConversationList.current = true;
+  }
+  const routeConversationExists =
+    routeConversationId !== null &&
+    conversationState.conversations.some(
+      ({ id }) => id === routeConversationId,
+    );
+  const conversationId = routeConversationId
+    ? hasCompletedConversationList.current && routeConversationExists
+      ? routeConversationId
+      : null
+    : selection.selectedConversationId;
   const messageState = conversationId
     ? (allMessageStates[conversationId] ??
       messageStore.getConversation(conversationId))
     : null;
+  const messageNotFound = messageState?.status === 'not_found';
   const selectedConversation = conversationId
     ? conversationState.conversations.find(({ id }) => id === conversationId)
     : undefined;
+  const routeConversationMissing =
+    routeConversationId !== null &&
+    hasCompletedConversationList.current &&
+    !conversationState.conversations.some(
+      ({ id }) => id === routeConversationId,
+    );
   const selectedConversationMissing =
-    (routeConversationId !== null &&
-      conversationState.status === 'ready' &&
-      selectedConversation === undefined) ||
-    messageState?.status === 'not_found';
+    routeConversationId !== null &&
+    hasCompletedConversationList.current &&
+    (messageNotFound ||
+      (conversationState.status !== 'error' && routeConversationMissing));
 
   useEffect(() => {
     void conversationListStore.load(commands.loadConversations);
@@ -187,12 +208,12 @@ export function ConversationsPage({
   ]);
 
   useEffect(() => {
-    if (!conversationId) return;
+    if (!conversationId || messageNotFound) return;
     void messageStore.load(conversationId, commands.loadMessages);
-  }, [commands.loadMessages, conversationId, messageStore]);
+  }, [commands.loadMessages, conversationId, messageNotFound, messageStore]);
 
   useEffect(() => {
-    if (!conversationId) return;
+    if (!conversationId || messageNotFound) return;
 
     let disposed = false;
     let visibilityGeneration = 0;
@@ -258,7 +279,7 @@ export function ConversationsPage({
       stopPolling();
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [commands.loadMessages, conversationId, messageStore]);
+  }, [commands.loadMessages, conversationId, messageNotFound, messageStore]);
 
   const send = useCallback(
     async (body: string): Promise<void> => {
@@ -364,33 +385,50 @@ export function ConversationsPage({
               <p>Loading conversations…</p>
             </div>
           ) : conversationState.status === 'error' &&
-            conversationState.conversations.length === 0 ? (
+            (conversationState.conversations.length === 0 ||
+              routeConversationId !== null) ? (
             <div className="empty-chat" role="alert">
-              <p>
-                {conversationState.error ?? 'Unable to load conversations.'}
-              </p>
-              <button
-                type="button"
-                onClick={() =>
-                  void conversationListStore.load(commands.loadConversations)
-                }
-              >
-                Retry
-              </button>
+              {routeConversationId !== null ? (
+                <NotFoundContent
+                  title="This Conversation couldn’t be loaded."
+                  to="/"
+                  linkLabel="Back to Conversations"
+                  eyebrow="Conversation unavailable"
+                  onRetry={() =>
+                    void conversationListStore.load(commands.loadConversations)
+                  }
+                  mark="!"
+                >
+                  Try again in a moment, or return to Conversations.
+                </NotFoundContent>
+              ) : (
+                <>
+                  <p>
+                    {conversationState.error ?? 'Unable to load conversations.'}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void conversationListStore.load(
+                        commands.loadConversations,
+                      )
+                    }
+                  >
+                    Retry
+                  </button>
+                </>
+              )}
             </div>
           ) : selectedConversationMissing ? (
-            <div className="empty-chat" data-testid="conversation-not-found">
-              <div className="empty-chat-icon" aria-hidden="true">
-                <span>✦</span>
-              </div>
-              <h1>The selected Conversation is unavailable.</h1>
-              <p>
-                This Conversation may have been deleted or moved out of this
-                workspace.
-              </p>
-              <button type="button" onClick={() => navigate('/')}>
-                Back to Conversations
-              </button>
+            <div data-testid="conversation-not-found">
+              <NotFoundContent
+                title="This Conversation is unavailable."
+                to="/"
+                linkLabel="Back to Conversations"
+                eyebrow="Conversation unavailable"
+              >
+                It may have been removed, or you may not have access.
+              </NotFoundContent>
             </div>
           ) : (
             <>

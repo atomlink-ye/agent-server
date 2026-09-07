@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import type { WorkListItem } from '@atomlink-ye/agent-server/product-contract';
 
 import { ArtifactsPane } from '../components/panes/artifacts-pane';
@@ -12,6 +13,8 @@ import { WorkTabs } from '../components/work-tabs';
 import { normalizeWorkTab } from '../components/work-presentation';
 import { workRootPath } from '../../../app/routes';
 import { useWorkDetail } from '../queries/use-work-detail';
+import { WorkDetailRootNotFoundError } from '../queries/load-work-detail';
+import { NotFoundContent } from '../../../app/router/NotFoundPage';
 import '../components/work-shell.css';
 import '../components/work-list.css';
 import '../components/work-detail.css';
@@ -118,7 +121,10 @@ export function WorkDetailPage({
         </p>
       ) : null}
       {query.status === 'error' ? (
-        <WorkDetailError originConversationId={originConversationId} />
+        <WorkDetailError
+          error={query.error}
+          originConversationId={originConversationId}
+        />
       ) : null}
       {detail ? (
         <>
@@ -148,17 +154,35 @@ export function WorkDetailPage({
 }
 
 function WorkDetailError({
+  error,
   originConversationId,
 }: {
+  readonly error: unknown | null;
   readonly originConversationId?: string | null;
 }) {
+  const rootWorkMissing = error instanceof WorkDetailRootNotFoundError;
+  if (rootWorkMissing) {
+    return (
+      <NotFoundContent
+        title="This Work is unavailable."
+        to={workRootPath(originConversationId ?? null)}
+        linkLabel="Back to Work"
+        eyebrow="Work unavailable"
+      >
+        It may have been removed, or you may not have access.
+      </NotFoundContent>
+    );
+  }
+
   return (
     <section className="work-list-state work-list-state--error" role="alert">
       <p className="work-list-state__eyebrow">Couldn't load Work</p>
-      <h2>The selected Work or Run is unavailable.</h2>
-      <p>Return to My Work or retry loading this Work.</p>
+      <h2>This Work couldn’t be loaded.</h2>
+      <p>Try again in a moment, or return to Work.</p>
       <div className="work-status-actions">
-        <a href={workRootPath(originConversationId ?? null)}>Back to My Work</a>
+        <Link to={workRootPath(originConversationId ?? null)}>
+          Back to Work
+        </Link>
         <button type="button" onClick={() => window.location.reload()}>
           Retry loading
         </button>

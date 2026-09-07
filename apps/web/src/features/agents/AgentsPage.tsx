@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 
 import { createConversation } from '../conversations/conversations-gateway';
 import { ApiTransportError } from '../../api/transport';
+import { isResourceNotFound } from '../../api/feature-availability';
+import { NotFoundContent } from '../../app/router/NotFoundPage';
 import {
   loadCoworkers,
   loadCoworkerProfile,
@@ -51,15 +53,14 @@ const RUNTIME_STATUS_LABEL: Record<Coworker['runtimeStatus'], string> = {
 };
 
 export function AgentsPage() {
-  const location = useLocation();
   const navigate = useNavigate();
-  const selectedAgentId = useMemo(() => {
-    const match = location.pathname.match(/^\/agents\/([^/]+)$/u);
-    return match?.[1] ? decodeURIComponent(match[1]) : null;
-  }, [location.pathname]);
+  const { agentId: selectedAgentId } = useParams<{ agentId?: string }>();
   const [agents, setAgents] = useState<readonly Coworker[]>([]);
   const [profile, setProfile] = useState<CoworkerProfile | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [profileStatus, setProfileStatus] = useState<
+    'idle' | 'loading' | 'ready' | 'not_found' | 'error'
+  >('idle');
   const [loading, setLoading] = useState(true);
   const [opening, setOpening] = useState(false);
   const [authoring, setAuthoring] = useState<'coworker' | 'capability' | null>(
@@ -76,6 +77,7 @@ export function AgentsPage() {
   useEffect(() => {
     let active = true;
     setLoading(true);
+    setError(null);
     void loadCoworkers().then(
       (items) => {
         if (!active) return;
@@ -88,7 +90,7 @@ export function AgentsPage() {
       },
       (reason: unknown) => {
         if (!active) return;
-        setError(reason instanceof Error ? reason.message : String(reason));
+        setError('Unable to load Agents. Check your connection and try again.');
         setLoading(false);
       },
     );
@@ -100,15 +102,24 @@ export function AgentsPage() {
   useEffect(() => {
     if (!selectedAgentId) {
       setProfile(null);
+      setProfileStatus('idle');
       return;
     }
     let active = true;
-    setError(null);
+    setProfile(null);
+    setProfileStatus('loading');
     void loadCoworkerProfile(selectedAgentId).then(
-      (next) => active && setProfile(next),
-      (reason: unknown) =>
-        active &&
-        setError(reason instanceof Error ? reason.message : String(reason)),
+      (next) => {
+        if (!active) return;
+        setProfile(next);
+        setProfileStatus('ready');
+      },
+      (reason: unknown) => {
+        if (!active) return;
+        setProfileStatus(
+          isResourceNotFound(reason, 'agent_not_found') ? 'not_found' : 'error',
+        );
+      },
     );
     return () => {
       active = false;
@@ -263,7 +274,35 @@ export function AgentsPage() {
                 {error}
               </p>
             ) : null}
-            {!profile ? (
+            {profileStatus === 'not_found' ? (
+              <NotFoundContent
+                title="This Agent is unavailable."
+                to="/agents"
+                linkLabel="Back to Agents"
+                eyebrow="Agent unavailable"
+              >
+                It may have been removed, or you may not have access.
+              </NotFoundContent>
+            ) : profileStatus === 'error' ? (
+              <NotFoundContent
+                title="This Agent couldn’t be loaded."
+                to="/agents"
+                linkLabel="Back to Agents"
+                eyebrow="Agent unavailable"
+                onRetry={() => setReload((value) => value + 1)}
+                mark="!"
+              >
+                Try again in a moment, or return to Agents.
+              </NotFoundContent>
+            ) : profileStatus === 'loading' ? (
+              <div className="work-main-empty" role="status">
+                <span className="work-main-icon" aria-hidden="true">
+                  ◎
+                </span>
+                <h1>Loading Agent…</h1>
+                <p>Opening this Agent&apos;s profile.</p>
+              </div>
+            ) : !profile ? (
               <div className="work-main-empty">
                 <span className="work-main-icon">◎</span>
                 <h1>

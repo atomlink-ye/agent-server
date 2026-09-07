@@ -17,7 +17,11 @@ import {
   type ConversationsStore,
 } from './stores/conversations';
 import { createMessagesStore, type MessagesStore } from './stores/messages';
-import { conversationPath, workPath } from '../../app/routes';
+import {
+  conversationPath,
+  isConversationsRootPath,
+  workPath,
+} from '../../app/routes';
 import { NotFoundContent } from '../../app/router/NotFoundPage';
 
 export interface ConversationsPageProps {
@@ -185,7 +189,7 @@ export function ConversationsPage({
 
     const selected = appSelectionStore.getSnapshot().selectedConversationId;
     if (!selected && initialSelectionResolved.current) return;
-    if (!selected && location.pathname !== '/') return;
+    if (!selected && !isConversationsRootPath(location.pathname)) return;
     const selectedExists = selected
       ? conversations.some(({ id }) => id === selected)
       : false;
@@ -194,7 +198,7 @@ export function ConversationsPage({
       : conversations[0]!.id;
     appSelectionStore.select(nextConversationId);
     initialSelectionResolved.current = true;
-    if (location.pathname === '/') {
+    if (isConversationsRootPath(location.pathname)) {
       navigate(conversationPath(nextConversationId), { replace: true });
     }
   }, [

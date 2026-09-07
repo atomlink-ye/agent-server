@@ -9,6 +9,7 @@ import { WORK_BOARD_NOT_FOUND_CODE } from '@atomlink-ye/agent-server/product-con
 
 import TitleBar from '../../app/shell/TitleBar';
 import { NotFoundContent } from '../../app/router/NotFoundPage';
+import { isValidDetailId } from '../../app/router/detail-id';
 import { loadCoworkers } from '../agents/agents-gateway';
 import type { Coworker } from '../agents/contracts';
 import {
@@ -83,6 +84,8 @@ export interface BoardsPageProps {
 
 export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
   const navigate = useNavigate();
+  const invalidBoardId =
+    selectedBoardId !== null && !isValidDetailId('board', selectedBoardId);
   const [boards, setBoards] = useState<readonly WorkBoardDto[]>([]);
   const [snapshot, setSnapshot] = useState<WorkBoardSnapshotDto | null>(null);
   const [listStatus, setListStatus] = useState<ListStatus>('loading');
@@ -117,7 +120,7 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
 
   const loadSnapshot = useCallback(async () => {
     const request = ++selectionRequest.current;
-    if (!selectedBoardId) {
+    if (!selectedBoardId || invalidBoardId) {
       setSnapshot(null);
       setSelectionStatus('idle');
       return;
@@ -145,7 +148,7 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
       });
       setSnapshot(null);
     }
-  }, [selectedBoardId]);
+  }, [invalidBoardId, selectedBoardId]);
 
   useEffect(() => {
     void loadBoards();
@@ -355,6 +358,7 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
             </button>
           </div>
           {error &&
+          !invalidBoardId &&
           selectionStatus !== 'not_found' &&
           selectionStatus !== 'error' ? (
             <div className="work-org-error" role="alert">
@@ -366,7 +370,18 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
               ) : null}
             </div>
           ) : null}
-          {listStatus === 'unavailable' ? (
+          {invalidBoardId ? (
+            <NotFoundContent
+              title="This Board link is invalid."
+              to="/boards"
+              linkLabel="Back to Boards"
+              eyebrow="Board link"
+              mark="!"
+              variant="detail"
+            >
+              Check the link, or return to Boards.
+            </NotFoundContent>
+          ) : listStatus === 'unavailable' ? (
             <div className="work-main-empty" data-testid="boards-unavailable">
               <span className="work-main-icon" aria-hidden="true">
                 ▦

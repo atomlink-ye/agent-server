@@ -14,3 +14,10 @@
   border-color: var(--skype);
   color: var(--skype-deep);
 }
+
+.not-found.not-found--detail {
+  min-height: clamp(260px, 50vh, 540px);
+  max-height: 100%;
+  overflow: auto;
+  border-radius: var(--radius-lg);
+}

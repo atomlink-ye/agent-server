@@ -12,6 +12,7 @@ export function NotFoundContent({
   onRetry,
   retryLabel = 'Try again',
   mark = '404',
+  variant = 'page',
 }: {
   readonly title: string;
   readonly children: ReactNode;
@@ -22,9 +23,13 @@ export function NotFoundContent({
   readonly onRetry?: () => void;
   readonly retryLabel?: string;
   readonly mark?: string;
+  readonly variant?: 'page' | 'detail';
 }) {
   return (
-    <Container className="not-found" aria-labelledby="not-found-title">
+    <Container
+      className={`not-found not-found--${variant}`}
+      aria-labelledby="not-found-title"
+    >
       <div className="not-found__mark" aria-hidden="true">
         {mark}
       </div>

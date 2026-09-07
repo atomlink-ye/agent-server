@@ -8,6 +8,7 @@ import { WORK_ITEM_NOT_FOUND_CODE } from '@atomlink-ye/agent-server/product-cont
 
 import TitleBar from '../../app/shell/TitleBar';
 import { NotFoundContent } from '../../app/router/NotFoundPage';
+import { isValidDetailId } from '../../app/router/detail-id';
 import { loadCoworkers } from '../agents/agents-gateway';
 import type { Coworker } from '../agents/contracts';
 import {
@@ -68,6 +69,8 @@ export interface TasksPageProps {
 
 export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
   const navigate = useNavigate();
+  const invalidWorkItemId =
+    selectedWorkItemId !== null && !isValidDetailId('task', selectedWorkItemId);
   const location = useLocation();
   const [items, setItems] = useState<readonly WorkItemDetailDto[]>([]);
   const [agents, setAgents] = useState<readonly Coworker[]>([]);
@@ -86,7 +89,9 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
   const load = useCallback(async () => {
     const request = ++selectionRequest.current;
     setListStatus('loading');
-    setSelectionStatus(selectedWorkItemId ? 'loading' : 'idle');
+    setSelectionStatus(
+      selectedWorkItemId && !invalidWorkItemId ? 'loading' : 'idle',
+    );
     setError(null);
     try {
       const [nextItems, nextAgents] = await Promise.all([
@@ -97,7 +102,7 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
       setItems(nextItems);
       setAgents(nextAgents);
       setListStatus('ready');
-      if (selectedWorkItemId) {
+      if (selectedWorkItemId && !invalidWorkItemId) {
         const detail = nextItems.find(
           (entry) => entry.work_item.id === selectedWorkItemId,
         );
@@ -125,7 +130,7 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
       if (request !== selectionRequest.current) return;
       setListStatus(isFeatureUnavailable(reason) ? 'unavailable' : 'error');
     }
-  }, [selectedWorkItemId]);
+  }, [invalidWorkItemId, selectedWorkItemId]);
 
   useEffect(() => {
     void load();
@@ -133,7 +138,7 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
 
   const loadComments = useCallback(async () => {
     const request = ++commentsRequest.current;
-    if (!selectedWorkItemId) {
+    if (!selectedWorkItemId || invalidWorkItemId) {
       setComments([]);
       return;
     }
@@ -151,7 +156,7 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
         retry: () => void loadComments(),
       });
     }
-  }, [selectedWorkItemId]);
+  }, [invalidWorkItemId, selectedWorkItemId]);
 
   useEffect(() => {
     void loadComments();
@@ -317,7 +322,7 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
               + New Task
             </button>
           </div>
-          {error && selectionStatus !== 'not_found' ? (
+          {error && !invalidWorkItemId && selectionStatus !== 'not_found' ? (
             <div className="work-org-error" role="alert">
               <p>{error.message}</p>
               {error.retry ? (
@@ -327,7 +332,18 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
               ) : null}
             </div>
           ) : null}
-          {listStatus === 'unavailable' ? (
+          {invalidWorkItemId ? (
+            <NotFoundContent
+              title="This Task link is invalid."
+              to="/tasks"
+              linkLabel="Back to Tasks"
+              eyebrow="Task link"
+              mark="!"
+              variant="detail"
+            >
+              Check the link, or return to Tasks.
+            </NotFoundContent>
+          ) : listStatus === 'unavailable' ? (
             <div className="work-main-empty" data-testid="tasks-unavailable">
               <span className="work-main-icon" aria-hidden="true">
                 ☑

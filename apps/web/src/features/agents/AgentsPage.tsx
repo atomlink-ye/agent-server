@@ -4,6 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { createConversation } from '../conversations/conversations-gateway';
 import { ApiTransportError } from '../../api/transport';
 import { isResourceNotFound } from '../../api/feature-availability';
+import { isValidDetailId } from '../../app/router/detail-id';
 import { NotFoundContent } from '../../app/router/NotFoundPage';
 import {
   loadCoworkers,
@@ -55,6 +56,8 @@ const RUNTIME_STATUS_LABEL: Record<Coworker['runtimeStatus'], string> = {
 export function AgentsPage() {
   const navigate = useNavigate();
   const { agentId: selectedAgentId } = useParams<{ agentId?: string }>();
+  const invalidAgentId =
+    selectedAgentId !== undefined && !isValidDetailId('agent', selectedAgentId);
   const [agents, setAgents] = useState<readonly Coworker[]>([]);
   const [profile, setProfile] = useState<CoworkerProfile | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -100,7 +103,7 @@ export function AgentsPage() {
   }, [navigate, selectedAgentId, reload, authoring]);
 
   useEffect(() => {
-    if (!selectedAgentId) {
+    if (!selectedAgentId || invalidAgentId) {
       setProfile(null);
       setProfileStatus('idle');
       return;
@@ -124,7 +127,7 @@ export function AgentsPage() {
     return () => {
       active = false;
     };
-  }, [selectedAgentId, reload]);
+  }, [invalidAgentId, selectedAgentId, reload]);
 
   async function openConversation(): Promise<void> {
     if (!selectedAgentId || opening) return;
@@ -251,7 +254,7 @@ export function AgentsPage() {
 
       <main className="chat-panel agents-main">
         <TitleBar section="Agents" />
-        {authoring === 'coworker' ? (
+        {authoring === 'coworker' && !invalidAgentId ? (
           <NewCoworkerForm
             onCancel={() => setAuthoring(null)}
             onCreated={({ conversationId }) =>
@@ -259,7 +262,7 @@ export function AgentsPage() {
             }
           />
         ) : null}
-        {authoring === 'capability' && profile ? (
+        {authoring === 'capability' && profile && !invalidAgentId ? (
           <CapabilityBuilder
             agent={profile.agent}
             onCancel={() => setAuthoring(null)}
@@ -267,14 +270,25 @@ export function AgentsPage() {
             onStart={startCapability}
           />
         ) : null}
-        {authoring === null ? (
+        {authoring === null || invalidAgentId ? (
           <section className="agents-detail" aria-label="Agent profile">
-            {error ? (
+            {error && !invalidAgentId ? (
               <p className="agents-error" role="alert">
                 {error}
               </p>
             ) : null}
-            {profileStatus === 'not_found' ? (
+            {invalidAgentId ? (
+              <NotFoundContent
+                title="This Agent link is invalid."
+                to="/agents"
+                linkLabel="Back to Agents"
+                eyebrow="Agent link"
+                mark="!"
+                variant="detail"
+              >
+                Check the link, or return to Agents.
+              </NotFoundContent>
+            ) : profileStatus === 'not_found' ? (
               <NotFoundContent
                 title="This Agent is unavailable."
                 to="/agents"

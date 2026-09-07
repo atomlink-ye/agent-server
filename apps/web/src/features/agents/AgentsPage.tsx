@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import { createConversation } from '../conversations/conversations-gateway';
@@ -14,6 +14,7 @@ import {
 import type { Coworker } from './contracts';
 import { CapabilityBuilder, NewCoworkerForm } from './AuthoringPanels';
 import { CoworkerHomeFiles } from './CoworkerHomeFiles';
+import { CoworkerRecentActivity } from './CoworkerRecentActivity';
 import TitleBar from '../../app/shell/TitleBar';
 import './agents.css';
 
@@ -77,6 +78,13 @@ export function AgentsPage() {
   const visibleAgents = statusFilter
     ? agents.filter((agent) => agent.runtimeStatus === statusFilter)
     : agents;
+  // Recent activity attributes Work through the Coworker's Work Catalog, so
+  // this list is the join key. Memoised on the loaded profile so the activity
+  // fetch keys off the profile rather than every render.
+  const capabilityDefinitionIds = useMemo(
+    () => (profile?.workCatalog ?? []).map((item) => item.definitionId),
+    [profile],
+  );
 
   useEffect(() => {
     let active = true;
@@ -345,7 +353,6 @@ export function AgentsPage() {
                     {profile.agent.displayName.slice(0, 1).toUpperCase()}
                   </span>
                   <div className="agents-profile-copy">
-                    <span className="eyebrow">AI Coworker</span>
                     <h1>{profile.agent.displayName}</h1>
                     <p className="agents-profile-meta">
                       {profile.agent.roleLabel ?? 'Coworker'}
@@ -363,9 +370,14 @@ export function AgentsPage() {
                         </span>
                       ) : null}
                     </p>
-                    {profile.agent.summary ? (
-                      <p className="agents-quote">“{profile.agent.summary}”</p>
-                    ) : null}
+                    {/*
+                      The Coworker's own words appear exactly once on this
+                      page. The former About card repeated this same summary
+                      and pushed the Work capabilities below the fold.
+                    */}
+                    <p className="agents-profile-bio">
+                      {profile.agent.summary ?? 'No summary provided.'}
+                    </p>
                   </div>
                   <div className="agents-profile-actions">
                     <button
@@ -401,73 +413,90 @@ export function AgentsPage() {
                   </div>
                 </header>
 
-                <article className="agents-card agents-about-card">
-                  <h2>About</h2>
-                  <p>{profile.agent.summary ?? 'No summary provided.'}</p>
-                </article>
+                {/*
+                  First screen order answers, top to bottom: who is this
+                  (header), what can I ask it to do (Capabilities), and what
+                  has it done lately (Activity). Context files are supporting
+                  material, so they sit under that pair.
+                */}
+                <div className="agents-first-screen">
+                  <section
+                    className="agents-capabilities"
+                    aria-labelledby="coworker-capabilities-heading"
+                  >
+                    <div className="agents-section-heading">
+                      <div>
+                        <span className="eyebrow">Can do</span>
+                        <h2 id="coworker-capabilities-heading">
+                          Formal capabilities
+                        </h2>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setAuthoring('capability')}
+                      >
+                        + Add capability
+                      </button>
+                    </div>
+                    {profile.workCatalog.length ? (
+                      <div className="agents-capability-grid">
+                        {profile.workCatalog.map((capability) => (
+                          <article
+                            className="agents-card agents-capability-card"
+                            key={capability.definitionId}
+                          >
+                            <div>
+                              <h3>{humanize(capability.name)}</h3>
+                              <p>
+                                {capability.description ??
+                                  'Formal Work capability'}
+                              </p>
+                            </div>
+                            <div className="agents-capability-meta">
+                              <span>
+                                {
+                                  Object.keys(capability.inputSchema.properties)
+                                    .length
+                                }{' '}
+                                inputs
+                              </span>
+                            </div>
+                            <button
+                              className="agents-primary"
+                              type="button"
+                              onClick={() =>
+                                startCapability(capability.definitionVersionId)
+                              }
+                            >
+                              Start Work
+                            </button>
+                          </article>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="agents-empty-capabilities">
+                        <p>This Coworker has no formal Capabilities yet.</p>
+                        <button
+                          type="button"
+                          onClick={() => setAuthoring('capability')}
+                        >
+                          Teach the first capability
+                        </button>
+                      </div>
+                    )}
+                  </section>
+
+                  <CoworkerRecentActivity
+                    key={profile.agent.id}
+                    agentId={profile.agent.id}
+                    capabilityDefinitionIds={capabilityDefinitionIds}
+                  />
+                </div>
 
                 <CoworkerHomeFiles
                   key={profile.agent.id}
                   agent={profile.agent}
                 />
-
-                <div className="agents-section-heading">
-                  <div>
-                    <span className="eyebrow">Can do</span>
-                    <h2>Formal capabilities</h2>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setAuthoring('capability')}
-                  >
-                    + Add capability
-                  </button>
-                </div>
-                {profile.workCatalog.length ? (
-                  <div className="agents-capability-grid">
-                    {profile.workCatalog.map((capability) => (
-                      <article
-                        className="agents-card agents-capability-card"
-                        key={capability.definitionId}
-                      >
-                        <div>
-                          <h3>{humanize(capability.name)}</h3>
-                          <p>
-                            {capability.description ?? 'Formal Work capability'}
-                          </p>
-                        </div>
-                        <div className="agents-capability-meta">
-                          <span>
-                            {
-                              Object.keys(capability.inputSchema.properties)
-                                .length
-                            }{' '}
-                            inputs
-                          </span>
-                        </div>
-                        <button
-                          className="agents-primary"
-                          type="button"
-                          onClick={() =>
-                            startCapability(capability.definitionVersionId)
-                          }
-                        >
-                          Start Work
-                        </button>
-                      </article>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="agents-empty-capabilities">
-                    <p>This Coworker has no formal Capabilities yet.</p>
-                    <button
-                      type="button"
-                      onClick={() => setAuthoring('capability')}
-                    >
-                      Teach the first capability
-                    </button>
-                  </div>
-                )}
 
                 <details className="agents-advanced agents-technical-details">
                   <summary>Advanced · runtime and package details</summary>

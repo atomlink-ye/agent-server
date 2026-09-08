@@ -9,6 +9,7 @@ import { readBoundedJson } from '../read-bounded-json.js';
 import type { ApiEnvironment } from '../http-types.js';
 import type { AppConfig } from '../../../shared/config.js';
 import { HttpError } from '../../../contracts/http.js';
+import { WorkspaceMemberNotFoundError } from '../../../application/ports/workspace-membership-repository.js';
 import {
   AccountResponseSchema,
   SetDisplayNameRequestSchema,
@@ -70,6 +71,8 @@ export function registerAccountRoutes(
         displayName: parsed.data.display_name,
       });
     } catch (error) {
+      if (error instanceof WorkspaceMemberNotFoundError)
+        throw new HttpError(404, error.code, error.message);
       throw new HttpError(
         400,
         'invalid_request',

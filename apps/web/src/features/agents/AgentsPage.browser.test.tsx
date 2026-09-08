@@ -7,6 +7,7 @@ import { AgentsPage } from './AgentsPage';
 import type { Coworker } from './contracts';
 import type { CoworkerProfile } from './agents-gateway';
 import { ApiTransportError } from '../../api/transport';
+import '../../index.css';
 
 const loadCoworkers = vi.fn(async () => [] as readonly Coworker[]);
 const loadCoworkerProfile =
@@ -113,6 +114,48 @@ it('labels the New Coworker action for sighted users', async () => {
     );
     expect(button?.textContent?.trim()).toBe('+ New Coworker');
     expect(button?.classList.contains('pane-refresh')).toBe(false);
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+  }
+});
+
+it('scrolls the real Agents roster to its final Coworker on desktop', async () => {
+  loadCoworkers.mockResolvedValue(
+    Array.from({ length: 48 }, (_, index) => ({
+      id: `123e4567-e89b-42d3-a456-${String(index).padStart(12, '0')}`,
+      displayName: index === 47 ? 'Final real Coworker' : `Coworker ${index}`,
+      roleLabel: 'Research',
+      activeAgentVersionId: 'v1',
+      runtimeStatus: 'available' as const,
+    })),
+  );
+  const host = document.createElement('div');
+  host.style.height = '900px';
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(
+        <MemoryRouter initialEntries={['/agents']}>
+          <div className="app-shell">
+            <AgentsPage />
+          </div>
+        </MemoryRouter>,
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const region = host.querySelector<HTMLElement>('.agents-main')!;
+    expect(region.scrollHeight).toBeGreaterThan(region.clientHeight);
+    region.scrollTop = region.scrollHeight;
+    expect(region.scrollTop).toBeGreaterThan(0);
+    const final = [...region.querySelectorAll('button')].find((item) =>
+      item.textContent?.includes('Final real Coworker'),
+    )!;
+    expect(final.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+      region.getBoundingClientRect().bottom + 1,
+    );
   } finally {
     await act(async () => root.unmount());
     host.remove();

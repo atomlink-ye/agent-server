@@ -1,0 +1,26 @@
+# 桌面端滚动与中文文案修订报告
+
+根因是固定高度且 `overflow: hidden` 的 `.app-shell` 内，`.sidebar`、`.chat-panel` 与 Work 主区等 grid/flex 子项沿途缺少 `min-height: 0`，默认 `min-height: auto` 让长内容撑出可用高度后被根壳裁剪。
+
+布局约定：根壳继续负责裁剪；受限高度链路上的 grid/flex 子项必须允许收缩（`min-width: 0; min-height: 0`）；唯一承接滚动的局部面板使用 `.scroll-region`（`min-width: 0; min-height: 0; overflow: auto`）。网格的可伸缩列使用 `minmax(0, 1fr)`，避免不可断行内容撑破主区。
+
+改动面板与滚动证据：
+
+- Conversations：`.sidebar-section` 与 `.chat-transcript`。
+- Agents：`.agents-list`、`.agents-main`。
+- Files：`.files-scope-list`、`.files-file-list`、`.files-main`，并将文件预览网格主列改为 `minmax(0, 1fr)`。
+- Work：`.work-list`、`.work-main`、`.work-main-content`；后者覆盖 detail、Run transcript 与 Definition 内容。
+- Observe：复用 Work 壳的 `.work-main-content`。
+- Tasks 与 Boards：`.work-org-list` 和 `.work-org-content`。
+- Whispers：`.whispers-list` 和 `.whisper-message-log`。
+
+浏览器证据位于 `apps/web/src/app/shell/scroll-regions.browser.test.ts`。该 Chromium 测试在宽 1440px 的 `.app-shell` 夹具中，为上述每个实际面板类填充足量内容，断言 `scrollHeight > clientHeight`、写入 `scrollTop` 后位置变化，并以每个面板的 `bottom marker` 的实际边界仍落在滚动视口内证明末项可见；另断言长不可断行内容可横向滚动。视觉证据为已忽略的 `.local/scroll-regions-browser.png`，不提交。Settings 页面在当前路由与实现中不存在，因此没有虚构该页面或测试。
+
+中文文案按三组修订：一是统一保留 Work、Run、Board、Workspace、Agent、Coworker、Definition、Capability 等产品对象，同时去除重复或不自然的拼接；二是把任务、Board、Work 状态、Trace 与 Observe 的操作说明改为直接、可执行的中文；三是重写 Coworker 创建、Capability 编写和验证错误提示，减少机译式句法并明确用户下一步。英文词典键和中英文键结构未变。
+
+实际运行的命令：
+
+- `pnpm exec vitest run --config vitest.web.config.ts apps/web/src/app/shell/scroll-regions.browser.test.ts`：通过，1 个 Chromium 测试。
+- `pnpm typecheck`：通过。
+- `pnpm web:check:types`：通过。
+- `pnpm test:web`：通过，48 个测试文件、258 个测试；运行时输出了既有 BoardCanvas 和 AdvancedDefinitionAuthoring 的 `act(...)` 警告，但无失败。实际基线不是要求中提到的 43 个文件、252 个测试。

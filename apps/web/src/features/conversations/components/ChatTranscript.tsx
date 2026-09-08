@@ -374,7 +374,7 @@ export function ChatTranscript({
 
   return (
     <div
-      className="chat-transcript"
+      className="chat-transcript scroll-region"
       aria-live="polite"
       aria-label={t('transcript.label')}
     >

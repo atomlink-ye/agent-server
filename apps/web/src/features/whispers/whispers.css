@@ -1,6 +1,8 @@
 .whispers-list {
   display: flex;
+  flex: 1;
   flex-direction: column;
+  min-height: 0;
   gap: 4px;
   padding: 8px;
   overflow-y: auto;
@@ -33,7 +35,9 @@
 
 .whisper-message-log {
   display: flex;
+  flex: 1;
   flex-direction: column;
+  min-height: 0;
   gap: 10px;
   padding: 16px;
   overflow-y: auto;

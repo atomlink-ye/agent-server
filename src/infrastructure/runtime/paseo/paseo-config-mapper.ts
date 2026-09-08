@@ -14,6 +14,9 @@ export function mapPaseoConfig(
       : {}),
     cwd: config.paseo.agentCwd,
     workspaceTitle: config.paseo.workspaceTitle,
+    ...(config.paseo.codexHome
+      ? { sessionEnvironment: { CODEX_HOME: config.paseo.codexHome } }
+      : {}),
     ...(config.paseo.model
       ? {
           requestedModel: normalizePaseoRequestedModel(

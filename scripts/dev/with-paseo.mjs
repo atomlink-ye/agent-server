@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
-import { chmod, mkdir, writeFile } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { access, chmod, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -94,6 +95,56 @@ function boundedTail(output) {
   return redacted.split(/\r?\n/u).slice(-30).join('\n').slice(-4_000);
 }
 
+/**
+ * Carry the developer's ChatGPT-subscription login into the runtime's own
+ * Codex home without carrying anything else that lives there.
+ *
+ * A symlink rather than a copy: Codex refreshes this token, and a copy would
+ * leave the runtime rotating a credential the developer's own `codex` no
+ * longer shares. If the host has no login the runtime simply has none either,
+ * which surfaces as an ordinary Codex auth error rather than a silent
+ * fallback.
+ */
+async function borrowCodexLogin(hostCodexHome, runtimeCodexHome) {
+  const source = join(hostCodexHome, 'auth.json');
+  const target = join(runtimeCodexHome, 'auth.json');
+  try {
+    await access(source, constants.R_OK);
+  } catch {
+    process.stderr.write(
+      `with-paseo: no Codex login at ${source}; Codex sessions will be unauthenticated.\n`,
+    );
+    return;
+  }
+  await rm(target, { force: true });
+  await symlink(source, target);
+}
+
+/**
+ * The whole configuration a product Agent's Codex needs, and nothing else.
+ *
+ * `apps = false` because an Agent cannot install or authorize the operator's
+ * OpenAI Apps connectors; with the setting absent Codex spends several
+ * kilobytes of every session advertising ones it will never have. Trust is
+ * declared for the runtime's own directories only -- Codex asks before acting
+ * in a directory it has not been told to trust, and those are the only
+ * directories a product Agent works in.
+ */
+function runtimeCodexConfig(directories) {
+  return [
+    '[features]',
+    'apps = false',
+    '',
+    ...directories.map((directory) =>
+      [
+        `[projects.${JSON.stringify(directory)}]`,
+        'trust_level = "trusted"',
+        '',
+      ].join('\n'),
+    ),
+  ].join('\n');
+}
+
 async function prepareProviderToolchain() {
   const child = spawn(
     process.execPath,
@@ -186,9 +237,15 @@ if (command.length === 0) {
     repositoryRoot,
     configuredAgentWorkspace || join('.local', 'agent-workspace'),
   );
+  const runtimeCellRoot = resolve(
+    repositoryRoot,
+    process.env.PASEO_RUNTIME_CELL_ROOT?.trim() ||
+      join('.local', 'runtime-cells'),
+  );
   await Promise.all([
     mkdir(runtimeRoot, { recursive: true }),
     mkdir(agentWorkspace, { recursive: true }),
+    mkdir(runtimeCellRoot, { recursive: true }),
   ]);
   for (const name of paseoEnvironmentNames) {
     if (!process.env[name]?.trim()) delete process.env[name];
@@ -261,20 +318,34 @@ if (command.length === 0) {
   //
   // 1. A host developer login. `codex login` stores a ChatGPT-subscription
   //    OAuth token under the real CODEX_HOME, and the runtime isolates HOME,
-  //    so pointing CODEX_HOME back at the host directory is what carries that
-  //    login across the isolation boundary. No gateway key is involved.
+  //    so the host directory is where that login has to be borrowed from.
   // 2. The opencode-go gateway key, which needs a generated provider config.
   //
-  // Selection is explicit: honor a caller-provided CODEX_HOME, otherwise fall
-  // back to the host login when no gateway key is configured.
+  // Selection is explicit: honor a caller-provided CODEX_HOME as the login
+  // source, otherwise fall back to the host login when no gateway key is set.
+  //
+  // Either way the runtime gets its own CODEX_HOME. A developer's real one is
+  // not just credentials: Codex reads `AGENTS.md` there as global instructions
+  // for every session, plus that developer's MCP servers, plugins and skills.
+  // Pointing product Agents at it briefed them with the operator's personal
+  // subagent-orchestration handbook and handed them the operator's connectors.
+  // Borrow the login; leave the operator's working environment behind.
   const hostCodexHome = process.env.CODEX_HOME?.trim();
   const useHostCodexAuth =
     Boolean(hostCodexHome) || !process.env.OPENCODE_GO_API_KEY?.trim();
+  await mkdir(codexHome, { recursive: true, mode: 0o700 });
+  await chmod(codexHome, 0o700);
   if (useHostCodexAuth) {
-    process.env.CODEX_HOME =
-      hostCodexHome || join(process.env.HOME ?? homedir(), '.codex');
+    await borrowCodexLogin(
+      hostCodexHome || join(process.env.HOME ?? homedir(), '.codex'),
+      codexHome,
+    );
+    await writeFile(
+      join(codexHome, 'config.toml'),
+      runtimeCodexConfig([agentWorkspace, runtimeCellRoot]),
+      { mode: 0o600 },
+    );
   } else {
-    await mkdir(codexHome, { recursive: true, mode: 0o700 });
     await writeFile(
       join(codexHome, 'config.toml'),
       [
@@ -286,10 +357,12 @@ if (command.length === 0) {
         'env_key = "OPENCODE_GO_API_KEY"',
         'wire_api = "responses"',
         '',
+        runtimeCodexConfig([agentWorkspace, runtimeCellRoot]),
       ].join('\n'),
       { mode: 0o600 },
     );
   }
+  process.env.CODEX_HOME = codexHome;
   let paseo;
   let child;
   let cleanupStarted = false;

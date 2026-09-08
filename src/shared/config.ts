@@ -164,6 +164,17 @@ const ConfigSchema = z
     /** Extra providers the same Paseo adapter also serves, beyond PASEO_PROVIDER. */
     PASEO_ADDITIONAL_PROVIDERS: ManagedEnvironmentProviderList,
     PASEO_AGENT_CWD: z.string().min(1).default('.local/agent-workspace'),
+    /**
+     * The Codex home the runtime hands to provider sessions.
+     *
+     * Codex reads its home for far more than credentials: a global `AGENTS.md`
+     * that becomes authoritative instructions for every session, MCP servers,
+     * plugins and skills. Whoever runs the server has one of those directories
+     * for their own work, and a product Agent must not inherit it. The runtime
+     * therefore names the home it prepared rather than letting Codex fall back
+     * to the operator's `~/.codex`.
+     */
+    CODEX_HOME: z.string().trim().min(1).optional(),
     PASEO_RUNTIME_CELL_ROOT: z.string().min(1).default('.local/runtime-cells'),
     AGENT_SERVER_SKILL_REGISTRY_ROOT: z
       .string()
@@ -327,6 +338,8 @@ export type AppConfig = Readonly<{
     additionalProviders?: readonly ManagedEnvironmentProvider[];
     agentCwd: string;
     runtimeCellRoot?: string;
+    /** Provider home handed to Codex sessions, when the runtime prepared one. */
+    codexHome?: string;
     workspaceTitle: string;
     model?: string;
     connectTimeoutMs: number;
@@ -447,6 +460,9 @@ export function loadConfig(
         parsed.data.PASEO_RUNTIME_CELL_ROOT,
       ),
       workspaceTitle: parsed.data.PASEO_WORKSPACE_TITLE,
+      ...(parsed.data.CODEX_HOME
+        ? { codexHome: resolve(workingDirectory, parsed.data.CODEX_HOME) }
+        : {}),
       ...(parsed.data.PASEO_MODEL ? { model: parsed.data.PASEO_MODEL } : {}),
       connectTimeoutMs: parsed.data.PASEO_CONNECT_TIMEOUT_MS,
       connectTimeoutSource,

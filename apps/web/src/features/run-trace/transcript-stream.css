@@ -49,10 +49,13 @@ details.transcript__row[open] {
   min-height: 22px;
 }
 .transcript__row-copy {
+  align-items: baseline;
   display: flex;
   font-size: 12px;
   gap: 7px;
   min-width: 0;
+  overflow-wrap: anywhere;
+  flex-wrap: wrap;
 }
 .transcript__row-copy strong {
   font-weight: 600;
@@ -60,9 +63,22 @@ details.transcript__row[open] {
 .transcript__row-copy small {
   color: var(--trace-muted);
   font-size: 11px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
+}
+.transcript__status {
+  font-size: 10px !important;
+  font-weight: 650;
   white-space: nowrap;
+}
+.transcript__status--completed {
+  color: var(--grass-deep) !important;
+}
+.transcript__status--failed,
+.transcript__status--cancelled {
+  color: var(--coral-deep) !important;
+}
+.transcript__status--running {
+  color: var(--gold-deep) !important;
 }
 .transcript__origin {
   color: var(--gold-deep);

@@ -178,6 +178,49 @@ it('does not merge the same provider activity id across sequence-reset runs', ()
   expect(tools.map((entry) => entry.sourceOrdinals)).toEqual([[2], [5]]);
 });
 
+it('keeps the first and final captured timestamps while merging one activity', () => {
+  const output = projectTranscript([
+    at(1, {
+      kind: 'tool_status',
+      activity_id: 'command-1',
+      category: 'other',
+      status: 'running',
+      label: 'Other activity',
+      summary: 'Other activity.',
+      provider: null,
+      tool_name: null,
+      detail_kind: null,
+      detail_text: null,
+      exit_code: null,
+      parent_activity_id: null,
+      sequence: 1,
+      created_at: '2026-08-18T04:00:00.000Z',
+    }),
+    at(2, {
+      kind: 'tool_status',
+      activity_id: 'command-1',
+      category: 'other',
+      status: 'completed',
+      label: 'Other activity: pwd && ls -la',
+      summary: 'Other activity.',
+      provider: null,
+      tool_name: null,
+      detail_kind: null,
+      detail_text: null,
+      exit_code: 0,
+      parent_activity_id: null,
+      sequence: 2,
+      created_at: '2026-08-18T04:00:01.250Z',
+    }),
+  ]);
+  expect(output).toHaveLength(1);
+  expect(output[0]).toMatchObject({
+    startedAt: '2026-08-18T04:00:00.000Z',
+    endedAt: '2026-08-18T04:00:01.250Z',
+    sourceOrdinals: [1, 2],
+  });
+});
+
 it('merges independent incremental assistant_text chunks into one row', () => {
   const input = [
     at(1, {

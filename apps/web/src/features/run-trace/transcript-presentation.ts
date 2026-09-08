@@ -134,32 +134,38 @@ export function buildEntryPresentation(
 function toolActivityLabel(
   event: Extract<TranscriptEntry, { readonly kind: 'tool_status' }>,
 ): string {
-  if (event.category === 'shell') {
-    const command = shellCommand(event.label);
-    if (/\brg\s+--files\b/u.test(command) || /\bfind\b/u.test(command))
-      return 'Searched the workspace';
-    if (/\b(?:sed|cat|head|tail)\b/u.test(command))
-      return 'Read workspace files';
-    if (/\bpaseo\s+(?:ls|inspect)\b/u.test(command))
-      return 'Checked agent work';
-    return 'Ran a command';
-  }
-  return event.label ?? humanize(event.tool_name ?? event.category);
+  const label = event.label?.trim() ?? null;
+  const summary = event.summary?.trim() ?? null;
+  const command = commandFromLabel(label);
+  // Fallback order: a non-generic summary, command embedded in the provider
+  // label, non-generic label, then captured category. Generic provider
+  // fallbacks are never used as a primary title.
+  if (summary && !isGenericActivityText(summary)) return summary;
+  if (command) return command;
+  if (label && !isGenericActivityText(label)) return label;
+  return humanize(event.category);
 }
 
 function toolDetail(
   event: Extract<TranscriptEntry, { readonly kind: 'tool_status' }>,
 ): string | null {
   if (event.category !== 'shell') return event.detail_text;
-  const command = shellCommand(event.label);
+  const command = commandFromLabel(event.label);
   if (!command) return event.detail_text;
   return event.detail_text
     ? `Recorded command\n${command}\n\nOutput\n${event.detail_text}`
     : `Recorded command\n${command}`;
 }
 
-function shellCommand(label: string | null): string {
-  return label?.replace(/^Shell activity:\s*/u, '').trim() ?? '';
+function commandFromLabel(label: string | null): string | null {
+  const match = label?.trim().match(/^(?:shell|other) activity:\s*(.+)$/iu);
+  return match?.[1]?.trim() || null;
+}
+
+function isGenericActivityText(value: string): boolean {
+  return /^(?:other|read|search|shell|write|edit) activity\.?$/iu.test(
+    value.trim(),
+  );
 }
 
 export function humanize(value: string | null | undefined): string {
@@ -192,7 +198,12 @@ function meaningfulSummary(
   label: string,
   summary: string | null,
 ): string | null {
-  if (!summary || normalize(summary) === normalize(label)) return null;
+  if (
+    !summary ||
+    isGenericActivityText(summary) ||
+    normalize(summary) === normalize(label)
+  )
+    return null;
   return summary;
 }
 

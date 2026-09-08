@@ -1,8 +1,5 @@
 import { buildEntryPresentation } from './transcript-presentation';
-import type {
-  ProjectedTranscriptEntry,
-  TranscriptEntry,
-} from './transcript-projection';
+import type { ProjectedTranscriptEntry } from './transcript-projection';
 
 export function ActivityRow({
   entry,
@@ -48,7 +45,7 @@ export function ActivityRow({
   } as const;
   const content = (
     <RowContent
-      event={entry.event}
+      entry={entry}
       expandable={expandable}
       terminalRun={terminalRun}
     />
@@ -93,15 +90,17 @@ export function ActivityRow({
 }
 
 function RowContent({
-  event,
+  entry,
   expandable,
   terminalRun,
 }: {
-  readonly event: TranscriptEntry;
+  readonly entry: ProjectedTranscriptEntry;
   readonly expandable: boolean;
   readonly terminalRun: boolean;
 }) {
-  const presentation = buildEntryPresentation(event, { terminalRun });
+  const presentation = buildEntryPresentation(entry.event, { terminalRun });
+  const status = entry.event.kind === 'tool_status' ? entry.event.status : null;
+  const duration = formatDuration(entry.startedAt, entry.endedAt);
   return (
     <>
       <span className="transcript__icon-slot">
@@ -120,9 +119,27 @@ function RowContent({
         ) : null}
         <strong>{presentation.label}</strong>
         {presentation.summary ? <small>{presentation.summary}</small> : null}
+        {status ? (
+          <small className={`transcript__status transcript__status--${status}`}>
+            {status === 'completed' ? 'Succeeded' : humanizeStatus(status)}
+            {duration ? ` · ${duration}` : ''}
+          </small>
+        ) : null}
       </span>
     </>
   );
+}
+
+function formatDuration(startedAt: string, endedAt: string): string | null {
+  const milliseconds = Date.parse(endedAt) - Date.parse(startedAt);
+  if (!Number.isFinite(milliseconds) || milliseconds < 0) return null;
+  return milliseconds < 1_000
+    ? `${milliseconds} ms`
+    : `${(milliseconds / 1_000).toFixed(1)} s`;
+}
+
+function humanizeStatus(status: string): string {
+  return status[0]!.toUpperCase() + status.slice(1);
 }
 
 function PlatformToolDetail({

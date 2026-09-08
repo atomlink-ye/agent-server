@@ -144,8 +144,7 @@ export function SessionTranscripts({
     if (statusCode === 404) {
       message = t('trace.sessions.unavailable');
     } else if (statusCode === 503) {
-      message =
-        t('trace.sessions.unavailable');
+      message = t('trace.sessions.unavailable');
     }
     return (
       <section
@@ -218,7 +217,7 @@ export function SessionTranscripts({
           <h2>{t('trace.sessions.workers')}</h2>
           <p>
             This Work Run is {humanize(productState)}. Choose a Worker to see
-            its captured conversation, completed activity, and any block.
+            its captured log, completed activity, and any block.
           </p>
         </div>
         <span>
@@ -342,7 +341,7 @@ export function SessionTranscripts({
                 className="execution-transcript__events transcript__events"
                 data-testid="session-entries"
               >
-                <h3>Session conversation</h3>
+                <h3>Session log</h3>
                 {selected.entries.length ? (
                   <TranscriptStream
                     entries={selected.entries}
@@ -360,8 +359,8 @@ export function SessionTranscripts({
                   className="execution-transcript__notice"
                   data-testid="session-truncated-warning"
                 >
-                  ⚠️ This transcript is truncated — newer entries exist but were
-                  not returned. The captured window shows the earliest{' '}
+                  ⚠️ This log is truncated — newer entries exist but were not
+                  returned. The captured window shows the earliest{' '}
                   {selected.entries.length} entries.
                 </p>
               ) : null}
@@ -598,7 +597,7 @@ function SessionSummaryBlock({
             <summary>About this summary</summary>
             <p>
               This is assembled from captured messages and actions. Original
-              wording appears in the conversation below.
+              wording appears in the log below.
             </p>
           </details>
         </aside>

@@ -341,7 +341,7 @@ export function SessionTranscripts({
                 className="execution-transcript__events transcript__events"
                 data-testid="session-entries"
               >
-                <h3>Session log</h3>
+                <h3>{t('trace.sessions.conversation')}</h3>
                 {selected.entries.length ? (
                   <TranscriptStream
                     entries={selected.entries}

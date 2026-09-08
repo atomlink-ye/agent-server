@@ -100,7 +100,7 @@ function RowContent({
 }) {
   const presentation = buildEntryPresentation(entry.event, { terminalRun });
   const status = entry.event.kind === 'tool_status' ? entry.event.status : null;
-  const duration = formatDuration(entry.startedAt, entry.endedAt);
+  const timing = formatActivityTiming(entry);
   return (
     <>
       <span className="transcript__icon-slot">
@@ -120,19 +120,49 @@ function RowContent({
         <strong>{presentation.label}</strong>
         {presentation.summary ? <small>{presentation.summary}</small> : null}
         {status ? (
-          <small className={`transcript__status transcript__status--${status}`}>
-            {status === 'completed' ? 'Succeeded' : humanizeStatus(status)}
-            {duration ? ` · ${duration}` : ''}
-          </small>
+          <span className="transcript__row-meta">
+            <span
+              className={`transcript__status transcript__status--${status}`}
+            >
+              {humanizeStatus(status)}
+            </span>
+            {timing ? (
+              <time dateTime={entry.endedAt} title={timing.title}>
+                {timing.label}
+              </time>
+            ) : null}
+          </span>
         ) : null}
       </span>
     </>
   );
 }
 
-function formatDuration(startedAt: string, endedAt: string): string | null {
-  const milliseconds = Date.parse(endedAt) - Date.parse(startedAt);
-  if (!Number.isFinite(milliseconds) || milliseconds < 0) return null;
+function formatActivityTiming(entry: ProjectedTranscriptEntry): {
+  readonly label: string;
+  readonly title: string;
+} | null {
+  const started = new Date(entry.startedAt);
+  const ended = new Date(entry.endedAt);
+  if (Number.isNaN(started.valueOf()) || Number.isNaN(ended.valueOf()))
+    return null;
+  const capturedAt = ended.toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+  const duration = ended.valueOf() - started.valueOf();
+  // A single provider event captures a point in time, not a duration. Do not
+  // turn that missing information into a misleading "0 ms" claim.
+  if (entry.sourceOrdinals.length < 2 || duration <= 0)
+    return { label: capturedAt, title: `Captured at ${capturedAt}` };
+  return {
+    label: `${formatDuration(duration)} · ${capturedAt}`,
+    title: `Captured from ${started.toLocaleTimeString()} to ${ended.toLocaleTimeString()}`,
+  };
+}
+
+function formatDuration(milliseconds: number): string {
   return milliseconds < 1_000
     ? `${milliseconds} ms`
     : `${(milliseconds / 1_000).toFixed(1)} s`;

@@ -284,7 +284,7 @@ it('renders per-session transcripts with switching between sessions that share a
     expect(summaryBlock).not.toBeNull();
     expect(summaryBlock!.textContent).toContain('About this summary');
     expect(summaryBlock!.textContent).toContain(
-      'This is assembled from captured messages and actions. Original wording appears in the conversation below.',
+      'This is assembled from captured messages and actions. Original wording appears in the log below.',
     );
     expect(
       summaryBlock!.querySelector('[data-testid="session-platform-tool-count"]')

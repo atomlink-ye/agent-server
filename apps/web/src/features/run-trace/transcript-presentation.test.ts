@@ -38,3 +38,11 @@ it('uses a non-generic summary before a generic label', () => {
     buildEntryPresentation(tool({ summary: 'Read src/index.ts' })),
   ).toMatchObject({ label: 'Read src/index.ts' });
 });
+
+it('falls back to the captured category when provider text is generic', () => {
+  expect(
+    buildEntryPresentation(
+      tool({ category: 'read', label: 'Read activity', summary: 'Read activity.' }),
+    ),
+  ).toMatchObject({ label: 'Read', summary: null });
+});

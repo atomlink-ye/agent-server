@@ -669,7 +669,7 @@ export const zhCN: Record<MessageKey, string> = {
   'trace.sessions.workerFilter': 'Workers 列表',
   'trace.sessions.workItemFilter': '按 Work Item 筛选',
   'trace.sessions.agentMessages': 'Agent 间消息',
-  'trace.sessions.conversation': '会话对话',
+  'trace.sessions.conversation': '会话日志',
   'trace.sessions.runStarted': 'Run 已启动',
   'trace.entries': '记录数',
   'trace.lastActivity': '最后活动',

@@ -121,7 +121,12 @@ describe('ExecutionRuntimeChatTurnProvider', () => {
     expect(executor.calls[0]?.prompt).not.toContain(
       'Always answer in terse Alpha format.',
     );
-    expect(executor.calls[0]?.prompt).toContain('Alpha persona home content.');
+    // The `definition` namespace is the published instructions re-serialized,
+    // and the system prompt already opens with them. Projecting it again put
+    // the same paragraph in the turn as escaped JSON.
+    expect(executor.calls[0]?.prompt).not.toContain(
+      'Alpha persona home content.',
+    );
     expect(executor.calls[0]?.recoveryPrompt).toContain(
       'CHAT BOOTSTRAP SNAPSHOT',
     );

@@ -44,6 +44,10 @@ function projectMessage(
     sequence: message.sequence,
     authorType: message.authorType,
     authorId: message.authorId,
+    // A WorkItem dispatch is the one durable message that already knows what
+    // to call the person behind it. Carrying that name through is what lets
+    // the turn transcript say who spoke instead of quoting an id back.
+    authorLabel: message.dispatch?.actorLabel ?? null,
     body: message.body,
     workRef: message.workRef,
     deliveryId: message.deliveryId ?? null,

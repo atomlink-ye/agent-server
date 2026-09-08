@@ -860,7 +860,8 @@ export function FilesPage() {
                           </button>
                         </label>
                       ) : null}
-                      {selected.work && !file.path.startsWith('artifacts/') ? (
+                      {selected.work &&
+                      !visibleFile.path.startsWith('artifacts/') ? (
                         <button
                           type="button"
                           onClick={() => void publishResult()}

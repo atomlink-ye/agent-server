@@ -43,7 +43,10 @@ export function OverviewPane({
     );
 
   return (
-    <OverviewContent data={data} originConversationId={originConversationId} />
+    <OverviewContent
+      data={{ ...data, run: data.run, trace: data.trace }}
+      originConversationId={originConversationId}
+    />
   );
 }
 

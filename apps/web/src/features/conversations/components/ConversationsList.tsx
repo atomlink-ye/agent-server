@@ -1,5 +1,5 @@
 import { useT, type Translate } from '../../../i18n';
-import type { Conversation, ConversationId } from './contracts';
+import type { Conversation, ConversationId } from '../contracts';
 import type { ConversationListState } from '../stores/conversations';
 
 export interface ConversationsListProps {

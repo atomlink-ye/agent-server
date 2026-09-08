@@ -4,16 +4,13 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-patchedDependencies:
-  '@getpaseo/client@0.1.110': f375cd7e38e4811684ebc6945ce99b85aed00b625b30bb50956a79d609a5774e
-
 importers:
 
   .:
     dependencies:
       '@getpaseo/client':
-        specifier: 0.1.110
-        version: 0.1.110(patch_hash=f375cd7e38e4811684ebc6945ce99b85aed00b625b30bb50956a79d609a5774e)
+        specifier: ^0.7.2
+        version: 0.7.2
       '@hono/node-server':
         specifier: 2.0.11
         version: 2.0.11(hono@4.12.31)
@@ -346,14 +343,14 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@getpaseo/client@0.1.110':
-    resolution: {integrity: sha512-XffG2UTx2FOMRw9Mfx1RkYZxvqvXzKQNzl01JPYL7D3QpOILYDkp9zjCcYQgck6mSgbmkEnrYiZ9biEdfN3hPg==}
+  '@getpaseo/client@0.7.2':
+    resolution: {integrity: sha512-BD3uNBdp4wz79uDIJPYqAnaLXbMlZ1V/Nb9RFv0cEUcrFzk0kKAQ1NOaquD3Lz4MUJFTR8Eh/VxJB+OlbHSsiQ==}
 
-  '@getpaseo/protocol@0.1.110':
-    resolution: {integrity: sha512-pr3yoVMx4W/DCGnRK+yjRSymYdcSMaE6T10bFlkgfHtuxledPjrD3SLNfAo9DrT7UAnCUOCYkBpkomGcjbXJvg==}
+  '@getpaseo/protocol@0.7.2':
+    resolution: {integrity: sha512-bLegKuZIqO34Az8eKi0y3W0CcwwICipd7s4iFOUdOAiMwUYybzyXEpVaxuMcSzstNAtGqP+FMRteljFXAJ8T8w==}
 
-  '@getpaseo/relay@0.1.110':
-    resolution: {integrity: sha512-F7fNkO3TI0pMXd4UpN83XOG1IYdJ7SZHdK9nQknmOElUzUSNGRnqx7xk9dJzjdjHYpF7EmXKcHcMn9Xz/8zifQ==}
+  '@getpaseo/relay@0.7.2':
+    resolution: {integrity: sha512-IKdHhpWfofVa/v248r/wiU9Bu2AWhCKOijx4BbNFkGwJr6Eazby3n99tuN9cWYnCLj6/Hfnm4yNL29Bf9jXnbg==}
 
   '@hono/node-server@2.0.11':
     resolution: {integrity: sha512-bjD221KPLoJTWUwso1J6fGKiTXEUFedG/s0visavY4zakFPkeGURMRNly+FhBHs7T8Dz4qHaZIMX9ZoJHSJtKA==}
@@ -2043,20 +2040,20 @@ snapshots:
   '@esbuild/win32-x64@0.28.1':
     optional: true
 
-  '@getpaseo/client@0.1.110(patch_hash=f375cd7e38e4811684ebc6945ce99b85aed00b625b30bb50956a79d609a5774e)':
+  '@getpaseo/client@0.7.2':
     dependencies:
-      '@getpaseo/protocol': 0.1.110
-      '@getpaseo/relay': 0.1.110
+      '@getpaseo/protocol': 0.7.2
+      '@getpaseo/relay': 0.7.2
       zod: 4.4.3
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@getpaseo/protocol@0.1.110':
+  '@getpaseo/protocol@0.7.2':
     dependencies:
       zod: 4.4.3
 
-  '@getpaseo/relay@0.1.110':
+  '@getpaseo/relay@0.7.2':
     dependencies:
       base64-js: 1.5.1
       tweetnacl: 1.0.3

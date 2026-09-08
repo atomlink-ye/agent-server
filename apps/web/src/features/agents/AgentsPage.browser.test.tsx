@@ -2,6 +2,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { expect, it, vi } from 'vitest';
+import { page } from 'vitest/browser';
 
 import { AgentsPage } from './AgentsPage';
 import type { Coworker } from './contracts';
@@ -126,6 +127,7 @@ it('scrolls the real Agents roster to its final Coworker on desktop', async () =
       id: `123e4567-e89b-42d3-a456-${String(index).padStart(12, '0')}`,
       displayName: index === 47 ? 'Final real Coworker' : `Coworker ${index}`,
       roleLabel: 'Research',
+      summary: null,
       activeAgentVersionId: 'v1',
       runtimeStatus: 'available' as const,
     })),
@@ -156,6 +158,9 @@ it('scrolls the real Agents roster to its final Coworker on desktop', async () =
     expect(final.getBoundingClientRect().bottom).toBeLessThanOrEqual(
       region.getBoundingClientRect().bottom + 1,
     );
+    await page.screenshot({
+      path: '../../../../../.local/agents-scroll-desktop.png',
+    });
   } finally {
     await act(async () => root.unmount());
     host.remove();

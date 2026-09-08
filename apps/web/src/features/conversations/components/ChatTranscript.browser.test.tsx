@@ -2,6 +2,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, expect, it, vi } from 'vitest';
+import { page } from 'vitest/browser';
 
 import '../../../index.css';
 
@@ -116,6 +117,9 @@ it('scrolls the real Conversation transcript to its final message', async () => 
   expect(finalMessage.getBoundingClientRect().bottom).toBeLessThanOrEqual(
     transcript.getBoundingClientRect().bottom + 1,
   );
+  await page.screenshot({
+    path: '../../../../../.local/conversations-scroll-desktop.png',
+  });
 });
 
 it('refuses raw HTML in an Agent reply', async () => {

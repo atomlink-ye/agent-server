@@ -15,6 +15,8 @@
 - Whispers：`.whispers-list` 和 `.whisper-message-log`。
 
 浏览器测试固定使用 Chromium 的 1440×900 视口。`apps/web/src/features/work/components/work-list.browser.test.tsx` 将真实 AppShell 挂载到 `/work`，用 48 条真实 Work fixture 断言 `.work-list` 溢出、`scrollTop` 改变，且最终 Work 条目进入可视区。`apps/web/src/features/whispers/WhispersPage.browser.test.tsx` 在真实 WhispersPage 中以 48 个频道和 48 条消息断言 `.whispers-list` 与 `.whisper-message-log` 的同一行为，并验证最后一条真实消息可见。视觉证据为已忽略的 `.local/whispers-scroll-desktop.png`，不提交。旧的 class-only 测试已删除。Settings 页面在当前路由与实现中不存在，因此没有虚构该页面或测试。
+`apps/web/src/features/conversations/components/ChatTranscript.browser.test.tsx` 在真实 `.chat-panel` 高度链中渲染 48 条真实对话消息，断言 `.chat-transcript` 溢出、`scrollTop` 变化且最后消息可见；视觉证据为 `.local/conversations-scroll-desktop.png`。`apps/web/src/features/agents/AgentsPage.browser.test.tsx` 在真实 AppShell 中渲染 48 位 Coworker，断言 `.agents-main` 溢出、`scrollTop` 变化且最后一位 Coworker 可见；视觉证据为 `.local/agents-scroll-desktop.png`。截图均已忽略、不提交。
+
 `apps/web/src/features/files/FilesPage.browser.test.tsx` 在真实 FilesPage 中使用 48 个 coworker scope 和 48 个 file entry fixture，按实际 `Request.url`/GET method 匹配 transport 请求，断言 `.files-scope-list` 与 `.files-file-list` 都发生溢出、`scrollTop` 可变，并验证最后一个真实 scope/file 条目进入可视区。视觉证据为已忽略的 `.local/files-scroll-desktop.png`，不提交。
 `apps/web/src/features/observe/ObservePage.browser.test.tsx` 在真实 `AppShell → ObservePage` 中使用 `rework-once` Product recording 作为 Trace/Run 基底，并提供 48 个合法 Work/Run 列表项及真实 session-transcripts API mock；按实际 `Request.url`/GET method 匹配 transport 请求，断言 `.work-list` 与真实 `.work-main-content` 都发生溢出、`scrollTop` 可变，且最后一个 Trace 与最终结果内容进入可视区。视觉证据为已忽略的 `.local/observe-scroll-desktop.png`，不提交。
 
@@ -29,8 +31,9 @@
 - `pnpm exec vitest run --config vitest.web.config.ts apps/web/src/features/work-organization/TasksPage.browser.test.tsx apps/web/src/features/work-organization/BoardsPage.browser.test.tsx`：通过，25 个 Chromium 测试（Tasks 10、Boards 15）；生成已忽略的 `.local/tasks-scroll-desktop.png` 与 `.local/boards-scroll-desktop.png`。
 - `pnpm typecheck`：通过，包含根类型检查和 Web 类型检查。
 - `pnpm exec vitest run --config vitest.web.config.ts apps/web/src/features/whispers/WhispersPage.browser.test.tsx apps/web/src/features/work/components/work-list.browser.test.tsx`：通过，6 个 Chromium 测试。
+- `pnpm exec vitest run --config vitest.web.config.ts apps/web/src/features/conversations/components/ChatTranscript.browser.test.tsx apps/web/src/features/agents/AgentsPage.browser.test.tsx`：通过，11 个 Chromium 测试；生成已忽略的 `.local/conversations-scroll-desktop.png` 与 `.local/agents-scroll-desktop.png`。
 - `pnpm exec vitest run --config vitest.web.config.ts apps/web/src/features/files/FilesPage.browser.test.tsx`：通过，1 个 Chromium 测试；生成已忽略的 `.local/files-scroll-desktop.png`。
 - `pnpm exec vitest run --config vitest.web.config.ts apps/web/src/features/observe/ObservePane.browser.test.tsx apps/web/src/features/observe/ObserveDetail.browser.test.tsx apps/web/src/features/observe/ObservePage.browser.test.tsx`：通过，6 个 Chromium 测试；生成已忽略的 `.local/observe-scroll-desktop.png`。
 - `pnpm typecheck`：通过。
 - `pnpm web:check:types`：通过。
-- `pnpm test:web`：通过，48 个测试文件、258 个测试；运行时输出了既有 BoardCanvas 和 AdvancedDefinitionAuthoring 的 `act(...)` 警告，但无失败。实际基线不是要求中提到的 43 个文件、252 个测试。
+- `pnpm test:web`：通过，49 个测试文件、266 个测试；运行时输出了既有 BoardCanvas 和 AdvancedDefinitionAuthoring 的 `act(...)` 警告，但无失败。实际基线不是要求中提到的 43 个文件、252 个测试。

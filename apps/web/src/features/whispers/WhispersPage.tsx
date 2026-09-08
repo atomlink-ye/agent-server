@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import TitleBar from '../../app/shell/TitleBar';
+import { useT } from '../../i18n';
 import {
   loadWhispers,
   loadWhisperMessages,
@@ -16,6 +17,7 @@ import './whispers.css';
  * whispers-gateway.ts).
  */
 export function WhispersPage() {
+  const t = useT();
   const [channels, setChannels] = useState<readonly WhisperChannel[] | null>(
     null,
   );
@@ -67,21 +69,24 @@ export function WhispersPage() {
 
   return (
     <>
-      <aside className="sidebar whispers-pane" aria-label="Whisper channels">
+      <aside
+        className="sidebar whispers-pane"
+        aria-label={t('whispers.channels')}
+      >
         <div className="pane-heading">
           <div>
-            <span className="eyebrow">Silent peek</span>
-            <h1>Whispers</h1>
+            <span className="eyebrow">{t('whispers.eyebrow')}</span>
+            <h1>{t('whispers.title')}</h1>
           </div>
           <span className="pane-count">{channels?.length ?? 0}</span>
         </div>
         {channels === null ? (
           <p className="pane-placeholder" role="status">
-            Loading whispers…
+            {t('whispers.loading')}
           </p>
         ) : channels.length === 0 ? (
           <p className="pane-placeholder" role="status">
-            Send a message in a group to nudge an agent to whisper.
+            {t('whispers.emptyNudge')}
           </p>
         ) : (
           <div className="whispers-list">
@@ -93,7 +98,7 @@ export function WhispersPage() {
                 onClick={() => setSelectedId(channel.id)}
               >
                 <strong>{channelTitle(channel)}</strong>
-                <small>{channel.topic ?? 'private thread'}</small>
+                <small>{channel.topic ?? t('whispers.privateThread')}</small>
               </button>
             ))}
           </div>
@@ -101,7 +106,7 @@ export function WhispersPage() {
       </aside>
 
       <main className="chat-panel whispers-main">
-        <TitleBar section="Whispers" />
+        <TitleBar section={t('whispers.title')} />
         {error ? (
           <p className="files-error" role="alert">
             {error}
@@ -112,32 +117,28 @@ export function WhispersPage() {
             <span className="work-main-icon" aria-hidden="true">
               ◐
             </span>
-            <h1>No whispers yet</h1>
-            <p>
-              Whispers form when an agent decides -- after their public reply --
-              that they need to align with another teammate privately. You can
-              watch, not join.
-            </p>
+            <h1>{t('whispers.emptyTitle')}</h1>
+            <p>{t('whispers.emptyBody')}</p>
           </div>
         ) : (
           <>
             <header className="whisper-observer-badge">
               <span aria-hidden="true">◐</span>
-              Observer mode -- silent peek, they can't see you
+              {t('whispers.observerMode')}
             </header>
             <p className="whisper-observer-badge">
               {channelTitle(selected)}
               {selected.origin.workRef
-                ? ` · about ${selected.origin.workRef}`
+                ? t('whispers.aboutWork', { work: selected.origin.workRef })
                 : ''}
             </p>
             {messages === null ? (
               <p className="pane-placeholder" role="status">
-                Loading messages…
+                {t('whispers.loadingMessages')}
               </p>
             ) : messages.length === 0 ? (
               <p className="pane-placeholder" role="status">
-                No messages yet.
+                {t('whispers.emptyMessages')}
               </p>
             ) : (
               <div className="whisper-message-log">

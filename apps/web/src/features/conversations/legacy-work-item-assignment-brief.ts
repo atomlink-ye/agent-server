@@ -39,9 +39,16 @@ export function recognizeLegacyWorkItemAssignmentBrief(
   if (quoteLine.test(lines[index] ?? '')) index += 1;
 
   const workItemId = workItem[1]!;
+  // Must stay byte-identical to what workItemMentionBrief() emits in
+  // src/domain/work-organization/work-item-mention-brief.ts — this parser
+  // recognises persisted messages by exact match, so any wording change on the
+  // server side has to be mirrored here or old briefs stop being recognised.
   const claimLine =
     `To take this work, call agent-server/work-item-claim with {"work_item_id":"${workItemId}"}. ` +
-    'Claiming is atomic: if it returns that someone else already claimed it, they are on it and you must not start.';
+    'Claiming is atomic: if it returns that someone else already claimed it, ' +
+    'they are on it and you must not start. Claiming does not set the status — ' +
+    'call agent-server/work-item-status with {"status":"in_progress"} when you start; ' +
+    'if your brief says to wait, leave it in todo.';
   const expectedClaimLine = board
     ? `${claimLine} On a successful claim, if this board declares a Doing column, the WorkItem moves there too.`
     : claimLine;

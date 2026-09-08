@@ -144,7 +144,7 @@ export function AgentsPage() {
   if (!selectedAgentId) {
     return (
       <main className="chat-panel agents-main agents-roster-main">
-        <TitleBar section="Agents" right={<AccountName />} />
+        <TitleBar section={t('agents.title')} right={<AccountName />} />
         {error ? (
           <p className="agents-error" role="alert">
             {error}
@@ -180,7 +180,10 @@ export function AgentsPage() {
 
   return (
     <>
-      <aside className="sidebar agents-pane" aria-label={t('agents.navigation')}>
+      <aside
+        className="sidebar agents-pane"
+        aria-label={t('agents.navigation')}
+      >
         <button
           className="agents-roster-back"
           type="button"
@@ -194,7 +197,7 @@ export function AgentsPage() {
         <div className="pane-heading">
           <div>
             <span className="eyebrow">{t('agents.roster')}</span>
-            <h1>Agents</h1>
+            <h1>{t('agents.title')}</h1>
           </div>
           <button
             className="agents-new-coworker-cta"
@@ -281,7 +284,7 @@ export function AgentsPage() {
               </span>
               <span className="agents-list-copy">
                 <strong>{agent.displayName}</strong>
-                <small>{agent.roleLabel ?? 'Coworker'}</small>
+                <small>{agent.roleLabel ?? t('agents.coworker')}</small>
               </span>
               <span
                 className={`agents-runtime agents-runtime--${agent.runtimeStatus}`}
@@ -294,7 +297,7 @@ export function AgentsPage() {
       </aside>
 
       <main className="chat-panel agents-main">
-        <TitleBar section="Agents" right={<AccountName />} />
+        <TitleBar section={t('agents.title')} right={<AccountName />} />
         {authoring === 'coworker' && !invalidAgentId ? (
           <NewCoworkerForm
             onCancel={() => setAuthoring(null)}
@@ -354,8 +357,8 @@ export function AgentsPage() {
                 <span className="work-main-icon" aria-hidden="true">
                   ◎
                 </span>
-                  <h1>{t('agents.loadingProfile')}</h1>
-                  <p>{t('agents.openingProfile')}</p>
+                <h1>{t('agents.loadingProfile')}</h1>
+                <p>{t('agents.openingProfile')}</p>
               </div>
             ) : (
               <>
@@ -366,7 +369,7 @@ export function AgentsPage() {
                   <div className="agents-profile-copy">
                     <h1>{profile.agent.displayName}</h1>
                     <p className="agents-profile-meta">
-                      {profile.agent.roleLabel ?? 'Coworker'}
+                      {profile.agent.roleLabel ?? t('agents.coworker')}
                       <span
                         className={`agents-runtime agents-runtime--${profile.agent.runtimeStatus}`}
                       >
@@ -408,8 +411,8 @@ export function AgentsPage() {
                       }
                     >
                       {openingAgentId !== null
-                          ? t('agents.opening')
-                          : BUSY_RUNTIME_STATUSES.has(profile.agent.runtimeStatus)
+                        ? t('agents.opening')
+                        : BUSY_RUNTIME_STATUSES.has(profile.agent.runtimeStatus)
                           ? t('agents.busy')
                           : t('agents.chat')}
                     </button>
@@ -466,7 +469,9 @@ export function AgentsPage() {
                             <div className="agents-capability-meta">
                               <span>
                                 {t('agents.inputs', {
-                                  count: Object.keys(capability.inputSchema.properties).length,
+                                  count: Object.keys(
+                                    capability.inputSchema.properties,
+                                  ).length,
                                 })}
                               </span>
                             </div>

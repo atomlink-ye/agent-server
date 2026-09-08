@@ -7,12 +7,11 @@ import {
   loadCoworkerActivity,
   type CoworkerActivity,
 } from './coworker-activity';
+import { useT } from '../../i18n';
 
 type ActivityState =
   | { readonly status: 'loading'; readonly activity: null }
   | { readonly status: 'ready'; readonly activity: CoworkerActivity };
-
-const KIND_LABEL = { work: 'Work', chat: 'Chat' } as const;
 
 export function CoworkerRecentActivity({
   agentId,
@@ -21,6 +20,7 @@ export function CoworkerRecentActivity({
   readonly agentId: string;
   readonly capabilityDefinitionIds: readonly string[];
 }) {
+  const t = useT();
   const [reload, setReload] = useState(0);
   const [state, setState] = useState<ActivityState>({
     status: 'loading',
@@ -51,22 +51,22 @@ export function CoworkerRecentActivity({
     >
       <div className="agents-section-heading">
         <div>
-          <span className="eyebrow">Recently</span>
-          <h2 id="coworker-activity-heading">Activity</h2>
+          <span className="eyebrow">{t('agents.recently')}</span>
+          <h2 id="coworker-activity-heading">{t('agents.activity')}</h2>
         </div>
       </div>
 
       {state.status === 'loading' ? (
         <p className="agents-activity-note" role="status">
-          Loading recent activity…
+          {t('agents.loadingActivity')}
         </p>
       ) : null}
 
       {activity && bothFailed ? (
         <div className="agents-activity-error" role="alert">
-          <p>Recent activity couldn&apos;t be loaded.</p>
+          <p>{t('agents.activityLoadError')}</p>
           <button type="button" onClick={() => setReload((n) => n + 1)}>
-            Retry
+            {t('common.retry')}
           </button>
         </div>
       ) : null}
@@ -75,20 +75,17 @@ export function CoworkerRecentActivity({
         <div className="agents-activity-error" role="alert">
           <p>
             {activity.work === 'failed'
-              ? 'Work history couldn’t be loaded, so this list may be incomplete.'
-              : 'Conversation history couldn’t be loaded, so this list may be incomplete.'}
+              ? t('agents.workHistoryLoadError')
+              : t('agents.conversationHistoryLoadError')}
           </p>
           <button type="button" onClick={() => setReload((n) => n + 1)}>
-            Retry
+            {t('common.retry')}
           </button>
         </div>
       ) : null}
 
       {activity && !bothFailed && activity.items.length === 0 ? (
-        <p className="agents-activity-note">
-          Nothing yet. Chat with this Coworker, or start one of its Capabilities
-          — the Work and conversations you create show up here.
-        </p>
+        <p className="agents-activity-note">{t('agents.activityEmpty')}</p>
       ) : null}
 
       {activity && activity.items.length > 0 ? (
@@ -102,7 +99,9 @@ export function CoworkerRecentActivity({
                     <span
                       className={`agents-activity-kind agents-activity-kind--${item.kind}`}
                     >
-                      {KIND_LABEL[item.kind]}
+                      {item.kind === 'work'
+                        ? t('agents.work')
+                        : t('agents.chat')}
                     </span>
                     <span className="agents-activity-copy">
                       <strong>{item.title}</strong>
@@ -123,9 +122,7 @@ export function CoworkerRecentActivity({
               );
             })}
           </ul>
-          <p className="agents-activity-note">
-            Work here was started from this Coworker&apos;s Capabilities.
-          </p>
+          <p className="agents-activity-note">{t('agents.activityWorkHint')}</p>
         </>
       ) : null}
     </section>

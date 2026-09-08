@@ -10,6 +10,7 @@ import {
   type CoworkerFileScope,
 } from '../files/coworker-file-route';
 import type { Coworker } from './contracts';
+import { useT } from '../../i18n';
 
 type ListingState =
   | { status: 'loading'; listing: null }
@@ -19,6 +20,7 @@ type ListingState =
 const FILE_LIMIT = 3;
 
 export function CoworkerHomeFiles({ agent }: { readonly agent: Coworker }) {
+  const t = useT();
   const [sharedReload, setSharedReload] = useState(0);
   const [privateReload, setPrivateReload] = useState(0);
   const [shared, setShared] = useState<ListingState>({
@@ -67,29 +69,24 @@ export function CoworkerHomeFiles({ agent }: { readonly agent: Coworker }) {
     >
       <div className="agents-section-heading">
         <div>
-          <span className="eyebrow">Home</span>
-          <h2 id="context-files-heading">Context files</h2>
+          <span className="eyebrow">{t('agents.home')}</span>
+          <h2 id="context-files-heading">{t('agents.contextFiles')}</h2>
         </div>
       </div>
-      <p className="agents-home-files-intro">
-        These files provide context for Chat. Shared Coworker files are
-        available to everyone who can use this Coworker; relationship files are
-        private to you and this Coworker. Formal Work uses its own execution
-        context.
-      </p>
+      <p className="agents-home-files-intro">{t('agents.contextFilesIntro')}</p>
       <div className="agents-home-files-grid">
         <ContextFileScope
           agentId={agent.id}
-          heading="Shared Coworker files"
-          description="Available in this Coworker's Chat context."
+          heading={t('agents.sharedCoworkerFiles')}
+          description={t('agents.sharedCoworkerFilesHint')}
           scope="agent"
           state={shared}
           onRetry={() => setSharedReload((value) => value + 1)}
         />
         <ContextFileScope
           agentId={agent.id}
-          heading="Private relationship files"
-          description="Only you and this Coworker can use these in Chat."
+          heading={t('agents.privateRelationshipFiles')}
+          description={t('agents.privateRelationshipFilesHint')}
           scope="agent_user"
           state={privateFiles}
           onRetry={() => setPrivateReload((value) => value + 1)}
@@ -114,6 +111,7 @@ function ContextFileScope({
   readonly state: ListingState;
   readonly onRetry: () => void;
 }) {
+  const t = useT();
   const files = state.listing?.entries ?? [];
   return (
     <article className="agents-home-file-scope">
@@ -121,22 +119,24 @@ function ContextFileScope({
         <h3>{heading}</h3>
         <p>{description}</p>
       </div>
-      {state.status === 'loading' ? <p role="status">Loading files…</p> : null}
+      {state.status === 'loading' ? (
+        <p role="status">{t('agents.loadingFiles')}</p>
+      ) : null}
       {state.status === 'error' ? (
         <div className="agents-home-files-error" role="alert">
-          <p>Files couldn&apos;t be loaded.</p>
+          <p>{t('agents.filesLoadError')}</p>
           <button type="button" onClick={onRetry}>
-            Retry
+            {t('common.retry')}
           </button>
         </div>
       ) : null}
       {state.status === 'ready' && files.length === 0 ? (
-        <p>No context files have been saved here yet.</p>
+        <p>{t('agents.contextFilesEmpty')}</p>
       ) : null}
       {state.status === 'ready' && files.length > 0 ? (
         <>
           <p className="agents-home-file-count">
-            {files.length} {files.length === 1 ? 'file' : 'files'}
+            {t('agents.fileCount', { count: files.length })}
           </p>
           <ul>
             {files.slice(0, FILE_LIMIT).map((file) => (
@@ -153,7 +153,7 @@ function ContextFileScope({
         className="agents-home-files-link"
         to={coworkerFilePath(scope, agentId)}
       >
-        Preview files
+        {t('agents.previewFiles')}
       </Link>
     </article>
   );

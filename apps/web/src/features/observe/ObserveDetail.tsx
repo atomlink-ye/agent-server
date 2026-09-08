@@ -9,6 +9,7 @@ import { longestAttemptMs } from '../run-trace/selectors';
 import type { NormalizedTrace } from '../run-trace/normalized';
 import { useObserveRunTokens } from './queries/use-observe-run-tokens';
 import { AssistantMarkdown } from '@/features/conversations/components/assistant-markdown';
+import { useT } from '../../i18n';
 import './observe.css';
 
 export function ObserveDetail({
@@ -18,6 +19,7 @@ export function ObserveDetail({
   readonly workId: string;
   readonly runId: string;
 }) {
+  const t = useT();
   const query = useWorkDetail({
     workId,
     selectedRunId: runId,
@@ -30,14 +32,14 @@ export function ObserveDetail({
   if (query.status === 'loading') {
     return (
       <p className="work-detail-loading" aria-live="polite">
-        Loading Trace…
+        {t('observe.loadingTrace')}
       </p>
     );
   }
   if (query.status === 'starting') {
     return (
       <p className="work-detail-loading" aria-live="polite">
-        Run is starting…
+        {t('observe.startingRun')}
       </p>
     );
   }
@@ -48,8 +50,8 @@ export function ObserveDetail({
         role="alert"
         data-testid="observe-detail-error"
       >
-        <p className="eyebrow">Couldn&apos;t load this Trace</p>
-        <p>The selected Run is unavailable.</p>
+        <p className="eyebrow">{t('observe.loadTraceError')}</p>
+        <p>{t('observe.selectedRunUnavailable')}</p>
       </section>
     );
   }
@@ -62,11 +64,13 @@ export function ObserveDetail({
     <section className="observe-detail" data-testid="observe-detail">
       <header className="observe-detail-header">
         <div>
-          <p className="observe-kicker">Run</p>
+          <p className="observe-kicker">{t('observe.run')}</p>
           <h2>{run.id}</h2>
           <p className="observe-detail-timestamps">
-            Started {formatTimestamp(run.created_at)} · Updated{' '}
-            {formatTimestamp(run.updated_at)}
+            {t('observe.startedUpdated', {
+              started: formatTimestamp(run.created_at),
+              updated: formatTimestamp(run.updated_at),
+            })}
           </p>
         </div>
         <span
@@ -98,29 +102,33 @@ function ObserveMetricCards({
   readonly trace: NormalizedTrace;
   readonly tokens: ReturnType<typeof useObserveRunTokens>;
 }) {
+  const t = useT();
   const durationMs = longestAttemptMs(trace);
   const tokensReady = tokens.status === 'ready' && tokens.totalTokens !== null;
   return (
     <div className="observe-metric-cards" data-testid="observe-metric-cards">
       <ObserveMetricCard
-        label="Duration"
+        label={t('observe.duration')}
         value={durationMs === null ? '—' : formatDurationMs(durationMs)}
-        hint={durationMs === null ? 'not captured' : undefined}
+        hint={durationMs === null ? t('observe.notCaptured') : undefined}
       />
-      <ObserveMetricCard label="Inbox" value={String(trace.messages.size)} />
       <ObserveMetricCard
-        label="Tools"
+        label={t('observe.inbox')}
+        value={String(trace.messages.size)}
+      />
+      <ObserveMetricCard
+        label={t('observe.tools')}
         value={String(trace.activities.length)}
       />
       <ObserveMetricCard
-        label="Tokens"
+        label={t('observe.tokens')}
         value={tokensReady ? tokens.totalTokens!.toLocaleString() : '—'}
         hint={
           tokensReady
             ? undefined
             : tokens.status === 'loading'
-              ? 'loading…'
-              : 'not captured'
+              ? t('observe.loading')
+              : t('observe.notCaptured')
         }
       />
     </div>

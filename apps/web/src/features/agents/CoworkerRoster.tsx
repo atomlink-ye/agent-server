@@ -49,16 +49,10 @@ export function CoworkerRoster({
             {empty ? (
               t('agents.teamStarts')
             ) : (
-              <>
-                {t('agents.teamCount', { count: agents.length })}
-              </>
+              <>{t('agents.teamCount', { count: agents.length })}</>
             )}
           </h1>
-          <p>
-            {empty
-              ? t('agents.emptyIntro')
-              : t('agents.teamIntro')}
-          </p>
+          <p>{empty ? t('agents.emptyIntro') : t('agents.teamIntro')}</p>
         </div>
         <button
           className="agents-primary agents-roster-new"
@@ -171,7 +165,7 @@ function CoworkerCard({
         </span>
         <span className="agents-roster-identity-copy">
           <strong>{agent.displayName}</strong>
-          <small>{agent.roleLabel ?? 'Coworker'}</small>
+          <small>{agent.roleLabel ?? t('agents.coworker')}</small>
           <span
             className={`agents-runtime agents-runtime--${agent.runtimeStatus}`}
           >
@@ -200,7 +194,11 @@ function CoworkerCard({
           title={busy ? t('agents.busyConversation') : undefined}
           onClick={() => onChat(agent.id)}
         >
-          {opening ? t('agents.opening') : busy ? t('agents.busy') : t('agents.chat')}
+          {opening
+            ? t('agents.opening')
+            : busy
+              ? t('agents.busy')
+              : t('agents.chat')}
         </button>
         <button
           className="agents-whisper"

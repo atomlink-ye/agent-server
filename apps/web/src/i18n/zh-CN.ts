@@ -35,7 +35,6 @@ export const zhCN: Record<MessageKey, string> = {
   'shell.nav.files': '文件',
   'shell.nav.whispers': '悄悄话',
   // An aria-label is prose read aloud, so this one describes rather than
-  // brands: 「对话 工作区」reads; 「对话 Workspace」does not.
   'shell.titleBar.workspace': '{section} 所在的 Workspace',
   'shell.language.change': '切换语言',
   'shell.language.menu': '语言',
@@ -185,7 +184,7 @@ export const zhCN: Record<MessageKey, string> = {
   'tasks.filter.label': '按状态筛选任务',
   'tasks.filter.all': '全部',
   'tasks.loading': '正在加载任务…',
-  'tasks.unavailable': '此工作区尚未启用任务管理。',
+  'tasks.unavailable': '此 Workspace 尚未启用任务管理。',
   'tasks.loadError': '无法加载任务。请检查连接后重试。',
   'tasks.loadTitle': '无法加载任务',
   'tasks.actionError': '无法保存此任务更改，请重试。',
@@ -243,7 +242,7 @@ export const zhCN: Record<MessageKey, string> = {
   'tasks.unassigned': '未分配',
   'tasks.unavailableMember': '成员不可用',
   'tasks.loadingDefinitions': '正在加载已发布的 Definitions…',
-  'tasks.definitionsUnavailable': '此工作区尚未启用 Work 执行。',
+  'tasks.definitionsUnavailable': '此 Workspace 尚未启用 Work 执行。',
   'tasks.definitionsLoadError': '无法加载已发布的 Definitions。',
   'tasks.noDefinitions':
     '还没有已发布的 Definitions。请先在“新建 Work”中创建一个。',
@@ -264,7 +263,7 @@ export const zhCN: Record<MessageKey, string> = {
   'boards.done': '完成',
   'boards.notDeclared': '未声明',
   'boards.loading': '正在加载 Boards…',
-  'boards.unavailable': '此工作区尚未启用 Board 协作。',
+  'boards.unavailable': '此 Workspace 尚未启用 Board 协作。',
   'boards.loadError': '无法加载 Boards。请检查连接后重试。',
   'boards.actionError': '无法保存此 Board 更改，请重试。',
   'boards.loadTitle': '无法加载 Boards',
@@ -467,7 +466,7 @@ export const zhCN: Record<MessageKey, string> = {
   'authoring.resolving': '正在解析…',
   'authoring.previewPlan': '预览计划',
   'authoring.generatedSource': '高级 · 生成的规范源代码',
-  'authoring.previewSource': '预览将生成的标准 WorkDefinition 定义。',
+  'authoring.previewSource': '预览将生成的规范 Work Definition 源。',
   'authoring.readyToSave':
     '可以保存了。下方预览显示了此 Capability 解析后的计划。',
   'authoring.fixDetails': '请先修正标出的 Capability 详情。',
@@ -487,15 +486,15 @@ export const zhCN: Record<MessageKey, string> = {
   'authoring.platform': '平台',
   'authoring.noPlatformCapabilities': '没有额外的平台能力',
   'authoring.loadingSkills': '正在加载 Skills…',
-  'authoring.skillsUnavailable': '此工作区目前不提供 Skills。',
+  'authoring.skillsUnavailable': '此 Workspace 目前不提供 Skills。',
   'authoring.skillsLoadError': '无法加载 Skills。',
-  'authoring.noPublishedSkills': '此工作区还没有发布 Skills。',
+  'authoring.noPublishedSkills': '此 Workspace 还没有发布 Skills。',
   'authoring.skillsLabel': '技能',
   'authoring.skillsHint': '此参与者能正式做什么。',
   'authoring.grants': '授予 {tools}',
   'authoring.grantsNone': '不授予额外工具',
   'authoring.capabilityUnavailable':
-    '此工作区目前不提供 Work 执行，无法在这里预览或保存 Capabilities。',
+    '此 Workspace 目前不提供 Work 执行，无法在这里预览或保存 Capabilities。',
   'authoring.externalWorkspace':
     '需要聊天会话之外的持久项目 Workspace。部分部署尚未提供该能力；若当前部署未提供，此 Capability 的 Run 无法启动。',
   'authoring.reusableSession':
@@ -524,7 +523,7 @@ export const zhCN: Record<MessageKey, string> = {
   'authoring.error.maximum': '{label}的最大值无效。',
   'authoring.error.numberOrder': '{label}的最小值不能超过最大值。',
   'authoring.error.skillUnavailable':
-    'Skill“{ref}”已不再在此工作区发布。取消选择它，或重新发布后再保存。',
+    'Skill “{ref}”已不再在此 Workspace 发布。取消选择它，或重新发布后再保存。',
   'authoring.error.stableName': '输入字段需要稳定的名称。',
   'authoring.error.numericBound': '{label}的数值范围无效。',
 

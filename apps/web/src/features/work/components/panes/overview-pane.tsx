@@ -8,6 +8,14 @@ import {
 import { AssistantMarkdown } from '@/features/conversations/components/assistant-markdown';
 import { RunTrace } from '@/features/run-trace/run-trace-view';
 import {
+  loadSessionTranscripts,
+  type Session,
+} from '@/features/run-trace/run-trace-gateway';
+import {
+  projectTranscript,
+  type TranscriptEntry,
+} from '@/features/run-trace/transcript-projection';
+import {
   productStatePresentation,
   resultCaptureLabel,
 } from '../work-presentation';
@@ -34,9 +42,37 @@ export function OverviewPane({
       </section>
     );
 
+  return (
+    <OverviewContent data={data} originConversationId={originConversationId} />
+  );
+}
+
+function OverviewContent({
+  data,
+  originConversationId,
+}: {
+  readonly data: WorkDetailData & {
+    readonly run: NonNullable<WorkDetailData['run']>;
+    readonly trace: NonNullable<WorkDetailData['trace']>;
+  };
+  readonly originConversationId?: string | null;
+}) {
   const run = data.run;
   const trace = data.trace;
-  const outcome = run.work_run.result_summary;
+  const [outcome, setOutcome] = useState<string | null>(null);
+  useEffect(() => {
+    let active = true;
+    void loadSessionTranscripts(data.work.id, run.work_run.id)
+      .then((transcripts) => {
+        if (active) setOutcome(outcomeFromSessions(transcripts.sessions));
+      })
+      .catch(() => {
+        if (active) setOutcome(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [data.work.id, run.work_run.id]);
   const outcomeDocument = outcome ? outcomeBody(outcome) : '';
   const stateView = productStatePresentation(run.work_run.product_state);
   const live = run.work_run.product_state === 'running';
@@ -92,6 +128,30 @@ export function OverviewPane({
       />
     </section>
   );
+}
+
+/**
+ * The WorkRun summary is an individual captured event, which can be an
+ * incomplete provider chunk. Project each session before choosing the most
+ * recent assistant segment so the Overview uses the same turn boundaries as
+ * the transcript reader.
+ */
+export function outcomeFromSessions(
+  sessions: readonly Session[],
+): string | null {
+  let latest: { readonly text: string; readonly createdAt: string } | null =
+    null;
+  for (const session of sessions) {
+    for (const entry of projectTranscript(
+      session.entries as readonly TranscriptEntry[],
+    )) {
+      if (entry.event.kind !== 'assistant_text') continue;
+      if (!latest || entry.event.created_at >= latest.createdAt) {
+        latest = { text: entry.event.text, createdAt: entry.event.created_at };
+      }
+    }
+  }
+  return latest?.text ?? null;
 }
 
 function RunJourney({

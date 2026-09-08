@@ -206,13 +206,19 @@ function buildExecutionPrompt(
 function grantedChatToolRefs(
   input: Parameters<ChatTurnProvider['runTurn']>[0],
 ): readonly string[] {
-  return Object.freeze([
-    ...new Set([
-      ...input.brain.toolRefs,
-      AGENT_SERVER_LIST_AGENT_WORKFLOWS_TOOL_REF,
-      AGENT_SERVER_PRODUCT_WORK_RUN_START_TOOL_REF,
-    ]),
-  ]);
+  // Sorted because this list is rendered verbatim into the system prompt, and
+  // Anthropic caches on an exact prefix. Passing the upstream order through
+  // means any change to how toolRefs are fetched rewrites that prompt and
+  // invalidates the whole cached prefix for that turn.
+  return Object.freeze(
+    [
+      ...new Set([
+        ...input.brain.toolRefs,
+        AGENT_SERVER_LIST_AGENT_WORKFLOWS_TOOL_REF,
+        AGENT_SERVER_PRODUCT_WORK_RUN_START_TOOL_REF,
+      ]),
+    ].sort(),
+  );
 }
 
 /**

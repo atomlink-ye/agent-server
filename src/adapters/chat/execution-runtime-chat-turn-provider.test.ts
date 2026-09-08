@@ -176,13 +176,49 @@ describe('ExecutionRuntimeChatTurnProvider', () => {
     ])
       expect(prompt).toContain(`- ${name}`);
     expect(creator.calls[0]?.toolRefs).toEqual([
+      'agent-server/list-agent-workflows',
+      'agent-server/product-work-run-start',
+      'agent-server/work-item-claim',
       'agent-server/workspace-list',
       'agent-server/workspace-read',
       'agent-server/workspace-write',
-      'agent-server/work-item-claim',
-      'agent-server/list-agent-workflows',
-      'agent-server/product-work-run-start',
     ]);
+  });
+
+  it('orders granted tools the same way regardless of how they arrive', async () => {
+    // The rendered list is part of the cached prompt prefix, so two turns that
+    // hold the same grant must produce byte-identical text even if the upstream
+    // query returns them in a different order.
+    const forward = [
+      'agent-server/workspace-list',
+      'agent-server/workspace-read',
+      'agent-server/work-item-claim',
+    ];
+    const shuffled = [
+      'agent-server/work-item-claim',
+      'agent-server/workspace-list',
+      'agent-server/workspace-read',
+    ];
+    const seen: string[][] = [];
+    for (const toolRefs of [forward, shuffled]) {
+      const creator = new RecordingDesiredSpec([
+        runtimeSession('runtime-session-1'),
+      ]);
+      const provider = new ExecutionRuntimeChatTurnProvider(
+        creator,
+        new RecordingTurnExecutor(),
+        recordingConfiguration,
+      );
+      await provider.runTurn({
+        ...turnIdentity('agent-definition-1', 'agent-version-1'),
+        brain: chatBrain({ toolRefs }),
+        messages: [
+          { authorType: 'principal', authorId: 'principal-1', body: 'hello' },
+        ],
+      });
+      seen.push([...(creator.calls[0]?.toolRefs ?? [])]);
+    }
+    expect(seen[0]).toEqual(seen[1]);
   });
 
   it('grants a human actor the same platform tools as the Agent owner', async () => {

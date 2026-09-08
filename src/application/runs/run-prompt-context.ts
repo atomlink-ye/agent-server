@@ -39,6 +39,11 @@ export interface ResolvedRunPrompt {
   readonly agentVersionId: string;
   readonly workerVersionId?: string;
   readonly agentDefinitionId?: string;
+  /**
+   * Durable filesystem identity for the execution subject. Managed Workers
+   * have their own Definition identity, just as Coworker Agents do.
+   */
+  readonly workspaceIdentityId?: string;
   readonly agentOwner?: ResourceOwner;
   readonly modelPolicyRef: ResolvedAgentVersion['modelPolicyRef'];
   readonly skills: readonly ResolvedSkillPackage[];
@@ -135,6 +140,7 @@ export class RunPromptContext {
         proposalLimit: worker.proposalLimit,
         agentVersionId: input.invokableVersionId,
         workerVersionId: input.invokableVersionId,
+        workspaceIdentityId: worker.definitionId,
         modelPolicyRef: worker.modelPolicyRef,
         skills: worker.skills,
         toolRefs: worker.toolRefs,
@@ -160,7 +166,10 @@ export class RunPromptContext {
       proposalLimit: agentVersion.proposalLimit ?? 0,
       agentVersionId: input.invokableVersionId,
       ...(agentVersion.definitionId
-        ? { agentDefinitionId: agentVersion.definitionId }
+        ? {
+            agentDefinitionId: agentVersion.definitionId,
+            workspaceIdentityId: agentVersion.definitionId,
+          }
         : {}),
       ...(agentVersion.agentOwner
         ? { agentOwner: agentVersion.agentOwner }

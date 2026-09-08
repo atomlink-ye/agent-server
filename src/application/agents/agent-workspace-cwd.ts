@@ -20,18 +20,28 @@ import { join } from 'node:path';
  * null computerId is today's single shared runtime and resolves to a
  * `default` namespace, keeping the directory shape ready for real multi-machine
  * placement without another path migration.
+ *
+ * A Work is a separate piece of Agent work, so its optional directory lives
+ * below that Agent identity. Leaving it absent deliberately preserves the
+ * established chat directory exactly; adding Work placement never moves or
+ * hides the Agent's existing files.
  */
 export function agentWorkspaceCwd(
   root: string,
   agentDefinitionId: string,
   computerId: string | null,
+  workId?: string,
 ): string {
   if (!isSafeDirectorySegment(agentDefinitionId))
     throw new Error('agent_workspace_cwd_identity_invalid');
   const computerSegment = computerId ?? 'default';
   if (!isSafeDirectorySegment(computerSegment))
     throw new Error('agent_workspace_cwd_identity_invalid');
-  return join(root, computerSegment, agentDefinitionId);
+  if (workId !== undefined && !isSafeDirectorySegment(workId))
+    throw new Error('agent_workspace_cwd_identity_invalid');
+  return workId === undefined
+    ? join(root, computerSegment, agentDefinitionId)
+    : join(root, computerSegment, agentDefinitionId, 'works', workId);
 }
 
 /**

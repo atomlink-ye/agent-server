@@ -47,6 +47,20 @@ describe('agentWorkspaceCwd', () => {
     );
   });
 
+  it('gives one Agent separate directories for separate Work', () => {
+    const first = agentWorkspaceCwd('/root', 'agent-1', 'computer-1', 'work-1');
+    const second = agentWorkspaceCwd(
+      '/root',
+      'agent-1',
+      'computer-1',
+      'work-2',
+    );
+
+    expect(first).toBe('/root/computer-1/agent-1/works/work-1');
+    expect(second).toBe('/root/computer-1/agent-1/works/work-2');
+    expect(second).not.toBe(first);
+  });
+
   it('refuses a computer id that would place the workspace outside the root', () => {
     for (const computerId of ['..', '../elsewhere', 'a/b', ''])
       expect(() =>
@@ -54,6 +68,18 @@ describe('agentWorkspaceCwd', () => {
           '/srv/agent-workspace',
           'agent-definition-1',
           computerId,
+        ),
+      ).toThrow('agent_workspace_cwd_identity_invalid');
+  });
+
+  it('refuses a Work id that would place the workspace outside the root', () => {
+    for (const workId of ['..', '../elsewhere', 'a/b', ''])
+      expect(() =>
+        agentWorkspaceCwd(
+          '/srv/agent-workspace',
+          'agent-definition-1',
+          null,
+          workId,
         ),
       ).toThrow('agent_workspace_cwd_identity_invalid');
   });

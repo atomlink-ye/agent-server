@@ -34,6 +34,7 @@ import { createDesiredRuntimeSystemPrompt } from '../../domain/runtime/desired-r
 import { createRuntimeSessionSpec } from '../../domain/runtime/runtime-session-spec.js';
 import { runtimeSpecRevision } from '../../domain/runtime/runtime-session.js';
 import type { EnsureDesiredRuntimeSpec } from '../ports/ensure-desired-runtime-spec.js';
+import type { WorkerResolutionApi } from '../ports/worker-registry.js';
 
 function testRuntimeSessions() {
   return {
@@ -1741,6 +1742,63 @@ describe('ExecuteRun', () => {
     // would make the Files surface contradict the Run it came from.
     expect(files.write).not.toHaveBeenCalled();
   });
+
+  it('places a Work participant below its own Work directory', async () => {
+    const task = createTask('worker', 'managed-version-1');
+    const claim = createClaim();
+    const runtime = createRuntimeWithCandidates();
+    const ensureDesiredRuntimeSpec = {
+      execute: vi.fn(async () => ({
+        session: makeRuntimeSession({
+          id: 'runtime-work-1',
+          scope: { kind: 'run', id: claim.run.id },
+        }),
+        spec: {} as never,
+      })),
+    } as unknown as EnsureDesiredRuntimeSpec;
+    const executeRun = createDirectExecuteRun({
+      completeRun: { execute: vi.fn(async ({ run }) => run) } as never,
+      runtime,
+      task,
+      resolver: createManagedResolver(),
+      runtimeSessions: { findByScope: vi.fn(async () => null) } as never,
+      ensureDesiredRuntimeSpec,
+      runtimeConfiguration: {
+        provider: 'test-provider',
+        model: 'test-model',
+        cwd: '/srv/agent-workspace',
+      },
+      workerResolver: {
+        resolvePublished: vi.fn(async () => ({
+          source: 'worker',
+          id: 'managed-version-1',
+          definitionId: 'worker-definition-1',
+          workerOwner: {
+            tenantId: task.tenantId,
+            workspaceId: task.workspaceId,
+            principalType: task.principalType,
+            principalId: task.principalId,
+          },
+          instructions: 'worker instructions',
+          modelPolicyRef: 'free-only',
+          proposalLimit: 0,
+          skills: [],
+          toolRefs: [],
+        })),
+      } as never,
+      workRunManifests: createWorkManifests(task.rootTaskId),
+    });
+
+    await executeRun.execute(claim);
+
+    expect(ensureDesiredRuntimeSpec.execute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        configuration: expect.objectContaining({
+          cwd: '/srv/agent-workspace/default/worker-definition-1/works/work-1',
+        }),
+      }),
+    );
+  });
 });
 
 function createExecuteRun(input: {
@@ -1890,6 +1948,14 @@ function createDirectExecuteRun(input: {
   readonly createMemoryProposal?: CreateMemoryProposal;
   readonly contextFiles?: LogicalFileStore;
   readonly workRunManifests?: WorkRunResourceManifestRead;
+  readonly runtimeSessions?: ReturnType<typeof testRuntimeSessions>;
+  readonly ensureDesiredRuntimeSpec?: EnsureDesiredRuntimeSpec;
+  readonly runtimeConfiguration?: {
+    readonly provider: string;
+    readonly model: string | null;
+    readonly cwd: string;
+  };
+  readonly workerResolver?: WorkerResolutionApi;
 }): ExecuteRun {
   const tasks = {
     findById: vi.fn(async () => input.task),
@@ -1902,11 +1968,17 @@ function createDirectExecuteRun(input: {
     executeTeamTask: {} as never,
     runtimeTurns: input.runtime,
     runtimeProvider: input.runtime,
-    runtimeSessions: testRuntimeSessions(),
-    ensureDesiredRuntimeSpec: testDesiredSpecOwner(testRuntimeSessions()),
+    runtimeSessions: input.runtimeSessions ?? testRuntimeSessions(),
+    ensureDesiredRuntimeSpec:
+      input.ensureDesiredRuntimeSpec ??
+      testDesiredSpecOwner(testRuntimeSessions()),
     logger: { log: vi.fn() },
     now: () => new Date('2026-07-23T00:00:00.000Z'),
     resolver: input.resolver,
+    ...(input.runtimeConfiguration
+      ? { runtimeConfiguration: input.runtimeConfiguration }
+      : {}),
+    ...(input.workerResolver ? { workerResolver: input.workerResolver } : {}),
     ...(input.createMemoryProposal
       ? { createMemoryProposal: input.createMemoryProposal }
       : {}),
@@ -1995,7 +2067,7 @@ function createClaimWithIds(runId: string, taskId: string): ClaimedRun {
 }
 
 function createTask(
-  invokableKind: 'agent' | 'team' = 'agent',
+  invokableKind: 'agent' | 'worker' | 'team' = 'agent',
   invokableVersionId = RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID,
   id = 'task-1',
   sourceMessageId: string | null = `message-${id}`,

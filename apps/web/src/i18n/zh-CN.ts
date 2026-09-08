@@ -253,8 +253,8 @@ export const zhCN: Record<MessageKey, string> = {
 
   // --- Boards --------------------------------------------------------------
   'boards.navigation': 'Board 导航',
-  'boards.eyebrow': 'AI Coworker 工作区',
-  'boards.title': 'Boards 看板',
+  'boards.eyebrow': 'AI Coworker Workspace',
+  'boards.title': 'Boards',
   'boards.new': '+ 新建 Board',
   'boards.newTitle': '新 Board 的标题',
   'boards.titlePlaceholder': 'Board 标题',
@@ -529,7 +529,7 @@ export const zhCN: Record<MessageKey, string> = {
   'authoring.error.numericBound': '{label}的数值范围无效。',
 
   // --- Work / Run trace ---
-  'work.title': 'Work 工作区',
+  'work.title': 'Work',
   'work.overview': 'Work 概览',
   'work.backToTask': '← 返回任务',
   'work.respondInConversation': '← 在对话中回复',
@@ -586,7 +586,7 @@ export const zhCN: Record<MessageKey, string> = {
   'work.tab.runs': 'Run 记录',
   'work.tab.transcript': '对话',
   'work.tab.artifacts': '文件',
-  'work.tab.definition': 'Definition 定义',
+  'work.tab.definition': 'Definition',
   'work.result.present': '结果摘要已准备好。',
   'work.result.redacted': '结果可用，但摘要已隐藏。',
   'work.result.notPresent': '这次 Run 没有结果摘要。',

@@ -3,6 +3,8 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, expect, it, vi } from 'vitest';
 
+import '../../../index.css';
+
 import { ChatTranscript } from './ChatTranscript';
 import type { ChatMessage, ConversationId } from '../contracts';
 import type { ConversationMessagesState } from '../stores/messages';
@@ -34,19 +36,21 @@ async function render(messages: readonly ChatMessage[]): Promise<HTMLElement> {
   await act(async () => {
     root.render(
       <MemoryRouter>
-        <ChatTranscript
-          conversationId={conversationId}
-          hasConversations
-          state={
-            {
-              status: 'ready',
-              messages,
-              error: null,
-            } as unknown as ConversationMessagesState
-          }
-          onRetry={() => undefined}
-          onOpenWork={() => undefined}
-        />
+        <main className="chat-panel" style={{ height: '900px' }}>
+          <ChatTranscript
+            conversationId={conversationId}
+            hasConversations
+            state={
+              {
+                status: 'ready',
+                messages,
+                error: null,
+              } as unknown as ConversationMessagesState
+            }
+            onRetry={() => undefined}
+            onOpenWork={() => undefined}
+          />
+        </main>
       </MemoryRouter>,
     );
   });
@@ -90,6 +94,28 @@ it('leaves a principal message as the text they actually typed', async () => {
 
   expect(host.querySelector('strong')).toBeNull();
   expect(host.textContent).toContain('**exactly**');
+});
+
+it('scrolls the real Conversation transcript to its final message', async () => {
+  const host = await render(
+    Array.from({ length: 48 }, (_, index) =>
+      message({
+        id: `22222222-2222-4222-8222-${String(index).padStart(12, '0')}`,
+        sequence: index,
+        authorType: 'agent_definition',
+        body:
+          index === 47 ? 'Final real conversation message' : `Message ${index}`,
+      }),
+    ),
+  );
+  const transcript = host.querySelector<HTMLElement>('.chat-transcript')!;
+  expect(transcript.scrollHeight).toBeGreaterThan(transcript.clientHeight);
+  transcript.scrollTop = transcript.scrollHeight;
+  expect(transcript.scrollTop).toBeGreaterThan(0);
+  const finalMessage = [...transcript.querySelectorAll('article')].at(-1)!;
+  expect(finalMessage.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+    transcript.getBoundingClientRect().bottom + 1,
+  );
 });
 
 it('refuses raw HTML in an Agent reply', async () => {

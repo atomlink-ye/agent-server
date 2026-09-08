@@ -6,6 +6,11 @@ import type { AuthorizedRuntimeToolContext } from '../../application/runtime/aut
 import { DescribeWorkflow } from '../../application/work/describe-workflow.js';
 import type { WorkDefinitionSourceRepository } from '../../application/ports/work-definition-source-repository.js';
 import type { ConversationRepository } from '../../application/ports/conversation-repository.js';
+import {
+  ProductProjectionNotFoundError,
+  type ProductProjectionApi,
+} from '../../application/product-projection/product-projection.js';
+import type { GetProductSessionTranscripts } from '../../application/product-projection/get-product-session-transcripts.js';
 import type {
   ConversationWorkLinkRepository,
   ConversationWorkOrigin,
@@ -15,6 +20,11 @@ import {
   toWorkResponse,
   toWorkRunResponse,
 } from '../../contracts/product-work-commands.js';
+import {
+  AGENT_SERVER_PRODUCT_WORK_READ_TOOL_REF,
+  AGENT_SERVER_PRODUCT_WORK_RUN_READ_TOOL_REF,
+  AGENT_SERVER_PRODUCT_WORK_RUN_TRANSCRIPT_TOOL_REF,
+} from '../../application/agents/built-in-skills.js';
 
 export const PRODUCT_WORK_CREATE_TOOL_REF = 'agent-server/product-work-create';
 export const PRODUCT_WORK_RUN_START_TOOL_REF =
@@ -51,15 +61,92 @@ const strictContinueInput = z.strictObject({
   work_ref: z.string().uuid(),
   feedback: z.string(),
 });
+const strictWorkReadInput = z.strictObject({ work_id: z.string().uuid() });
+const strictWorkRunReadInput = z.strictObject({
+  work_id: z.string().uuid(),
+  work_run_id: z.string().uuid(),
+});
 type CreateInput = z.infer<typeof strictCreateInput>;
 type StartInput = z.infer<typeof strictStartInput>;
 type OneCallStartInput = z.infer<typeof strictOneCallStartInput>;
 type ContinueInput = z.infer<typeof strictContinueInput>;
+type WorkReadInput = z.infer<typeof strictWorkReadInput>;
+type WorkRunReadInput = z.infer<typeof strictWorkRunReadInput>;
+
+const MAX_INSPECTED_MCP_ACTIVITIES = 200;
 
 export interface WorkReference {
   readonly work_id: string;
   readonly definition_id: string;
   readonly definition_version_id: string;
+}
+
+function notFound() {
+  return {
+    isError: true as const,
+    content: [{ type: 'text' as const, text: 'not_found' }],
+  };
+}
+
+function invalidRequest() {
+  return {
+    isError: true as const,
+    content: [{ type: 'text' as const, text: 'invalid_request' }],
+  };
+}
+
+function unavailable() {
+  return {
+    isError: true as const,
+    content: [{ type: 'text' as const, text: 'unavailable' }],
+  };
+}
+
+function jsonResult(value: unknown) {
+  return {
+    content: [{ type: 'text' as const, text: JSON.stringify(value) }],
+  };
+}
+
+async function authorizeWorkRead(
+  current: AuthorizedRuntimeToolContext,
+  workId: string,
+  links:
+    | Pick<ConversationWorkLinkRepository, 'findConversationIdByWork'>
+    | undefined,
+): Promise<boolean> {
+  const conversationId = current.chatContext?.conversationId;
+  if (!conversationId || !links) return false;
+  try {
+    return (
+      (await links.findConversationIdByWork({
+        tenantId: current.tenantId,
+        workspaceId: current.workspaceId,
+        workId,
+      })) === conversationId
+    );
+  } catch {
+    // Work visibility is fail-closed and must not expose repository details.
+    return false;
+  }
+}
+
+type ProductRunTraceSuccess = Extract<
+  Awaited<ReturnType<ProductProjectionApi['getRunTrace']>>,
+  { readonly projection_status: 'internally_anchored' }
+>;
+
+function boundedRunTrace(trace: ProductRunTraceSuccess) {
+  const activities = trace.mcp_activities;
+  return {
+    work: trace.work,
+    work_run: trace.work_run,
+    runs: trace.runs,
+    actors: trace.actors,
+    messages: trace.messages,
+    mcp_activities: activities.slice(0, MAX_INSPECTED_MCP_ACTIVITIES),
+    mcp_activities_truncated: activities.length > MAX_INSPECTED_MCP_ACTIVITIES,
+  };
 }
 
 function toConversationOrigin(
@@ -241,7 +328,7 @@ async function executeOneCallWorkStart(
     definitionVersionId: version.version.id,
     title: definition.name,
   });
-  await deps.startWorkRun.execute({
+  const started = await deps.startWorkRun.execute({
     accessContext,
     workId: work.id,
     triggerKind: 'manual',
@@ -270,7 +357,10 @@ async function executeOneCallWorkStart(
     content: [
       {
         type: 'text',
-        text: JSON.stringify({ work_reference: workReference }),
+        text: JSON.stringify({
+          work_reference: workReference,
+          work_run: toWorkRunResponse(started.workRun),
+        }),
       },
     ],
   };
@@ -348,7 +438,7 @@ async function executeContinueWork(
     principalId: deps.current.principalId,
     policySnapshotVersion: 'runtime-mcp',
   };
-  await deps.startWorkRun.execute({
+  const started = await deps.startWorkRun.execute({
     accessContext,
     workId: work.id,
     triggerKind: 'manual',
@@ -365,6 +455,7 @@ async function executeContinueWork(
             definition_id: work.definitionId,
             definition_version_id: work.currentDefinitionVersionId,
           } satisfies WorkReference,
+          work_run: toWorkRunResponse(started.workRun),
           continuation_kind: 'new_work_run',
         }),
       },
@@ -392,6 +483,11 @@ export function registerProductWorkMcpTools(input: {
     | 'findConversationIdByWork'
     | 'findRecentWorkByConversation'
   >;
+  readonly productProjection: Pick<
+    ProductProjectionApi,
+    'getWorkListItem' | 'getRunTrace'
+  >;
+  readonly sessionTranscripts?: Pick<GetProductSessionTranscripts, 'execute'>;
 }): void {
   const { server, grant, authorize } = input;
   const fallbackConversationOrigin = toConversationOrigin(grant.chatContext);
@@ -403,6 +499,143 @@ export function registerProductWorkMcpTools(input: {
       throw new Error('Chat runtime grant context is unavailable.');
     return fallbackConversationOrigin;
   };
+  if (grant.catalogTools.includes(AGENT_SERVER_PRODUCT_WORK_READ_TOOL_REF))
+    (server.registerTool as any)(
+      'product_work_read',
+      {
+        description:
+          'Read the authorized Work and its current projected product status.',
+        inputSchema: strictWorkReadInput,
+        annotations: { readOnlyHint: true },
+        _meta: { risk: 'read_only' },
+      },
+      async (args: WorkReadInput) => {
+        const current = await authorize(
+          AGENT_SERVER_PRODUCT_WORK_READ_TOOL_REF,
+        );
+        if (!current) return notFound();
+        const parsed = strictWorkReadInput.safeParse(args);
+        if (!parsed.success) return invalidRequest();
+        if (
+          !(await authorizeWorkRead(
+            current,
+            parsed.data.work_id,
+            input.conversationWorkLinks,
+          ))
+        )
+          return notFound();
+        try {
+          const work = await input.workIdentity.findWorkById(
+            parsed.data.work_id,
+            {
+              tenantId: current.tenantId,
+              workspaceId: current.workspaceId,
+            },
+          );
+          if (!work) return notFound();
+          const projected = await input.productProjection.getWorkListItem({
+            tenantId: current.tenantId,
+            workspaceId: current.workspaceId,
+            work,
+          });
+          return jsonResult({ work: projected });
+        } catch (error) {
+          return error instanceof ProductProjectionNotFoundError
+            ? notFound()
+            : unavailable();
+        }
+      },
+    );
+  if (grant.catalogTools.includes(AGENT_SERVER_PRODUCT_WORK_RUN_READ_TOOL_REF))
+    (server.registerTool as any)(
+      'product_work_run_read',
+      {
+        description:
+          'Read the authorized WorkRun status, failure codes, result, participants, and bounded trace activities.',
+        inputSchema: strictWorkRunReadInput,
+        annotations: { readOnlyHint: true },
+        _meta: { risk: 'read_only' },
+      },
+      async (args: WorkRunReadInput) => {
+        const current = await authorize(
+          AGENT_SERVER_PRODUCT_WORK_RUN_READ_TOOL_REF,
+        );
+        if (!current) return notFound();
+        const parsed = strictWorkRunReadInput.safeParse(args);
+        if (!parsed.success) return invalidRequest();
+        if (
+          !(await authorizeWorkRead(
+            current,
+            parsed.data.work_id,
+            input.conversationWorkLinks,
+          ))
+        )
+          return notFound();
+        try {
+          const trace = await input.productProjection.getRunTrace({
+            tenantId: current.tenantId,
+            workspaceId: current.workspaceId,
+            workId: parsed.data.work_id,
+            workRunId: parsed.data.work_run_id,
+          });
+          if (
+            !('projection_status' in trace) ||
+            trace.projection_status !== 'internally_anchored'
+          )
+            return notFound();
+          return jsonResult(boundedRunTrace(trace));
+        } catch (error) {
+          return error instanceof ProductProjectionNotFoundError
+            ? notFound()
+            : unavailable();
+        }
+      },
+    );
+  if (
+    grant.catalogTools.includes(
+      AGENT_SERVER_PRODUCT_WORK_RUN_TRANSCRIPT_TOOL_REF,
+    )
+  )
+    (server.registerTool as any)(
+      'product_work_run_transcript',
+      {
+        description:
+          'Read the authorized WorkRun session transcripts. Each session reports whether its bounded entries were truncated.',
+        inputSchema: strictWorkRunReadInput,
+        annotations: { readOnlyHint: true },
+        _meta: { risk: 'read_only' },
+      },
+      async (args: WorkRunReadInput) => {
+        const current = await authorize(
+          AGENT_SERVER_PRODUCT_WORK_RUN_TRANSCRIPT_TOOL_REF,
+        );
+        if (!current) return notFound();
+        const parsed = strictWorkRunReadInput.safeParse(args);
+        if (!parsed.success) return invalidRequest();
+        if (
+          !(await authorizeWorkRead(
+            current,
+            parsed.data.work_id,
+            input.conversationWorkLinks,
+          ))
+        )
+          return notFound();
+        if (!input.sessionTranscripts) return unavailable();
+        try {
+          const transcripts = await input.sessionTranscripts.execute({
+            tenantId: current.tenantId,
+            workspaceId: current.workspaceId,
+            workId: parsed.data.work_id,
+            workRunId: parsed.data.work_run_id,
+          });
+          return jsonResult(transcripts);
+        } catch (error) {
+          return error instanceof ProductProjectionNotFoundError
+            ? notFound()
+            : unavailable();
+        }
+      },
+    );
   if (grant.catalogTools.includes(PRODUCT_WORK_CREATE_TOOL_REF))
     (server.registerTool as any)(
       'product_work_create',

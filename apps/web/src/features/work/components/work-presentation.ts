@@ -4,7 +4,7 @@ import type {
   WorkListItem,
 } from '@atomlink-ye/agent-server/product-contract';
 import { workTabPath } from '../../../app/routes';
-import { t } from '../../../i18n';
+import { getLocale, t, type Locale } from '../../../i18n';
 
 export type WorkTab =
   'overview' | 'runs' | 'transcript' | 'artifacts' | 'definition';
@@ -113,10 +113,13 @@ export function formatTimestamp(value: string) {
 }
 
 /** A compact, locale-aware timestamp for the navigation index. */
-export function formatWorkListTime(value: string): string {
+export function formatWorkListTime(
+  value: string,
+  locale: Locale = getLocale(),
+): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return t('work.updatedUnavailable');
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(locale, {
     month: 'short',
     day: 'numeric',
     hour: 'numeric',

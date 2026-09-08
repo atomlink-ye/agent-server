@@ -7,18 +7,12 @@ import {
 } from '../../queries/load-work-detail';
 import { AssistantMarkdown } from '@/features/conversations/components/assistant-markdown';
 import { RunTrace } from '@/features/run-trace/run-trace-view';
-import {
-  loadSessionTranscripts,
-  type Session,
-} from '@/features/run-trace/run-trace-gateway';
-import {
-  projectTranscript,
-  type TranscriptEntry,
-} from '@/features/run-trace/transcript-projection';
+import { loadSessionTranscripts } from '@/features/run-trace/run-trace-gateway';
 import {
   productStatePresentation,
   resultCaptureLabel,
 } from '../work-presentation';
+import { latestAssistantSegmentFromSessions } from '../run-outcome';
 import { workRunResultFilePath, workTabPath } from '@/app/routes';
 import { outcomeBody } from './outcome-headline';
 import { humanize } from '../work-presentation';
@@ -67,7 +61,8 @@ function OverviewContent({
     let active = true;
     void loadSessionTranscripts(data.work.id, run.work_run.id)
       .then((transcripts) => {
-        if (active) setOutcome(outcomeFromSessions(transcripts.sessions));
+        if (active)
+          setOutcome(latestAssistantSegmentFromSessions(transcripts.sessions));
       })
       .catch(() => {
         if (active) setOutcome(null);
@@ -133,29 +128,8 @@ function OverviewContent({
   );
 }
 
-/**
- * The WorkRun summary is an individual captured event, which can be an
- * incomplete provider chunk. Project each session before choosing the most
- * recent assistant segment so the Overview uses the same turn boundaries as
- * the transcript reader.
- */
-export function outcomeFromSessions(
-  sessions: readonly Session[],
-): string | null {
-  let latest: { readonly text: string; readonly createdAt: string } | null =
-    null;
-  for (const session of sessions) {
-    for (const entry of projectTranscript(
-      session.entries as readonly TranscriptEntry[],
-    )) {
-      if (entry.event.kind !== 'assistant_text') continue;
-      if (!latest || entry.event.created_at >= latest.createdAt) {
-        latest = { text: entry.event.text, createdAt: entry.event.created_at };
-      }
-    }
-  }
-  return latest?.text ?? null;
-}
+// Kept as a named export for the focused projector tests and existing callers.
+export { latestAssistantSegmentFromSessions as outcomeFromSessions } from '../run-outcome';
 
 function RunJourney({
   trace,
@@ -179,7 +153,8 @@ function RunJourney({
               {item.attempts.map((attempt) => (
                 <li key={attempt.id}>
                   <span>
-                    {t('work.attempt', { number: attempt.attemptNo })} · {humanize(attempt.status)}
+                    {t('work.attempt', { number: attempt.attemptNo })} ·{' '}
+                    {humanize(attempt.status)}
                   </span>
                   {attempt.resultSummary ? (
                     <p>{attempt.resultSummary}</p>
@@ -251,7 +226,10 @@ function RunRoleCards({
               <span>{session.label.role}</span>
             ) : null}
             <span>
-              {t('work.sessionSummary', { status: session.label.status, count: session.summary.entry_count })}
+              {t('work.sessionSummary', {
+                status: session.label.status,
+                count: session.summary.entry_count,
+              })}
             </span>
           </button>
         );

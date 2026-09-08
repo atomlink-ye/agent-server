@@ -450,7 +450,7 @@ it('shows a missing selected Board without Retry, while a snapshot transport fai
       );
     });
     await act(settle);
-    expect(host.textContent).toContain('The selected Board is unavailable.');
+    expect(host.textContent).toContain('This Board is unavailable.');
     expect(host.textContent).toContain('Back to Boards');
     expect(
       [...host.querySelectorAll('button')].some(

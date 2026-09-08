@@ -7,6 +7,7 @@ import { terminalRunStatuses } from '../../domain/runs/run-status.js';
 import type { Task } from '../../domain/tasks/task.js';
 import type { Logger } from '../../shared/observability/logger.js';
 import { AGENT_SERVER_PLATFORM_COLLABORATION_TOOL_REFS } from '../agents/built-in-skills.js';
+import { agentWorkspaceCwd } from '../agents/agent-workspace-cwd.js';
 import { renderGrantedPlatformToolsPrompt } from '../agents/runtime-tool-mcp-names.js';
 import { AGENT_SERVER_EXECUTION_MCP_SERVER_NAME } from '../ports/runtime-extension-binding.js';
 import { resolveRuntimeModelPolicy } from '../agents/runtime-model-policy.js';
@@ -242,6 +243,19 @@ export class AgentRunExecutor {
             runtimeModelPolicy,
           )
         : this.resolveGenericConfiguration(runtimeModelPolicy);
+      // Product Work has a durable Work identity. Keep that directory beneath
+      // the durable Agent/Worker Definition identity so Work files cannot land
+      // in the Agent's chat drawer or another Work's drawer. Worker Definitions
+      // are the corresponding stable identity for Work participants.
+      const workCwd =
+        workManifest && resolved.workspaceIdentityId
+          ? agentWorkspaceCwd(
+              configuration.cwd,
+              resolved.workspaceIdentityId,
+              null,
+              workManifest.workId,
+            )
+          : configuration.cwd;
       const ensured = await this.ensureDesiredRuntimeSpec.execute({
         owner,
         scope,
@@ -260,6 +274,7 @@ export class AgentRunExecutor {
         toolRefs: runtimeToolRefs,
         configuration: {
           ...configuration,
+          cwd: workCwd,
           contextEpoch: 0,
           desiredSystemPrompt: createDesiredRuntimeSystemPrompt(
             prompts.systemPrompt,

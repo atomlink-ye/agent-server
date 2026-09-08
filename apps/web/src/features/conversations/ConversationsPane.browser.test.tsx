@@ -40,15 +40,15 @@ it('opens Direct Chat from the Coworker roster without exposing AgentDefinition 
   const { host, root } = renderPane(commands, appStore, conversationsStore);
 
   try {
-    const newConversation = findButton(host, 'New conversation');
+    const newConversation = findButton(host, 'Message a Coworker');
     await act(async () => {
       newConversation.click();
       await Promise.resolve();
       await Promise.resolve();
     });
 
-    expect(host.textContent).toContain('Choose a coworker');
-    expect(host.textContent).toContain('Research Analyst');
+    expect(host.textContent).toContain('Choose a Coworker');
+    expect(host.textContent).toContain('Research Analyst · Researcher · Start');
     expect(host.textContent).not.toContain('Agent definition ID');
     expect(host.querySelector('#new-conversation-agent-definition')).toBeNull();
 
@@ -88,7 +88,7 @@ it('reloads the Coworker roster on every picker open and reuses an existing Dire
 
   try {
     await act(async () => {
-      findButton(host, 'New conversation').click();
+      findButton(host, 'Message a Coworker').click();
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -97,7 +97,7 @@ it('reloads the Coworker roster on every picker open and reuses an existing Dire
 
     await act(async () => {
       findButton(host, 'Cancel').click();
-      findButton(host, 'New conversation').click();
+      findButton(host, 'Message a Coworker').click();
       await Promise.resolve();
       await Promise.resolve();
     });

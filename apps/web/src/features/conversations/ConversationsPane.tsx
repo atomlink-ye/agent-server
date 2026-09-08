@@ -196,7 +196,9 @@ export function ConversationsPane({
                   >
                     {coworker.displayName}
                     {secondary ? ` · ${secondary}` : ''}
-                    {existing ? ` · ${t('conversations.openExisting')}` : ''}
+                    {existing
+                      ? ` · ${t('conversations.openExisting')}`
+                      : ` · ${t('conversations.startNew')}`}
                     {!available ? ` · ${coworker.runtimeStatus}` : ''}
                   </button>
                 );

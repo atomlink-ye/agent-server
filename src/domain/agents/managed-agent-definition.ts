@@ -9,20 +9,23 @@ export interface AgentDefinition extends ManagedAgentOwner {
   readonly updatedAt: string;
   readonly roleLabel: string | null;
   readonly summary: string | null;
+  /** The Computer namespace this Agent runs under; null means the shared default. */
+  readonly computerId: string | null;
 }
 
 export function createManagedAgentDefinition(
   options: Omit<
     AgentDefinition,
-    'id' | 'createdAt' | 'updatedAt' | 'roleLabel' | 'summary'
+    'id' | 'createdAt' | 'updatedAt' | 'roleLabel' | 'summary' | 'computerId'
   > & {
     id?: string;
     now?: () => Date;
     roleLabel?: string | null;
     summary?: string | null;
+    computerId?: string | null;
   },
 ): AgentDefinition {
-  const { id, now, roleLabel, summary, ...durable } = options;
+  const { id, now, roleLabel, summary, computerId, ...durable } = options;
   const at = (now ?? (() => new Date()))().toISOString();
   return Object.freeze({
     ...durable,
@@ -31,5 +34,6 @@ export function createManagedAgentDefinition(
     updatedAt: at,
     roleLabel: roleLabel ?? null,
     summary: summary ?? null,
+    computerId: computerId ?? null,
   });
 }

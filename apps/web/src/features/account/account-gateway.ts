@@ -1,0 +1,44 @@
+import { apiTransport } from '../../api/transport';
+
+export interface Account {
+  readonly principalId: string;
+  readonly principalType: string;
+  readonly displayName: string | null;
+}
+
+export async function loadAccount(): Promise<Account> {
+  const payload = record(await apiTransport.request('/api/account'));
+  if (!payload) throw new Error('Invalid account response.');
+  return {
+    principalId: text(payload.principal_id),
+    principalType: text(payload.principal_type),
+    displayName: nullableText(payload.display_name),
+  };
+}
+
+export async function setDisplayName(displayName: string): Promise<string> {
+  const payload = record(
+    await apiTransport.request('/api/account/display-name', {
+      method: 'PATCH',
+      cache: 'no-store',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ display_name: displayName }),
+    }),
+  );
+  if (!payload) throw new Error('Invalid display name response.');
+  return text(payload.display_name);
+}
+
+function record(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+function text(value: unknown): string {
+  if (typeof value !== 'string' || !value.trim())
+    throw new Error('Invalid account response.');
+  return value;
+}
+function nullableText(value: unknown): string | null {
+  return value === null || value === undefined ? null : text(value);
+}

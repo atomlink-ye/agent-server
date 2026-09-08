@@ -1,4 +1,4 @@
-import { DaemonClient } from '@getpaseo/client';
+import { DaemonClient } from '@getpaseo/client/internal/daemon-client';
 
 import type { ExecutionMcpServerConfig } from '../../application/ports/runtime-extension-binding.js';
 import type { ManagedEnvironmentProvider } from '../../domain/environments/managed-environment-package.js';
@@ -92,6 +92,8 @@ export class PaseoSdkClient implements PaseoClientPort {
       id: model.id,
       label: model.label,
       ...(model.description ? { description: model.description } : {}),
+      ...(model.isDefault ? { isDefault: true } : {}),
+      ...(model.isSelectable === false ? { isSelectable: false } : {}),
     }));
   }
 

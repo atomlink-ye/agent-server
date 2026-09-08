@@ -66,7 +66,16 @@ if (
 }
 
 await mkdir(runtimeRoot, { recursive: true });
-const model = deriveOpenCodeGoModelId(defaults.PASEO_MODEL);
+// The OpenCode Go gateway is one model source among several, not the only one.
+// A provider-native PASEO_MODEL (`claude-sonnet-5`) means the provider reaches
+// its own account, so the gateway id derivation -- which rejects any model that
+// is not `opencode-go/<id>` -- must not run, and the gateway-shaped Codex and
+// OpenCode configs have nothing to describe. `with-paseo.mjs` already reads the
+// two model forms this way; this launcher used to assume only the gateway one.
+const openCodeGoModel = defaults.PASEO_MODEL.startsWith('opencode-go/')
+  ? deriveOpenCodeGoModelId(defaults.PASEO_MODEL)
+  : null;
+const model = openCodeGoModel ?? defaults.PASEO_MODEL;
 const providerConfigurations = [
   {
     provider: 'claude',
@@ -75,29 +84,35 @@ const providerConfigurations = [
     content: ({ model: configuredModel }) =>
       JSON.stringify({ env: { ANTHROPIC_MODEL: configuredModel } }),
   },
-  {
-    provider: 'codex',
-    path: join(runtimeRoot, 'home', '.codex', 'config.toml'),
-    format: 'toml',
-    content: () =>
-      [
-        'model_provider = "opencode-go"',
-        '',
-        '[model_providers.opencode-go]',
-        'name = "OpenCode Go"',
-        `base_url = "${gatewayBaseUrl}/v1"`,
-        'env_key = "OPENCODE_GO_API_KEY"',
-        'wire_api = "responses"',
-        '',
-      ].join('\n'),
-  },
-  {
-    provider: 'opencode',
-    path: join(runtimeRoot, 'xdg-config', 'opencode', 'opencode.json'),
-    format: 'json',
-    content: ({ model: configuredModel }) =>
-      createOpenCodeConfigContent({ model: `opencode-go/${configuredModel}` }),
-  },
+  ...(openCodeGoModel === null
+    ? []
+    : [
+        {
+          provider: 'codex',
+          path: join(runtimeRoot, 'home', '.codex', 'config.toml'),
+          format: 'toml',
+          content: () =>
+            [
+              'model_provider = "opencode-go"',
+              '',
+              '[model_providers.opencode-go]',
+              'name = "OpenCode Go"',
+              `base_url = "${gatewayBaseUrl}/v1"`,
+              'env_key = "OPENCODE_GO_API_KEY"',
+              'wire_api = "responses"',
+              '',
+            ].join('\n'),
+        },
+        {
+          provider: 'opencode',
+          path: join(runtimeRoot, 'xdg-config', 'opencode', 'opencode.json'),
+          format: 'json',
+          content: ({ model: configuredModel }) =>
+            createOpenCodeConfigContent({
+              model: `opencode-go/${configuredModel}`,
+            }),
+        },
+      ]),
 ];
 
 for (const configuration of providerConfigurations) {
@@ -129,7 +144,7 @@ for (const configuration of providerConfigurations) {
   }
 }
 
-if (process.env.OPENCODE_GO_API_KEY?.trim()) {
+if (openCodeGoModel !== null && process.env.OPENCODE_GO_API_KEY?.trim()) {
   process.env.OPENCODE_CONFIG_CONTENT ||= createOpenCodeConfigContent({
     model: defaults.PASEO_MODEL,
   });

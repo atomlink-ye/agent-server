@@ -92,9 +92,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-export class OpenCodeModelUnavailableError extends Error {
+/** No model could be resolved for the provider a Paseo connection runs on. */
+export class RuntimeModelUnavailableError extends Error {
   public constructor(message: string) {
     super(message);
-    this.name = 'OpenCodeModelUnavailableError';
+    this.name = 'RuntimeModelUnavailableError';
   }
 }

@@ -1,22 +1,35 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { OpenCodeModelUnavailableError } from './errors.js';
-import { PaseoConnectionManager } from './paseo-connection-manager.js';
+import { RuntimeModelUnavailableError } from './errors.js';
+import {
+  PaseoConnectionManager,
+  type PaseoConnectionManagerOptions,
+} from './paseo-connection-manager.js';
 import { FakePaseoClientPort } from '../../../tests/fixtures/fake-paseo-client.js';
 
 const logger = { log: () => undefined };
 
-function createManager(client: FakePaseoClientPort) {
+function createManager(
+  client: FakePaseoClientPort,
+  overrides: Partial<PaseoConnectionManagerOptions> = {},
+) {
   return new PaseoConnectionManager(
     client,
     {
       cwd: '/tmp/agent-server-connection-manager-test',
       provider: 'opencode',
       workspaceTitle: 'Connection Manager Test',
+      ...overrides,
     },
     logger,
   );
 }
+
+/** What Paseo 0.7.0 reports for Claude: a default marker and no free marker. */
+const claudeModels = [
+  { id: 'claude-opus-5', label: 'Opus 5', isDefault: true },
+  { id: 'claude-sonnet-5', label: 'Sonnet 5' },
+];
 
 describe('PaseoConnectionManager', () => {
   it('coalesces initialization and retries startup connection', async () => {
@@ -96,12 +109,37 @@ describe('PaseoConnectionManager', () => {
     });
   });
 
+  it('becomes model-ready for Claude on the operator-pinned demo model', async () => {
+    const client = new FakePaseoClientPort();
+    client.models = claudeModels;
+    const manager = createManager(client, {
+      provider: 'claude',
+      requestedModel: 'claude-sonnet-5',
+    });
+
+    await manager.initialize();
+
+    expect(manager.model?.id).toBe('claude-sonnet-5');
+    expect(manager.health()).toMatchObject({ modelReady: true });
+  });
+
+  it('becomes model-ready for Claude with no configured model', async () => {
+    const client = new FakePaseoClientPort();
+    client.models = claudeModels;
+    const manager = createManager(client, { provider: 'claude' });
+
+    await manager.initialize();
+
+    expect(manager.model?.id).toBe('claude-opus-5');
+    expect(manager.health()).toMatchObject({ modelReady: true });
+  });
+
   it('fails closed when the configured model policy cannot resolve a free model', async () => {
     const client = new FakePaseoClientPort();
     client.models = [{ id: 'opencode/paid', label: 'Paid' }];
 
     await expect(createManager(client).initialize()).rejects.toThrow(
-      OpenCodeModelUnavailableError,
+      RuntimeModelUnavailableError,
     );
   });
 });

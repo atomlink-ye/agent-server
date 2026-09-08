@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { DaemonClient } from '@getpaseo/client';
+import { DaemonClient } from '@getpaseo/client/internal/daemon-client';
 
 describe('pinned Paseo client capabilities', () => {
   it('exposes the Runtime Session V2 methods required by later phases', () => {

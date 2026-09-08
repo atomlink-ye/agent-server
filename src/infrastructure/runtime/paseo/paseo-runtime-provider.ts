@@ -241,7 +241,7 @@ export class PaseoRuntimeProvider implements RuntimeExecutionProvider {
             : {}),
         },
         {
-          name: 'opencode_model',
+          name: 'runtime_model',
           ready: health.modelReady,
           ...(!health.modelReady && health.lastError
             ? { detail: health.lastError }

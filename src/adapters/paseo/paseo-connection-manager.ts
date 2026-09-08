@@ -4,7 +4,7 @@ import type { ManagedEnvironmentProvider } from '../../domain/environments/manag
 import type { Logger } from '../../shared/observability/logger.js';
 import { PaseoConnectionError } from './errors.js';
 import {
-  selectOpenCodeModel,
+  selectRuntimeModel,
   type PaseoModelDescriptor,
 } from './model-selector.js';
 import type { PaseoClientPort } from './paseo-client-port.js';
@@ -101,7 +101,13 @@ export class PaseoConnectionManager {
       this.#options.provider,
       this.#options.cwd,
     );
-    const model = selectOpenCodeModel(models, this.#options.requestedModel);
+    const model = selectRuntimeModel({
+      provider: this.#options.provider,
+      models,
+      ...(this.#options.requestedModel
+        ? { requestedModel: this.#options.requestedModel }
+        : {}),
+    });
     const workspaceId = await this.#client.openWorkspace(this.#options.cwd);
     await this.#client.setWorkspaceTitle(
       workspaceId,

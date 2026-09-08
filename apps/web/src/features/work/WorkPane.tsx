@@ -222,8 +222,8 @@ function WorkListRow({
             )}
             <time dateTime={timestamp}>
               {latestRun
-                ? `Run ${formatWorkListTime(timestamp)}`
-                : `Updated ${formatWorkListTime(timestamp)}`}
+                ? t('work.runAt', { time: formatWorkListTime(timestamp) })
+                : t('work.updatedAt', { time: formatWorkListTime(timestamp) })}
             </time>
           </span>
         </span>

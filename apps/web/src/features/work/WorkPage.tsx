@@ -5,9 +5,11 @@ import type { WorkListItem } from '@atomlink-ye/agent-server/product-contract';
 import { NewWork } from './components/new-work';
 import {
   formatWorkListTime,
-  latestRunSummary,
   productStatePresentation,
+  resultCaptureLabel,
 } from './components/work-presentation';
+import { recentWorkRunSummary } from './components/run-outcome';
+import { loadSessionTranscripts } from '@/features/run-trace/run-trace-gateway';
 import { WorkDetailPage } from './pages/WorkDetailPage';
 import type { WorkListQuery } from './queries/use-work-list';
 import { workPath, workRootPath } from '../../app/routes';
@@ -271,39 +273,89 @@ function WorkLanding({
             return rightTime.localeCompare(leftTime);
           })
           .slice(0, 4)
-          .map((work) => {
-            const latestRun = work.latest_run_summary;
-            const state = productStatePresentation(work.product_state);
-            const timestamp = latestRun?.updated_at ?? work.updated_at;
-            return (
-              <li key={work.id}>
-                <a href={workPath(work.id, originConversationId)}>
-                  {latestRun ? (
-                    <span
-                      className={`work-state-pill work-state-pill--${work.product_state}`}
-                    >
-                      {state.label}
-                    </span>
-                  ) : (
-                    <span className="work-landing__no-run">{t('work.noRuns')}</span>
-                  )}
-                  <strong>{work.title}</strong>
-                  <span className="work-landing__summary">
-                    {latestRun
-                      ? latestRunSummary(work)
-                      : t('work.reviewSetup')}
-                  </span>
-                  <time dateTime={timestamp}>
-                    {latestRun
-                      ? t('work.runAt', { time: formatWorkListTime(timestamp) })
-                      : t('work.updatedAt', { time: formatWorkListTime(timestamp) })}
-                  </time>
-                </a>
-              </li>
-            );
-          })}
+          .map((work) => (
+            <RecentWorkRow
+              key={work.id}
+              work={work}
+              originConversationId={originConversationId}
+            />
+          ))}
       </ol>
     </div>
+  );
+}
+
+function RecentWorkRow({
+  work,
+  originConversationId,
+}: {
+  readonly work: WorkListItem;
+  readonly originConversationId: string | null;
+}) {
+  const t = useT();
+  const latestRun = work.latest_run_summary;
+  const [transcriptSummary, setTranscriptSummary] = useState<{
+    readonly runId: string;
+    readonly segment: string | null;
+  } | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setTranscriptSummary(null);
+    if (!latestRun)
+      return () => {
+        active = false;
+      };
+    void loadSessionTranscripts(work.id, latestRun.id)
+      .then((transcripts) => {
+        if (active)
+          setTranscriptSummary({
+            runId: latestRun.id,
+            segment: recentWorkRunSummary(transcripts.sessions),
+          });
+      })
+      .catch(() => {
+        // The capture label is the safe fallback when transcript data is not
+        // available; a raw result_summary may be an incomplete provider chunk.
+        if (active)
+          setTranscriptSummary({ runId: latestRun.id, segment: null });
+      });
+    return () => {
+      active = false;
+    };
+  }, [latestRun?.id, work.id]);
+
+  const state = productStatePresentation(work.product_state);
+  const timestamp = latestRun?.updated_at ?? work.updated_at;
+  const matchingTranscript =
+    latestRun && transcriptSummary?.runId === latestRun.id
+      ? transcriptSummary
+      : null;
+  const transcriptSegment = matchingTranscript?.segment ?? null;
+  const summary = latestRun
+    ? (transcriptSegment ?? resultCaptureLabel(latestRun.result_capture_status))
+    : t('work.reviewSetup');
+  return (
+    <li>
+      <a href={workPath(work.id, originConversationId)}>
+        {latestRun ? (
+          <span
+            className={`work-state-pill work-state-pill--${work.product_state}`}
+          >
+            {state.label}
+          </span>
+        ) : (
+          <span className="work-landing__no-run">{t('work.noRuns')}</span>
+        )}
+        <strong>{work.title}</strong>
+        <span className="work-landing__summary">{summary}</span>
+        <time dateTime={timestamp}>
+          {latestRun
+            ? t('work.runAt', { time: formatWorkListTime(timestamp) })
+            : t('work.updatedAt', { time: formatWorkListTime(timestamp) })}
+        </time>
+      </a>
+    </li>
   );
 }
 

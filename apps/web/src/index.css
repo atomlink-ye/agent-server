@@ -50,7 +50,7 @@
   --text-sm: 12px;
   --text-md: 13px;
   --text-lg: 14px;
-  --text-title: 18px;
+  --text-title: 20px;
   --text-display: 24px;
 
   --radius-sm: 8px;
@@ -65,6 +65,11 @@
   background: var(--paper);
   font-family:
     'Manrope',
+    'PingFang SC',
+    'Hiragino Sans GB',
+    'Microsoft YaHei',
+    'Noto Sans CJK SC',
+    'Noto Sans SC',
     ui-sans-serif,
     system-ui,
     -apple-system,
@@ -189,7 +194,7 @@ textarea {
   border-radius: 13px;
   background: linear-gradient(135deg, var(--sky-100), var(--cloud));
   box-shadow: var(--shadow-soft);
-  font-size: 20px;
+  font-size: var(--text-title);
 }
 
 .rail-tabs {
@@ -275,7 +280,7 @@ textarea {
 .pane-heading h1 {
   margin: 6px 0 0;
   color: var(--ink-900);
-  font-size: 21px;
+  font-size: var(--text-title);
   font-weight: 700;
   letter-spacing: -0.035em;
 }
@@ -327,7 +332,7 @@ textarea {
 }
 
 .new-chat-button span {
-  font-size: 18px;
+  font-size: var(--text-title);
   line-height: 0.7;
 }
 
@@ -728,7 +733,7 @@ textarea {
   box-shadow: var(--shadow-soft);
   padding: 12px 14px;
   color: var(--ink-700);
-  line-height: 1.55;
+  line-height: 1.6;
 }
 
 .chat-message[data-author-type='principal'] {
@@ -862,7 +867,7 @@ textarea {
 .empty-chat-icon {
   width: 58px;
   height: 58px;
-  font-size: 22px;
+  font-size: var(--text-display);
 }
 
 .composer-error {
@@ -1071,7 +1076,7 @@ textarea {
   border-radius: var(--radius-sm);
   background: var(--cloud);
   color: var(--ink-500);
-  font-size: 18px;
+  font-size: var(--text-title);
 }
 
 /* Container contract for the Work main region.
@@ -1107,7 +1112,7 @@ textarea {
 .work-main-empty h1 {
   margin: 8px 0 0;
   color: var(--ink-900);
-  font-size: 24px;
+  font-size: var(--text-display);
   letter-spacing: -0.04em;
 }
 
@@ -1120,7 +1125,7 @@ textarea {
   width: 68px;
   height: 68px;
   border-radius: 22px;
-  font-size: 25px;
+  font-size: var(--text-display);
 }
 
 /* A Work is its own object in the conversation, so the card is a tile beside
@@ -1295,7 +1300,7 @@ textarea {
   max-width: 500px;
   margin: 0;
   color: var(--ink-900);
-  font-size: clamp(26px, 4vw, 36px);
+  font-size: var(--text-display);
   letter-spacing: -0.045em;
 }
 
@@ -1332,7 +1337,7 @@ textarea {
 .work-status-content h1 {
   margin: 12px 0;
   color: var(--ink-900);
-  font-size: 24px;
+  font-size: var(--text-display);
   letter-spacing: -0.04em;
 }
 

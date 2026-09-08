@@ -84,7 +84,7 @@
 .agents-profile-avatar {
   width: 52px;
   height: 52px;
-  font-size: 20px;
+  font-size: var(--text-title);
 }
 .agents-profile-header {
   display: flex;
@@ -98,7 +98,7 @@
 }
 .agents-profile-header h1 {
   margin: 0;
-  font-size: 20px;
+  font-size: var(--text-title);
 }
 .agents-profile-header p {
   margin: 4px 0 0;
@@ -694,10 +694,10 @@
 .agents-roster-copy h1 {
   margin: 0;
   color: var(--ink-900);
-  font-size: 34px;
+  font-size: var(--text-display);
   font-weight: 700;
   letter-spacing: -0.04em;
-  line-height: 1.15;
+  line-height: 1.25;
 }
 .agents-roster-copy h1 em {
   color: var(--skype-deep);
@@ -771,7 +771,7 @@
 }
 .agents-roster-identity-copy strong {
   color: var(--ink-900);
-  font-size: 19px;
+  font-size: var(--text-title);
   font-weight: 700;
   letter-spacing: -0.02em;
 }
@@ -794,7 +794,7 @@
   border-radius: 999px;
   background: linear-gradient(135deg, var(--sky-100), var(--cloud));
   color: var(--skype-deep);
-  font-size: 22px;
+  font-size: var(--text-title);
   font-weight: 700;
 }
 /* Presence dot. Cumora carries it on a photo; the initial block is ours, so
@@ -887,7 +887,7 @@
   border-radius: 999px;
   background: var(--sky-100);
   color: var(--skype-deep);
-  font-size: 22px;
+  font-size: var(--text-title);
   font-weight: 700;
 }
 .agents-roster-back {

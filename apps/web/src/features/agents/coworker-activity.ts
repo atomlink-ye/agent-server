@@ -4,6 +4,7 @@ import type { WorkListItem } from '@atomlink-ye/agent-server/product-contract';
 import { apiTransport } from '../../api/transport';
 import { loadConversations } from '../conversations/conversations-gateway';
 import type { Conversation } from '../conversations/contracts';
+import { t } from '../../i18n';
 
 /**
  * A Coworker profile has to answer "what did this one do lately?" from real
@@ -131,7 +132,7 @@ function chatActivity(conversation: Conversation): CoworkerActivityItem {
   return {
     id: `chat:${conversation.id}`,
     kind: 'chat',
-    title: conversation.title ?? 'Direct conversation',
+    title: conversation.title ?? t('agents.directConversation'),
     detail: null,
     state: null,
     at: conversation.updatedAt,
@@ -139,16 +140,15 @@ function chatActivity(conversation: Conversation): CoworkerActivityItem {
   };
 }
 
-const ACTIVITY_STATE_LABEL: Record<CoworkerActivityState, string> = {
-  running: 'Running',
-  needs_you: 'Needs you',
-  complete: 'Complete',
-  problem: 'Problem',
-  not_captured: 'Result not captured',
-};
-
 export function activityStateLabel(state: CoworkerActivityState): string {
-  return ACTIVITY_STATE_LABEL[state];
+  const key: Record<CoworkerActivityState, Parameters<typeof t>[0]> = {
+    running: 'activityState.running',
+    needs_you: 'activityState.needsYou',
+    complete: 'activityState.complete',
+    problem: 'activityState.problem',
+    not_captured: 'activityState.notCaptured',
+  };
+  return t(key[state]);
 }
 
 const MINUTE = 60_000;
@@ -168,9 +168,12 @@ export function formatActivityTime(
   if (Number.isNaN(at)) return null;
   const elapsed = now - at;
   if (elapsed < 0) return new Date(at).toLocaleDateString();
-  if (elapsed < MINUTE) return 'Just now';
-  if (elapsed < HOUR) return `${Math.floor(elapsed / MINUTE)}m ago`;
-  if (elapsed < DAY) return `${Math.floor(elapsed / HOUR)}h ago`;
-  if (elapsed < 7 * DAY) return `${Math.floor(elapsed / DAY)}d ago`;
+  if (elapsed < MINUTE) return t('agents.justNow');
+  if (elapsed < HOUR)
+    return t('agents.minutesAgo', { count: Math.floor(elapsed / MINUTE) });
+  if (elapsed < DAY)
+    return t('agents.hoursAgo', { count: Math.floor(elapsed / HOUR) });
+  if (elapsed < 7 * DAY)
+    return t('agents.daysAgo', { count: Math.floor(elapsed / DAY) });
   return new Date(at).toLocaleDateString();
 }

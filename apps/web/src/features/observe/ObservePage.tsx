@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 import { TitleBar } from '../../app/shell/TitleBar';
+import { useT } from '../../i18n';
 import { ObserveDetail } from './ObserveDetail';
 import { ObservePane } from './ObservePane';
 import { ObserveSummary } from './ObserveSummary';
@@ -9,6 +10,7 @@ import type { ObserveAggregate } from './observe-aggregate';
 import './observe.css';
 
 export function ObservePage() {
+  const t = useT();
   const [searchParams] = useSearchParams();
   const workId = searchParams.get('work');
   const runId = searchParams.get('run');
@@ -28,9 +30,9 @@ export function ObservePage() {
     <>
       <ObservePane onAggregateChange={handleAggregateChange} />
       <main className="chat-panel work-main">
-        <TitleBar section="Observe" />
+        <TitleBar section={t('observe.title')} />
         <section
-          aria-label="Observe detail"
+          aria-label={t('observe.detail')}
           className="work-main-content"
           data-empty={hasSelection || aggregate ? 'false' : 'true'}
         >
@@ -46,8 +48,8 @@ export function ObservePage() {
               <span className="work-main-icon" aria-hidden="true">
                 ◈
               </span>
-              <h1>Select a Run</h1>
-              <p>Choose a Run from the list to inspect its recorded Trace.</p>
+              <h1>{t('observe.selectRun')}</h1>
+              <p>{t('observe.selectRunHint')}</p>
             </div>
           )}
         </section>

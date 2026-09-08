@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import type { WorkListItem } from '@atomlink-ye/agent-server/product-contract';
+import { useT } from '../../i18n';
 
 import {
   formatWorkListTime,
@@ -39,6 +40,7 @@ export function ObservePane({
     resolving: boolean,
   ) => void;
 }) {
+  const t = useT();
   const [searchParams, setSearchParams] = useSearchParams();
   const { status, entries, refresh, autoRefresh, setAutoRefresh } =
     useObserveEntries();
@@ -81,17 +83,20 @@ export function ObservePane({
   const controlsDisabled = status === 'unavailable' || status === 'error';
 
   return (
-    <aside className="sidebar observe-pane" aria-label="Observe navigation">
+    <aside
+      className="sidebar observe-pane"
+      aria-label={t('observe.navigation')}
+    >
       <div className="pane-heading">
         <div>
-          <span className="eyebrow">Agent Observability</span>
-          <h1>Observe</h1>
+          <span className="eyebrow">{t('observe.eyebrow')}</span>
+          <h1>{t('observe.title')}</h1>
         </div>
         <div className="work-pane-actions">
           {status === 'ready' ? (
             <span
               className="pane-count"
-              aria-label={`${filtered.length} traces`}
+              aria-label={t('observe.traceCount', { count: filtered.length })}
             >
               {filtered.length}
             </span>
@@ -99,7 +104,7 @@ export function ObservePane({
           <button
             className="pane-refresh"
             type="button"
-            aria-label="Refresh traces"
+            aria-label={t('observe.refreshTraces')}
             disabled={status === 'loading' || controlsDisabled}
             onClick={refresh}
           >
@@ -107,19 +112,17 @@ export function ObservePane({
           </button>
         </div>
       </div>
-      <p className="observe-pane-subhead">
-        Backend traces for every agent turn
-      </p>
+      <p className="observe-pane-subhead">{t('observe.subhead')}</p>
       <div className="observe-filters">
         <label>
-          Agent
+          {t('observe.agent')}
           <select
-            aria-label="Filter by Agent"
+            aria-label={t('observe.filterAgent')}
             disabled={controlsDisabled}
             value={agentFilter ?? ''}
             onChange={(event) => updateFilter('agent', event.target.value)}
           >
-            <option value="">All agents</option>
+            <option value="">{t('observe.allAgents')}</option>
             {roster.agents.map((agent) => (
               <option key={agent.id} value={agent.id}>
                 {agent.name}
@@ -128,14 +131,14 @@ export function ObservePane({
           </select>
         </label>
         <label>
-          Status
+          {t('observe.status')}
           <select
-            aria-label="Filter by Status"
+            aria-label={t('observe.filterStatus')}
             disabled={controlsDisabled}
             value={statusFilter ?? ''}
             onChange={(event) => updateFilter('status', event.target.value)}
           >
-            <option value="">All statuses</option>
+            <option value="">{t('observe.allStatuses')}</option>
             {STATUS_OPTIONS.map((state) => (
               <option key={state} value={state}>
                 {productStatePresentation(state).label}
@@ -149,7 +152,7 @@ export function ObservePane({
             checked={autoRefresh}
             onChange={(event) => setAutoRefresh(event.target.checked)}
           />
-          Auto refresh
+          {t('observe.autoRefresh')}
         </label>
       </div>
 
@@ -160,7 +163,7 @@ export function ObservePane({
           role="status"
           aria-live="polite"
         >
-          Getting your traces…
+          {t('observe.loadingTraces')}
         </p>
       ) : null}
       {filtered.length === 0 && status === 'unavailable' ? (
@@ -169,8 +172,8 @@ export function ObservePane({
           data-testid="observe-list-unavailable"
           role="status"
         >
-          <p className="eyebrow">Observe isn&apos;t available here</p>
-          <p>This workspace doesn&apos;t currently offer Work execution.</p>
+          <p className="eyebrow">{t('observe.unavailableTitle')}</p>
+          <p>{t('observe.unavailableBody')}</p>
         </div>
       ) : null}
       {filtered.length === 0 && status === 'error' ? (
@@ -179,10 +182,10 @@ export function ObservePane({
           data-testid="observe-list-error"
           role="alert"
         >
-          <p className="eyebrow">Couldn&apos;t load traces</p>
-          <p>This is a connection problem, not a statement about any Run.</p>
+          <p className="eyebrow">{t('observe.loadTracesError')}</p>
+          <p>{t('observe.loadTracesErrorHint')}</p>
           <button type="button" onClick={refresh}>
-            Retry
+            {t('common.retry')}
           </button>
         </div>
       ) : null}
@@ -192,13 +195,13 @@ export function ObservePane({
           data-testid="observe-list-empty"
           role="status"
         >
-          <p>No traced Run matches the current filters.</p>
+          <p>{t('observe.empty')}</p>
         </div>
       ) : null}
       {filtered.length > 0 ? (
         <ul
           className="work-list"
-          aria-label="Traces"
+          aria-label={t('observe.traces')}
           data-testid="observe-list"
         >
           {filtered.map((entry) => (
@@ -233,6 +236,7 @@ function ObserveListRow({
   readonly selected: boolean;
   readonly search: URLSearchParams;
 }) {
+  const t = useT();
   const stateView = productStatePresentation(entry.product_state);
   const runId = entry.latest_run_summary!.id;
   const next = new URLSearchParams(search);
@@ -269,7 +273,7 @@ function ObserveListRow({
           ) : null}
           {runtimeModels.length ? (
             <span className="observe-agent-chip">
-              Model: {runtimeModels.join(', ')}
+              {t('observe.model', { models: runtimeModels.join(', ') })}
             </span>
           ) : null}
         </span>

@@ -1,4 +1,5 @@
 import { productStatePresentation } from '../work/components/work-presentation';
+import { useT } from '../../i18n';
 import { STATUS_OPTIONS } from './ObservePane';
 import type { ObserveAggregate } from './observe-aggregate';
 import './observe.css';
@@ -17,27 +18,26 @@ export function ObserveSummary({
   readonly aggregate: ObserveAggregate;
   readonly resolving: boolean;
 }) {
+  const t = useT();
   return (
     <section className="observe-summary" data-testid="observe-summary">
       <header className="observe-summary-header">
-        <p className="observe-kicker">Overview</p>
-        <h1>Traced Runs</h1>
+        <p className="observe-kicker">{t('observe.overview')}</p>
+        <h1>{t('observe.tracedRuns')}</h1>
         <p className="observe-summary-subhead">
           {aggregate.traceCount === 0
-            ? 'No traced Run matches the current filters.'
-            : `Aggregated across ${aggregate.traceCount} traced ${
-                aggregate.traceCount === 1 ? 'Run' : 'Runs'
-              } matching the current filters.`}
+            ? t('observe.empty')
+            : t('observe.aggregateSummary', { count: aggregate.traceCount })}
         </p>
       </header>
 
       <div className="observe-metric-cards" data-testid="observe-summary-cards">
         <ObserveSummaryCard
-          label="Traces"
+          label={t('observe.traces')}
           value={String(aggregate.traceCount)}
         />
         <ObserveSummaryCard
-          label="Total cost"
+          label={t('observe.totalCost')}
           value={
             aggregate.hasCostData ? formatCost(aggregate.totalCostUsd) : '—'
           }
@@ -45,12 +45,12 @@ export function ObserveSummary({
             aggregate.hasCostData
               ? undefined
               : resolving
-                ? 'loading…'
-                : 'not tracked'
+                ? t('observe.loading')
+                : t('observe.notTracked')
           }
         />
         <ObserveSummaryCard
-          label="Tokens"
+          label={t('observe.tokens')}
           value={
             aggregate.hasTokenData
               ? (
@@ -62,39 +62,47 @@ export function ObserveSummary({
             aggregate.hasTokenData
               ? undefined
               : resolving
-                ? 'loading…'
-                : 'not captured'
+                ? t('observe.loading')
+                : t('observe.notCaptured')
           }
         />
         <ObserveSummaryCard
-          label="Cache hit rate"
+          label={t('observe.cacheHitRate')}
           value={
             aggregate.cacheHitRate === null
               ? '—'
               : formatPercent(aggregate.cacheHitRate)
           }
-          hint={aggregate.cacheHitRate === null ? 'not enough data' : undefined}
+          hint={
+            aggregate.cacheHitRate === null
+              ? t('observe.notEnoughData')
+              : undefined
+          }
         />
         <ObserveSummaryCard
-          label="Avg duration"
+          label={t('observe.averageDuration')}
           value={
             aggregate.avgDurationMs === null
               ? '—'
               : formatDurationMs(aggregate.avgDurationMs)
           }
           hint={
-            aggregate.avgDurationMs === null ? 'not enough data' : undefined
+            aggregate.avgDurationMs === null
+              ? t('observe.notEnoughData')
+              : undefined
           }
         />
         <ObserveSummaryCard
-          label="Median duration"
+          label={t('observe.medianDuration')}
           value={
             aggregate.medianDurationMs === null
               ? '—'
               : formatDurationMs(aggregate.medianDurationMs)
           }
           hint={
-            aggregate.medianDurationMs === null ? 'not enough data' : undefined
+            aggregate.medianDurationMs === null
+              ? t('observe.notEnoughData')
+              : undefined
           }
         />
       </div>
@@ -103,7 +111,7 @@ export function ObserveSummary({
         className="observe-summary-status"
         data-testid="observe-summary-status"
       >
-        <p className="observe-metric-card-label">By status</p>
+        <p className="observe-metric-card-label">{t('observe.byStatus')}</p>
         <ul className="observe-summary-status-list">
           {STATUS_OPTIONS.map((state) => {
             const count = aggregate.statusCounts.get(state) ?? 0;

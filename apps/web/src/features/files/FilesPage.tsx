@@ -28,6 +28,7 @@ import {
   type ContextScopeRequest,
 } from './files-gateway';
 import TitleBar from '../../app/shell/TitleBar';
+import { useT } from '../../i18n';
 import './files.css';
 
 type Conversation = Awaited<ReturnType<typeof loadConversations>>[number];
@@ -47,6 +48,7 @@ type ScopeChoice = Readonly<{
 }>;
 
 export function FilesPage() {
+  const t = useT();
   const location = useLocation();
   const navigate = useNavigate();
   const resultRoute = parseWorkRunResultFileRoute(location.search);
@@ -133,8 +135,8 @@ export function FilesPage() {
     const result: ScopeChoice[] = [
       {
         key: 'workspace',
-        label: 'Workspace',
-        kind: 'Workspace',
+        label: t('files.workspace'),
+        kind: t('files.workspace'),
         request: { scope: 'workspace' },
       },
     ];
@@ -142,14 +144,14 @@ export function FilesPage() {
       result.push({
         key: `agent:${agent.id}`,
         label: agent.displayName,
-        kind: 'Agent',
+        kind: t('files.agent'),
         agent,
         request: { scope: 'agent', agentDefinitionId: agent.id },
       });
       result.push({
         key: `agent-user:${agent.id}`,
-        label: `You + ${agent.displayName}`,
-        kind: 'Relationship',
+        label: t('files.youAndAgent', { agent: agent.displayName }),
+        kind: t('files.relationship'),
         agent,
         request: { scope: 'agent_user', agentDefinitionId: agent.id },
       });
@@ -160,8 +162,8 @@ export function FilesPage() {
         label:
           conversation.directAgent?.displayName ??
           conversation.title ??
-          'Conversation',
-        kind: 'Conversation',
+          t('files.conversation'),
+        kind: t('files.conversation'),
         conversation,
         request: { scope: 'conversation', conversationId: conversation.id },
       });
@@ -170,13 +172,13 @@ export function FilesPage() {
       result.push({
         key: `work:${work.id}`,
         label: work.title,
-        kind: 'Work',
+        kind: t('files.work'),
         work,
         request: { scope: 'work', workId: work.id },
       });
     }
     return result;
-  }, [conversations, coworkers, works]);
+  }, [conversations, coworkers, t, works]);
   // Agent and Relationship (agent_user) scopes describe the same coworker
   // and are near-always shown together, so the sidebar renders them as one
   // grouped row with a compact scope toggle instead of two stacked rows.
@@ -201,7 +203,7 @@ export function FilesPage() {
     const consumed = new Set<string>();
     for (const choice of choices) {
       if (consumed.has(choice.key)) continue;
-      if (choice.kind === 'Agent' && choice.agent) {
+      if (choice.request.scope === 'agent' && choice.agent) {
         const relationshipChoice =
           choices.find((c) => c.key === `agent-user:${choice.agent!.id}`) ??
           null;
@@ -210,11 +212,11 @@ export function FilesPage() {
         groups.push({ type: 'agent', agentChoice: choice, relationshipChoice });
         continue;
       }
-      if (choice.kind === 'Relationship') continue;
+      if (choice.request.scope === 'agent_user') continue;
       groups.push({ type: 'single', choice });
     }
     for (const choice of choices) {
-      if (choice.kind === 'Relationship' && !consumed.has(choice.key)) {
+      if (choice.request.scope === 'agent_user' && !consumed.has(choice.key)) {
         groups.push({ type: 'single', choice });
       }
     }
@@ -225,8 +227,8 @@ export function FilesPage() {
         (choice) => choice.key === `work:${resultRoute.workId}`,
       ) ?? {
         key: `work:${resultRoute.workId}`,
-        label: 'Work result',
-        kind: 'Work',
+        label: t('files.workResult'),
+        kind: t('files.work'),
         request: { scope: 'work' as const, workId: resultRoute.workId },
       })
     : null;
@@ -310,7 +312,7 @@ export function FilesPage() {
     autoAdvanceAttempts.current.add(selected.key);
     const next = choices.find(
       (choice) =>
-        (choice.kind === 'Agent' || choice.kind === 'Work') &&
+        (choice.request.scope === 'agent' || choice.request.scope === 'work') &&
         !autoAdvanceAttempts.current.has(choice.key),
     );
     if (next) {
@@ -318,7 +320,14 @@ export function FilesPage() {
     } else {
       setAutoAdvanced(true);
     }
-  }, [autoAdvanced, resultRoute, coworkerRoute, listing, choices, selected.key]);
+  }, [
+    autoAdvanced,
+    resultRoute,
+    coworkerRoute,
+    listing,
+    choices,
+    selected.key,
+  ]);
 
   useEffect(() => {
     if (!resultRoute || !selectedWorkId) return;
@@ -447,9 +456,9 @@ export function FilesPage() {
     setError(null);
     try {
       await navigator.clipboard.writeText(visibleFile.content);
-      setNotice('Raw Markdown copied.');
+      setNotice(t('files.rawMarkdownCopied'));
     } catch {
-      setError('Raw Markdown could not be copied.');
+      setError(t('files.rawMarkdownCopyError'));
     }
   }
 
@@ -508,7 +517,7 @@ export function FilesPage() {
         sourcePath: file.path,
         targetPath: basename(file.path),
       });
-      setNotice('Promoted to your private Agent relationship memory.');
+      setNotice(t('files.promoted'));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
     }
@@ -525,7 +534,7 @@ export function FilesPage() {
         sourcePath: file.path,
         targetPath: `input/${basename(file.path)}`,
       });
-      setNotice('Admitted into the selected Work input scope.');
+      setNotice(t('files.admitted'));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
     }
@@ -541,7 +550,7 @@ export function FilesPage() {
         sourcePath: file.path,
         targetPath: `artifacts/${basename(file.path)}`,
       });
-      setNotice('Published into the Work artifact surface.');
+      setNotice(t('files.published'));
       setListing(await loadContextFiles(selected.request));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
@@ -550,14 +559,11 @@ export function FilesPage() {
 
   return (
     <>
-      <aside
-        className="sidebar files-pane"
-        aria-label="Files and Context navigation"
-      >
+      <aside className="sidebar files-pane" aria-label={t('files.navigation')}>
         <div className="pane-heading">
           <div>
-            <span className="eyebrow">Shared world</span>
-            <h1>Files</h1>
+            <span className="eyebrow">{t('files.eyebrow')}</span>
+            <h1>{t('files.title')}</h1>
           </div>
         </div>
         <div className="files-scope-list">
@@ -589,7 +595,9 @@ export function FilesPage() {
                 <div
                   className="files-scope-agent-tabs"
                   role="group"
-                  aria-label={`${agentChoice.label} scope`}
+                  aria-label={t('files.agentScope', {
+                    agent: agentChoice.label,
+                  })}
                 >
                   <button
                     type="button"
@@ -601,7 +609,7 @@ export function FilesPage() {
                     }
                     onClick={() => selectScope(agentChoice.key)}
                   >
-                    Agent
+                    {t('files.agent')}
                   </button>
                   {relationshipChoice ? (
                     <button
@@ -614,7 +622,7 @@ export function FilesPage() {
                       }
                       onClick={() => selectScope(relationshipChoice.key)}
                     >
-                      You + Agent
+                      {t('files.youAndAgentShort')}
                     </button>
                   ) : null}
                 </div>
@@ -625,15 +633,15 @@ export function FilesPage() {
       </aside>
 
       <main className="chat-panel files-main">
-        <TitleBar section="Files" />
+        <TitleBar section={t('files.title')} />
         {pendingCoworkerRoute ? (
           <section className="files-files files-route-state" aria-live="polite">
             <div className="work-main-empty">
               <span className="work-main-icon" aria-hidden="true">
                 ◎
               </span>
-              <h1>Loading Coworker files…</h1>
-              <p>Checking whether this Coworker is available to you.</p>
+              <h1>{t('files.loadingCoworkerFiles')}</h1>
+              <p>{t('files.checkingCoworker')}</p>
             </div>
           </section>
         ) : coworkerRosterError ? (
@@ -642,8 +650,8 @@ export function FilesPage() {
               <span className="work-main-icon" aria-hidden="true">
                 !
               </span>
-              <h1>Coworker files couldn&apos;t be loaded</h1>
-              <p>Try again in a moment.</p>
+              <h1>{t('files.coworkerFilesError')}</h1>
+              <p>{t('files.tryAgainSoon')}</p>
               <button
                 type="button"
                 className="files-back"
@@ -653,7 +661,7 @@ export function FilesPage() {
                   setRosterReload((value) => value + 1);
                 }}
               >
-                Retry
+                {t('common.retry')}
               </button>
             </div>
           </section>
@@ -663,18 +671,15 @@ export function FilesPage() {
               <span className="work-main-icon" aria-hidden="true">
                 !
               </span>
-              <h1>Coworker files unavailable</h1>
-              <p>
-                This link is invalid, or the Coworker is no longer available to
-                you.
-              </p>
+              <h1>{t('files.coworkerFilesUnavailable')}</h1>
+              <p>{t('files.coworkerFilesUnavailableHint')}</p>
               <Link className="files-back" to="/agents">
-                Back to Coworkers
+                {t('files.backToCoworkers')}
               </Link>
             </div>
           </section>
         ) : (
-          <section className="files-files" aria-label="Context files">
+          <section className="files-files" aria-label={t('files.contextFiles')}>
             <header className="files-files-header">
               <div>
                 <span className="eyebrow">{selected.kind}</span>
@@ -686,7 +691,7 @@ export function FilesPage() {
                   className="files-back"
                   onClick={backToWork}
                 >
-                  Back to Work
+                  {t('files.backToWork')}
                 </button>
               ) : null}
               {selected.request.scope === 'agent' ||
@@ -695,16 +700,16 @@ export function FilesPage() {
                   className="files-back"
                   to={`/agents/${encodeURIComponent(selected.request.agentDefinitionId!)}`}
                 >
-                  Back to Coworker Home
+                  {t('files.backToCoworkerHome')}
                 </Link>
               ) : null}
               <span className="files-access">
                 {selected.request.scope === 'agent' ||
                 selected.request.scope === 'agent_user'
-                  ? 'Preview only'
+                  ? t('files.previewOnly')
                   : listing?.access === 'read_only'
-                    ? 'Read only'
-                    : 'Read / write'}
+                    ? t('files.readOnly')
+                    : t('files.readWrite')}
               </span>
             </header>
             {error ? (
@@ -720,11 +725,13 @@ export function FilesPage() {
             <div className="files-files-grid">
               <div className="files-file-list">
                 {listing === null ? (
-                  <p className="pane-placeholder">Loading context…</p>
+                  <p className="pane-placeholder">
+                    {t('files.loadingContext')}
+                  </p>
                 ) : null}
                 {listing?.entries.length === 0 ? (
                   <p className="pane-placeholder">
-                    No files in this canonical scope.
+                    {t('files.emptyCanonicalScope')}
                   </p>
                 ) : null}
                 {listing?.entries.map((entry) => (
@@ -750,36 +757,38 @@ export function FilesPage() {
                     data-testid="result-file-missing"
                   >
                     <span className="work-main-icon">▱</span>
-                    <h1>Result file unavailable</h1>
+                    <h1>{t('files.resultUnavailable')}</h1>
                     <p>
                       <code>{resultRoute.path}</code> is not available in this
-                      Work scope.
+                      {t('files.workScope')}
                     </p>
                   </div>
                 ) : fileState === 'missing' && coworkerRoute?.path ? (
                   <div className="work-main-empty">
                     <span className="work-main-icon">▱</span>
-                    <h1>File unavailable</h1>
+                    <h1>{t('files.fileUnavailable')}</h1>
                     <p>
                       <code>{coworkerRoute.path}</code> is not available in this
-                      Coworker scope.
+                      {t('files.coworkerScope')}
                     </p>
                   </div>
                 ) : !visibleFile ? (
                   <div className="files-viewer-idle">
                     <p>
                       {fileState === 'loading'
-                        ? 'Loading file…'
+                        ? t('files.loadingFile')
                         : listing?.entries.length
-                          ? 'Choose a file from the list.'
-                          : 'No files in this scope yet.'}
+                          ? t('files.chooseFile')
+                          : t('files.emptyScope')}
                     </p>
                   </div>
                 ) : (
                   <>
                     <header>
                       <div>
-                        <span className="eyebrow">Canonical ContextFS</span>
+                        <span className="eyebrow">
+                          {t('files.canonicalContext')}
+                        </span>
                         <h2>{visibleFile.path}</h2>
                       </div>
                       <span className="files-mono">
@@ -788,9 +797,9 @@ export function FilesPage() {
                     </header>
                     <div
                       className="files-viewer-toolbar"
-                      aria-label="File format"
+                      aria-label={t('files.fileFormat')}
                     >
-                      <div role="group" aria-label="View mode">
+                      <div role="group" aria-label={t('files.viewMode')}>
                         <button
                           type="button"
                           data-active={
@@ -798,7 +807,7 @@ export function FilesPage() {
                           }
                           onClick={() => setViewerMode('markdown')}
                         >
-                          Markdown
+                          {t('files.markdown')}
                         </button>
                         <button
                           type="button"
@@ -807,7 +816,7 @@ export function FilesPage() {
                           }
                           onClick={() => setViewerMode('source')}
                         >
-                          Source
+                          {t('files.source')}
                         </button>
                       </div>
                     </div>
@@ -823,22 +832,22 @@ export function FilesPage() {
                         type="button"
                         onClick={() => void copyRawContent()}
                       >
-                        Copy raw Markdown
+                        {t('files.copyRawMarkdown')}
                       </button>
                       <button type="button" onClick={downloadRawContent}>
-                        Download .md
+                        {t('files.downloadMarkdown')}
                       </button>
                       {selected.conversation?.directAgent ? (
                         <button
                           type="button"
                           onClick={() => void promoteToRelationship()}
                         >
-                          Promote to my memory
+                          {t('files.promote')}
                         </button>
                       ) : null}
                       {selected.conversation && works.length ? (
                         <label>
-                          Admit to Work
+                          {t('files.admitToWork')}
                           <select
                             value={targetWorkId}
                             onChange={(event) =>
@@ -856,7 +865,7 @@ export function FilesPage() {
                             disabled={!targetWorkId}
                             onClick={() => void admitToWork()}
                           >
-                            Admit input
+                            {t('files.admitInput')}
                           </button>
                         </label>
                       ) : null}
@@ -866,7 +875,7 @@ export function FilesPage() {
                           type="button"
                           onClick={() => void publishResult()}
                         >
-                          Publish as Work result
+                          {t('files.publishResult')}
                         </button>
                       ) : null}
                     </div>

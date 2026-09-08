@@ -1,0 +1,36 @@
+import { join } from 'node:path';
+
+/**
+ * One working directory per Agent, not one per deployment and not one per run.
+ *
+ * An Agent's files are part of who it is. It writes notes between wake-ups and
+ * expects to find them on the next one, and the person who hired it expects
+ * those files to be that Coworker's -- not a shared drawer every Coworker on
+ * the server reaches into. A single configured directory gave every Agent the
+ * same drawer: two Coworkers working at once saw, overwrote and cited each
+ * other's files, and nothing in the product said they should.
+ *
+ * The Agent definition id is the identity that outlives runs, versions and
+ * provider sessions, so it is what names the directory. The configured value
+ * stays the root that holds them, which keeps one place to point at a volume
+ * and one place the runtime prepares.
+ */
+export function agentWorkspaceCwd(
+  root: string,
+  agentDefinitionId: string,
+): string {
+  if (!isSafeDirectorySegment(agentDefinitionId))
+    throw new Error('agent_workspace_cwd_identity_invalid');
+  return join(root, agentDefinitionId);
+}
+
+/**
+ * The id reaches a filesystem path, so it is checked as one rather than
+ * trusted for being internal. Agent definition ids are UUIDs; anything that is
+ * not a plain single path segment is refused instead of escaped, because there
+ * is no legitimate Agent whose directory needs to be anywhere but under the
+ * root.
+ */
+function isSafeDirectorySegment(value: string): boolean {
+  return /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(value) && value !== '..';
+}

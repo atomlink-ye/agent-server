@@ -8,6 +8,8 @@ import {
   AGENT_SERVER_MEMORY_READ_TOOL_REF,
 } from '../application/agents/built-in-skills.js';
 import { EnsureCoworkerDefaultCapability } from '../application/agents/ensure-coworker-default-capability.js';
+import { WriteAgentHomeEntry } from '../application/agents/agent-home.js';
+import { SeedCoworkerIdentityFiles } from '../application/agents/seed-coworker-identity-files.js';
 import { EnsureCoworkerConversation } from '../application/chat/ensure-coworker-conversation.js';
 import { ReconcileCoworkerConversations } from '../application/chat/reconcile-coworker-conversations.js';
 import type { AgentResolutionApi } from '../application/ports/agent-resolution-api.js';
@@ -35,6 +37,7 @@ import { registerProductWorkDefinitionRoutes } from '../entrypoints/api/routes/p
 import { registerSkillRoutes } from '../entrypoints/api/routes/skills.js';
 import { registerTeamRoutes } from '../entrypoints/api/routes/teams.js';
 import { LocalSkillCatalog } from '../infrastructure/filesystem/local-skill-catalog.js';
+import { PostgresAgentHomeRepository } from '../infrastructure/postgres/postgres-agent-home-repository.js';
 import { PostgresAgentRegistry } from '../infrastructure/postgres/postgres-agent-registry.js';
 import { PostgresWorkerRegistry } from '../infrastructure/postgres/postgres-worker-registry.js';
 import { PostgresConversationRepository } from '../infrastructure/postgres/postgres-conversation-repository.js';
@@ -176,6 +179,15 @@ export async function createResourceModule(
         workDefinitionSources,
       )
     : undefined;
+  // The Agent's own workspace is a Chat-plane store, so identity files compose
+  // under the same gate as the Conversation they are read in.
+  const coworkerIdentityFiles = directChatEnabled
+    ? new SeedCoworkerIdentityFiles(
+        new WriteAgentHomeEntry(
+          new PostgresAgentHomeRepository(options.database),
+        ),
+      )
+    : undefined;
   const conversationRepository = directChatEnabled
     ? new PostgresConversationRepository(options.database)
     : undefined;
@@ -240,6 +252,9 @@ export async function createResourceModule(
           : {}),
         ...(coworkerDefaultCapability
           ? { defaultCapability: coworkerDefaultCapability }
+          : {}),
+        ...(coworkerIdentityFiles
+          ? { identityFiles: coworkerIdentityFiles }
           : {}),
         ...(options.logger ? { logger: options.logger } : {}),
       });

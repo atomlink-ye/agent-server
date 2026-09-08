@@ -14,6 +14,7 @@ import type { AgentRegistry } from '../../../application/ports/agent-registry.js
 import type { WorkspaceMembershipRepository } from '../../../application/ports/workspace-membership-repository.js';
 import type { EnsureCoworkerConversation } from '../../../application/chat/ensure-coworker-conversation.js';
 import type { EnsureCoworkerDefaultCapability } from '../../../application/agents/ensure-coworker-default-capability.js';
+import type { SeedCoworkerIdentityFiles } from '../../../application/agents/seed-coworker-identity-files.js';
 import { AdmitWorkspaceMember } from '../../../application/workspaces/admit-workspace-member.js';
 import {
   CreateCoworkerRequestSchema,
@@ -53,6 +54,13 @@ export function registerCoworkerAuthoringRoute(
       EnsureCoworkerDefaultCapability,
       'execute'
     >;
+    /**
+     * Present only where the Chat plane is composed, because the Agent's own
+     * workspace is the Chat plane's store. Without it a Coworker is still
+     * hired; it simply starts with the identity its published instructions
+     * carry and nothing it can edit.
+     */
+    readonly identityFiles?: Pick<SeedCoworkerIdentityFiles, 'execute'>;
     readonly logger?: Logger;
   },
 ): void {
@@ -137,6 +145,38 @@ export function registerCoworkerAuthoringRoute(
         accessContext: requester,
         definition: imported.definition,
       });
+      // The Coworker's own account of itself, written from what the person
+      // typed. It is attached here rather than lazily on first turn so the
+      // very first thing the Agent reads about itself is a file it owns and
+      // can rewrite. A failure does not un-hire it: the Agent, its version
+      // and its Conversation are already durable, and it still knows who it
+      // is from its published instructions -- it just has nothing to edit.
+      if (dependencies.identityFiles) {
+        try {
+          const files = await dependencies.identityFiles.execute({
+            draft: {
+              name: parsed.data.name,
+              role: parsed.data.role,
+              summary: parsed.data.summary,
+              ...(parsed.data.instructions
+                ? { instructions: parsed.data.instructions }
+                : {}),
+            },
+            agentDefinitionId: imported.definition.id,
+            accessContext: owner,
+          });
+          dependencies.logger?.log('info', 'coworker.identity_files', {
+            agent_definition_id: imported.definition.id,
+            paths: files.map((file) => file.path),
+          });
+        } catch (error) {
+          dependencies.logger?.log('error', 'coworker.identity_files_failed', {
+            agent_definition_id: imported.definition.id,
+            error_name: error instanceof Error ? error.name : 'unknown',
+            error_message: error instanceof Error ? error.message : undefined,
+          });
+        }
+      }
       // Work is what makes this Coworker more than a chat persona, so it is
       // attached at hire time rather than left for a later authoring visit.
       // A failure here does not un-hire the Coworker: the Agent, its version

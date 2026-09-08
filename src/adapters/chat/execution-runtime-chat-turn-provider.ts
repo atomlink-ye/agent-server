@@ -20,6 +20,8 @@ import {
   AGENT_SERVER_PRODUCT_WORK_RUN_START_TOOL_REF,
 } from '../../application/agents/built-in-skills.js';
 import { renderGrantedPlatformToolsPrompt } from '../../application/agents/runtime-tool-mcp-names.js';
+import { agentWorkspaceCwd } from '../../application/agents/agent-workspace-cwd.js';
+import { COWORKER_IDENTITY_FILE_PATHS } from '../../application/agents/coworker-identity-files.js';
 import { AGENT_SERVER_EXECUTION_MCP_SERVER_NAME } from '../../application/ports/runtime-extension-binding.js';
 import { createDesiredRuntimeSystemPrompt } from '../../domain/runtime/desired-runtime-system-prompt.js';
 
@@ -68,6 +70,10 @@ export class ExecutionRuntimeChatTurnProvider implements ChatTurnProvider {
       toolRefs: grantedChatToolRefs(input),
       configuration: {
         ...this.configuration,
+        // The configured value is the root that holds Agent workspaces, not
+        // one workspace. Which one this turn runs in follows the Agent, so
+        // two Coworkers working at the same time do not share a drawer.
+        cwd: agentWorkspaceCwd(this.configuration.cwd, input.agentDefinitionId),
         contextEpoch: turnContext.runtimeEpoch,
         desiredSystemPrompt,
       },
@@ -165,13 +171,21 @@ function assertRuntimeTurnId(value: string): asserts value is RuntimeTurnId {
   }
 }
 
+/**
+ * What this turn adds, and only that.
+ *
+ * The stable prompt used to be repeated here as well, so an Agent met its own
+ * identity three times in one request. Paseo composes the session's system
+ * prompt into `developerInstructions` on every `turn/start` and again when it
+ * reloads an existing thread, so the provider holds it on a delta turn just as
+ * firmly as on the first one -- restating it bought nothing and cost the
+ * Agent's attention on every wake-up.
+ */
 function buildExecutionPrompt(
   input: Parameters<ChatTurnProvider['runTurn']>[0],
   mode: ChatTurnMode,
 ): string {
-  return [buildStableSystemPrompt(input), buildTurnPrompt(input, mode)].join(
-    '\n\n',
-  );
+  return buildTurnPrompt(input, mode);
 }
 
 /**
@@ -208,11 +222,45 @@ function buildStableSystemPrompt(
   return [
     input.brain.instructions.trim(),
     AGENT_SERVER_EXISTENCE,
+    renderIdentityFiles(input),
     renderGrantedPlatformTools(input),
     renderTrustBoundary(input),
   ]
     .filter((section) => section !== null && section !== '')
     .join('\n\n');
+}
+
+/**
+ * The Agent's own account of itself, read back from its own workspace.
+ *
+ * Seeded at hire from what the person typed and editable afterwards with
+ * `workspace_write`, these two files are the one part of the prompt the Agent
+ * itself authors. Reading them here closes that loop: what it writes is what
+ * it is told it is next time. They are rendered before the tool grant because
+ * who an Agent is comes before what it can reach for, and only these two paths
+ * are lifted -- the rest of a workspace is material to work with, not identity
+ * to be briefed with, and belongs in the tools that read it on demand.
+ */
+function renderIdentityFiles(
+  input: Parameters<ChatTurnProvider['runTurn']>[0],
+): string | null {
+  const files = identityFileEntries(input);
+  if (files.length === 0) return null;
+  return [
+    'YOUR OWN FILES:',
+    'These live in your workspace and outlive every wake-up. You wrote them, or they were written from how you were hired. Change them with workspace_write and the changed version is what you read here next time.',
+    ...files.map((file) => `--- ${file.path} ---\n${file.content.trim()}`),
+  ].join('\n\n');
+}
+
+function identityFileEntries(
+  input: Parameters<ChatTurnProvider['runTurn']>[0],
+): readonly { readonly path: string; readonly content: string }[] {
+  const shared = input.brain.agentHome['agent-shared'] ?? [];
+  return COWORKER_IDENTITY_FILE_PATHS.flatMap((path) => {
+    const entry = shared.find((candidate) => candidate.path === path);
+    return entry && entry.content.trim() !== '' ? [entry] : [];
+  });
 }
 
 /**
@@ -289,23 +337,31 @@ function buildTurnPrompt(
 /**
  * Only what this turn adds.
  *
- * Three things are dropped, all of them restatements: the capability summary
+ * Four things are dropped, all of them restatements: the capability summary
  * repeats the two identifiers the stable prompt already carries, the Agent
  * Home projection of the published instructions repeats the identity the
- * prompt opens with, and empty namespaces teach an Agent nothing except that
- * most of its prompt is boilerplate. Anything that carries content the Agent
- * has not already been told stays.
+ * prompt opens with, the identity files were just rendered in full above, and
+ * empty namespaces teach an Agent nothing except that most of its prompt is
+ * boilerplate. Anything that carries content the Agent has not already been
+ * told stays.
  */
 function renderTrustedTurnContext(
   input: Parameters<ChatTurnProvider['runTurn']>[0],
 ): string {
   const memory = input.brain.memory ?? [];
   const instructions = input.brain.instructions.trim();
+  const rendered = new Set(
+    identityFileEntries(input).map((entry) => entry.path),
+  );
   const agentHome = Object.fromEntries(
     Object.entries(input.brain.agentHome)
       .map(([namespace, entries]) => [
         namespace,
-        (entries ?? []).filter((entry) => entry.content.trim() !== instructions),
+        (entries ?? []).filter(
+          (entry) =>
+            entry.content.trim() !== instructions &&
+            !(namespace === 'agent-shared' && rendered.has(entry.path)),
+        ),
       ])
       .filter(([, entries]) => (entries as readonly unknown[]).length > 0),
   );

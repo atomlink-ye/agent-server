@@ -112,7 +112,13 @@ describe('ExecutionRuntimeChatTurnProvider', () => {
         ),
       }),
     );
-    expect(executor.calls[0]?.prompt).toContain(
+    // Identity is carried by the session's system prompt, which Paseo
+    // re-composes into the provider's developer instructions on every turn.
+    // The turn prompt carries only what this turn adds.
+    expect(executor.calls[0]?.desiredSystemPrompt.text).toContain(
+      'Always answer in terse Alpha format.',
+    );
+    expect(executor.calls[0]?.prompt).not.toContain(
       'Always answer in terse Alpha format.',
     );
     expect(executor.calls[0]?.prompt).toContain('Alpha persona home content.');
@@ -152,7 +158,7 @@ describe('ExecutionRuntimeChatTurnProvider', () => {
       ],
     });
 
-    const prompt = executor.calls[0]?.prompt ?? '';
+    const prompt = executor.calls[0]?.desiredSystemPrompt.text ?? '';
     expect(prompt).toContain('GRANTED PLATFORM TOOLS:');
     expect(prompt).toContain('MCP server named "agent-server"');
     for (const name of [
@@ -223,7 +229,125 @@ describe('ExecutionRuntimeChatTurnProvider', () => {
     // The Runtime session still belongs to the Agent owner, which is what the
     // tool grant is issued against.
     expect(asHuman?.owner.principalType).toBe('service_account');
-    expect(executor.calls[1]?.prompt).toContain('- workspace_write');
+    expect(executor.calls[1]?.desiredSystemPrompt.text).toContain(
+      '- workspace_write',
+    );
+  });
+
+  it('gives each Agent its own working directory under the configured root', async () => {
+    const creator = new RecordingDesiredSpec([
+      runtimeSession('runtime-session-1'),
+      runtimeSession('runtime-session-2'),
+    ]);
+    const provider = new ExecutionRuntimeChatTurnProvider(
+      creator,
+      new RecordingTurnExecutor(),
+      recordingConfiguration,
+    );
+
+    await provider.runTurn({
+      ...turnIdentity('agent-definition-1', 'agent-version-1'),
+      brain: chatBrain({ agentDefinitionId: 'agent-definition-1' }),
+      messages: [
+        { authorType: 'principal', authorId: 'principal-1', body: 'hello' },
+      ],
+    });
+    await provider.runTurn({
+      ...turnIdentity(
+        'agent-definition-2',
+        'agent-version-2',
+        'conversation-2',
+      ),
+      brain: chatBrain({
+        agentDefinitionId: 'agent-definition-2',
+        agentVersionId: 'agent-version-2',
+        conversationId: 'conversation-2',
+      }),
+      messages: [
+        { authorType: 'principal', authorId: 'principal-1', body: 'hello' },
+      ],
+    });
+
+    expect(creator.calls[0]?.configuration.cwd).toBe(
+      '/tmp/recording/agent-definition-1',
+    );
+    expect(creator.calls[1]?.configuration.cwd).toBe(
+      '/tmp/recording/agent-definition-2',
+    );
+  });
+
+  it('reads the identity files back from the Agent workspace ahead of the tool grant', async () => {
+    const creator = new RecordingDesiredSpec([
+      runtimeSession('runtime-session-1'),
+    ]);
+    const executor = new RecordingTurnExecutor();
+    const provider = new ExecutionRuntimeChatTurnProvider(
+      creator,
+      executor,
+      recordingConfiguration,
+    );
+
+    await provider.runTurn({
+      ...turnIdentity('agent-definition-1', 'agent-version-1'),
+      brain: chatBrain({
+        toolRefs: ['agent-server/workspace-write'],
+        agentHome: {
+          'agent-shared': [
+            { path: 'IDENTITY.md', content: '# Maya\n\n**Role:** Analyst' },
+            { path: 'SOUL.md', content: '# Soul of Maya' },
+            { path: 'notes/market.md', content: 'Ordinary working note.' },
+          ],
+        },
+      }),
+      messages: [
+        { authorType: 'principal', authorId: 'principal-1', body: 'hello' },
+      ],
+    });
+
+    const systemPrompt = executor.calls[0]?.desiredSystemPrompt.text ?? '';
+    expect(systemPrompt).toContain('YOUR OWN FILES:');
+    expect(systemPrompt).toContain('--- IDENTITY.md ---');
+    expect(systemPrompt).toContain('**Role:** Analyst');
+    expect(systemPrompt).toContain('--- SOUL.md ---');
+    // Who the Agent is comes before what it can reach for.
+    expect(systemPrompt.indexOf('YOUR OWN FILES:')).toBeLessThan(
+      systemPrompt.indexOf('GRANTED PLATFORM TOOLS:'),
+    );
+    // An identity file rendered in full is not repeated in the turn context,
+    // while an ordinary workspace file is still projected there.
+    const prompt = executor.calls[0]?.prompt ?? '';
+    expect(prompt).not.toContain('IDENTITY.md');
+    expect(prompt).toContain('notes/market.md');
+  });
+
+  it('states the Agent identity exactly once across the prompts one turn sends', async () => {
+    const creator = new RecordingDesiredSpec([
+      runtimeSession('runtime-session-1'),
+    ]);
+    const executor = new RecordingTurnExecutor();
+    const provider = new ExecutionRuntimeChatTurnProvider(
+      creator,
+      executor,
+      recordingConfiguration,
+    );
+
+    await provider.runTurn({
+      ...turnIdentity('agent-definition-1', 'agent-version-1'),
+      brain: chatBrain({ instructions: 'You are Maya, Research Analyst.' }),
+      messages: [
+        { authorType: 'principal', authorId: 'principal-1', body: 'hello' },
+      ],
+    });
+
+    const call = executor.calls[0];
+    const occurrences = [
+      call?.desiredSystemPrompt.text ?? '',
+      call?.prompt ?? '',
+      call?.recoveryPrompt ?? '',
+    ].filter((text) => text.includes('You are Maya, Research Analyst.'));
+    // The recovery prompt is an alternative to the turn prompt, never sent
+    // alongside it, so one occurrence across all three is one per request.
+    expect(occurrences).toHaveLength(1);
   });
 
   it('passes delta and canonical recovery prompts so runtime Ensure chooses reuse or replacement', async () => {

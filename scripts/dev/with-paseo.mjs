@@ -313,7 +313,8 @@ if (command.length === 0) {
     mode: 0o600,
   });
   await chmod(claudeSettingsPath, 0o600);
-  const codexHome = join(runtimeRoot, 'home', '.codex');
+  const providerHome = join(runtimeRoot, 'home');
+  const codexHome = join(providerHome, '.codex');
   // Two ways to authenticate Codex, in priority order:
   //
   // 1. A host developer login. `codex login` stores a ChatGPT-subscription
@@ -363,6 +364,13 @@ if (command.length === 0) {
     );
   }
   process.env.CODEX_HOME = codexHome;
+  // Isolating the Codex home alone leaves one channel open: Codex also reads
+  // skills from `$HOME/.agents/skills`, outside CODEX_HOME entirely, and the
+  // Paseo daemon that spawns the provider inherits the developer's own HOME.
+  // The runtime already keeps `.codex` and `.claude` under this directory, so
+  // naming it is what makes it the provider's actual home rather than a place
+  // two dotfiles happen to live.
+  process.env.PASEO_PROVIDER_HOME = providerHome;
   let paseo;
   let child;
   let cleanupStarted = false;

@@ -25,6 +25,11 @@ export const applicationEnvironmentNames = [
   // operator's own `~/.codex` -- which would brief it with that person's
   // global AGENTS.md, MCP servers and plugins.
   'CODEX_HOME',
+  // The home the runtime prepared for provider processes. Codex reads skills
+  // from `$HOME/.agents/skills` as well as from `$CODEX_HOME`, so an Agent
+  // whose provider keeps the operator's HOME is briefed with that person's
+  // skill library no matter where CODEX_HOME points.
+  'PASEO_PROVIDER_HOME',
 ];
 
 export function createApplicationEnvironment({

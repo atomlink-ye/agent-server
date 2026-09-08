@@ -10,6 +10,7 @@ import {
   useRunTraceViewModel,
   type TraceView,
 } from './use-run-trace-view-model';
+import { useT } from '../../i18n';
 import './run-trace.css';
 
 const TAB_LABELS: Record<TraceView, string> = {
@@ -36,6 +37,7 @@ export function RunTrace({
   /** Work detail keeps the evidence in disclosures instead of a second tab bar. */
   readonly presentation?: 'workspace' | 'record';
 }) {
+  const t = useT();
   const model = useRunTraceViewModel(
     trace,
     view,
@@ -61,11 +63,11 @@ export function RunTrace({
       >
         <header className="run-trace__header">
           <div>
-            <p className="run-trace__eyebrow">Execution record</p>
-            <h2 id="run-trace-heading">Everything captured during this Run</h2>
+            <p className="run-trace__eyebrow">{t('trace.record.eyebrow')}</p>
+            <h2 id="run-trace-heading">{t('trace.record.title')}</h2>
           </div>
           <span className={live ? 'run-trace__live' : 'run-trace__historical'}>
-            {live ? 'Updating' : `${trace.events.length} events`}
+            {live ? t('trace.updating') : t('trace.eventCount', { count: trace.events.length })}
           </span>
         </header>
         <p className="run-trace__subhead">
@@ -73,7 +75,7 @@ export function RunTrace({
           is inferred from these events.
         </p>
         <details className="run-trace__record-section">
-          <summary>Event timeline</summary>
+          <summary>{t('trace.eventTimeline')}</summary>
           <div className="run-trace__record-canvas">
             <Timeline
               live={live}
@@ -86,7 +88,7 @@ export function RunTrace({
           </div>
         </details>
         <details className="run-trace__record-section">
-          <summary>Collaboration relationships</summary>
+          <summary>{t('trace.relationships')}</summary>
           <div className="run-trace__record-canvas">
             <MapView
               model={model.map}
@@ -119,7 +121,7 @@ export function RunTrace({
           className="run-trace__coverage"
           data-testid="trace-coverage-disclosure"
         >
-          <summary>What this record includes</summary>
+          <summary>{t('trace.includes')}</summary>
           <p>
             This record covers {humanize(trace.coverage.scope)}; excluded
             execution:{' '}
@@ -135,11 +137,11 @@ export function RunTrace({
     <section className="run-trace" aria-labelledby="run-trace-heading">
       <header className="run-trace__header">
         <div>
-          <p className="run-trace__eyebrow">Run Trace</p>
+          <p className="run-trace__eyebrow">{t('trace.title')}</p>
           <h2 id="run-trace-heading">{trace.work.title}</h2>
         </div>
         <span className={live ? 'run-trace__live' : 'run-trace__historical'}>
-          {live ? 'Live Run Trace' : 'Historical Run Trace'}
+          {live ? t('trace.live') : t('trace.historical')}
         </span>
       </header>
       <p className="run-trace__subhead">
@@ -148,7 +150,7 @@ export function RunTrace({
           ? ` · recorded ${formatTimestamp(new Date(trace.timeline.startedAt).toISOString())} → ${formatTimestamp(new Date(trace.timeline.endedAt).toISOString())}`
           : ''}
       </p>
-      <div className="run-trace__tabs" role="tablist" aria-label="Trace views">
+      <div className="run-trace__tabs" role="tablist" aria-label={t('trace.views')}>
         {(['timeline', 'map', 'events'] as const).map((item) => (
           <button
             aria-selected={activeView === item}
@@ -204,7 +206,7 @@ export function RunTrace({
         className="run-trace__coverage"
         data-testid="trace-coverage-disclosure"
       >
-        <summary>About this activity record</summary>
+        <summary>{t('trace.aboutActivity')}</summary>
         <p>
           The activity list records event sequence, type, time, and Run only. It
           does not expose output bodies. Read the Transcript for captured Worker

@@ -13,10 +13,10 @@ export const WORK_TABS: readonly {
   readonly id: WorkTab;
   readonly label: string;
 }[] = [
-  { id: 'runs', label: 'Runs' },
-  { id: 'transcript', label: 'Conversation' },
-  { id: 'artifacts', label: 'Files' },
-  { id: 'definition', label: 'Definition' },
+  { id: 'runs', label: t('work.tab.runs') },
+  { id: 'transcript', label: t('work.tab.transcript') },
+  { id: 'artifacts', label: t('work.tab.artifacts') },
+  { id: 'definition', label: t('work.tab.definition') },
 ];
 
 export function normalizeWorkTab(value: string | undefined): WorkTab {
@@ -86,7 +86,7 @@ export function productStatePresentation(state: WorkStage) {
 
 export function latestRunSummary(work: WorkListItem) {
   const latest = work.latest_run_summary;
-  if (!latest) return 'No runs yet.';
+  if (!latest) return t('work.noRuns');
   if (latest.result_summary !== null) return latest.result_summary;
   return resultCaptureLabel(latest.result_capture_status);
 }
@@ -98,13 +98,13 @@ export function resultCaptureLabel(
 ): string {
   switch (status) {
     case 'present':
-      return 'Result summary is ready.';
+      return t('work.result.present');
     case 'redacted':
-      return 'A result is available, but its summary is redacted.';
+      return t('work.result.redacted');
     case 'not_present':
-      return 'This Run has no result summary.';
+      return t('work.result.notPresent');
     case 'not_captured':
-      return 'The result summary is still unavailable.';
+      return t('work.result.notCaptured');
   }
 }
 
@@ -115,7 +115,7 @@ export function formatTimestamp(value: string) {
 /** A compact, locale-aware timestamp for the navigation index. */
 export function formatWorkListTime(value: string): string {
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return 'Updated time unavailable';
+  if (Number.isNaN(date.getTime())) return t('work.updatedUnavailable');
   return new Intl.DateTimeFormat(undefined, {
     month: 'short',
     day: 'numeric',

@@ -1,5 +1,6 @@
 import { SessionTranscripts } from '@/features/run-trace/session-transcripts';
 import type { WorkDetailData } from '../../queries/load-work-detail';
+import { useT } from '../../../../i18n';
 
 export function TranscriptPane({
   data,
@@ -8,12 +9,13 @@ export function TranscriptPane({
   readonly data: WorkDetailData;
   readonly selectedSessionIndex?: number;
 }) {
+  const t = useT();
   if (!data.run || !data.trace)
     return (
       <section className="work-detail-state" data-testid="work-no-runs">
-        <p className="work-shell-kicker">Transcript</p>
-        <h2>No conversation to show yet.</h2>
-        <p>Start a Run to follow the activity and messages it produces.</p>
+        <p className="work-shell-kicker">{t('work.transcript')}</p>
+        <h2>{t('work.transcript.emptyTitle')}</h2>
+        <p>{t('work.transcript.emptyBody')}</p>
       </section>
     );
   const live = data.run.work_run.product_state === 'running';

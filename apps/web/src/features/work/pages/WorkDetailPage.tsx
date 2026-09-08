@@ -15,6 +15,7 @@ import { workRootPath } from '../../../app/routes';
 import { useWorkDetail } from '../queries/use-work-detail';
 import { WorkDetailRootNotFoundError } from '../queries/load-work-detail';
 import { NotFoundContent } from '../../../app/router/NotFoundPage';
+import { useT } from '../../../i18n';
 import '../components/work-shell.css';
 import '../components/work-list.css';
 import '../components/work-detail.css';
@@ -40,6 +41,7 @@ export function WorkDetailPage({
     } | null,
   ) => void;
 }) {
+  const t = useT();
   const activeTab = normalizeWorkTab(tab);
   const preferCurrentDefinition = activeTab === 'definition' && !selectedRunId;
   const query = useWorkDetail({
@@ -112,12 +114,12 @@ export function WorkDetailPage({
     <div className="work-shell" data-testid="work-detail-shell">
       {query.status === 'loading' ? (
         <p className="work-detail-loading" aria-live="polite">
-          Loading Work…
+          {t('work.detail.loading')}
         </p>
       ) : null}
       {query.status === 'starting' ? (
         <p className="work-detail-loading" aria-live="polite">
-          Run is starting…
+          {t('work.detail.starting')}
         </p>
       ) : null}
       {query.status === 'error' ? (
@@ -161,31 +163,32 @@ function WorkDetailError({
   readonly error: unknown | null;
   readonly originConversationId?: string | null;
 }) {
+  const t = useT();
   const rootWorkMissing = error instanceof WorkDetailRootNotFoundError;
   if (rootWorkMissing) {
     return (
       <NotFoundContent
-        title="This Work is unavailable."
+        title={t('work.detailUnavailable.title')}
         to={workRootPath(originConversationId ?? null)}
-        linkLabel="Back to Work"
-        eyebrow="Work unavailable"
+        linkLabel={t('work.invalidLink.back')}
+        eyebrow={t('work.detailUnavailable.eyebrow')}
       >
-        It may have been removed, or you may not have access.
+        {t('work.detailMissing.body')}
       </NotFoundContent>
     );
   }
 
   return (
     <section className="work-list-state work-list-state--error" role="alert">
-      <p className="work-list-state__eyebrow">Couldn't load Work</p>
-      <h2>This Work couldn’t be loaded.</h2>
-      <p>Try again in a moment, or return to Work.</p>
+      <p className="work-list-state__eyebrow">{t('work.couldNotLoad')}</p>
+      <h2>{t('work.couldNotLoad.title')}</h2>
+      <p>{t('work.couldNotLoad.body')}</p>
       <div className="work-status-actions">
         <Link to={workRootPath(originConversationId ?? null)}>
-          Back to Work
+          {t('work.invalidLink.back')}
         </Link>
         <button type="button" onClick={() => window.location.reload()}>
-          Retry loading
+          {t('work.retryLoading')}
         </button>
       </div>
     </section>

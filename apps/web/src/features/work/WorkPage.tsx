@@ -14,6 +14,7 @@ import { workPath, workRootPath } from '../../app/routes';
 import { isValidDetailId } from '../../app/router/detail-id';
 import { NotFoundContent } from '../../app/router/NotFoundPage';
 import { TitleBar } from '../../app/shell/TitleBar';
+import { useT } from '../../i18n';
 import WorkPane from './WorkPane';
 import './work-page.css';
 
@@ -34,6 +35,7 @@ export function WorkPage({
   selectedRunId = null,
   selectedSessionIndex = null,
 }: WorkPageProps) {
+  const t = useT();
   const navigate = useNavigate();
   const location = useLocation();
   const authoringRequest = useMemo(() => {
@@ -110,36 +112,36 @@ export function WorkPage({
         selectedLatestRunState={selectedLatestRunState}
       />
       <main className="chat-panel work-main">
-        <TitleBar section="Work" />
+        <TitleBar section={t('work.title')} />
         <section
-          aria-label="Work overview"
+          aria-label={t('work.overview')}
           className="work-main-content"
           data-empty={isEmpty ? 'true' : 'false'}
         >
           {returnWorkItemId ? (
             <div className="work-return-bar">
               <button type="button" onClick={returnToTask}>
-                ← Back to Task
+                {t('work.backToTask')}
               </button>
             </div>
           ) : null}
           {!returnWorkItemId && returnConversationId ? (
             <div className="work-return-bar">
               <button type="button" onClick={respondInChat}>
-                ← Respond in conversation
+                {t('work.respondInConversation')}
               </button>
             </div>
           ) : null}
           {selectedWorkId && invalidWorkId ? (
             <NotFoundContent
-              title="This Work link is invalid."
+              title={t('work.invalidLink.title')}
               to="/work"
-              linkLabel="Back to Work"
-              eyebrow="Work link"
+              linkLabel={t('work.invalidLink.back')}
+              eyebrow={t('work.invalidLink.eyebrow')}
               mark="!"
               variant="detail"
             >
-              Check the link, or return to Work.
+              {t('work.invalidLink.body')}
             </NotFoundContent>
           ) : null}
           {!invalidWorkId && !workUnavailable && showNewWork ? (
@@ -183,21 +185,18 @@ export function WorkPage({
               <span className="work-main-icon" aria-hidden="true">
                 ✓
               </span>
-              <h1>Work isn&apos;t set up here</h1>
-              <p>This workspace doesn&apos;t have Work execution enabled.</p>
+              <h1>{t('work.unavailable.title')}</h1>
+              <p>{t('work.unavailable.body')}</p>
             </div>
           ) : isEmpty && workListFailed ? (
             <div className="work-main-empty" data-testid="work-page-error">
               <span className="work-main-icon" aria-hidden="true">
                 ✓
               </span>
-              <h1>Work could not be loaded</h1>
-              <p>
-                We couldn&apos;t retrieve Work right now. Try again when the
-                connection is ready.
-              </p>
+              <h1>{t('work.loadError.title')}</h1>
+              <p>{t('work.loadError.body')}</p>
               <button type="button" onClick={() => refreshWorkList?.()}>
-                Try again
+                {t('work.tryAgain')}
               </button>
             </div>
           ) : isEmpty ? (
@@ -225,14 +224,15 @@ function WorkLanding({
   readonly originConversationId: string | null;
   readonly onCreate: () => void;
 }) {
+  const t = useT();
   if (status === 'loading')
     return (
       <div className="work-main-empty work-main-empty--loading" role="status">
         <span className="work-main-icon" aria-hidden="true">
           …
         </span>
-        <h1>Loading your Work</h1>
-        <p>Checking the current objectives and their latest activity.</p>
+        <h1>{t('work.loading.title')}</h1>
+        <p>{t('work.loading.body')}</p>
       </div>
     );
 
@@ -242,14 +242,11 @@ function WorkLanding({
         <span className="work-main-icon" aria-hidden="true">
           +
         </span>
-        <p className="eyebrow">Formal execution</p>
-        <h1>Start a piece of Work</h1>
-        <p>
-          Define an objective, choose its execution setup, then start a Run when
-          it is ready.
-        </p>
+        <p className="eyebrow">{t('work.formalExecution')}</p>
+        <h1>{t('work.start.title')}</h1>
+        <p>{t('work.start.body')}</p>
         <button type="button" onClick={onCreate}>
-          Create Work
+          {t('work.create')}
         </button>
       </div>
     );
@@ -257,17 +254,14 @@ function WorkLanding({
   return (
     <div className="work-landing">
       <div className="work-landing__intro">
-        <p className="eyebrow">Work</p>
-        <h1>Choose where to continue</h1>
-        <p>
-          Open a recent objective to review its Run, trace, transcript, or
-          definition.
-        </p>
+        <p className="eyebrow">{t('work.title')}</p>
+        <h1>{t('work.continue.title')}</h1>
+        <p>{t('work.continue.body')}</p>
         <button type="button" onClick={onCreate}>
-          Create Work
+          {t('work.create')}
         </button>
       </div>
-      <ol className="work-landing__recent" aria-label="Recent Work">
+      <ol className="work-landing__recent" aria-label={t('work.recent')}>
         {[...works]
           .sort((left, right) => {
             const leftTime =
@@ -291,18 +285,18 @@ function WorkLanding({
                       {state.label}
                     </span>
                   ) : (
-                    <span className="work-landing__no-run">No runs yet</span>
+                    <span className="work-landing__no-run">{t('work.noRuns')}</span>
                   )}
                   <strong>{work.title}</strong>
                   <span className="work-landing__summary">
                     {latestRun
                       ? latestRunSummary(work)
-                      : 'Open Work to review its setup.'}
+                      : t('work.reviewSetup')}
                   </span>
                   <time dateTime={timestamp}>
                     {latestRun
-                      ? `Run ${formatWorkListTime(timestamp)}`
-                      : `Updated ${formatWorkListTime(timestamp)}`}
+                      ? t('work.runAt', { time: formatWorkListTime(timestamp) })
+                      : t('work.updatedAt', { time: formatWorkListTime(timestamp) })}
                   </time>
                 </a>
               </li>
@@ -324,13 +318,14 @@ function MobileWorkPicker({
   readonly originConversationId: string | null;
   readonly onCreate: () => void;
 }) {
+  const t = useT();
   const navigate = useNavigate();
   return (
     <div className="work-mobile-picker">
       <label>
-        <span>Work</span>
+        <span>{t('work.title')}</span>
         <select
-          aria-label="Select Work"
+          aria-label={t('work.select')}
           value={selectedWorkId ?? ''}
           onChange={(event) =>
             navigate(
@@ -340,7 +335,7 @@ function MobileWorkPicker({
             )
           }
         >
-          <option value="">Choose Work</option>
+          <option value="">{t('work.choose')}</option>
           {works.map((work) => (
             <option key={work.id} value={work.id}>
               {work.title}
@@ -349,7 +344,7 @@ function MobileWorkPicker({
         </select>
       </label>
       <button type="button" onClick={onCreate}>
-        Create Work
+        {t('work.create')}
       </button>
     </div>
   );

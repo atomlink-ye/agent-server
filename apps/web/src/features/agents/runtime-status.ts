@@ -1,4 +1,5 @@
 import type { Coworker } from './contracts';
+import type { Translate } from '../../i18n';
 
 /**
  * Cumora shows four status chips (working/thinking/available/resting) and
@@ -14,13 +15,23 @@ export const STATUS_FILTERS: readonly Coworker['runtimeStatus'][] = [
   'unavailable',
 ];
 
-export const RUNTIME_STATUS_LABEL: Record<Coworker['runtimeStatus'], string> = {
-  working: 'Working',
-  thinking: 'Thinking',
-  available: 'Available',
-  draining: 'Draining',
-  unavailable: 'Unavailable',
-};
+/**
+ * The API's runtime status is a closed vocabulary. Keep its UI mapping total:
+ * a new status must add a translation instead of silently becoming offline.
+ */
+export function runtimeStatusLabel(
+  t: Translate,
+  status: Coworker['runtimeStatus'],
+): string {
+  const key: Record<Coworker['runtimeStatus'], Parameters<Translate>[0]> = {
+    working: 'runtimeStatus.working',
+    thinking: 'runtimeStatus.thinking',
+    available: 'runtimeStatus.available',
+    draining: 'runtimeStatus.draining',
+    unavailable: 'runtimeStatus.unavailable',
+  };
+  return t(key[status]);
+}
 
 export const BUSY_RUNTIME_STATUSES: ReadonlySet<Coworker['runtimeStatus']> =
   new Set(['working', 'thinking']);

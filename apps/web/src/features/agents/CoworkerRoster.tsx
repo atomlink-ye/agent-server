@@ -1,10 +1,10 @@
 import type { Coworker } from './contracts';
-import { useT, type Translate } from '../../i18n';
+import { useT } from '../../i18n';
 import {
   BUSY_RUNTIME_STATUSES,
-  RUNTIME_STATUS_LABEL,
   STATUS_FILTERS,
   chatBlocked,
+  runtimeStatusLabel,
 } from './runtime-status';
 
 export interface CoworkerRosterProps {
@@ -90,7 +90,7 @@ export function CoworkerRoster({
                 data-active={active ? 'true' : 'false'}
                 onClick={() => onFilter(active ? null : status)}
               >
-                {localizedRuntimeStatus(t, status)} · {count}
+                {runtimeStatusLabel(t, status)} · {count}
               </button>
             );
           })}
@@ -107,7 +107,7 @@ export function CoworkerRoster({
         <p className="agents-roster-note">
           {statusFilter
             ? t('agents.filteredEmpty', {
-                status: localizedRuntimeStatus(t, statusFilter).toLowerCase(),
+                status: runtimeStatusLabel(t, statusFilter).toLowerCase(),
               })
             : t('agents.empty')}
         </p>
@@ -175,7 +175,7 @@ function CoworkerCard({
           <span
             className={`agents-runtime agents-runtime--${agent.runtimeStatus}`}
           >
-            {localizedRuntimeStatus(t, agent.runtimeStatus)}
+            {runtimeStatusLabel(t, agent.runtimeStatus)}
           </span>
         </span>
       </button>
@@ -216,12 +216,3 @@ function CoworkerCard({
 }
 
 export default CoworkerRoster;
-
-function localizedRuntimeStatus(
-  t: Translate,
-  status: Coworker['runtimeStatus'],
-): string {
-  if (status === 'available') return t('runtimeStatus.available');
-  if (status === 'draining') return t('runtimeStatus.draining');
-  return t('runtimeStatus.unavailable');
-}

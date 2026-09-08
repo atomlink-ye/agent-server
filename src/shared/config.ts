@@ -175,6 +175,17 @@ const ConfigSchema = z
      * to the operator's `~/.codex`.
      */
     CODEX_HOME: z.string().trim().min(1).optional(),
+    /**
+     * The home directory a provider process for an Agent session runs with.
+     *
+     * A provider home is not only its own dotfile directory. Codex enumerates
+     * skills from `$CODEX_HOME/skills` *and* `$HOME/.agents/skills`, so naming
+     * only the Codex home still leaves an Agent reading the skill library of
+     * whoever runs the server -- their names, descriptions and trigger phrases,
+     * for tools the Agent cannot call. Naming the home the runtime prepared
+     * makes the Agent's provider environment the platform's, not a person's.
+     */
+    PASEO_PROVIDER_HOME: z.string().trim().min(1).optional(),
     PASEO_RUNTIME_CELL_ROOT: z.string().min(1).default('.local/runtime-cells'),
     AGENT_SERVER_SKILL_REGISTRY_ROOT: z
       .string()
@@ -340,6 +351,8 @@ export type AppConfig = Readonly<{
     runtimeCellRoot?: string;
     /** Provider home handed to Codex sessions, when the runtime prepared one. */
     codexHome?: string;
+    /** Home directory provider processes run with, when the runtime prepared one. */
+    providerHome?: string;
     workspaceTitle: string;
     model?: string;
     connectTimeoutMs: number;
@@ -462,6 +475,14 @@ export function loadConfig(
       workspaceTitle: parsed.data.PASEO_WORKSPACE_TITLE,
       ...(parsed.data.CODEX_HOME
         ? { codexHome: resolve(workingDirectory, parsed.data.CODEX_HOME) }
+        : {}),
+      ...(parsed.data.PASEO_PROVIDER_HOME
+        ? {
+            providerHome: resolve(
+              workingDirectory,
+              parsed.data.PASEO_PROVIDER_HOME,
+            ),
+          }
         : {}),
       ...(parsed.data.PASEO_MODEL ? { model: parsed.data.PASEO_MODEL } : {}),
       connectTimeoutMs: parsed.data.PASEO_CONNECT_TIMEOUT_MS,

@@ -2,7 +2,10 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter, Route, Routes, useParams } from 'react-router-dom';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { page } from 'vitest/browser';
 
+import '../../index.css';
+import { AppShell } from '../../app/shell/AppShell';
 import { BoardsPage } from './BoardsPage';
 import { WORK_BOARD_NOT_FOUND_CODE } from '@atomlink-ye/agent-server/product-contract';
 
@@ -33,6 +36,111 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+
+it('scrolls the real Board list and canvas to its final Board and Card on desktop', async () => {
+  const boards = Array.from({ length: 48 }, (_, index) => ({
+    ...board(),
+    id: `00000000-0000-4000-8000-${String(index + 600).padStart(12, '0')}`,
+    title: index === 47 ? 'Final real Board' : `Real Board ${index}`,
+  }));
+  const selectedBoard = boards[0]!;
+  const columns = Array.from({ length: 8 }, (_, index) => ({
+    id: `00000000-0000-4000-8000-${String(index + 700).padStart(12, '0')}`,
+    board_id: selectedBoard.id,
+    title: `Column ${index}`,
+    position: index,
+    kind: null,
+    created_at: '2026-08-26T00:00:00.000Z',
+    updated_at: '2026-08-26T00:00:00.000Z',
+  }));
+  const cards = columns.map((column, index) => ({
+    ...workItem(),
+    id: `00000000-0000-4000-8000-${String(index + 800).padStart(12, '0')}`,
+    title:
+      index === columns.length - 1 ? 'Final real Card' : `Real Card ${index}`,
+  }));
+  const snapshotBody = {
+    board: selectedBoard,
+    columns,
+    placements: columns.map((column, index) => ({
+      board_id: selectedBoard.id,
+      column_id: column.id,
+      work_item_id: cards[index]!.id,
+      position: 0,
+      created_at: '2026-08-26T00:00:00.000Z',
+      updated_at: '2026-08-26T00:00:00.000Z',
+    })),
+    work_items: cards,
+  };
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL) => {
+      const request =
+        typeof input === 'object' && input !== null && 'url' in input
+          ? (input as Request)
+          : null;
+      const path = new URL(request?.url ?? String(input), window.location.href)
+        .pathname;
+      if (path === '/api/agents') return json({ items: [] });
+      if (path === '/api/boards') return json({ boards });
+      if (path === `/api/boards/${selectedBoard.id}`) return json(snapshotBody);
+      throw new Error(`Unexpected browser request: ${path}`);
+    }),
+  );
+
+  const host = document.createElement('div');
+  host.style.height = '900px';
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(
+        <MemoryRouter initialEntries={[`/boards/${selectedBoard.id}`]}>
+          <AppShell
+            commands={shellCommands()}
+            selectedBoardId={selectedBoard.id}
+          />
+        </MemoryRouter>,
+      );
+    });
+    await act(settle);
+    await act(settle);
+
+    const list = host.querySelector<HTMLElement>('.work-org-list');
+    expect(list).not.toBeNull();
+    expect(host.textContent).toContain('Final real Board');
+    expect(list!.scrollHeight).toBeGreaterThan(list!.clientHeight);
+    list!.scrollTop = list!.scrollHeight;
+    expect(list!.scrollTop).toBeGreaterThan(0);
+    const finalBoard = [
+      ...list!.querySelectorAll<HTMLElement>('.work-org-list-item'),
+    ].at(-1)!;
+    expect(finalBoard.textContent).toContain('Final real Board');
+    expect(finalBoard.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+      list!.getBoundingClientRect().bottom + 1,
+    );
+
+    const canvas = host.querySelector<HTMLElement>('.work-board-canvas');
+    expect(canvas).not.toBeNull();
+    expect(host.textContent).toContain('Final real Card');
+    expect(canvas!.scrollWidth).toBeGreaterThan(canvas!.clientWidth);
+    canvas!.scrollLeft = canvas!.scrollWidth;
+    expect(canvas!.scrollLeft).toBeGreaterThan(0);
+    const finalCard = host.querySelector<HTMLElement>(
+      '[data-work-item-id="00000000-0000-4000-8000-000000000807"]',
+    );
+    expect(finalCard).not.toBeNull();
+    expect(finalCard!.getBoundingClientRect().right).toBeLessThanOrEqual(
+      canvas!.getBoundingClientRect().right + 1,
+    );
+    await page.screenshot({
+      path: '../../../../../.local/boards-scroll-desktop.png',
+    });
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+  }
 });
 
 it('adds a Task card through the in-app form instead of a native dialog', async () => {
@@ -966,4 +1074,18 @@ function expectNoNativeDialogs() {
   expect(nativeDialogSpies.prompt.mock.calls).toHaveLength(0);
   expect(nativeDialogSpies.confirm.mock.calls).toHaveLength(0);
   expect(nativeDialogSpies.alert.mock.calls).toHaveLength(0);
+}
+
+function shellCommands() {
+  return {
+    loadCoworkers: async () => [],
+    loadConversations: async () => [],
+    createConversation: async () => {
+      throw new Error('not used');
+    },
+    loadMessages: async () => [],
+    sendMessage: async () => {
+      throw new Error('not used');
+    },
+  };
 }

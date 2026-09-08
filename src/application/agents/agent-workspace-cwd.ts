@@ -14,14 +14,24 @@ import { join } from 'node:path';
  * provider sessions, so it is what names the directory. The configured value
  * stays the root that holds them, which keeps one place to point at a volume
  * and one place the runtime prepares.
+ *
+ * A Computer names the execution namespace an Agent runs under (cloud, a
+ * paired local machine, a VPS), so it sits above the per-Agent directory: a
+ * null computerId is today's single shared runtime and resolves to a
+ * `default` namespace, keeping the directory shape ready for real multi-machine
+ * placement without another path migration.
  */
 export function agentWorkspaceCwd(
   root: string,
   agentDefinitionId: string,
+  computerId: string | null,
 ): string {
   if (!isSafeDirectorySegment(agentDefinitionId))
     throw new Error('agent_workspace_cwd_identity_invalid');
-  return join(root, agentDefinitionId);
+  const computerSegment = computerId ?? 'default';
+  if (!isSafeDirectorySegment(computerSegment))
+    throw new Error('agent_workspace_cwd_identity_invalid');
+  return join(root, computerSegment, agentDefinitionId);
 }
 
 /**

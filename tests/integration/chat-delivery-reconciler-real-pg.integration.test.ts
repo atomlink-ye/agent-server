@@ -55,6 +55,7 @@ function createTestBrainResolver(): ChatBrainResolver {
         updatedAt: new Date().toISOString(),
         roleLabel: null,
         summary: null,
+        computerId: null,
       }),
   };
   const agentResolution: AgentResolutionApi = {

@@ -51,6 +51,7 @@ type DefinitionRow = {
   updated_at: string | Date;
   role_label: string | null;
   summary: string | null;
+  computer_id: string | null;
 };
 type CoworkerRow = DefinitionRow & {
   active_agent_version_id: string;
@@ -115,7 +116,7 @@ export class PostgresAgentRegistry implements AgentRegistry {
           (id, tenant_id, workspace_id, principal_type, principal_id, name, managed_discriminator, normalized_name, role_label, summary, created_at, updated_at)
          VALUES ($1,$2,$3,$4,$5,$6,'managed_agent_v1',$7,$8,$9,$10,$11)
          ON CONFLICT DO NOTHING
-         RETURNING id, tenant_id, workspace_id, principal_type, principal_id, name, normalized_name, role_label, summary, created_at, updated_at`,
+         RETURNING id, tenant_id, workspace_id, principal_type, principal_id, name, normalized_name, role_label, summary, computer_id, created_at, updated_at`,
         [
           command.definition.id,
           command.owner.tenantId,
@@ -134,7 +135,7 @@ export class PostgresAgentRegistry implements AgentRegistry {
         definitionResult.rows?.[0] ??
         (
           await db.query<DefinitionRow>(
-            `SELECT id, tenant_id, workspace_id, principal_type, principal_id, name, normalized_name, role_label, summary, created_at, updated_at
+            `SELECT id, tenant_id, workspace_id, principal_type, principal_id, name, normalized_name, role_label, summary, computer_id, created_at, updated_at
            FROM agent_definitions WHERE tenant_id=$1 AND workspace_id=$2 AND principal_type=$3 AND principal_id=$4 AND normalized_name=$5
              AND managed_discriminator='managed_agent_v1' FOR UPDATE`,
             ownerNameValues(command.owner, command.normalizedName),
@@ -289,7 +290,7 @@ export class PostgresAgentRegistry implements AgentRegistry {
     definitionId: string,
   ): Promise<AgentDefinition | null> {
     const result = await this.database.query<DefinitionRow>(
-      `SELECT id,tenant_id,workspace_id,principal_type,principal_id,name,normalized_name,role_label,summary,created_at,updated_at FROM agent_definitions
+      `SELECT id,tenant_id,workspace_id,principal_type,principal_id,name,normalized_name,role_label,summary,computer_id,created_at,updated_at FROM agent_definitions
        WHERE id=$1 AND tenant_id=$2 AND workspace_id=$3 AND principal_type=$4 AND principal_id=$5
          AND managed_discriminator='managed_agent_v1'`,
       [
@@ -308,7 +309,7 @@ export class PostgresAgentRegistry implements AgentRegistry {
     readonly definitionId: string;
   }): Promise<AgentDefinition | null> {
     const result = await this.database.query<DefinitionRow>(
-      `SELECT id,tenant_id,workspace_id,principal_type,principal_id,name,normalized_name,role_label,summary,created_at,updated_at FROM agent_definitions
+      `SELECT id,tenant_id,workspace_id,principal_type,principal_id,name,normalized_name,role_label,summary,computer_id,created_at,updated_at FROM agent_definitions
        WHERE id=$1 AND tenant_id=$2 AND managed_discriminator='managed_agent_v1'`,
       [input.definitionId, input.tenantId],
     );
@@ -334,7 +335,7 @@ export class PostgresAgentRegistry implements AgentRegistry {
     if (cursor) values.push(cursor.createdAt, cursor.id);
     const result = await this.database.query<CoworkerRow>(
       `SELECT d.id,d.tenant_id,d.workspace_id,d.principal_type,d.principal_id,
-              d.name,d.normalized_name,d.role_label,d.summary,d.created_at,d.updated_at,
+              d.name,d.normalized_name,d.role_label,d.summary,d.computer_id,d.created_at,d.updated_at,
               r.active_agent_version_id,r.status AS runtime_status
          FROM agent_definitions d
          JOIN agent_chat_runtimes r
@@ -388,7 +389,7 @@ export class PostgresAgentRegistry implements AgentRegistry {
     if (cursor) values.push(cursor.createdAt, cursor.id);
     const result = await this.database.query<CoworkerRow>(
       `SELECT d.id,d.tenant_id,d.workspace_id,d.principal_type,d.principal_id,
-              d.name,d.normalized_name,d.role_label,d.summary,d.created_at,d.updated_at,
+              d.name,d.normalized_name,d.role_label,d.summary,d.computer_id,d.created_at,d.updated_at,
               r.active_agent_version_id,r.status AS runtime_status
          FROM agent_definitions d
          JOIN agent_chat_runtimes r
@@ -746,7 +747,7 @@ async function loadImportResult(
   versionId: string,
 ) {
   const d = await db.query<DefinitionRow>(
-    `SELECT id,tenant_id,workspace_id,principal_type,principal_id,name,normalized_name,role_label,summary,created_at,updated_at FROM agent_definitions
+    `SELECT id,tenant_id,workspace_id,principal_type,principal_id,name,normalized_name,role_label,summary,computer_id,created_at,updated_at FROM agent_definitions
      WHERE id=$1 AND tenant_id=$2 AND workspace_id=$3 AND principal_type=$4 AND principal_id=$5
        AND managed_discriminator='managed_agent_v1'`,
     [
@@ -787,6 +788,7 @@ function mapDefinition(row: DefinitionRow): AgentDefinition {
     updatedAt: iso(row.updated_at),
     roleLabel: row.role_label ?? null,
     summary: row.summary ?? null,
+    computerId: row.computer_id ?? null,
   });
 }
 function mapVersion(row: VersionRow): ManagedAgentVersion {

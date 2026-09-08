@@ -8,6 +8,7 @@ import {
   useParams,
 } from 'react-router-dom';
 import { expect, it, vi } from 'vitest';
+import { page } from 'vitest/browser';
 
 import { AppShell } from '../../app/shell/AppShell';
 import { ConversationsPage } from './ConversationsPage';
@@ -21,6 +22,7 @@ import type {
 import { createAppStore } from './stores/app';
 import { createConversationsStore } from './stores/conversations';
 import { createMessagesStore } from './stores/messages';
+import '../../index.css';
 
 (
   globalThis as typeof globalThis & {
@@ -126,6 +128,87 @@ it('refreshes the selected transcript on its interval and stops transcript polli
     await act(async () => root.unmount());
     host.remove();
     vi.useRealTimers();
+  }
+});
+
+it('scrolls the real Conversations shell list and transcript at desktop size', async () => {
+  expect(window.innerWidth).toBe(1440);
+  expect(window.innerHeight).toBe(900);
+
+  const conversations = Array.from({ length: 48 }, (_, index) => ({
+    ...conversation(`conversation-${index}`),
+    updatedAt: new Date(Date.UTC(2026, 7, 21, 0, 47 - index)).toISOString(),
+    title:
+      index === 47 ? 'Final real Conversation' : `Long Conversation ${index}`,
+    directAgent: {
+      agentDefinitionId: `agent-${index}`,
+      displayName:
+        index === 47 ? 'Final real Conversation' : `Long Conversation ${index}`,
+    },
+  }));
+  const selected = conversations[0]!;
+  const messages = Array.from({ length: 48 }, (_, index) =>
+    message(
+      selected.id,
+      `message-${index}`,
+      index + 1,
+      index === 47 ? 'Final real conversation message' : `Message ${index}`,
+    ),
+  );
+  const commands: ChatCommands = {
+    loadCoworkers: async () => [],
+    loadConversations: async () => conversations,
+    createConversation: async () => selected,
+    loadMessages: async (conversationId) =>
+      conversationId === selected.id ? messages : [],
+    sendMessage: async () => messages[0]!,
+  };
+
+  const host = document.createElement('div');
+  host.style.height = '900px';
+  host.style.width = '100%';
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(
+        <MemoryRouter initialEntries={[`/conversations/${selected.id}`]}>
+          <Routes>
+            <Route
+              path="/conversations/:conversationId"
+              element={<RoutedShell commands={commands} />}
+            />
+          </Routes>
+        </MemoryRouter>,
+      );
+      for (let turn = 0; turn < 6; turn += 1)
+        await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    const listRegion = host.querySelector<HTMLElement>('.sidebar-section');
+    expect(listRegion).not.toBeNull();
+    expectScrollable(listRegion!);
+    const finalConversation = [
+      ...listRegion!.querySelectorAll('.conversation-item'),
+    ].at(-1)!;
+    expect(finalConversation.textContent).toContain('Final real Conversation');
+    expectFullyVisible(finalConversation, listRegion!);
+
+    const transcript = host.querySelector<HTMLElement>('.chat-transcript');
+    expect(transcript).not.toBeNull();
+    expectScrollable(transcript!);
+    const finalMessage = [...transcript!.querySelectorAll('article')].at(-1)!;
+    expect(finalMessage.textContent).toContain(
+      'Final real conversation message',
+    );
+    expectFullyVisible(finalMessage, transcript!);
+
+    await page.screenshot({
+      path: '../../../../../.local/conversations-app-shell-scroll-desktop.png',
+    });
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
   }
 });
 
@@ -318,9 +401,7 @@ it('reports a selected Conversation whose message read returns 404 without Retry
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(host.textContent).toContain(
-      'This Conversation is unavailable.',
-    );
+    expect(host.textContent).toContain('This Conversation is unavailable.');
     expect(host.textContent).toContain('Back to Conversations');
     expect(
       [...host.querySelectorAll('button')].some(
@@ -515,6 +596,20 @@ function locationText(host: HTMLElement): string {
     throw new Error('location output missing');
   }
   return output.textContent ?? '';
+}
+
+function expectScrollable(region: HTMLElement): void {
+  expect(['auto', 'scroll']).toContain(getComputedStyle(region).overflowY);
+  expect(region.scrollHeight).toBeGreaterThan(region.clientHeight);
+  region.scrollTop = region.scrollHeight;
+  expect(region.scrollTop).toBeGreaterThan(0);
+}
+
+function expectFullyVisible(item: Element, region: HTMLElement): void {
+  const itemRect = item.getBoundingClientRect();
+  const regionRect = region.getBoundingClientRect();
+  expect(itemRect.top).toBeGreaterThanOrEqual(regionRect.top - 1);
+  expect(itemRect.bottom).toBeLessThanOrEqual(regionRect.bottom + 1);
 }
 
 function conversation(id: ConversationId): Conversation {

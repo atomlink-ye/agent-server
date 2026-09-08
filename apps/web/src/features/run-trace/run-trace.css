@@ -64,6 +64,37 @@
   margin: 0;
   padding: 7px 18px;
 }
+.run-trace--record .run-trace__coverage,
+.run-trace__record-section {
+  background: var(--trace-canvas);
+  border-left: 1px solid var(--trace-line);
+  border-right: 1px solid var(--trace-line);
+}
+.run-trace__record-section {
+  border-bottom: 1px solid var(--trace-line);
+}
+.run-trace__record-section summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 650;
+  padding: 12px 18px;
+}
+.run-trace__record-section[open] summary {
+  border-bottom: 1px solid var(--trace-soft-line);
+}
+.run-trace__record-canvas {
+  overflow: auto;
+  padding: 14px;
+}
+.run-trace__record-inspector {
+  background: var(--trace-canvas);
+  border-bottom: 1px solid var(--trace-line);
+  border-left: 1px solid var(--trace-line);
+  border-right: 1px solid var(--trace-line);
+}
+.run-trace__record-inspector .run-trace__inspector {
+  border-left: 0;
+}
 .run-trace__tabs {
   align-items: center;
   border-bottom: 1px solid var(--trace-line);

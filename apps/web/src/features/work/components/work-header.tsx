@@ -39,9 +39,27 @@ export function WorkDetailHeader({
               ? ` · ${productStatePresentation(run.work_run.product_state).label}`
               : ''}
           </p>
-          <p className="work-detail-surface-note">
-            Start a Run, then follow its outcome, trace, and conversation here.
-          </p>
+          {!run ? (
+            <p className="work-detail-surface-note">
+              Start a Run when you are ready to begin this Work.
+            </p>
+          ) : run.work_run.product_state === 'complete' ? (
+            <p className="work-detail-surface-note">
+              Read the result first, then inspect how the Work reached it.
+            </p>
+          ) : run.work_run.product_state === 'problem' ? (
+            <p className="work-detail-surface-note">
+              Review what was captured before retrying this Work.
+            </p>
+          ) : run.work_run.product_state === 'not_captured' ? (
+            <p className="work-detail-surface-note">
+              This Run’s status was not captured. Review its recorded activity.
+            </p>
+          ) : (
+            <p className="work-detail-surface-note">
+              Follow the result and progress of this active Run here.
+            </p>
+          )}
         </div>
       </header>
     </>

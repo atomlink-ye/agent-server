@@ -141,6 +141,55 @@
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+.work-run-trigger__result {
+  border: 1px solid var(--skype);
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, var(--skype), var(--skype-deep));
+  box-shadow: 0 8px 18px -10px rgb(0 120 200 / 70%);
+  color: var(--cloud);
+  font-size: var(--text-sm);
+  font-weight: 800;
+  padding: var(--space-2) var(--space-4);
+  text-decoration: none;
+}
+.work-journey {
+  margin-top: var(--space-8);
+  max-width: 760px;
+}
+.work-journey__steps {
+  border-top: 1px solid var(--ink-200);
+  display: grid;
+  gap: 0;
+  list-style: none;
+  margin: var(--space-4) 0 0;
+  padding: 0;
+}
+.work-journey__steps > li {
+  border-bottom: 1px solid var(--ink-100);
+  padding: var(--space-4) 0;
+}
+.work-journey__steps > li > strong {
+  color: var(--ink-900);
+  font-size: var(--text-sm);
+}
+.work-journey__steps ul {
+  display: grid;
+  gap: var(--space-2);
+  list-style: none;
+  margin: var(--space-3) 0 0;
+  padding: 0;
+}
+.work-journey__steps ul span,
+.work-journey__steps ul p {
+  color: var(--ink-500);
+  font-size: var(--text-sm);
+}
+.work-journey__steps ul p {
+  color: var(--ink-700);
+  line-height: 1.55;
+  margin: var(--space-1) 0 0;
+  white-space: pre-wrap;
+}
 
 .work-run-list {
   border-top: 1px solid var(--ink-200);

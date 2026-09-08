@@ -12,15 +12,14 @@ export const WORK_TABS: readonly {
   readonly id: WorkTab;
   readonly label: string;
 }[] = [
-  { id: 'overview', label: 'Overview' },
   { id: 'runs', label: 'Runs' },
-  { id: 'transcript', label: 'Transcript' },
-  { id: 'artifacts', label: 'Artifacts' },
+  { id: 'transcript', label: 'Conversation' },
+  { id: 'artifacts', label: 'Files' },
   { id: 'definition', label: 'Definition' },
 ];
 
 export function normalizeWorkTab(value: string | undefined): WorkTab {
-  return WORK_TABS.some((tab) => tab.id === value)
+  return value === 'overview' || WORK_TABS.some((tab) => tab.id === value)
     ? (value as WorkTab)
     : 'overview';
 }

@@ -8,6 +8,7 @@ import {
 } from '../clients/errors';
 import { workTabHref } from './work-presentation';
 import { useRunAvailability } from '../queries/use-run-availability';
+import type { WorkListItem } from '@atomlink-ye/agent-server/product-contract';
 
 type RunTriggerState =
   | { readonly kind: 'idle' }
@@ -22,13 +23,33 @@ export function RunTrigger({
   workId,
   originConversationId,
   definitionVersion,
+  runState,
 }: {
   readonly workId: string;
   readonly originConversationId?: string | null;
   readonly definitionVersion?: ProductWorkDefinitionVersionResponse | null;
+  readonly runState?: WorkListItem['product_state'] | null;
 }) {
   const [state, setState] = useState<RunTriggerState>({ kind: 'idle' });
   const availability = useRunAvailability(definitionVersion);
+
+  if (runState === 'complete')
+    return (
+      <div className="work-run-trigger">
+        <a className="work-run-trigger__result" href="#run-result">
+          Read result
+        </a>
+      </div>
+    );
+
+  if (runState === 'running' || runState === 'needs_you')
+    return (
+      <div className="work-run-trigger">
+        <a className="work-run-trigger__result" href="#execution-record">
+          Follow progress
+        </a>
+      </div>
+    );
 
   async function handleRun() {
     setState({ kind: 'starting' });
@@ -89,7 +110,9 @@ export function RunTrigger({
                 ? state.permanent
                   ? 'Can’t start Run'
                   : 'Error — Retry'
-                : 'Start Run'}
+                : runState === 'problem'
+                  ? 'Retry Run'
+                  : 'Start Run'}
       </button>
       {availability.status === 'loading' ? (
         <p role="status">Checking whether this Work can run here…</p>

@@ -158,7 +158,7 @@ export function WorkPane({
       ) : null}
       {works.length > 0 ? (
         <ul
-          className="work-list"
+          className="work-list scroll-region"
           aria-label={t('work.items')}
           data-testid="work-list"
         >

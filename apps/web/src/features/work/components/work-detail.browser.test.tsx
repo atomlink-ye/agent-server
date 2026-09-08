@@ -1,14 +1,20 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
+import { MemoryRouter } from 'react-router-dom';
 import { expect, it, vi } from 'vitest';
+import { page } from 'vitest/browser';
 
 import {
   GetWorkResponseSchema,
   ProductRunTraceSuccessSchema,
   ProductWorkDefinitionVersionSchema,
   ProductWorkRunSuccessSchema,
+  type ProductSessionTranscriptsResponse,
 } from '@atomlink-ye/agent-server/product-contract';
+import { AppProviders } from '@/app/providers';
+import { AppRouter } from '@/app/router';
 import { WorkDetailPage } from '@/features/work/pages/WorkDetailPage';
+import '../../../index.css';
 import reworkRecording from '@/test-support/fixtures/product-recordings/rework-once.json';
 import {
   projectWorkList,
@@ -146,12 +152,14 @@ function mockProductReads(
     readonly runBody?: unknown;
     readonly definition?: ReturnType<typeof productDefinitionVersion>;
     readonly currentDefinitionMissing?: boolean;
+    readonly sessionTranscripts?: ProductSessionTranscriptsResponse;
   } = {},
 ) {
   const runList = input.runList ?? runs;
   const runId = input.selectedRunId ?? selectedRun.id;
   const definition = input.definition ?? definitionVersion;
   const responses = new Map<string, unknown>([
+    ['/api/works', { works: projectedWorks.works, next_cursor: null }],
     [
       '/api/runtime-capabilities',
       {
@@ -171,6 +179,10 @@ function mockProductReads(
     [`/api/work-definition-versions/${definition.id}`, { version: definition }],
     [`/api/works/${work.work.id}/runs/${runId}`, input.runBody ?? run],
     [`/api/works/${work.work.id}/runs/${runId}/trace`, trace],
+    [
+      `/api/works/${work.work.id}/runs/${runId}/session-transcripts`,
+      input.sessionTranscripts,
+    ],
   ]);
   const fetchMock = vi.fn().mockImplementation(async (path: string) => {
     if (
@@ -192,6 +204,110 @@ function mockProductReads(
   vi.stubGlobal('fetch', fetchMock);
   return fetchMock;
 }
+
+const longTranscript: ProductSessionTranscriptsResponse = {
+  work_id: work.work.id,
+  work_run_id: selectedRun.id,
+  capture_scope: 'safe_run_events',
+  sessions: [
+    {
+      label: {
+        name: 'Recorded projection-worker',
+        role: 'member',
+        status: 'completed',
+        status_basis: 'team_member_run',
+        source_refs: {
+          team_member_run_id: '8c6f3cfd-6a94-4ff7-88ec-c27ac9b1618f',
+        },
+      },
+      summary: {
+        status: 'completed',
+        entry_count: 48,
+        last_timestamp: '2026-08-13T02:48:00.000Z',
+        last_meaningful: null,
+        work_refs: [],
+        truncated: false,
+      },
+      entries: Array.from({ length: 48 }, (_, index) => ({
+        ordinal: index + 1,
+        kind: 'assistant_text' as const,
+        sequence: index + 1,
+        created_at: `2026-08-13T02:${String(index + 1).padStart(2, '0')}:00.000Z`,
+        text:
+          index === 47
+            ? 'Final real Work transcript entry'
+            : `Recorded Work transcript checkpoint ${index + 1}`,
+      })),
+    },
+  ],
+};
+
+function shellCommands() {
+  return {
+    loadCoworkers: async () => [],
+    loadConversations: async () => [],
+    createConversation: async () => {
+      throw new Error('not used');
+    },
+    loadMessages: async () => [],
+    sendMessage: async () => {
+      throw new Error('not used');
+    },
+  };
+}
+
+it('scrolls the real Work detail transcript to its final entry in the AppShell router', async () => {
+  const fetchMock = mockProductReads({ sessionTranscripts: longTranscript });
+  const host = document.createElement('div');
+  host.style.height = '900px';
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(
+        <MemoryRouter
+          initialEntries={[
+            `/work/${work.work.id}?tab=transcript&run=${selectedRun.id}`,
+          ]}
+        >
+          <AppProviders commands={shellCommands()}>
+            <AppRouter />
+          </AppProviders>
+        </MemoryRouter>,
+      );
+      for (let turn = 0; turn < 8; turn += 1)
+        await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    const content = host.querySelector<HTMLElement>('.work-main-content');
+    expect(content).not.toBeNull();
+    expect(content!.textContent).toContain('Final real Work transcript entry');
+    expect(content!.scrollHeight).toBeGreaterThan(content!.clientHeight);
+    content!.scrollTop = content!.scrollHeight;
+    expect(content!.scrollTop).toBeGreaterThan(0);
+    const finalEntry = [
+      ...content!.querySelectorAll<HTMLElement>('.transcript__prose'),
+    ].find((entry) =>
+      entry.textContent?.includes('Final real Work transcript entry'),
+    )!;
+    expect(finalEntry.textContent).toContain(
+      'Final real Work transcript entry',
+    );
+    expect(finalEntry.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+      content!.getBoundingClientRect().bottom + 1,
+    );
+    expect(fetchMock.mock.calls.map(([path]) => path)).toContain(
+      `/api/works/${work.work.id}/runs/${selectedRun.id}/session-transcripts`,
+    );
+    await page.screenshot({
+      path: '../../../../../../.local/work-detail-transcript-scroll-desktop.png',
+    });
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+  }
+});
 
 async function renderDetail(
   props: React.ComponentProps<typeof WorkDetailPage> = {

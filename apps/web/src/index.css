@@ -168,6 +168,15 @@ textarea {
   background: rgb(255 255 255 / 74%);
 }
 
+/* Fixed-height shell contract: every flex/grid child may shrink; the one
+ * panel that owns scrolling uses this class. Keep overflow local: the shell
+ * intentionally never scrolls. */
+.scroll-region {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+
 .rail {
   display: flex;
   width: 72px;
@@ -322,6 +331,7 @@ textarea {
 .sidebar {
   display: flex;
   min-width: 0;
+  min-height: 0;
   flex-direction: column;
   overflow: hidden;
   border-right: 1px solid var(--ink-100);
@@ -603,6 +613,7 @@ textarea {
 .chat-panel {
   display: flex;
   min-width: 0;
+  min-height: 0;
   flex-direction: column;
   overflow: hidden;
   background: rgb(255 255 255 / 82%);

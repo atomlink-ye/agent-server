@@ -143,7 +143,7 @@ export function AgentsPage() {
   */
   if (!selectedAgentId) {
     return (
-      <main className="chat-panel agents-main agents-roster-main">
+      <main className="chat-panel agents-main agents-roster-main scroll-region">
         <TitleBar section={t('agents.title')} right={<AccountName />} />
         {error ? (
           <p className="agents-error" role="alert">
@@ -238,7 +238,7 @@ export function AgentsPage() {
             })}
           </div>
         ) : null}
-        <div className="agents-list">
+        <div className="agents-list scroll-region">
           {loading && agents.length === 0 ? (
             <p className="pane-placeholder">{t('agents.loading')}</p>
           ) : null}
@@ -296,7 +296,7 @@ export function AgentsPage() {
         </div>
       </aside>
 
-      <main className="chat-panel agents-main">
+      <main className="chat-panel agents-main scroll-region">
         <TitleBar section={t('agents.title')} right={<AccountName />} />
         {authoring === 'coworker' && !invalidAgentId ? (
           <NewCoworkerForm

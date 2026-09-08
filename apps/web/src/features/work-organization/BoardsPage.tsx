@@ -35,7 +35,6 @@ import { CommentCount, MentionRow, StatusBadge } from './WorkItemMeta';
 import './work-organization.css';
 import { useT, type Translate } from '../../i18n';
 
-
 /**
  * How often an open Board re-reads its snapshot.
  *
@@ -246,7 +245,10 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
 
   return (
     <>
-      <aside className="sidebar work-org-pane" aria-label={t('boards.navigation')}>
+      <aside
+        className="sidebar work-org-pane"
+        aria-label={t('boards.navigation')}
+      >
         <div className="pane-heading work-org-heading">
           <div>
             <span className="eyebrow">{t('boards.eyebrow')}</span>
@@ -279,7 +281,7 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
             </button>
           </form>
         ) : null}
-        <div className="work-org-list">
+        <div className="work-org-list scroll-region">
           {listStatus === 'loading' && boards.length === 0 ? (
             <p className="pane-placeholder">{t('boards.loading')}</p>
           ) : null}
@@ -312,8 +314,7 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
                 >
                   <strong>{board.title}</strong>
                   <small>
-                    {board.description ??
-                      t('boards.defaultDescription')}
+                    {board.description ?? t('boards.defaultDescription')}
                   </small>
                 </button>
               ))
@@ -323,7 +324,10 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
 
       <main className="chat-panel work-board-main">
         <TitleBar section="Boards" />
-        <section className="work-org-content" aria-label={t('boards.canvas')}>
+        <section
+          className="work-org-content scroll-region"
+          aria-label={t('boards.canvas')}
+        >
           <div className="work-org-mobile-picker">
             <label>
               <span>{t('boards.title').replace(/s$/u, '')}</span>
@@ -466,9 +470,7 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
                 ▦
               </span>
               <h1>{t('boards.selectTitle')}</h1>
-              <p>
-                {t('boards.selectPrompt')}
-              </p>
+              <p>{t('boards.selectPrompt')}</p>
               <button type="button" onClick={() => setCreatingBoard(true)}>
                 {t('boards.newShort')}
               </button>
@@ -875,7 +877,7 @@ function BoardCanvas({
     <>
       <header className="work-board-toolbar">
         <div>
-        <span className="eyebrow">{t('boards.sharedWork')}</span>
+          <span className="eyebrow">{t('boards.sharedWork')}</span>
           <h1>{snapshot.board.title}</h1>
           {snapshot.board.description ? (
             <p className="work-org-muted">{snapshot.board.description}</p>
@@ -926,8 +928,12 @@ function BoardCanvas({
                 : authoring.kind === 'create-card'
                   ? t('boards.addTaskCard')
                   : authoring.kind === 'delete-board'
-                    ? t('boards.deleteBoardConfirm', { title: snapshot.board.title })
-                    : t('boards.deleteColumnConfirm', { title: authoring.title })
+                    ? t('boards.deleteBoardConfirm', {
+                        title: snapshot.board.title,
+                      })
+                    : t('boards.deleteColumnConfirm', {
+                        title: authoring.title,
+                      })
           }
           submitLabel={
             authoring.kind.startsWith('delete')
@@ -988,8 +994,7 @@ function BoardCanvas({
                           ? {
                               ...current,
                               columnKind:
-                                (event.target.value as BoardColumnKind) ||
-                                null,
+                                (event.target.value as BoardColumnKind) || null,
                             }
                           : current,
                       )
@@ -1113,7 +1118,9 @@ function BoardCanvas({
                     draggable
                     role="button"
                     tabIndex={0}
-                    aria-label={t('boards.dragReorder', { title: column.title })}
+                    aria-label={t('boards.dragReorder', {
+                      title: column.title,
+                    })}
                     data-testid="work-board-column-handle"
                     data-column-id={column.id}
                     onDragStart={(event) => {
@@ -1134,7 +1141,9 @@ function BoardCanvas({
                   <div className="work-board-column-actions">
                     <button
                       type="button"
-                      aria-label={t('boards.editColumnAria', { title: column.title })}
+                      aria-label={t('boards.editColumnAria', {
+                        title: column.title,
+                      })}
                       onClick={() =>
                         setAuthoring({
                           kind: 'rename-column',
@@ -1148,7 +1157,9 @@ function BoardCanvas({
                     </button>
                     <button
                       type="button"
-                      aria-label={t('boards.deleteColumnAria', { title: column.title })}
+                      aria-label={t('boards.deleteColumnAria', {
+                        title: column.title,
+                      })}
                       onClick={() =>
                         setAuthoring({
                           kind: 'delete-column',

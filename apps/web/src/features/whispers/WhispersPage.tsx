@@ -89,7 +89,7 @@ export function WhispersPage() {
             {t('whispers.emptyNudge')}
           </p>
         ) : (
-          <div className="whispers-list">
+          <div className="whispers-list scroll-region">
             {channels.map((channel) => (
               <button
                 type="button"
@@ -141,7 +141,7 @@ export function WhispersPage() {
                 {t('whispers.emptyMessages')}
               </p>
             ) : (
-              <div className="whisper-message-log">
+              <div className="whisper-message-log scroll-region">
                 {messages.map((message) => (
                   <div className="whisper-message" key={message.id}>
                     <strong>{message.authorAgentId}</strong>

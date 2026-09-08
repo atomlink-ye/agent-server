@@ -1,6 +1,7 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';
+import { page } from 'vitest/browser';
 
 import type {
   WorkListItem,
@@ -9,6 +10,9 @@ import type {
 import { MemoryRouter } from 'react-router-dom';
 
 import { WorkPane } from '@/features/work/WorkPane';
+import '../../../index.css';
+import { AppProviders } from '../../../app/providers';
+import { AppRouter } from '../../../app/router';
 import parallelRecording from '@/test-support/fixtures/product-recordings/parallel-success.json';
 import { projectWorkList } from '@/test-support/product-recording-test-helpers';
 
@@ -68,6 +72,20 @@ function renderPane() {
   );
 }
 
+function shellCommands() {
+  return {
+    loadCoworkers: async () => [],
+    loadConversations: async () => [],
+    createConversation: async () => {
+      throw new Error('not used');
+    },
+    loadMessages: async () => [],
+    sendMessage: async () => {
+      throw new Error('not used');
+    },
+  };
+}
+
 async function settleNetworkTurn() {
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -97,7 +115,9 @@ it('renders Product Work state and latest Run summary with one list read', async
       expect(card.textContent).toContain(stateLabel);
       // The list row is a navigation index, not a place to read a Run's
       // result: it shows state and a compact timestamp, not result text.
-      expect(card.textContent).not.toContain(`Latest recorded result ${index + 1}`);
+      expect(card.textContent).not.toContain(
+        `Latest recorded result ${index + 1}`,
+      );
       expect(card.querySelector('time')?.textContent).toMatch(/^Run /);
       expect(
         card
@@ -113,6 +133,50 @@ it('renders Product Work state and latest Run summary with one list read', async
     expect(host.textContent).not.toContain('RuntimeSession');
     expect(host.textContent).not.toContain('participating Agents');
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
+it('scrolls the real Work list through its final Work item', async () => {
+  const works = Array.from({ length: 48 }, (_, index) => ({
+    ...populatedWorkList.works[0]!,
+    id: uuid(index + 300),
+    title: index === 47 ? 'Final real Work item' : `Long Work ${index}`,
+  }));
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => jsonResponse({ works, next_cursor: null })),
+  );
+  const host = document.createElement('div');
+  host.style.height = '900px';
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(
+        <MemoryRouter initialEntries={['/work']}>
+          <AppProviders commands={shellCommands()}>
+            <AppRouter />
+          </AppProviders>
+        </MemoryRouter>,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    const list = host.querySelector<HTMLElement>('.work-list');
+    expect(list).not.toBeNull();
+    expect(list!.scrollHeight).toBeGreaterThan(list!.clientHeight);
+    list!.scrollTop = list!.scrollHeight;
+    expect(list!.scrollTop).toBeGreaterThan(0);
+    const finalItem = [...list!.querySelectorAll('li')].at(-1)!;
+    expect(finalItem.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+      list!.getBoundingClientRect().bottom + 1,
+    );
+    await page.screenshot({
+      path: '../../../../../../.local/work-list-scroll-desktop.png',
+    });
   } finally {
     await act(async () => root.unmount());
     host.remove();

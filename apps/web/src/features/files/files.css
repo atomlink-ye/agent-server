@@ -12,7 +12,9 @@
 .files-scope-list,
 .files-file-list {
   display: flex;
+  flex: 1;
   flex-direction: column;
+  min-height: 0;
   gap: 2px;
   margin: 0;
   padding: 0;
@@ -87,7 +89,8 @@
 }
 .files-files-grid {
   display: grid;
-  grid-template-columns: minmax(240px, 320px) 1fr;
+  grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+  flex: 1;
   gap: 14px;
   min-height: 0;
 }

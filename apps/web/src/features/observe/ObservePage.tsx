@@ -33,7 +33,7 @@ export function ObservePage() {
         <TitleBar section={t('observe.title')} />
         <section
           aria-label={t('observe.detail')}
-          className="work-main-content"
+          className="work-main-content scroll-region"
           data-empty={hasSelection || aggregate ? 'false' : 'true'}
         >
           {workId && runId ? (

@@ -2,11 +2,14 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { expect, it, vi } from 'vitest';
+import { page } from 'vitest/browser';
 
 import { AgentsPage } from './AgentsPage';
 import type { Coworker } from './contracts';
 import type { CoworkerProfile } from './agents-gateway';
 import { ApiTransportError } from '../../api/transport';
+import { AppShell } from '../../app/shell/AppShell';
+import '../../index.css';
 
 const loadCoworkers = vi.fn(async () => [] as readonly Coworker[]);
 const loadCoworkerProfile =
@@ -21,10 +24,16 @@ vi.mock('./agents-gateway', () => ({
 }));
 
 const createConversation = vi.fn();
-vi.mock('../conversations/conversations-gateway', () => ({
-  createConversation: (...args: unknown[]) =>
-    (createConversation as (...args: unknown[]) => unknown)(...args),
-}));
+vi.mock('../conversations/conversations-gateway', async () => {
+  const actual = await vi.importActual<
+    typeof import('../conversations/conversations-gateway')
+  >('../conversations/conversations-gateway');
+  return {
+    ...actual,
+    createConversation: (...args: unknown[]) =>
+      (createConversation as (...args: unknown[]) => unknown)(...args),
+  };
+});
 
 // Recent activity reads real Work and conversation records. These specs are
 // about the profile shell, so the loader is stubbed to a resolved empty result
@@ -45,13 +54,19 @@ vi.mock('./coworker-activity', () => ({
 
 // CoworkerHomeFiles owns its own fetches and has its own coverage; the profile
 // specs below only need it to render without reaching the network.
-vi.mock('../files/files-gateway', () => ({
-  loadContextFiles: async () => ({
-    access: 'read_only' as const,
-    scope: {},
-    entries: [],
-  }),
-}));
+vi.mock('../files/files-gateway', async () => {
+  const actual = await vi.importActual<typeof import('../files/files-gateway')>(
+    '../files/files-gateway',
+  );
+  return {
+    ...actual,
+    loadContextFiles: async () => ({
+      access: 'read_only' as const,
+      scope: {},
+      entries: [],
+    }),
+  };
+});
 
 // Agent detail routes only accept a canonical Agent id; a placeholder like
 // "agent-1" renders the invalid-link state instead of the profile.
@@ -71,6 +86,41 @@ function routed(entry: string) {
       </Routes>
     </MemoryRouter>
   );
+}
+
+function RoutedAppShell({ entry }: { readonly entry: string }) {
+  return (
+    <MemoryRouter initialEntries={[entry]}>
+      <Routes>
+        <Route
+          path="/agents"
+          element={<AppShell commands={shellCommands()} />}
+        />
+        <Route
+          path="/agents/:agentId"
+          element={<AppShell commands={shellCommands()} />}
+        />
+      </Routes>
+    </MemoryRouter>
+  );
+}
+
+function shellCommands() {
+  return {
+    loadCoworkers: async () => [],
+    loadConversations: async () => [],
+    createConversation: async () => {
+      throw new Error('not used');
+    },
+    loadMessages: async () => [],
+    sendMessage: async () => {
+      throw new Error('not used');
+    },
+  };
+}
+
+function agentId(index: number): string {
+  return `123e4567-e89b-42d3-a456-${String(index).padStart(12, '0')}`;
 }
 
 function profileFor(runtimeStatus: Coworker['runtimeStatus']): CoworkerProfile {
@@ -93,6 +143,20 @@ function profileFor(runtimeStatus: Coworker['runtimeStatus']): CoworkerProfile {
   };
 }
 
+function expectScrollable(region: HTMLElement): void {
+  expect(['auto', 'scroll']).toContain(getComputedStyle(region).overflowY);
+  expect(region.scrollHeight).toBeGreaterThan(region.clientHeight);
+  region.scrollTop = region.scrollHeight;
+  expect(region.scrollTop).toBeGreaterThan(0);
+}
+
+function expectFullyVisible(item: Element, region: HTMLElement): void {
+  const itemRect = item.getBoundingClientRect();
+  const regionRect = region.getBoundingClientRect();
+  expect(itemRect.top).toBeGreaterThanOrEqual(regionRect.top - 1);
+  expect(itemRect.bottom).toBeLessThanOrEqual(regionRect.bottom + 1);
+}
+
 (
   globalThis as typeof globalThis & {
     IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -113,6 +177,116 @@ it('labels the New Coworker action for sighted users', async () => {
     );
     expect(button?.textContent?.trim()).toBe('+ New Coworker');
     expect(button?.classList.contains('pane-refresh')).toBe(false);
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+  }
+});
+
+it('scrolls the real Agents roster to its final Coworker on desktop', async () => {
+  expect(window.innerWidth).toBe(1440);
+  expect(window.innerHeight).toBe(900);
+  loadCoworkers.mockResolvedValue(
+    Array.from({ length: 48 }, (_, index) => ({
+      id: `123e4567-e89b-42d3-a456-${String(index).padStart(12, '0')}`,
+      displayName: index === 47 ? 'Final real Coworker' : `Coworker ${index}`,
+      roleLabel: 'Research',
+      summary: null,
+      activeAgentVersionId: 'v1',
+      runtimeStatus: 'available' as const,
+    })),
+  );
+  const host = document.createElement('div');
+  host.style.height = '900px';
+  host.style.width = '100%';
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(<RoutedAppShell entry="/agents" />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const region = host.querySelector<HTMLElement>('.agents-main')!;
+    expectScrollable(region);
+    const final = [...region.querySelectorAll('.agents-roster-card')].at(-1)!;
+    expect(final.textContent).toContain('Final real Coworker');
+    expectFullyVisible(final, region);
+    await page.screenshot({
+      path: '../../../../../.local/agents-roster-app-shell-scroll-desktop.png',
+    });
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+  }
+});
+
+it('scrolls the real Agents detail and Coworker rail through their final entries', async () => {
+  expect(window.innerWidth).toBe(1440);
+  expect(window.innerHeight).toBe(900);
+  const agents = Array.from({ length: 48 }, (_, index) => ({
+    id: index === 0 ? AGENT_ID : agentId(index),
+    displayName:
+      index === 47 ? 'Final detail Coworker' : `Detail Coworker ${index}`,
+    roleLabel: 'Research',
+    summary: null,
+    activeAgentVersionId: 'v1',
+    runtimeStatus: 'available' as const,
+  }));
+  const profile = {
+    ...profileFor('available'),
+    agent: agents[0]!,
+    workCatalog: Array.from({ length: 48 }, (_, index) => ({
+      definitionId: `definition-${index}`,
+      definitionVersionId: `definition-version-${index}`,
+      name:
+        index === 47 ? 'final-detail-capability' : `detail-capability-${index}`,
+      description: 'A real capability fixture for the detail scroll surface.',
+      inputSchema: {
+        properties: {},
+        required: [],
+        additionalProperties: false,
+      },
+    })),
+  } satisfies CoworkerProfile;
+  loadCoworkers.mockReset();
+  loadCoworkerProfile.mockReset();
+  loadCoworkers.mockResolvedValue(agents);
+  loadCoworkerProfile.mockResolvedValue(profile);
+
+  const host = document.createElement('div');
+  host.style.height = '900px';
+  host.style.width = '100%';
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(<RoutedAppShell entry={`/agents/${AGENT_ID}`} />);
+      for (let turn = 0; turn < 6; turn += 1)
+        await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    const listRegion = host.querySelector<HTMLElement>('.agents-list');
+    expect(listRegion).not.toBeNull();
+    expectScrollable(listRegion!);
+    const finalAgent = [
+      ...listRegion!.querySelectorAll('.agents-list-item'),
+    ].at(-1)!;
+    expect(finalAgent.textContent).toContain('Final detail Coworker');
+    expectFullyVisible(finalAgent, listRegion!);
+
+    const detailRegion = host.querySelector<HTMLElement>('.agents-main');
+    expect(detailRegion).not.toBeNull();
+    expectScrollable(detailRegion!);
+    const finalCapability = [
+      ...detailRegion!.querySelectorAll('.agents-capability-card'),
+    ].at(-1)!;
+    expect(finalCapability.textContent).toContain('Final Detail Capability');
+    expectFullyVisible(finalCapability, detailRegion!);
+
+    await page.screenshot({
+      path: '../../../../../.local/agents-detail-app-shell-scroll-desktop.png',
+    });
   } finally {
     await act(async () => root.unmount());
     host.remove();

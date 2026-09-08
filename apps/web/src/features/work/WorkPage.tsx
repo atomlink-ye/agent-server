@@ -117,7 +117,7 @@ export function WorkPage({
         <TitleBar section={t('work.title')} />
         <section
           aria-label={t('work.overview')}
-          className="work-main-content"
+          className="work-main-content scroll-region"
           data-empty={isEmpty ? 'true' : 'false'}
         >
           {returnWorkItemId ? (

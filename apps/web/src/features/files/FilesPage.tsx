@@ -566,7 +566,7 @@ export function FilesPage() {
             <h1>{t('files.title')}</h1>
           </div>
         </div>
-        <div className="files-scope-list">
+        <div className="files-scope-list scroll-region">
           {listGroups.map((group) => {
             if (group.type === 'single') {
               const choice = group.choice;
@@ -632,7 +632,7 @@ export function FilesPage() {
         </div>
       </aside>
 
-      <main className="chat-panel files-main">
+      <main className="chat-panel files-main scroll-region">
         <TitleBar section={t('files.title')} />
         {pendingCoworkerRoute ? (
           <section className="files-files files-route-state" aria-live="polite">
@@ -723,7 +723,7 @@ export function FilesPage() {
               </p>
             ) : null}
             <div className="files-files-grid">
-              <div className="files-file-list">
+              <div className="files-file-list scroll-region">
                 {listing === null ? (
                   <p className="pane-placeholder">
                     {t('files.loadingContext')}

@@ -2,7 +2,10 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, expect, it, vi } from 'vitest';
+import { page } from 'vitest/browser';
 
+import '../../index.css';
+import { AppShell } from '../../app/shell/AppShell';
 import { TasksPage } from './TasksPage';
 import { WORK_ITEM_NOT_FOUND_CODE } from '@atomlink-ye/agent-server/product-contract';
 
@@ -17,6 +20,97 @@ const definitionId = '00000000-0000-4000-8000-000000000102';
 const versionId = '00000000-0000-4000-8000-000000000103';
 
 afterEach(() => vi.unstubAllGlobals());
+
+it('scrolls real Tasks list and detail content to their final entries on desktop', async () => {
+  const items = Array.from({ length: 48 }, (_, index) =>
+    taskFor(
+      `00000000-0000-4000-8000-${String(index + 500).padStart(12, '0')}`,
+      index === 47 ? 'Final real Task' : `Real Task ${index}`,
+    ),
+  );
+  const selectedTaskId = items[0]!.work_item.id;
+  const comments = Array.from({ length: 48 }, (_, index) =>
+    commentFor(
+      selectedTaskId,
+      index === 47 ? 'Final real Task comment' : `Real Task comment ${index}`,
+      String(index + 900).padStart(12, '0'),
+    ),
+  );
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL) => {
+      const request =
+        typeof input === 'object' && input !== null && 'url' in input
+          ? (input as Request)
+          : null;
+      const path = new URL(request?.url ?? String(input), window.location.href)
+        .pathname;
+      if (path === '/api/work-items') return json({ work_items: items });
+      if (path === '/api/agents') return json({ items: [] });
+      if (path === `/api/work-items/${selectedTaskId}/comments`)
+        return json({ comments });
+      if (path === '/api/work-definitions') return json({ items: [] });
+      throw new Error(`Unexpected browser request: ${path}`);
+    }),
+  );
+
+  const host = document.createElement('div');
+  host.style.height = '900px';
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(
+        <MemoryRouter initialEntries={[`/tasks/${selectedTaskId}`]}>
+          <AppShell
+            commands={shellCommands()}
+            selectedWorkItemId={selectedTaskId}
+          />
+        </MemoryRouter>,
+      );
+    });
+    await act(settle);
+    await act(settle);
+
+    const list = host.querySelector<HTMLElement>('.work-org-list');
+    expect(list).not.toBeNull();
+    expect(host.textContent).toContain('Final real Task');
+    expect(list!.scrollHeight).toBeGreaterThan(list!.clientHeight);
+    list!.scrollTop = list!.scrollHeight;
+    expect(list!.scrollTop).toBeGreaterThan(0);
+
+    const finalItem = [
+      ...list!.querySelectorAll<HTMLElement>('[data-testid="task-list-item"]'),
+    ].at(-1)!;
+    expect(finalItem.textContent).toContain('Final real Task');
+    expect(finalItem.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+      list!.getBoundingClientRect().bottom + 1,
+    );
+
+    const content = host.querySelector<HTMLElement>('.work-org-content');
+    expect(content).not.toBeNull();
+    expect(host.textContent).toContain('Final real Task comment');
+    expect(content!.scrollHeight).toBeGreaterThan(content!.clientHeight);
+    content!.scrollTop = content!.scrollHeight;
+    expect(content!.scrollTop).toBeGreaterThan(0);
+    const finalComment = [
+      ...content!.querySelectorAll<HTMLElement>('.work-org-comment'),
+    ].at(-1)!;
+    expect(finalComment.textContent).toContain('Final real Task comment');
+    expect(finalComment.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+      content!.getBoundingClientRect().top - 1,
+    );
+    expect(finalComment.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+      content!.getBoundingClientRect().bottom + 1,
+    );
+    await page.screenshot({
+      path: '../../../../../.local/tasks-scroll-desktop.png',
+    });
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+  }
+});
 
 it('selects a published Definition and coworker by display-safe labels while promoting canonical IDs', async () => {
   let promotionBody: unknown = null;
@@ -541,9 +635,13 @@ function taskFor(id: string, title: string) {
   };
 }
 
-function commentFor(workItemId: string, body: string) {
+function commentFor(
+  workItemId: string,
+  body: string,
+  commentId = '000000000190',
+) {
   return {
-    id: '00000000-0000-4000-8000-000000000190',
+    id: `00000000-0000-4000-8000-${commentId}`,
     work_item_id: workItemId,
     author_id: 'principal-1',
     body,
@@ -564,4 +662,18 @@ async function settle(): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 0));
     await Promise.resolve();
   }
+}
+
+function shellCommands() {
+  return {
+    loadCoworkers: async () => [],
+    loadConversations: async () => [],
+    createConversation: async () => {
+      throw new Error('not used');
+    },
+    loadMessages: async () => [],
+    sendMessage: async () => {
+      throw new Error('not used');
+    },
+  };
 }

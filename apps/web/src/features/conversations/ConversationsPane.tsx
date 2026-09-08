@@ -267,7 +267,7 @@ export function ConversationsPane({
         </div>
       </div>
 
-      <div className="sidebar-section">
+      <div className="sidebar-section scroll-region">
         <ConversationsList
           state={state}
           visibleConversations={visibleConversations}

@@ -211,7 +211,10 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
 
   return (
     <>
-      <aside className="sidebar work-org-pane" aria-label={t('tasks.navigation')}>
+      <aside
+        className="sidebar work-org-pane"
+        aria-label={t('tasks.navigation')}
+      >
         <div className="pane-heading work-org-heading">
           <div>
             <span className="eyebrow">{t('tasks.eyebrow')}</span>
@@ -240,7 +243,7 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
             ),
           )}
         </div>
-        <div className="work-org-list">
+        <div className="work-org-list scroll-region">
           {listStatus === 'loading' && items.length === 0 ? (
             <p className="pane-placeholder">{t('tasks.loading')}</p>
           ) : null}
@@ -285,7 +288,10 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
 
       <main className="chat-panel work-org-main">
         <TitleBar section="Tasks" />
-        <section className="work-org-content" aria-label={t('tasks.details')}>
+        <section
+          className="work-org-content scroll-region"
+          aria-label={t('tasks.details')}
+        >
           <div className="work-org-mobile-picker">
             <label>
               <span>{t('tasks.taskEyebrow')}</span>
@@ -500,7 +506,8 @@ function TaskListItem({
         <CommentCount count={readCommentCount(item)} />
         {detail.linked_work ? (
           <span className="work-org-chip">
-            {t('workOrg.linkedWork')} · {productStateLabel(detail.linked_work.product_state)}
+            {t('workOrg.linkedWork')} ·{' '}
+            {productStateLabel(detail.linked_work.product_state)}
           </span>
         ) : null}
       </span>
@@ -575,9 +582,7 @@ function CreateTaskForm({
       <span className="eyebrow">{t('tasks.newEyebrow')}</span>
       <h1>{t('tasks.captureTitle')}</h1>
       {sourceConversationId ? (
-        <p className="work-org-source-note">
-          {t('tasks.linkedSource')}
-        </p>
+        <p className="work-org-source-note">{t('tasks.linkedSource')}</p>
       ) : null}
       <MentionTextField
         label={t('tasks.titleLabel')}
@@ -595,9 +600,7 @@ function CreateTaskForm({
         multiline
         rows={5}
         hint={
-          <small className="work-org-muted">
-            {t('tasks.mentionHint')}
-          </small>
+          <small className="work-org-muted">{t('tasks.mentionHint')}</small>
         }
       />
       <AssigneeField
@@ -754,7 +757,10 @@ function TaskDetail({
                 id={item.assignee_id}
               />
               <span className="work-org-muted">
-                {t('tasks.createdBy', { name: participantLabel(participants, item.created_by), time: formatWorkTime(item.created_at) })}
+                {t('tasks.createdBy', {
+                  name: participantLabel(participants, item.created_by),
+                  time: formatWorkTime(item.created_at),
+                })}
               </span>
               <MentionRow
                 ids={readMentionIds(item)}
@@ -793,9 +799,7 @@ function TaskDetail({
           multiline
           rows={6}
           hint={
-            <small className="work-org-muted">
-              {t('tasks.mentionHint')}
-            </small>
+            <small className="work-org-muted">{t('tasks.mentionHint')}</small>
           }
         />
         <AssigneeField
@@ -884,9 +888,7 @@ function TaskDetail({
           <article className="work-org-card work-org-review-card">
             <span className="eyebrow">{t('tasks.humanReview')}</span>
             <h2>{t('tasks.decisionNeeded')}</h2>
-            <p className="work-org-muted">
-              {t('tasks.reviewDescription')}
-            </p>
+            <p className="work-org-muted">{t('tasks.reviewDescription')}</p>
             <div className="work-org-actions">
               <button
                 type="button"
@@ -1027,7 +1029,9 @@ function PublishedDefinitionField({
     // feature_unavailable means this workspace does not compose the
     // Product Work surface at all, so reloading can never succeed. No
     // Retry here — see docs/frontend.md "Surface availability".
-    return <p className="work-org-muted">{t('tasks.definitionsUnavailable')}</p>;
+    return (
+      <p className="work-org-muted">{t('tasks.definitionsUnavailable')}</p>
+    );
   if (state === 'error')
     return (
       <div className="work-org-error" role="alert">
@@ -1038,11 +1042,7 @@ function PublishedDefinitionField({
       </div>
     );
   if (definitions.length === 0)
-    return (
-      <p className="work-org-muted">
-        {t('tasks.noDefinitions')}
-      </p>
-    );
+    return <p className="work-org-muted">{t('tasks.noDefinitions')}</p>;
   return (
     <label>
       {t('tasks.publishedDefinitions')}
@@ -1062,7 +1062,10 @@ function PublishedDefinitionField({
   );
 }
 
-function coworkerOptionLabel(agent: Coworker, t: ReturnType<typeof useT>): string {
+function coworkerOptionLabel(
+  agent: Coworker,
+  t: ReturnType<typeof useT>,
+): string {
   return [
     agent.displayName,
     agent.roleLabel ?? coworkerRoleFallback(),

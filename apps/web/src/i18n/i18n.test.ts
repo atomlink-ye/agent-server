@@ -23,6 +23,9 @@ it('leaves no message untranslated by copying the English through', () => {
     'dispatch.recipient.fallback',
     'workCard.eyebrow',
     'coworker.role.fallback',
+    'boards.title',
+    'work.title',
+    'work.tab.definition',
   ]);
 });
 

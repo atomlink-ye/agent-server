@@ -252,7 +252,7 @@ export class AgentRunExecutor {
           ? agentWorkspaceCwd(
               configuration.cwd,
               resolved.workspaceIdentityId,
-              null,
+              resolved.computerId ?? null,
               workManifest.workId,
             )
           : configuration.cwd;

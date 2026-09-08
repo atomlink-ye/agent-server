@@ -43,6 +43,7 @@ export const CreateCoworkerRequestSchema = z
       .default('free-only'),
     tools: z.array(z.string().trim().min(1).max(256)).max(32).default([]),
     skills: z.array(z.string().trim().min(1).max(256)).max(32).default([]),
+    computer_id: AgentIdSchema.optional(),
   })
   .strict();
 

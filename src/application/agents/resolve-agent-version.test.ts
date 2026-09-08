@@ -83,6 +83,7 @@ describe('ResolveAgentVersion', () => {
     ).resolves.toEqual({
       source: 'managed',
       id: 'version-1',
+      computerId: null,
       instructions: 'managed',
       modelPolicyRef: 'free-only',
       proposalLimit: 0,

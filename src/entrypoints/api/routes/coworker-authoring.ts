@@ -11,6 +11,7 @@ import {
   InvalidIdempotencyKeyError,
 } from '../../../application/agents/errors.js';
 import type { AgentRegistry } from '../../../application/ports/agent-registry.js';
+import type { ComputerRepository } from '../../../application/ports/computer-repository.js';
 import type { WorkspaceMembershipRepository } from '../../../application/ports/workspace-membership-repository.js';
 import type { EnsureCoworkerConversation } from '../../../application/chat/ensure-coworker-conversation.js';
 import type { EnsureCoworkerDefaultCapability } from '../../../application/agents/ensure-coworker-default-capability.js';
@@ -44,6 +45,13 @@ export function registerCoworkerAuthoringRoute(
     readonly agentRegistry: AgentRegistry;
     readonly coworkerProvisioning?: Pick<EnsureCoworkerConversation, 'execute'>;
     readonly workspaceMembers?: WorkspaceMembershipRepository;
+    /**
+     * Present so a Coworker can optionally be hired onto a named Computer.
+     * Absent means the deployment has no Computer surface composed, and
+     * `computer_id` in the request is then rejected rather than silently
+     * dropped -- the caller asked for a placement this deployment cannot honor.
+     */
+    readonly computerRepository?: Pick<ComputerRepository, 'findById'>;
     /**
      * Present only where the Product Work surface is composed. A deployment
      * without it still hires Coworkers; they simply have no Work to run, and
@@ -121,12 +129,32 @@ export function registerCoworkerAuthoringRoute(
       // human on the other end: whoever just clicked Create.
       const owner = getAuthenticatedAccessContext(c);
       const requester = getRequestAccessContext(c);
+      if (parsed.data.computer_id !== undefined) {
+        if (!dependencies.computerRepository)
+          throw new HttpError(
+            400,
+            'computer_unavailable',
+            'Computer placement is unavailable.',
+          );
+        const computer = await dependencies.computerRepository.findById({
+          tenantId: owner.tenantId,
+          workspaceId: owner.workspaceId,
+          id: parsed.data.computer_id,
+        });
+        if (!computer)
+          throw new HttpError(
+            404,
+            'computer_not_found',
+            'The Computer does not exist in this workspace.',
+          );
+      }
       const imported = await importAgent(dependencies.agentRegistry, {
         accessContext: owner,
         idempotencyKey: `${idempotencyRoot}:import`,
         source,
         roleLabel: parsed.data.role,
         summary: parsed.data.summary,
+        computerId: parsed.data.computer_id ?? null,
       });
       const published =
         imported.version.status === 'published'

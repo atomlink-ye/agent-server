@@ -44,6 +44,8 @@ export interface ResolvedRunPrompt {
    * have their own Definition identity, just as Coworker Agents do.
    */
   readonly workspaceIdentityId?: string;
+  /** The Computer namespace the execution subject runs under; null is the shared default. */
+  readonly computerId?: string | null;
   readonly agentOwner?: ResourceOwner;
   readonly modelPolicyRef: ResolvedAgentVersion['modelPolicyRef'];
   readonly skills: readonly ResolvedSkillPackage[];
@@ -169,6 +171,7 @@ export class RunPromptContext {
         ? {
             agentDefinitionId: agentVersion.definitionId,
             workspaceIdentityId: agentVersion.definitionId,
+            computerId: agentVersion.computerId ?? null,
           }
         : {}),
       ...(agentVersion.agentOwner

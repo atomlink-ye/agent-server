@@ -1799,6 +1799,80 @@ describe('ExecuteRun', () => {
       }),
     );
   });
+
+  it('places an Agent Run under its bound Computer namespace instead of default', async () => {
+    const task = createTask('agent', 'managed-version-1');
+    const claim = createClaim();
+    const runtime = createRuntimeWithCandidates();
+    const ensureDesiredRuntimeSpec = {
+      execute: vi.fn(async () => ({
+        session: makeRuntimeSession({
+          id: 'runtime-work-2',
+          scope: { kind: 'run', id: claim.run.id },
+        }),
+        spec: {} as never,
+      })),
+    } as unknown as EnsureDesiredRuntimeSpec;
+    const findVersion = vi.fn(
+      async () =>
+        ({
+          id: 'managed-version-1',
+          status: 'published',
+          definitionId: 'agent-definition-computer-bound',
+          package: {
+            spec: {
+              instructions: 'managed instructions',
+              tools: [],
+              skills: [],
+              runtime: { modelPolicyRef: 'free-only' },
+            },
+          },
+        }) as never,
+    ) as unknown as (owner: unknown, versionId: string) => Promise<never>;
+    const findVersionByTenant = vi.fn(
+      async (input: {
+        readonly tenantId: string;
+        readonly versionId: string;
+      }) => findVersion({ tenantId: input.tenantId }, input.versionId),
+    );
+    const findManagedDefinitionByTenant = vi.fn(async () => ({
+      id: 'agent-definition-computer-bound',
+      computerId: 'computer-run-bound',
+    })) as never;
+    const resolver = new ResolveAgentVersion(
+      { findVersion, findVersionByTenant } as never,
+      { resolve: vi.fn(async () => null) } as never,
+      { findManagedDefinitionByTenant } as never,
+    );
+    const executeRun = createDirectExecuteRun({
+      completeRun: { execute: vi.fn(async ({ run }) => run) } as never,
+      runtime,
+      task,
+      resolver,
+      runtimeSessions: { findByScope: vi.fn(async () => null) } as never,
+      ensureDesiredRuntimeSpec,
+      runtimeConfiguration: {
+        provider: 'test-provider',
+        model: 'test-model',
+        cwd: '/srv/agent-workspace',
+      },
+      workRunManifests: createWorkManifests(task.rootTaskId),
+    });
+
+    await executeRun.execute(claim);
+
+    expect(findManagedDefinitionByTenant).toHaveBeenCalledWith({
+      tenantId: 'tenant-1',
+      definitionId: 'agent-definition-computer-bound',
+    });
+    expect(ensureDesiredRuntimeSpec.execute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        configuration: expect.objectContaining({
+          cwd: '/srv/agent-workspace/computer-run-bound/agent-definition-computer-bound/works/work-1',
+        }),
+      }),
+    );
+  });
 });
 
 function createExecuteRun(input: {

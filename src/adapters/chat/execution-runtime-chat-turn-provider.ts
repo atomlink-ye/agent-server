@@ -75,13 +75,13 @@ export class ExecutionRuntimeChatTurnProvider implements ChatTurnProvider {
         ...this.configuration,
         // The configured value is the root that holds Agent workspaces, not
         // one workspace. Which one this turn runs in follows the Agent, so
-        // two Coworkers working at the same time do not share a drawer.
-        // No computer-assignment lookup is wired into chat turns yet, so
-        // every turn resolves to the shared `default` Computer namespace.
+        // two Coworkers working at the same time do not share a drawer. The
+        // Agent's Computer assignment, resolved with the rest of the chat
+        // brain, decides which Computer namespace this turn lands under.
         cwd: agentWorkspaceCwd(
           this.configuration.cwd,
           input.agentDefinitionId,
-          null,
+          input.brain.computerId,
         ),
         contextEpoch: turnContext.runtimeEpoch,
         desiredSystemPrompt,

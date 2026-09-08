@@ -41,6 +41,8 @@ export type ResolvedChatBrain = Readonly<{
   readonly turnContext: ChatTurnContext;
   readonly invocationContext: RuntimeInvocationContext;
   readonly agentOwner: ResourceOwner;
+  /** The Computer namespace this Agent runs under; null is the shared default. */
+  readonly computerId: string | null;
   /** Canonical ContextFS mount manifest for this Chat turn. */
   readonly contextView: ContextView;
   /** Canonical memories admitted by the same pure scope policy used by Workers. */
@@ -160,6 +162,7 @@ export class ChatBrainResolver {
       turnContext,
       invocationContext,
       agentOwner,
+      computerId: definition.computerId,
       contextView,
       memory: Object.freeze([...memory]),
       instructions: resolvedVersion.instructions,

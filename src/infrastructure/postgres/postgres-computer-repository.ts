@@ -58,6 +58,20 @@ export class PostgresComputerRepository implements ComputerRepository {
     return result.rows?.[0] ? mapComputer(result.rows[0]) : null;
   }
 
+  public async listByWorkspace(input: {
+    readonly tenantId: string;
+    readonly workspaceId: string;
+  }): Promise<readonly Computer[]> {
+    const result = await this.query<ComputerRow>(
+      `SELECT id, tenant_id, workspace_id, kind, name, status, created_at, updated_at
+         FROM computers
+        WHERE tenant_id=$1 AND workspace_id=$2
+        ORDER BY created_at ASC, id ASC`,
+      [input.tenantId, input.workspaceId],
+    );
+    return (result.rows ?? []).map(mapComputer);
+  }
+
   private async query<Row extends Record<string, unknown>>(
     sql: string,
     values: readonly unknown[],

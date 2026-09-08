@@ -113,8 +113,8 @@ export class PostgresAgentRegistry implements AgentRegistry {
 
       const definitionResult = await db.query<DefinitionRow>(
         `INSERT INTO agent_definitions
-          (id, tenant_id, workspace_id, principal_type, principal_id, name, managed_discriminator, normalized_name, role_label, summary, created_at, updated_at)
-         VALUES ($1,$2,$3,$4,$5,$6,'managed_agent_v1',$7,$8,$9,$10,$11)
+          (id, tenant_id, workspace_id, principal_type, principal_id, name, managed_discriminator, normalized_name, role_label, summary, computer_id, created_at, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,'managed_agent_v1',$7,$8,$9,$10,$11,$12)
          ON CONFLICT DO NOTHING
          RETURNING id, tenant_id, workspace_id, principal_type, principal_id, name, normalized_name, role_label, summary, computer_id, created_at, updated_at`,
         [
@@ -127,6 +127,7 @@ export class PostgresAgentRegistry implements AgentRegistry {
           command.normalizedName,
           command.definition.roleLabel,
           command.definition.summary,
+          command.definition.computerId,
           command.definition.createdAt,
           command.definition.updatedAt,
         ],

@@ -6,6 +6,7 @@ import type {
 import type { ChatTurnProvider } from '../ports/chat-turn-provider.js';
 import type { ConversationWorkEntitlementRepository } from '../ports/conversation-work-entitlement-repository.js';
 import type { ConversationWorkLinkRepository } from '../../domain/chat/chat-work-origin-ref.js';
+import type { WorkspaceMembershipRepository } from '../ports/workspace-membership-repository.js';
 import type { Logger } from '../../shared/observability/logger.js';
 import type { ChatBrainResolver } from './chat-brain-resolver.js';
 import type { ConversationActorResolver } from './chat-turn-context.js';
@@ -42,12 +43,16 @@ export class ChatDeliveryReconciler {
     private readonly now: () => Date = () => new Date(),
     workEntitlements?: ConversationWorkEntitlementRepository,
     actorResolver?: ConversationActorResolver,
+    recoveryMessageLimit?: number,
+    workspaceMembers?: Pick<WorkspaceMembershipRepository, 'findDisplayNames'>,
   ) {
     this.#resolveContext = new ResolveChatTurnContext(
       conversations,
       dispatches,
       workEntitlements,
       actorResolver,
+      recoveryMessageLimit,
+      workspaceMembers,
     );
     this.#resolveBrain = new ResolveChatBrain(brainResolver);
     this.#executeTurn = new ExecuteChatTurn(provider);

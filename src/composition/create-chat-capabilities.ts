@@ -13,6 +13,7 @@ import type { ChatDispatchRepository } from '../application/ports/chat-dispatch-
 import type { ConversationRepository } from '../application/ports/conversation-repository.js';
 import type { ConversationWorkEntitlementRepository } from '../application/ports/conversation-work-entitlement-repository.js';
 import type { ConversationWorkLinkRepository } from '../domain/chat/chat-work-origin-ref.js';
+import type { WorkspaceMembershipRepository } from '../application/ports/workspace-membership-repository.js';
 import { PostgresAgentHomeDefinitionSource } from '../infrastructure/postgres/postgres-agent-home-definition-source.js';
 import { PostgresAgentHomeRepository } from '../infrastructure/postgres/postgres-agent-home-repository.js';
 import { ChatDeliveryWorker } from '../entrypoints/chat/worker.js';
@@ -49,6 +50,10 @@ interface CreateChatCapabilitiesEnabledOptions {
   readonly logger: Logger;
   readonly conversationWorkEntitlements:
     ConversationWorkEntitlementRepository | undefined;
+  readonly workspaceMembers?: Pick<
+    WorkspaceMembershipRepository,
+    'findDisplayNames'
+  >;
   readonly workerId: string;
   readonly leaseMs: number;
 }
@@ -91,6 +96,9 @@ export function createChatCapabilities(
     options.logger,
     undefined,
     options.conversationWorkEntitlements,
+    undefined,
+    undefined,
+    options.workspaceMembers,
   );
   const chatWorker = new ChatDeliveryWorker(
     options.chatDispatches,

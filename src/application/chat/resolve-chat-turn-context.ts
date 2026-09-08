@@ -12,6 +12,7 @@ import type {
 import type { ConversationRepository } from '../ports/conversation-repository.js';
 import type { ConversationWorkEntitlementRepository } from '../ports/conversation-work-entitlement-repository.js';
 import type { ChatTurnWindow } from '../ports/chat-turn-provider.js';
+import type { WorkspaceMembershipRepository } from '../ports/workspace-membership-repository.js';
 import type { ConversationActorResolver } from './chat-turn-context.js';
 
 const DEFAULT_RECOVERY_MESSAGE_LIMIT = 50;
@@ -33,6 +34,14 @@ export interface ResolvedChatTurnContext {
   readonly recoveryMessages: readonly ChatMessage[];
   readonly actor?: PrincipalRef;
   readonly workEntitlement: ConversationWorkEntitlement | null;
+  /**
+   * Human-chosen names for the principals speaking in this activation window,
+   * keyed by authorId. Omitted entirely when there is nothing to resolve
+   * (no workspace membership dependency, no Work entitlement to scope the
+   * lookup to a workspace, or no principal has a name on record) so a chat
+   * turn without this dependency behaves exactly as it did before it existed.
+   */
+  readonly authorLabels?: ReadonlyMap<string, string>;
 }
 
 /**
@@ -52,6 +61,10 @@ export class ResolveChatTurnContext {
     private readonly workEntitlements?: ConversationWorkEntitlementRepository,
     private readonly actorResolver?: ConversationActorResolver,
     private readonly recoveryMessageLimit = DEFAULT_RECOVERY_MESSAGE_LIMIT,
+    private readonly workspaceMembers?: Pick<
+      WorkspaceMembershipRepository,
+      'findDisplayNames'
+    >,
   ) {}
 
   public async execute(
@@ -135,6 +148,15 @@ export class ResolveChatTurnContext {
         throw new Error('chat_turn_actor_entitlement_mismatch');
     }
 
+    const authorLabels =
+      this.workspaceMembers && entitlement
+        ? await this.resolveAuthorLabels(
+            entitlement.workspaceId,
+            dispatch.tenantId,
+            [...activationWindow, ...recoveryMessages, triggerMessage],
+          )
+        : undefined;
+
     return Object.freeze({
       dispatch,
       runtime,
@@ -149,6 +171,27 @@ export class ResolveChatTurnContext {
       recoveryMessages: Object.freeze(recoveryMessages),
       ...(actor ? { actor } : {}),
       workEntitlement: entitlement,
+      ...(authorLabels && authorLabels.size > 0 ? { authorLabels } : {}),
+    });
+  }
+
+  private async resolveAuthorLabels(
+    workspaceId: string,
+    tenantId: string,
+    candidates: readonly ChatMessage[],
+  ): Promise<ReadonlyMap<string, string>> {
+    const principalIds = [
+      ...new Set(
+        candidates
+          .filter((message) => message.authorType === 'principal')
+          .map((message) => message.authorId),
+      ),
+    ];
+    if (principalIds.length === 0 || !this.workspaceMembers) return new Map();
+    return this.workspaceMembers.findDisplayNames({
+      tenantId,
+      workspaceId,
+      principalIds,
     });
   }
 

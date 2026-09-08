@@ -21,6 +21,9 @@ export class ExecuteChatTurn {
     brain: ResolvedChatBrain,
     extensions?: ExecutionExtensionBinding,
   ): Promise<ExecutedChatTurn> {
+    const projectWithLabels = (
+      message: import('../../domain/chat/chat-message.js').ChatMessage,
+    ) => projectMessage(message, context.authorLabels);
     return this.provider.runTurn({
       tenantId: context.dispatch.tenantId,
       agentDefinitionId: context.dispatch.agentDefinitionId,
@@ -28,8 +31,8 @@ export class ExecuteChatTurn {
       conversationId: context.dispatch.conversationId,
       triggerMessageId: context.triggerMessage.id,
       brain,
-      messages: context.messages.map(projectMessage),
-      recoveryMessages: context.recoveryMessages.map(projectMessage),
+      messages: context.messages.map(projectWithLabels),
+      recoveryMessages: context.recoveryMessages.map(projectWithLabels),
       turn: context.turn,
       ...(extensions ? { extensions } : {}),
     });
@@ -38,16 +41,23 @@ export class ExecuteChatTurn {
 
 function projectMessage(
   message: import('../../domain/chat/chat-message.js').ChatMessage,
+  authorLabels: ReadonlyMap<string, string> | undefined,
 ): ChatTurnMessage {
   return Object.freeze({
     messageId: message.id,
     sequence: message.sequence,
     authorType: message.authorType,
     authorId: message.authorId,
-    // A WorkItem dispatch is the one durable message that already knows what
-    // to call the person behind it. Carrying that name through is what lets
-    // the turn transcript say who spoke instead of quoting an id back.
-    authorLabel: message.dispatch?.actorLabel ?? null,
+    // A live-resolved workspace membership name takes precedence: it reflects
+    // whoever this person is called *now*, and a rename must show up on the
+    // very next turn. A WorkItem dispatch's actorLabel is the fallback -- it
+    // is the durable message's own idea of who sent it, frozen at send time,
+    // and the only name at all for an activation this dependency was not
+    // wired for.
+    authorLabel:
+      authorLabels?.get(message.authorId) ??
+      message.dispatch?.actorLabel ??
+      null,
     body: message.body,
     workRef: message.workRef,
     deliveryId: message.deliveryId ?? null,

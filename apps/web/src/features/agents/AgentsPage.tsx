@@ -143,7 +143,7 @@ export function AgentsPage() {
   if (!selectedAgentId) {
     return (
       <main className="chat-panel agents-main agents-roster-main scroll-region">
-        <TitleBar section={t('agents.title')} right={<AccountName />} />
+        <TitleBar section={t('agents.title')} />
         {error ? (
           <p className="agents-error" role="alert">
             {error}
@@ -296,7 +296,7 @@ export function AgentsPage() {
       </aside>
 
       <main className="chat-panel agents-main scroll-region">
-        <TitleBar section={t('agents.title')} right={<AccountName />} />
+        <TitleBar section={t('agents.title')} />
         {authoring === 'coworker' && !invalidAgentId ? (
           <NewCoworkerForm
             onCancel={() => setAuthoring(null)}

@@ -71,6 +71,191 @@ describe('EnsureRuntimeSessionService reuse path', () => {
   });
 });
 
+describe('EnsureRuntimeSessionService provider-missing replace path', () => {
+  it('provisions a fresh provider session and logs a human-readable self-heal reason', async () => {
+    const harness = missingSessionHarness();
+
+    const ready = await harness.service.execute(
+      sessionId,
+      harness.desiredSystemPrompt,
+    );
+
+    expect(ready.resolution).toBe('replaced');
+    // The stale generation must actually have been discarded for a genuinely
+    // fresh provider session, not silently reused under a new label.
+    expect(harness.createCalls).toBe(1);
+
+    const resetLog = harness.logs.find(
+      (entry) => entry.event === 'runtime.provider.session_reset',
+    );
+    expect(resetLog).toBeDefined();
+    expect(resetLog?.level).toBe('info');
+    expect(resetLog?.fields?.runtime_session_id).toBe(sessionId);
+    expect(resetLog?.fields?.runtime_generation_id).toBe(generationId);
+    expect(resetLog?.fields?.reason).toEqual(expect.any(String));
+    expect((resetLog?.fields?.reason as string).length).toBeGreaterThan(20);
+
+    // This log must stay distinct from the unrelated orphan-close logging so
+    // it does not get lost or conflated with it.
+    const orphanLog = harness.logs.find(
+      (entry) => entry.event === 'runtime.provider.orphan_session',
+    );
+    expect(orphanLog).toBeDefined();
+    expect(orphanLog?.fields?.reason).not.toBe(resetLog?.fields?.reason);
+  });
+});
+
+function missingSessionHarness() {
+  const desiredSystemPrompt = createDesiredRuntimeSystemPrompt('stable prompt');
+  const spec = createRuntimeSessionSpec({
+    runtimeSessionId: sessionId,
+    revision: runtimeSpecRevision(1),
+    workspaceId: 'workspace-1',
+    agentVersionId: 'agent-version-1',
+    environmentVersionId: null,
+    resolvedSkills: [],
+    toolRefs: ['agent-server/workspace-write'],
+    provider: 'codex',
+    model: 'model-1',
+    cwd: '/tmp/replace',
+    systemPromptDigest: desiredSystemPrompt.digest,
+    skillSetDigest: 'skills',
+    toolCatalogDigest: 'catalog',
+    extensionSetDigest: 'extensions',
+    contextEpoch: 1,
+    createdAt: '2026-09-07T00:00:00.000Z',
+  });
+  const currentGeneration = {
+    id: generationId,
+    runtimeSessionId: sessionId,
+    generation: 1,
+    provider: 'codex',
+    providerWorkspaceId: 'wks_1',
+    providerSessionId: 'provider-session-1',
+    appliedSpecRevision: runtimeSpecRevision(1),
+    appliedBootstrapDigest: spec.bootstrapDigest,
+    endpointEpoch: spec.extensionSetDigest,
+    status: 'active' as const,
+    createdAt: '2026-09-07T00:00:00.000Z',
+    activeAt: '2026-09-07T00:00:00.000Z',
+    supersededAt: null,
+    closedAt: null,
+  };
+  const newGenerationId =
+    '33333333-3333-4333-8333-333333333333' as RuntimeGenerationId;
+
+  let createCalls = 0;
+  const logs: {
+    level: string;
+    event: string;
+    fields: Readonly<Record<string, unknown>> | undefined;
+  }[] = [];
+
+  const service = new EnsureRuntimeSessionService({
+    provider: {
+      capabilities: () => ({
+        canReconfigure: false,
+        canCloseSession: false,
+        canInspectBootstrapDigestComponents: false,
+      }),
+      inspect: async () => ({
+        status: 'missing' as const,
+        reason: 'the provider explicitly reported the session as absent',
+      }),
+      create: async () => {
+        createCalls += 1;
+        return {
+          provider: 'codex',
+          model: 'model-1',
+          providerWorkspaceId: 'wks_2',
+          providerSessionId: 'provider-session-2',
+          session: {} as never,
+        };
+      },
+    } as never,
+    sessions: {
+      findById: async () => ({
+        id: sessionId,
+        owner: {
+          tenantId: 'tenant-1',
+          workspaceId: 'workspace-1',
+          principalType: 'service_account',
+          principalId: 'svc_1',
+        },
+        scope: { kind: 'agent_chat', id: 'chat-runtime-1', epoch: 1 },
+        desiredSpecRevision: 1,
+        currentGenerationId: generationId,
+        status: 'ready',
+        createdAt: '2026-09-07T00:00:00.000Z',
+        updatedAt: '2026-09-07T00:00:00.000Z',
+        closedAt: null,
+      }),
+    } as never,
+    specs: {
+      getDesired: async () => spec,
+      get: async () => spec,
+    } as never,
+    generations: { findCurrent: async () => currentGeneration } as never,
+    generationManager: {
+      beginReplacement: async () => ({
+        id: newGenerationId,
+        runtimeSessionId: sessionId,
+        generation: 2,
+        provider: 'codex',
+        providerWorkspaceId: null,
+        providerSessionId: null,
+        appliedSpecRevision: runtimeSpecRevision(1),
+        appliedBootstrapDigest: spec.bootstrapDigest,
+        endpointEpoch: spec.extensionSetDigest,
+        status: 'provisioning' as const,
+        createdAt: '2026-09-07T00:00:01.000Z',
+        activeAt: null,
+        supersededAt: null,
+        closedAt: null,
+      }),
+      activateReplacement: async () => ({
+        id: newGenerationId,
+        runtimeSessionId: sessionId,
+        generation: 2,
+        provider: 'codex',
+        providerWorkspaceId: 'wks_2',
+        providerSessionId: 'provider-session-2',
+        appliedSpecRevision: runtimeSpecRevision(1),
+        appliedBootstrapDigest: spec.bootstrapDigest,
+        endpointEpoch: spec.extensionSetDigest,
+        status: 'active' as const,
+        createdAt: '2026-09-07T00:00:01.000Z',
+        activeAt: '2026-09-07T00:00:01.000Z',
+        supersededAt: null,
+        closedAt: null,
+      }),
+    } as never,
+    grants: {
+      issue: async () => ({ grantId: 'grant-1', token: 'token-1' }),
+      revoke: async () => undefined,
+    } as never,
+    mcpEndpoint: {
+      current: async () => ({
+        url: 'http://127.0.0.1:39117/mcp/agent-runtime',
+      }),
+    },
+    logger: {
+      log: (level: string, event: string, fields?: Record<string, unknown>) =>
+        logs.push({ level, event, fields }),
+    } as never,
+    now: () => new Date('2026-09-07T00:00:01.000Z'),
+  });
+
+  return {
+    service,
+    desiredSystemPrompt,
+    get createCalls() {
+      return createCalls;
+    },
+    logs,
+  };
+}
+
 function reuseHarness() {
   const desiredSystemPrompt = createDesiredRuntimeSystemPrompt('stable prompt');
   const spec = createRuntimeSessionSpec({

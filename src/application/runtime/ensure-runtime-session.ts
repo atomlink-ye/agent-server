@@ -135,6 +135,24 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
       throw new Error('runtime_reconfigure_deferred');
     }
 
+    // Only the provider-missing/stale replace path earns this log: an
+    // ordinary spec-driven replace (provider/model/cwd change, etc.) is
+    // expected reconciliation, not a self-heal, and logging it here would
+    // make this line meaningless noise.
+    if (
+      current &&
+      effectivePlan.kind === 'replace' &&
+      effectivePlan.reason === 'provider_missing'
+    )
+      this.logger.log('info', 'runtime.provider.session_reset', {
+        runtime_session_id: session.id,
+        runtime_generation_id: current.id,
+        provider: current.provider,
+        provider_session_id: current.providerSessionId,
+        reason:
+          'Paseo reported the provider session missing or stale; starting a fresh engine session and replaying persisted history so no messages are lost.',
+      });
+
     return this.provision({
       session,
       desired,

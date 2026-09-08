@@ -168,4 +168,47 @@ describe('PaseoTurnRunner', () => {
       }),
     });
   });
+
+  it('classifies an explicit missing-session wait rejection distinctly from an unclassifiable one', async () => {
+    const missingSessionError = Object.assign(new Error('agent not found'), {
+      code: 'agent_not_found',
+    });
+    const { client } = createClient({ waitError: missingSessionError });
+    const logs: {
+      level: string;
+      event: string;
+      fields: Readonly<Record<string, unknown>> | undefined;
+    }[] = [];
+    const runner = new PaseoTurnRunner(
+      new PaseoGateway(client),
+      { log: (level, event, fields) => logs.push({ level, event, fields }) },
+      { executionTimeoutMs: 2_000 },
+    );
+
+    await expect(
+      runner.run({
+        run: { runId: 'run-missing-session', prompt: 'hello' },
+        agentId: 'agent-1',
+        provider: 'opencode',
+        model: 'free/model',
+        cwd: '/tmp/runtime-cell',
+      }),
+    ).rejects.toMatchObject({ name: 'PaseoProviderBindingStaleError' });
+
+    const missingSessionLog = logs.find(
+      (entry) => entry.event === 'runtime.turn.session_missing',
+    );
+    expect(missingSessionLog).toBeDefined();
+    expect(missingSessionLog?.level).toBe('warn');
+    expect(missingSessionLog?.fields?.reason).toEqual(expect.any(String));
+    expect(missingSessionLog?.fields?.reason).not.toBe(
+      'provider_wait_error_indistinguishable_at_boundary',
+    );
+
+    // The generic-boundary path must remain unaffected for errors without a
+    // structured missing-session code.
+    expect(
+      logs.some((entry) => entry.event === 'runtime.wait.completed'),
+    ).toBe(false);
+  });
 });

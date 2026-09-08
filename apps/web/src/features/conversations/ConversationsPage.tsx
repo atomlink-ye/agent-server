@@ -23,6 +23,7 @@ import {
   workPath,
 } from '../../app/routes';
 import { NotFoundContent } from '../../app/router/NotFoundPage';
+import { t as translateNow, useT, type Translate } from '../../i18n';
 
 export interface ConversationsPageProps {
   readonly commands: ChatCommands;
@@ -33,7 +34,6 @@ export interface ConversationsPageProps {
   readonly returnConversationId?: string | null;
 }
 
-const sendFailureMessage = 'Unable to send this message. Please try again.';
 const messageRefreshIntervalMs = 3000;
 const conversationRefreshIntervalMs = 5000;
 
@@ -45,6 +45,7 @@ export function ConversationsPage({
   routeConversationId = null,
   returnConversationId = null,
 }: ConversationsPageProps) {
+  const t = useT();
   const location = useLocation();
   const navigate = useNavigate();
   const appSelectionStore = useMemo(
@@ -295,7 +296,7 @@ export function ConversationsPage({
           messageStore.failSend(
             conversationId,
             body,
-            'The message was not persisted. Please try again.',
+            translateNow('conversations.send.notPersisted'),
           );
           return;
         }
@@ -303,14 +304,18 @@ export function ConversationsPage({
           messageStore.failSend(
             conversationId,
             body,
-            'The message was returned for a different conversation.',
+            translateNow('conversations.send.wrongConversation'),
           );
           return;
         }
         messageStore.append(conversationId, message);
         messageStore.completeSend(conversationId);
       } catch {
-        messageStore.failSend(conversationId, body, sendFailureMessage);
+        messageStore.failSend(
+          conversationId,
+          body,
+          translateNow('conversations.send.failed'),
+        );
       }
     },
     [commands.sendMessage, conversationId, messageStore],
@@ -360,33 +365,38 @@ export function ConversationsPage({
       />
 
       <main className="chat-panel">
-        <TitleBar section="Conversations" />
+        <TitleBar section={t('conversations.title')} />
         <header className="chat-header">
           <div className="chat-header-title">
             <span className="conversation-header-avatar" aria-hidden="true">
               {selectedConversation
-                ? conversationDisplayName(selectedConversation)
+                ? conversationDisplayName(t, selectedConversation)
                     .slice(0, 1)
                     .toUpperCase() || 'C'
                 : 'C'}
             </span>
             <div>
-              <span className="eyebrow">Conversation</span>
+              <span className="eyebrow">
+                {t('conversations.header.eyebrow')}
+              </span>
               <h1>
                 {selectedConversation
-                  ? conversationDisplayName(selectedConversation)
-                  : 'Conversation'}
+                  ? conversationDisplayName(t, selectedConversation)
+                  : t('conversations.fallback.title')}
               </h1>
             </div>
           </div>
         </header>
 
-        <section className="chat-content" aria-label="Conversation">
+        <section
+          className="chat-content"
+          aria-label={t('conversations.content.label')}
+        >
           {(conversationState.status === 'idle' ||
             conversationState.status === 'loading') &&
           conversationState.conversations.length === 0 ? (
             <div className="empty-chat" role="status">
-              <p>Loading conversations…</p>
+              <p>{t('conversations.list.loading')}</p>
             </div>
           ) : conversationState.status === 'error' &&
             (conversationState.conversations.length === 0 ||
@@ -394,21 +404,23 @@ export function ConversationsPage({
             <div className="empty-chat" role="alert">
               {routeConversationId !== null ? (
                 <NotFoundContent
-                  title="This Conversation couldn’t be loaded."
+                  title={t('conversations.loadFailed.title')}
                   to="/"
-                  linkLabel="Back to Conversations"
-                  eyebrow="Conversation unavailable"
+                  linkLabel={t('conversations.unavailable.backLink')}
+                  eyebrow={t('conversations.unavailable.eyebrow')}
+                  retryLabel={t('common.tryAgain')}
                   onRetry={() =>
                     void conversationListStore.load(commands.loadConversations)
                   }
                   mark="!"
                 >
-                  Try again in a moment, or return to Conversations.
+                  {t('conversations.loadFailed.body')}
                 </NotFoundContent>
               ) : (
                 <>
                   <p>
-                    {conversationState.error ?? 'Unable to load conversations.'}
+                    {conversationState.error ??
+                      t('conversations.list.loadError')}
                   </p>
                   <button
                     type="button"
@@ -418,7 +430,7 @@ export function ConversationsPage({
                       )
                     }
                   >
-                    Retry
+                    {t('common.retry')}
                   </button>
                 </>
               )}
@@ -426,12 +438,12 @@ export function ConversationsPage({
           ) : selectedConversationMissing ? (
             <div data-testid="conversation-not-found">
               <NotFoundContent
-                title="This Conversation is unavailable."
+                title={t('conversations.missing.title')}
                 to="/"
-                linkLabel="Back to Conversations"
-                eyebrow="Conversation unavailable"
+                linkLabel={t('conversations.unavailable.backLink')}
+                eyebrow={t('conversations.unavailable.eyebrow')}
               >
-                It may have been removed, or you may not have access.
+                {t('conversations.missing.body')}
               </NotFoundContent>
             </div>
           ) : (
@@ -464,15 +476,21 @@ export function ConversationsPage({
   );
 }
 
-function conversationDisplayName(conversation: {
-  readonly kind: 'direct' | 'group';
-  readonly title: string | null;
-  readonly directAgent: { readonly displayName: string | null } | null;
-}): string {
+function conversationDisplayName(
+  t: Translate,
+  conversation: {
+    readonly kind: 'direct' | 'group';
+    readonly title: string | null;
+    readonly directAgent: { readonly displayName: string | null } | null;
+  },
+): string {
   if (conversation.kind === 'direct') {
-    return conversation.directAgent?.displayName?.trim() || 'Agent';
+    return (
+      conversation.directAgent?.displayName?.trim() ||
+      t('conversations.fallback.agent')
+    );
   }
-  return conversation.title ?? 'Conversation';
+  return conversation.title ?? t('conversations.fallback.title');
 }
 
 export default ConversationsPage;

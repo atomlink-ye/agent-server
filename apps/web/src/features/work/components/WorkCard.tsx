@@ -2,6 +2,7 @@ import {
   isUuid,
   type WorkChatCard,
 } from '../../conversations/conversations-gateway';
+import { useT, type Translate } from '../../../i18n';
 import { useWorkCard } from '../queries/use-work-card';
 import { productStatePresentation } from './work-presentation';
 
@@ -19,6 +20,7 @@ export interface WorkCardProps {
  * own message when the Agent chooses to say it.
  */
 export function WorkCard({ workRef, onOpen }: WorkCardProps) {
+  const t = useT();
   const state = useWorkCard(workRef);
 
   if (!isUuid(workRef)) return null;
@@ -28,15 +30,19 @@ export function WorkCard({ workRef, onOpen }: WorkCardProps) {
   // if the conversation had a new message. The Work page is where someone
   // following state belongs; a tile that repeats itself is not an update.
   return (
-    <aside className="work-card" aria-label="Work update" aria-live="off">
+    <aside
+      className="work-card"
+      aria-label={t('workCard.label')}
+      aria-live="off"
+    >
       {state.status === 'loading' ? (
-        <p className="work-card-main">Loading Work update…</p>
+        <p className="work-card-main">{t('workCard.loading')}</p>
       ) : null}
       {state.status === 'error' ? (
         // Not role="alert": a refresh that failed is transient, and an
         // assertive interruption for it talks over whatever is being read.
         <div className="work-card-main">
-          <p>Work update is unavailable.</p>
+          <p>{t('workCard.unavailable')}</p>
         </div>
       ) : null}
       {state.status === 'ready' ? <WorkCardContent card={state.card} /> : null}
@@ -48,7 +54,7 @@ export function WorkCard({ workRef, onOpen }: WorkCardProps) {
             onOpen(state.status === 'ready' ? state.card.workId : workRef)
           }
         >
-          Open Work
+          {t('workCard.open')}
         </button>
       )}
     </aside>
@@ -56,7 +62,8 @@ export function WorkCard({ workRef, onOpen }: WorkCardProps) {
 }
 
 function WorkCardContent({ card }: { readonly card: WorkChatCard }) {
-  const status = statusLabel(card.productState);
+  const t = useT();
+  const status = statusLabel(t, card.productState);
   const statusClass =
     card.availability === 'unavailable'
       ? 'work-status--unavailable'
@@ -64,11 +71,11 @@ function WorkCardContent({ card }: { readonly card: WorkChatCard }) {
   return (
     <div className="work-card-main">
       <div className="work-card-heading">
-        <span className="eyebrow">Work</span>
+        <span className="eyebrow">{t('workCard.eyebrow')}</span>
         <span className={`work-status ${statusClass}`}>{status}</span>
       </div>
       <h3>{card.title}</h3>
-      <p className="work-card-result">{resultText(card)}</p>
+      <p className="work-card-result">{resultText(t, card)}</p>
     </div>
   );
 }
@@ -77,12 +84,15 @@ function WorkCardContent({ card }: { readonly card: WorkChatCard }) {
 // Work page, and this tile all read their label from productStatePresentation.
 // A null state is the one case the server could not read at all; every other
 // stage, including a Work that has not started, has a name of its own.
-function statusLabel(state: WorkChatCard['productState']): string {
-  if (state === null) return 'Status unavailable';
+function statusLabel(
+  t: Translate,
+  state: WorkChatCard['productState'],
+): string {
+  if (state === null) return t('workCard.statusUnavailable');
   return productStatePresentation(state).label;
 }
 
-function resultText(card: WorkChatCard): string {
+function resultText(t: Translate, card: WorkChatCard): string {
   if (card.resultSummary && card.resultCaptureStatus === 'present') {
     return condense(card.resultSummary);
   }
@@ -90,16 +100,16 @@ function resultText(card: WorkChatCard): string {
     card.availability === 'unavailable' ||
     card.resultCaptureStatus === 'not_captured'
   ) {
-    return 'The latest result is not available here.';
+    return t('workCard.result.unavailableHere');
   }
   if (card.resultCaptureStatus === 'redacted')
-    return 'The result is unavailable here.';
+    return t('workCard.result.redacted');
   if (card.resultSummary) return condense(card.resultSummary);
   // Before a result exists the honest secondary line is what the state means,
   // not a claim about a result.
   if (card.productState !== null)
     return productStatePresentation(card.productState).description;
-  return 'No result is available yet.';
+  return t('workCard.result.none');
 }
 
 const summaryCharacterLimit = 180;

@@ -18,12 +18,13 @@ import {
 import { workOrganizationClient } from './client';
 import type { PublishedWorkDefinition } from './client';
 import {
-  COWORKER_ROLE_FALLBACK,
+  coworkerRoleFallback,
   descriptionPreview,
   formatWorkTime,
   productStateLabel,
   runtimeStatusLabel,
-  STATUS_LABELS,
+  statusLabel,
+  WORK_ITEM_STATUSES,
 } from './format';
 import MentionedText from './MentionedText';
 import MentionTextField from './MentionTextField';
@@ -240,7 +241,7 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
                 data-active={filter === value ? 'true' : 'false'}
                 onClick={() => setFilter(value)}
               >
-                {value === 'all' ? 'All' : STATUS_LABELS[value]}
+                {value === 'all' ? 'All' : statusLabel(value)}
               </button>
             ),
           )}
@@ -774,9 +775,9 @@ function TaskDetail({
               void update({ status: event.target.value as WorkItemStatus })
             }
           >
-            {(Object.keys(STATUS_LABELS) as WorkItemStatus[]).map((status) => (
+            {WORK_ITEM_STATUSES.map((status) => (
               <option key={status} value={status}>
-                {STATUS_LABELS[status]}
+                {statusLabel(status)}
               </option>
             ))}
           </select>
@@ -1068,7 +1069,7 @@ function PublishedDefinitionField({
 function coworkerOptionLabel(agent: Coworker): string {
   return [
     agent.displayName,
-    agent.roleLabel ?? COWORKER_ROLE_FALLBACK,
+    agent.roleLabel ?? coworkerRoleFallback(),
     runtimeStatusLabel(agent.runtimeStatus),
   ].join(' · ');
 }

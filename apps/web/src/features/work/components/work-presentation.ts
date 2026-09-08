@@ -4,6 +4,7 @@ import type {
   WorkListItem,
 } from '@atomlink-ye/agent-server/product-contract';
 import { workTabPath } from '../../../app/routes';
+import { t } from '../../../i18n';
 
 export type WorkTab =
   'overview' | 'runs' | 'transcript' | 'artifacts' | 'definition';
@@ -45,38 +46,40 @@ export function productStatePresentation(state: WorkStage) {
   switch (state) {
     case 'not_started':
       return {
-        label: 'Ready to start',
+        label: t('workStage.not_started.label'),
         // A Work that has just been created has not failed at anything. The
         // honest line names the next move, not a missing result.
-        description:
-          'This Work is set up and hasn’t run yet. Open it to start the first Run.',
+        description: t('workStage.not_started.description'),
       };
     case 'starting':
       return {
-        label: 'Starting',
-        description: 'This Run has been requested and is starting.',
+        label: t('workStage.starting.label'),
+        description: t('workStage.starting.description'),
       };
     case 'running':
-      return { label: 'Running', description: 'This Run is active.' };
+      return {
+        label: t('workStage.running.label'),
+        description: t('workStage.running.description'),
+      };
     case 'needs_you':
       return {
-        label: 'Needs You',
-        description: 'Your action is required before this Work can progress.',
+        label: t('workStage.needs_you.label'),
+        description: t('workStage.needs_you.description'),
       };
     case 'complete':
       return {
-        label: 'Complete',
-        description: 'This Run is complete. Open its result to review.',
+        label: t('workStage.complete.label'),
+        description: t('workStage.complete.description'),
       };
     case 'problem':
       return {
-        label: 'Problem',
-        description: 'This Run needs review before Work can progress.',
+        label: t('workStage.problem.label'),
+        description: t('workStage.problem.description'),
       };
     case 'not_captured':
       return {
-        label: 'Status unknown',
-        description: 'We don’t have a status update for this Work.',
+        label: t('workStage.not_captured.label'),
+        description: t('workStage.not_captured.description'),
       };
   }
 }

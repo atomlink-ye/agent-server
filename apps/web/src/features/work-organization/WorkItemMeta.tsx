@@ -1,6 +1,6 @@
 import type { WorkItemStatus } from '@atomlink-ye/agent-server/product-contract';
 
-import { STATUS_LABELS } from './format';
+import { statusLabel } from './format';
 import {
   participantInitials,
   participantLabel,
@@ -11,7 +11,7 @@ import {
 export function StatusBadge({ status }: { readonly status: WorkItemStatus }) {
   return (
     <span className={`work-org-status work-org-status--${status}`}>
-      {STATUS_LABELS[status]}
+      {statusLabel(status)}
     </span>
   );
 }

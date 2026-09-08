@@ -1,4 +1,7 @@
 import type { ComponentType, SVGProps } from 'react';
+
+import { useT } from '../../i18n';
+import LanguageSwitcher from './LanguageSwitcher';
 import {
   IAgent,
   IBoard,
@@ -26,61 +29,63 @@ export interface RailProps {
 }
 
 export function Rail({ activeTab, onSelectTab }: RailProps) {
+  const t = useT();
   return (
-    <aside className="rail" aria-label="Primary navigation">
+    <aside className="rail" aria-label={t('shell.nav.primary')}>
       <div className="rail-brand" aria-label="Agent Server">
         <span aria-hidden="true">✦</span>
       </div>
-      <nav className="rail-tabs" aria-label="Sections">
+      <nav className="rail-tabs" aria-label={t('shell.nav.sections')}>
         <RailTab
           active={activeTab === 'conversations'}
-          label="Conversations"
+          label={t('shell.nav.conversations')}
           Icon={IChat}
           onClick={() => onSelectTab('conversations')}
         />
         <RailTab
           active={activeTab === 'agents'}
-          label="Agents"
+          label={t('shell.nav.agents')}
           Icon={IAgent}
           onClick={() => onSelectTab('agents')}
         />
         <RailTab
           active={activeTab === 'tasks'}
-          label="Tasks"
+          label={t('shell.nav.tasks')}
           Icon={ITasks}
           onClick={() => onSelectTab('tasks')}
         />
         <RailTab
           active={activeTab === 'boards'}
-          label="Boards"
+          label={t('shell.nav.boards')}
           Icon={IBoard}
           onClick={() => onSelectTab('boards')}
         />
         <RailTab
           active={activeTab === 'work'}
-          label="Work"
+          label={t('shell.nav.work')}
           Icon={IShip}
           onClick={() => onSelectTab('work')}
         />
         <RailTab
           active={activeTab === 'observe'}
-          label="Observe"
+          label={t('shell.nav.observe')}
           Icon={IObserve}
           onClick={() => onSelectTab('observe')}
         />
         <RailTab
           active={activeTab === 'files'}
-          label="Files"
+          label={t('shell.nav.files')}
           Icon={IFile}
           onClick={() => onSelectTab('files')}
         />
         <RailTab
           active={activeTab === 'whispers'}
-          label="Whispers"
+          label={t('shell.nav.whispers')}
           Icon={IWhisper}
           onClick={() => onSelectTab('whispers')}
         />
       </nav>
+      <LanguageSwitcher />
     </aside>
   );
 }

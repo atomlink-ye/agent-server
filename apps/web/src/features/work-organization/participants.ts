@@ -1,5 +1,5 @@
 import type { Coworker } from '../agents/contracts';
-import { COWORKER_ROLE_FALLBACK, runtimeStatusLabel } from './format';
+import { coworkerRoleFallback, runtimeStatusLabel } from './format';
 
 /**
  * The mention/assignee directory for Tasks and Boards.
@@ -34,7 +34,7 @@ export function buildParticipantDirectory(input: {
       name: agent.displayName,
       kind: 'agent',
       detail: [
-        agent.roleLabel ?? COWORKER_ROLE_FALLBACK,
+        agent.roleLabel ?? coworkerRoleFallback(),
         runtimeStatusLabel(agent.runtimeStatus),
       ].join(' · '),
       active: agent.runtimeStatus !== 'unavailable',

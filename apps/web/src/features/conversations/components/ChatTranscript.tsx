@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import type { WorkItemStatus } from '@atomlink-ye/agent-server/product-contract';
 import { Link, useNavigate } from 'react-router-dom';
 import type {
   ConversationId,
@@ -9,7 +10,9 @@ import type { ConversationMessagesState } from '../stores/messages';
 import { WorkCard } from '../../work/components/WorkCard';
 import { workOrganizationClient } from '../../work-organization/client';
 import { isFeatureUnavailable } from '../../../api/feature-availability';
-import { STATUS_LABELS } from '../../work-organization/format';
+import { statusLabel } from '../../work-organization/format';
+import { useT } from '../../../i18n';
+import { useRichT } from '../../../i18n/rich';
 import { AssistantMarkdown } from './assistant-markdown';
 import { recognizeLegacyWorkItemAssignmentBrief } from '../legacy-work-item-assignment-brief';
 import './dispatch-card.css';
@@ -78,6 +81,7 @@ function NormalMessage({
   readonly showWorkCard: boolean;
   readonly onOpenWork: (workId: string, conversationId: ConversationId) => void;
 }) {
+  const t = useT();
   const navigate = useNavigate();
   const [creatingTask, setCreatingTask] = useState(false);
   const [taskTitle, setTaskTitle] = useState(message.body.slice(0, 120));
@@ -117,10 +121,10 @@ function NormalMessage({
         <button
           type="button"
           className="chat-message-task-action"
-          aria-label="Create Task from this message"
+          aria-label={t('transcript.task.actionLabel')}
           onClick={() => setCreatingTask((value) => !value)}
         >
-          ☑ Create task
+          ☑ {t('transcript.task.action')}
         </button>
       </div>
       {creatingTask ? (
@@ -131,9 +135,9 @@ function NormalMessage({
             void createTask();
           }}
         >
-          <strong>Create Task from message</strong>
+          <strong>{t('transcript.task.formTitle')}</strong>
           <label>
-            Title
+            {t('transcript.task.title')}
             <input
               autoFocus
               value={taskTitle}
@@ -142,7 +146,7 @@ function NormalMessage({
             />
           </label>
           <label>
-            Description
+            {t('transcript.task.description')}
             <textarea
               rows={3}
               value={taskDescription}
@@ -156,10 +160,12 @@ function NormalMessage({
           ) : null}
           <div>
             <button type="button" onClick={() => setCreatingTask(false)}>
-              Cancel
+              {t('common.cancel')}
             </button>
             <button type="submit" disabled={savingTask || !taskTitle.trim()}>
-              {savingTask ? 'Creating…' : 'Create Task'}
+              {savingTask
+                ? t('transcript.task.submitting')
+                : t('transcript.task.submit')}
             </button>
           </div>
         </form>
@@ -176,7 +182,7 @@ function NormalMessage({
 
 type DispatchStatus =
   | { readonly kind: 'loading' }
-  | { readonly kind: 'ready'; readonly status: keyof typeof STATUS_LABELS }
+  | { readonly kind: 'ready'; readonly status: WorkItemStatus }
   | { readonly kind: 'unavailable' }
   | { readonly kind: 'error' };
 
@@ -191,6 +197,8 @@ function DispatchCard({
   readonly body: string;
   readonly fallbackRecipientLabel: string | null;
 }) {
+  const t = useT();
+  const richT = useRichT();
   const [status, setStatus] = useState<DispatchStatus>({ kind: 'loading' });
   const [taskTitle, setTaskTitle] = useState(dispatch.taskTitle);
 
@@ -253,35 +261,43 @@ function DispatchCard({
     };
   }, [dispatch.workItemId]);
 
-  const actor = safeLabel(dispatch.actorLabel, 'Someone');
+  const actor = safeLabel(dispatch.actorLabel, t('dispatch.actor.fallback'));
   const recipient = safeLabel(
     dispatch.recipientLabel,
-    safeLabel(fallbackRecipientLabel, 'Coworker'),
+    safeLabel(fallbackRecipientLabel, t('dispatch.recipient.fallback')),
   );
-  const action =
+  // The event is one whole sentence, not fragments joined in JSX: Chinese puts
+  // the task before the recipient, and only a full template can move them.
+  const eventKey =
     dispatch.reason === 'assignment'
-      ? 'assigned'
+      ? 'dispatch.event.assignment'
       : dispatch.reason === 'mention'
-        ? 'mentioned'
-        : 'commented for';
+        ? 'dispatch.event.mention'
+        : 'dispatch.event.comment';
 
   return (
-    <article className="dispatch-card" aria-label="Task dispatch">
+    <article className="dispatch-card" aria-label={t('dispatch.label')}>
       <p className="dispatch-card__event">
-        <strong>{actor}</strong> {action} <strong>{recipient}</strong>{' '}
-        {dispatch.reason === 'assignment' ? 'to' : 'on'}{' '}
-        <Link to={`/tasks/${encodeURIComponent(dispatch.workItemId)}`}>
-          {taskTitle}
-        </Link>
+        {richT(eventKey, {
+          actor: <strong>{actor}</strong>,
+          recipient: <strong>{recipient}</strong>,
+          task: (
+            <Link to={`/tasks/${encodeURIComponent(dispatch.workItemId)}`}>
+              {taskTitle}
+            </Link>
+          ),
+        })}
       </p>
       <p className="dispatch-card__status" aria-live="polite">
-        {status.kind === 'loading' ? 'Checking task status…' : null}
-        {status.kind === 'ready' ? STATUS_LABELS[status.status] : null}
-        {status.kind === 'unavailable' ? 'Task status is unavailable.' : null}
-        {status.kind === 'error' ? 'Task status could not be loaded.' : null}
+        {status.kind === 'loading' ? t('dispatch.status.loading') : null}
+        {status.kind === 'ready' ? statusLabel(status.status) : null}
+        {status.kind === 'unavailable'
+          ? t('dispatch.status.unavailable')
+          : null}
+        {status.kind === 'error' ? t('dispatch.status.error') : null}
       </p>
       <details className="dispatch-card__details">
-        <summary>Dispatch details</summary>
+        <summary>{t('dispatch.details')}</summary>
         <p>{body}</p>
       </details>
     </article>
@@ -307,6 +323,7 @@ export function ChatTranscript({
   onOpenWork,
   fallbackRecipientLabel = null,
 }: ChatTranscriptProps) {
+  const t = useT();
   const navigate = useNavigate();
 
   if (!hasConversations) {
@@ -315,41 +332,36 @@ export function ChatTranscript({
         <div className="empty-chat-icon" aria-hidden="true">
           <span>✦</span>
         </div>
-        <h1>Ready when you are</h1>
-        <p>
-          Start with a Coworker, then this is where your shared context and
-          replies will live.
-        </p>
+        <h1>{t('transcript.empty.title')}</h1>
+        <p>{t('transcript.empty.body')}</p>
         <button type="button" onClick={() => navigate('/agents')}>
-          Meet your Coworkers
+          {t('transcript.empty.action')}
         </button>
       </div>
     );
   }
 
   if (conversationId === null) {
-    return (
-      <StateMessage>Select a conversation to view its messages.</StateMessage>
-    );
+    return <StateMessage>{t('transcript.selectConversation')}</StateMessage>;
   }
 
   if (state === null || state.status === 'loading') {
-    return <StateMessage>Loading messages…</StateMessage>;
+    return <StateMessage>{t('transcript.loading')}</StateMessage>;
   }
 
   if (state.status === 'error') {
     return (
       <div className="empty-chat" role="alert">
-        <p>{state.error ?? 'Unable to load messages.'}</p>
+        <p>{state.error ?? t('transcript.loadError')}</p>
         <button type="button" onClick={onRetry}>
-          Retry
+          {t('common.retry')}
         </button>
       </div>
     );
   }
 
   if (state.messages.length === 0) {
-    return <StateMessage>No messages in this conversation yet.</StateMessage>;
+    return <StateMessage>{t('transcript.noMessages')}</StateMessage>;
   }
 
   const lastMessage = state.messages[state.messages.length - 1];
@@ -364,7 +376,7 @@ export function ChatTranscript({
     <div
       className="chat-transcript"
       aria-live="polite"
-      aria-label="Message transcript"
+      aria-label={t('transcript.label')}
     >
       {state.messages.map((message) => (
         <Message
@@ -385,7 +397,7 @@ export function ChatTranscript({
             <span />
             <span />
           </span>
-          Waiting for a reply
+          {t('transcript.awaitingReply')}
         </p>
       ) : null}
     </div>

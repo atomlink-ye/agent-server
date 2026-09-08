@@ -9,7 +9,11 @@ import {
   hasPositiveModelUsage,
   mapPaseoFinishStatus,
 } from './status-mapper.js';
-import { sanitizePaseoErrorEvidence } from './errors.js';
+import {
+  isPaseoExplicitMissingSessionError,
+  PaseoProviderBindingStaleError,
+  sanitizePaseoErrorEvidence,
+} from './errors.js';
 import { PaseoGateway } from './paseo-gateway.js';
 import { PaseoObservationProjector } from './paseo-observation-projector.js';
 
@@ -146,6 +150,21 @@ export class PaseoTurnRunner {
         );
         providerWaitStatus = finished.status;
       } catch (error) {
+        if (isPaseoExplicitMissingSessionError(error)) {
+          providerWaitStatus = 'rejected_session_missing';
+          const evidence = sanitizePaseoErrorEvidence(error);
+          const reason =
+            'Paseo lost track of the agent session mid-turn; this turn fails now, but the session will be recreated with persisted history replayed on the next turn, so no messages are lost.';
+          this.logger.log('warn', 'runtime.turn.session_missing', {
+            run_id: input.run.runId,
+            elapsed_ms: Date.now() - waitStartedAt,
+            status: providerWaitStatus,
+            reason,
+            error_name: evidence.errorName,
+            error_message: evidence.errorMessage,
+          });
+          throw new PaseoProviderBindingStaleError();
+        }
         providerWaitStatus = 'rejected_indistinguishable_at_boundary';
         const evidence = sanitizePaseoErrorEvidence(error);
         this.logger.log('info', 'runtime.wait.completed', {
@@ -168,6 +187,12 @@ export class PaseoTurnRunner {
           status: providerWaitStatus,
           ...(providerWaitStatus === 'rejected_indistinguishable_at_boundary'
             ? { reason: 'provider_wait_error_indistinguishable_at_boundary' }
+            : {}),
+          ...(providerWaitStatus === 'rejected_session_missing'
+            ? {
+                reason:
+                  'Paseo lost track of the agent session mid-turn; it will self-heal on the next turn.',
+              }
             : {}),
         });
       }

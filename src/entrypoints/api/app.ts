@@ -42,6 +42,8 @@ import { registerConversationRoutes } from './routes/conversations.js';
 import type { WhisperRepository } from '../../application/ports/whisper-repository.js';
 import { registerWhisperRoutes } from './routes/whispers.js';
 import { registerAccountRoutes } from './routes/account.js';
+import { registerAuthRoutes, requireBrowserSession } from './routes/auth.js';
+import type { AuthService } from '../../application/auth/auth-service.js';
 
 export interface AppDependencies {
   readonly config: AppConfig;
@@ -74,6 +76,7 @@ export interface AppDependencies {
     ResourceModule,
     'installHttp' | 'installProductWorkHttp' | 'managedAgentDefinitions'
   >;
+  readonly auth?: AuthService;
 }
 
 export function createHttpApp(
@@ -95,6 +98,7 @@ export function createHttpApp(
     const startedAt = performance.now();
     context.set('requestId', requestId);
     context.set('accessContext', null);
+    context.set('browserUserId', null);
     context.header('x-request-id', requestId);
 
     await next();
@@ -108,11 +112,18 @@ export function createHttpApp(
     });
   });
 
+  // Keep browser authentication in the composed application graph so every
+  // host (HTTP entrypoint and in-process tests) applies the same boundary.
+  if (dependencies.auth) {
+    app.use('/api/*', requireBrowserSession(dependencies.auth));
+  }
+
   registerHealthRoutes(app, {
     config: dependencies.config,
     readiness: dependencies.readiness,
     version,
   });
+  if (dependencies.auth) registerAuthRoutes(app, dependencies.auth);
   registerRunRoutes(app, dependencies);
   registerTaskRoutes(app, dependencies);
   if (productWorkSurfaceComposed) {

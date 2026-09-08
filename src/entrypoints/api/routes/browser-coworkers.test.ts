@@ -22,6 +22,13 @@ function testConfig(): AppConfig {
 
 function appWithCoworkerRoutes(): Hono<ApiEnvironment> {
   const app = new Hono<ApiEnvironment>();
+  app.use('*', async (c, next) => {
+    c.set(
+      'browserUserId',
+      c.req.header('x-agent-server-user-id')?.trim() ?? null,
+    );
+    await next();
+  });
   registerBrowserCoworkerRoutes(app, testConfig());
   return app;
 }

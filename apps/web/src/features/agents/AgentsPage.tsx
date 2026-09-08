@@ -22,7 +22,6 @@ import {
   runtimeStatusLabel,
 } from './runtime-status';
 import TitleBar from '../../app/shell/TitleBar';
-import AccountName from '../../app/shell/AccountName';
 import { useT, type Translate } from '../../i18n';
 import './agents.css';
 
@@ -144,7 +143,7 @@ export function AgentsPage() {
   if (!selectedAgentId) {
     return (
       <main className="chat-panel agents-main agents-roster-main">
-        <TitleBar section={t('agents.title')} right={<AccountName />} />
+        <TitleBar section={t('agents.title')} />
         {error ? (
           <p className="agents-error" role="alert">
             {error}
@@ -297,7 +296,7 @@ export function AgentsPage() {
       </aside>
 
       <main className="chat-panel agents-main">
-        <TitleBar section={t('agents.title')} right={<AccountName />} />
+        <TitleBar section={t('agents.title')} />
         {authoring === 'coworker' && !invalidAgentId ? (
           <NewCoworkerForm
             onCancel={() => setAuthoring(null)}

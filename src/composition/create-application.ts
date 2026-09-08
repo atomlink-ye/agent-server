@@ -38,6 +38,8 @@ import { PostgresWhisperRepository } from '../infrastructure/postgres/postgres-w
 import { PostgresConversationAgentIdentityResolver } from '../infrastructure/postgres/postgres-conversation-agent-identity-resolver.js';
 import { PostgresAgentHomeRepository } from '../infrastructure/postgres/postgres-agent-home-repository.js';
 import { PostgresAgentHomeDefinitionSource } from '../infrastructure/postgres/postgres-agent-home-definition-source.js';
+import { AuthService } from '../application/auth/auth-service.js';
+import { PostgresAuthRepository } from '../infrastructure/postgres/postgres-auth-repository.js';
 
 export interface SingleRunDebugControl {
   claimAndExecute(runId: string): Promise<{
@@ -65,6 +67,7 @@ export interface ApplicationControls {
   readonly dispatcher: PostgresRunDispatcher;
   readonly sessions: PostgresSessionRepository;
   readonly memoryModule: ReturnType<typeof createMemoryCapabilities>;
+  readonly auth: AuthService;
 }
 
 function turnLeaseDurationMs(executionTimeoutMs: number): number {
@@ -83,6 +86,10 @@ export async function createApplication(
   const leaseDurationMs = turnLeaseDurationMs(config.paseo.executionTimeoutMs);
   const pool =
     options.database ?? (await createInfrastructure(config, logger)).pool;
+  const commonAccount = (config.serviceAccounts ?? []).find(
+    (account) => !account.disabled,
+  );
+  if (!commonAccount) throw new Error('auth_common_workspace_missing');
   const resourceModule = await createResourceCapabilities({
     database: pool,
     config,
@@ -131,6 +138,14 @@ export async function createApplication(
     getRun,
     invokeTask,
   } = kernel;
+  const auth = new AuthService(
+    new PostgresAuthRepository(pool),
+    workspaceMembers,
+    {
+      tenantId: commonAccount.tenantId,
+      workspaceId: commonAccount.workspaceId,
+    },
+  );
   const teamModule = createTeamCapabilities({
     database: pool,
     tasks: taskRepository,
@@ -338,6 +353,7 @@ export async function createApplication(
     taskConsumers: { cancelTask, getTask, getTaskTree },
     memory: memoryModule,
     resources: resourceModule,
+    auth,
     ...(workModule ? { workModule } : {}),
     ...(workOrganizationModule ? { workOrganizationModule } : {}),
     channels: channelComposition,
@@ -388,6 +404,7 @@ export async function createApplication(
       dispatcher,
       sessions,
       memoryModule,
+      auth,
     } satisfies ApplicationControls,
     ...(singleRunDebug ? { singleRunDebug } : {}),
     close: host.close,

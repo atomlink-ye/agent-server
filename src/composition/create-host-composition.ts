@@ -18,6 +18,7 @@ import { createApplicationLifecycle } from './create-application-lifecycle.js';
 import { createWorkers, type WorkerSet } from './create-workers.js';
 import type { PostgresRunDispatcher } from '../infrastructure/postgres/postgres-run-dispatcher.js';
 import type { WhisperRepository } from '../application/ports/whisper-repository.js';
+import type { AuthService } from '../application/auth/auth-service.js';
 
 export interface HostCompositionInput {
   readonly config: AppConfig;
@@ -41,6 +42,7 @@ export interface HostCompositionInput {
   /** Human peek surface for agent-initiated whisper channels. */
   readonly whispers?: WhisperRepository;
   readonly pool: Pick<Pool, 'end'>;
+  readonly auth: AuthService;
   readonly activationReconciler: Pick<
     TeamCapabilities['activationReconciler'],
     'reconcilePendingRoots'
@@ -90,6 +92,7 @@ export async function createHostComposition(input: HostCompositionInput) {
     ...(input.whispers ? { whispers: input.whispers } : {}),
     memoryModule: input.memory,
     resourceModule: input.resources,
+    auth: input.auth,
   });
   const workers = createWorkers({
     ...input.channels.workers,

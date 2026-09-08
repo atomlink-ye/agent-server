@@ -14,6 +14,7 @@ import type { ConversationsStore } from '../../features/conversations/stores/con
 import type { MessagesStore } from '../../features/conversations/stores/messages';
 import { conversationPath, workPath, workRootPath } from '../routes';
 import Rail, { type DesktopTab } from './Rail';
+import AccountName from './AccountName';
 
 export interface AppShellProps {
   readonly commands: ChatCommands;
@@ -99,6 +100,9 @@ export function AppShell({
 
   return (
     <div className="app-shell">
+      <div className="app-account">
+        <AccountName />
+      </div>
       <Rail activeTab={activeTab} onSelectTab={selectTab} />
       {activeTab === 'conversations' ? (
         <ConversationsPage

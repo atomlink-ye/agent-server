@@ -13,7 +13,7 @@ import {
 } from '../../../contracts/agents.js';
 import type { ApiEnvironment } from '../http-types.js';
 import type { AppConfig } from '../../../shared/config.js';
-import { USER_ID_HEADER } from '../access-context.js';
+import { getBrowserUserId, USER_ID_HEADER } from '../access-context.js';
 import { decodeProductResponse } from '../browser-product-decoder.js';
 import {
   fetchAuthenticated,
@@ -44,12 +44,8 @@ export function registerBrowserCoworkerRoutes(
     );
     if (!parsed.success)
       return invalidRequest('The Coworker draft is invalid.');
-    // Hiring a Coworker opens the first Conversation with it, and that
-    // Conversation belongs to whoever did the hiring. If the human identifier
-    // stopped at this gateway the API would attribute it to the shared
-    // service account, and the person who just created the Coworker would be
-    // locked out of their own landing page.
-    const userId = c.req.header(USER_ID_HEADER)?.trim();
+    // Hiring opens the first Conversation for the authenticated session user.
+    const userId = getBrowserUserId(c);
     return forwardValidated(
       config,
       '/api/v1/coworkers',

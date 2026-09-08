@@ -28,6 +28,13 @@ function appWithBrowserRoutes(
   config: AppConfig = testConfig(),
 ): Hono<ApiEnvironment> {
   const app = new Hono<ApiEnvironment>();
+  app.use('*', async (c, next) => {
+    c.set(
+      'browserUserId',
+      c.req.header('x-agent-server-user-id')?.trim() ?? null,
+    );
+    await next();
+  });
   registerBrowserWebRoutes(app, config, logger);
   return app;
 }

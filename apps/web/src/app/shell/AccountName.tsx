@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useT } from '../../i18n';
 
 import {
+  loadAuthIdentity,
+  logout,
   loadAccount,
   setDisplayName,
 } from '../../features/account/account-gateway';
@@ -12,7 +16,10 @@ import {
  * name: click the name to open an inline text input, submit to rename.
  */
 export function AccountName() {
+  const t = useT();
+  const navigate = useNavigate();
   const [name, setName] = useState<string | null>(null);
+  const [username, setUsername] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
@@ -20,14 +27,23 @@ export function AccountName() {
 
   useEffect(() => {
     let active = true;
-    void loadAccount().then(
-      (account) => {
-        if (active) setName(account.displayName);
+    void loadAuthIdentity().then(
+      (identity) => {
+        if (active) {
+          setUsername(identity.username);
+          setName(identity.displayName);
+        }
       },
-      () => {
-        // Leave the name unset; the badge simply stays hidden until it can
-        // be loaded on a later render (e.g. after the reload below).
-      },
+      () =>
+        loadAccount().then(
+          (account) => {
+            if (active) setName(account.displayName);
+          },
+          () => {
+            // Leave the name unset; the badge simply stays hidden until it can
+            // be loaded on a later render (e.g. after the reload below).
+          },
+        ),
     );
     return () => {
       active = false;
@@ -56,7 +72,7 @@ export function AccountName() {
     }
   }
 
-  if (name === null && !editing) return null;
+  if (name === null && username === null && !editing) return null;
 
   if (editing) {
     return (
@@ -104,14 +120,27 @@ export function AccountName() {
   }
 
   return (
-    <button
-      className="account-name-badge"
-      type="button"
-      onClick={startEditing}
-      title="Change your display name"
-    >
-      {name}
-    </button>
+    <span className="account-name-wrap">
+      <button
+        className="account-name-badge"
+        type="button"
+        onClick={startEditing}
+        title="Change your display name"
+      >
+        {name ?? username}
+      </button>
+      <button
+        className="account-logout"
+        type="button"
+        onClick={() => {
+          void logout().finally(() => navigate('/login', { replace: true }));
+        }}
+        aria-label={t('auth.logout')}
+        title={t('auth.logout')}
+      >
+        ↪
+      </button>
+    </span>
   );
 }
 

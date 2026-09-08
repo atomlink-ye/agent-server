@@ -1,13 +1,23 @@
-import { Route, Routes, useLocation, useParams } from 'react-router-dom';
+import {
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+  useParams,
+} from 'react-router-dom';
+import { useEffect, useState } from 'react';
 
 import { useAppRuntime } from '../providers';
 import AppShell from '../shell/AppShell';
 import { parseSessionIndex } from '../routes';
 import NotFoundPage from './NotFoundPage';
+import AuthPage from '../../features/account/AuthPage';
+import { loadAuthIdentity } from '../../features/account/account-gateway';
 
 export function AppRouter() {
   return (
     <Routes>
+      <Route path="/login" element={<AuthPage />} />
       <Route path="/" element={<WorkspaceRoute />} />
       {/* The conversations list is reachable both as the workspace root and
           under its own path, so a shared or typed /conversations link lands on
@@ -34,6 +44,8 @@ export function AppRouter() {
 }
 
 function WorkspaceRoute() {
+  const [checked, setChecked] = useState(false);
+  const navigate = useNavigate();
   const runtime = useAppRuntime();
   const location = useLocation();
   const { conversationId, workItemId, boardId, workId } = useParams<{
@@ -42,6 +54,25 @@ function WorkspaceRoute() {
     boardId?: string;
     workId?: string;
   }>();
+  useEffect(() => {
+    let active = true;
+    void loadAuthIdentity().then(
+      () => {
+        if (active) setChecked(true);
+      },
+      () => {
+        if (active)
+          navigate(
+            `/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`,
+            { replace: true },
+          );
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [navigate]);
+  if (!checked) return null;
   const query = new URLSearchParams(location.search);
   const state = location.state as { returnConversationId?: unknown } | null;
   const stateReturnConversationId =

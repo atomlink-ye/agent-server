@@ -14,7 +14,7 @@ import {
 } from '../../../domain/context/context-fs.js';
 import { principalRef } from '../../../domain/tenancy/product-context.js';
 import { ServiceAccountAuthenticator } from '../../../application/control-plane/service-account-authenticator.js';
-import { getAuthenticatedAccessContext } from '../access-context.js';
+import { getRequestAccessContext } from '../access-context.js';
 import { requireServiceAccountAccess } from '../authentication.js';
 import { readBoundedJson } from '../read-bounded-json.js';
 import { HttpError } from '../../../contracts/http.js';
@@ -64,7 +64,7 @@ export function registerContextFileRoutes(
   app.use(`${BASE}/*`, auth);
 
   app.get(`${BASE}/files`, async (c) => {
-    const access = getAuthenticatedAccessContext(c);
+    const access = getRequestAccessContext(c);
     const requested = parseScopeRequest(new URL(c.req.url).searchParams);
     const resolved = await resolveScope(
       dependencies.database,
@@ -87,7 +87,7 @@ export function registerContextFileRoutes(
   });
 
   app.get(`${BASE}/file`, async (c) => {
-    const access = getAuthenticatedAccessContext(c);
+    const access = getRequestAccessContext(c);
     const params = new URL(c.req.url).searchParams;
     const path = requiredParam(params, 'path');
     const requested = parseScopeRequest(params);
@@ -114,7 +114,7 @@ export function registerContextFileRoutes(
   });
 
   app.post(`${BASE}/promotions/conversation-to-user`, async (c) => {
-    const access = getAuthenticatedAccessContext(c);
+    const access = getRequestAccessContext(c);
     const parsed = ContextConversationToUserPromotionRequestSchema.safeParse(
       await readBoundedJson(c.req.raw, MAX_REQUEST_BYTES),
     );
@@ -145,7 +145,7 @@ export function registerContextFileRoutes(
   });
 
   app.post(`${BASE}/admissions/conversation-to-work`, async (c) => {
-    const access = getAuthenticatedAccessContext(c);
+    const access = getRequestAccessContext(c);
     const parsed = ContextConversationToWorkAdmissionRequestSchema.safeParse(
       await readBoundedJson(c.req.raw, MAX_REQUEST_BYTES),
     );
@@ -168,7 +168,7 @@ export function registerContextFileRoutes(
   });
 
   app.post(`${BASE}/publications/work-result`, async (c) => {
-    const access = getAuthenticatedAccessContext(c);
+    const access = getRequestAccessContext(c);
     const parsed = ContextWorkResultPublicationRequestSchema.safeParse(
       await readBoundedJson(c.req.raw, MAX_REQUEST_BYTES),
     );
@@ -185,7 +185,7 @@ export function registerContextFileRoutes(
   });
 
   app.post(`${BASE}/pins/agent`, async (c) => {
-    const access = getAuthenticatedAccessContext(c);
+    const access = getRequestAccessContext(c);
     const parsed = ContextAgentPinRequestSchema.safeParse(
       await readBoundedJson(c.req.raw, MAX_REQUEST_BYTES),
     );
@@ -219,7 +219,7 @@ export function registerContextFileRoutes(
   });
 }
 
-type Access = ReturnType<typeof getAuthenticatedAccessContext>;
+type Access = ReturnType<typeof getRequestAccessContext>;
 type RequestedScope = {
   readonly kind: z.infer<typeof ContextScopeKindSchema>;
   readonly agentDefinitionId?: string;

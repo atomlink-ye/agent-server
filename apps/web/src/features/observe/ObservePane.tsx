@@ -12,6 +12,7 @@ import {
   type ObserveAggregate,
 } from './observe-aggregate';
 import { useObserveRunMetrics } from './queries/use-observe-run-metrics';
+import { useObserveRoster } from './queries/use-observe-roster';
 import {
   useObserveEntries,
   type ObserveEntry,
@@ -41,24 +42,13 @@ export function ObservePane({
   const [searchParams, setSearchParams] = useSearchParams();
   const { status, entries, refresh, autoRefresh, setAutoRefresh } =
     useObserveEntries();
+  const roster = useObserveRoster();
 
   const traced = useMemo(
     () => entries.filter((entry) => entry.latest_run_summary !== null),
     [entries],
   );
   const { metrics, resolving } = useObserveRunMetrics(traced);
-
-  // Filter options come from the participant labels a Run's own trace
-  // already reports, not the Coworker roster: a Coworker's display name and
-  // the Worker identity that actually appears in a trace are distinct
-  // concepts here, so sourcing options from the roster could offer a filter
-  // value that never matches any traced Run.
-  const agentNames = useMemo(() => {
-    const seen = new Set<string>();
-    for (const entryMetrics of metrics.values())
-      for (const name of entryMetrics.agentNames) seen.add(name);
-    return [...seen].sort();
-  }, [metrics]);
 
   const selectedWorkId = searchParams.get('work');
   const agentFilter = searchParams.get('agent');
@@ -68,12 +58,14 @@ export function ObservePane({
     return traced.filter((entry) => {
       if (statusFilter && entry.product_state !== statusFilter) return false;
       if (agentFilter) {
-        const names = metrics.get(entry.id)?.agentNames ?? [];
-        if (!names.includes(agentFilter)) return false;
+        const agent = roster.agents.find(
+          (candidate) => candidate.id === agentFilter,
+        );
+        if (!agent?.workDefinitionIds.has(entry.definition_id)) return false;
       }
       return true;
     });
-  }, [traced, statusFilter, agentFilter, metrics]);
+  }, [traced, statusFilter, agentFilter, roster.agents]);
 
   useEffect(() => {
     onAggregateChange?.(deriveObserveAggregate(filtered, metrics), resolving);
@@ -128,9 +120,9 @@ export function ObservePane({
             onChange={(event) => updateFilter('agent', event.target.value)}
           >
             <option value="">All agents</option>
-            {agentNames.map((name) => (
-              <option key={name} value={name}>
-                {name}
+            {roster.agents.map((agent) => (
+              <option key={agent.id} value={agent.id}>
+                {agent.name}
               </option>
             ))}
           </select>
@@ -214,6 +206,7 @@ export function ObservePane({
               key={entry.id}
               entry={entry}
               agentNames={metrics.get(entry.id)?.agentNames ?? []}
+              runtimeModels={entry.latest_run_summary?.runtime_models ?? []}
               durationMs={metrics.get(entry.id)?.durationMs ?? null}
               selected={selectedWorkId === entry.id}
               search={searchParams}
@@ -228,12 +221,14 @@ export function ObservePane({
 function ObserveListRow({
   entry,
   agentNames,
+  runtimeModels,
   durationMs,
   selected,
   search,
 }: {
   readonly entry: ObserveEntry;
   readonly agentNames: readonly string[];
+  readonly runtimeModels: readonly string[];
   readonly durationMs: number | null;
   readonly selected: boolean;
   readonly search: URLSearchParams;
@@ -271,6 +266,11 @@ function ObserveListRow({
           </span>
           {agentNames.length ? (
             <span className="observe-agent-chip">{agentNames.join(', ')}</span>
+          ) : null}
+          {runtimeModels.length ? (
+            <span className="observe-agent-chip">
+              Model: {runtimeModels.join(', ')}
+            </span>
           ) : null}
         </span>
         <span

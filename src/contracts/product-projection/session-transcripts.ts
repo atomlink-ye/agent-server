@@ -39,6 +39,10 @@ const ProductSessionTranscriptSummarySchema = z
     last_meaningful: ProductSessionTranscriptMeaningfulSchema.nullable(),
     work_refs: z.array(z.string().regex(/^W-[1-9]\d*$/u)).max(256),
     truncated: z.boolean(),
+    // One displayed Agent stream may contain retries, including retries with
+    // different models. This is deliberately plural and is sourced only from
+    // the technical Runs that produced the stream.
+    runtime_models: z.array(z.string().min(1).max(256)).max(256).optional(),
   })
   .strict();
 

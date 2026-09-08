@@ -86,7 +86,12 @@ describe('Product Work list projection', () => {
       },
       executionFacts: {
         listRunsByRootTask: async () => [
-          run({ rootTaskId, resultPresent: true, resultText: 'Wrong source' }),
+          run({
+            rootTaskId,
+            model: 'test-model',
+            resultPresent: true,
+            resultText: 'Wrong source',
+          }),
         ],
         listRunEvents: async () => [],
       },
@@ -105,6 +110,7 @@ describe('Product Work list projection', () => {
         updated_at: latestRun.updatedAt,
         result_summary: 'Done',
         result_capture_status: 'present',
+        runtime_models: ['test-model'],
       },
     });
   });

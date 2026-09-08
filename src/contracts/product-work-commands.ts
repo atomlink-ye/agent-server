@@ -77,6 +77,10 @@ export const LatestWorkRunSummarySchema = z
       'redacted',
       'not_captured',
     ]),
+    // A WorkRun can coordinate more than one technical Run. Keep the actual
+    // models as a separate additive observation rather than pretending the
+    // WorkRun itself has one runtime identity.
+    runtime_models: z.array(z.string().min(1).max(256)).max(256).optional(),
   })
   .strict();
 

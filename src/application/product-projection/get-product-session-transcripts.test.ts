@@ -130,6 +130,7 @@ describe('GetProductSessionTranscripts', () => {
       source_refs: { task_id: rootTaskId },
     });
     expect(session!.summary.entry_count).toBe(2);
+    expect(session!.summary.runtime_models).toEqual(['free-model']);
     expect(session!.entries.map((entry) => entry.ordinal)).toEqual([1, 2]);
     expect(session!.entries.map((entry) => entry.kind)).toEqual([
       'lifecycle',

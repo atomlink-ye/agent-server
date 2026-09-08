@@ -7,6 +7,8 @@ import { ObservePane } from './ObservePane';
 
 const listWorks = vi.fn();
 const loadSessionTranscripts = vi.fn();
+const loadCoworkers = vi.fn();
+const loadCoworkerProfile = vi.fn();
 
 vi.mock('../work/clients/work-client', () => ({
   workClient: { list: (...args: unknown[]) => listWorks(...args) },
@@ -14,6 +16,10 @@ vi.mock('../work/clients/work-client', () => ({
 vi.mock('../run-trace/run-trace-gateway', () => ({
   loadSessionTranscripts: (...args: unknown[]) =>
     loadSessionTranscripts(...args),
+}));
+vi.mock('../agents/agents-gateway', () => ({
+  loadCoworkers: () => loadCoworkers(),
+  loadCoworkerProfile: (id: string) => loadCoworkerProfile(id),
 }));
 
 (
@@ -37,11 +43,19 @@ const WORK_ITEM = {
     updated_at: '2026-01-02T00:00:00.000Z',
     result_summary: 'Report drafted.',
     result_capture_status: 'present' as const,
+    runtime_models: ['gpt-5.6-terra'],
   },
 };
 
-it('lists traced Work, resolves participating Agents, and filters by Agent', async () => {
+it('lists traced Work, keeps trace Workers visible, and filters by the complete Coworker roster', async () => {
   listWorks.mockResolvedValue({ works: [WORK_ITEM], next_cursor: null });
+  loadCoworkers.mockResolvedValue([
+    { id: 'agent-a', displayName: 'Report Owner' },
+    { id: 'agent-b', displayName: 'No Capability Coworker' },
+  ]);
+  loadCoworkerProfile.mockImplementation(async (id: string) => ({
+    workCatalog: id === 'agent-a' ? [{ definitionId: 'definition-1' }] : [],
+  }));
   loadSessionTranscripts.mockResolvedValue({
     work_id: 'work-1',
     work_run_id: 'run-1',
@@ -85,6 +99,7 @@ it('lists traced Work, resolves participating Agents, and filters by Agent', asy
     const list = host.querySelector('[data-testid="observe-list"]');
     expect(list?.textContent).toContain('Draft the quarterly report');
     expect(list?.textContent).toContain('Report Writer');
+    expect(list?.textContent).toContain('Model: gpt-5.6-terra');
 
     const agentSelect = host.querySelector<HTMLSelectElement>(
       '[aria-label="Filter by Agent"]',
@@ -92,10 +107,13 @@ it('lists traced Work, resolves participating Agents, and filters by Agent', asy
     expect(agentSelect).not.toBeNull();
     expect(
       Array.from(agentSelect!.options).map((option) => option.textContent),
-    ).toContain('Report Writer');
+    ).toContain('Report Owner');
+    expect(
+      Array.from(agentSelect!.options).map((option) => option.textContent),
+    ).toContain('No Capability Coworker');
 
     await act(async () => {
-      agentSelect!.value = 'Report Writer';
+      agentSelect!.value = 'agent-a';
       agentSelect!.dispatchEvent(new Event('change', { bubbles: true }));
       await Promise.resolve();
     });
@@ -110,6 +128,7 @@ it('lists traced Work, resolves participating Agents, and filters by Agent', asy
 
 it('shows an empty-filter placeholder when no traced Run matches', async () => {
   listWorks.mockResolvedValue({ works: [WORK_ITEM], next_cursor: null });
+  loadCoworkers.mockResolvedValue([]);
   loadSessionTranscripts.mockResolvedValue({
     work_id: 'work-1',
     work_run_id: 'run-1',

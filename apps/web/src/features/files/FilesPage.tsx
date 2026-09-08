@@ -79,6 +79,8 @@ export function FilesPage() {
   const [viewerMode, setViewerMode] = useState<'markdown' | 'source'>(
     'markdown',
   );
+  const [autoAdvanced, setAutoAdvanced] = useState(false);
+  const autoAdvanceAttempts = useRef<Set<string>>(new Set());
   const fileRequest = useRef(0);
 
   useEffect(() => {
@@ -175,6 +177,49 @@ export function FilesPage() {
     }
     return result;
   }, [conversations, coworkers, works]);
+  // Agent and Relationship (agent_user) scopes describe the same coworker
+  // and are near-always shown together, so the sidebar renders them as one
+  // grouped row with a compact scope toggle instead of two stacked rows.
+  const listGroups = useMemo<
+    readonly (
+      | { readonly type: 'single'; readonly choice: ScopeChoice }
+      | {
+          readonly type: 'agent';
+          readonly agentChoice: ScopeChoice;
+          readonly relationshipChoice: ScopeChoice | null;
+        }
+    )[]
+  >(() => {
+    const groups: (
+      | { type: 'single'; choice: ScopeChoice }
+      | {
+          type: 'agent';
+          agentChoice: ScopeChoice;
+          relationshipChoice: ScopeChoice | null;
+        }
+    )[] = [];
+    const consumed = new Set<string>();
+    for (const choice of choices) {
+      if (consumed.has(choice.key)) continue;
+      if (choice.kind === 'Agent' && choice.agent) {
+        const relationshipChoice =
+          choices.find((c) => c.key === `agent-user:${choice.agent!.id}`) ??
+          null;
+        consumed.add(choice.key);
+        if (relationshipChoice) consumed.add(relationshipChoice.key);
+        groups.push({ type: 'agent', agentChoice: choice, relationshipChoice });
+        continue;
+      }
+      if (choice.kind === 'Relationship') continue;
+      groups.push({ type: 'single', choice });
+    }
+    for (const choice of choices) {
+      if (choice.kind === 'Relationship' && !consumed.has(choice.key)) {
+        groups.push({ type: 'single', choice });
+      }
+    }
+    return groups;
+  }, [choices]);
   const requestedWorkChoice = resultRoute
     ? (choices.find(
         (choice) => choice.key === `work:${resultRoute.workId}`,
@@ -248,6 +293,32 @@ export function FilesPage() {
     selected.key,
     unavailableCoworkerRoute,
   ]);
+
+  useEffect(() => {
+    // The default landing scope is Workspace, but Workspace-scoped context
+    // entries are often never written in a given deployment (everything
+    // lives under Agent/Work scope instead). Rather than strand the user on
+    // a permanently empty default, walk candidate scopes (Agent, then Work)
+    // until one actually has files. This only runs before the user has made
+    // any explicit scope choice of their own, and never during an explicit
+    // Work-result or Coworker-file route.
+    if (autoAdvanced || resultRoute || coworkerRoute || !listing) return;
+    if (listing.entries.length > 0) {
+      setAutoAdvanced(true);
+      return;
+    }
+    autoAdvanceAttempts.current.add(selected.key);
+    const next = choices.find(
+      (choice) =>
+        (choice.kind === 'Agent' || choice.kind === 'Work') &&
+        !autoAdvanceAttempts.current.has(choice.key),
+    );
+    if (next) {
+      setSelectedKey(next.key);
+    } else {
+      setAutoAdvanced(true);
+    }
+  }, [autoAdvanced, resultRoute, coworkerRoute, listing, choices, selected.key]);
 
   useEffect(() => {
     if (!resultRoute || !selectedWorkId) return;
@@ -407,6 +478,7 @@ export function FilesPage() {
   }
 
   function selectScope(key: string): void {
+    setAutoAdvanced(true);
     setSelectedKey(key);
     const choice = choices.find((item) => item.key === key);
     if (
@@ -489,21 +561,66 @@ export function FilesPage() {
           </div>
         </div>
         <div className="files-scope-list">
-          {choices.map((choice) => (
-            <button
-              type="button"
-              key={choice.key}
-              data-active={
-                !showingCoworkerRouteState && choice.key === selected.key
-                  ? 'true'
-                  : 'false'
-              }
-              onClick={() => selectScope(choice.key)}
-            >
-              <small>{choice.kind}</small>
-              <strong>{choice.label}</strong>
-            </button>
-          ))}
+          {listGroups.map((group) => {
+            if (group.type === 'single') {
+              const choice = group.choice;
+              const active =
+                !showingCoworkerRouteState && choice.key === selected.key;
+              const showMeta =
+                choice.kind.toLowerCase() !== choice.label.toLowerCase();
+              return (
+                <button
+                  type="button"
+                  key={choice.key}
+                  data-active={active ? 'true' : 'false'}
+                  onClick={() => selectScope(choice.key)}
+                >
+                  <span className="files-scope-title">{choice.label}</span>
+                  {showMeta ? (
+                    <span className="files-scope-meta">{choice.kind}</span>
+                  ) : null}
+                </button>
+              );
+            }
+            const { agentChoice, relationshipChoice } = group;
+            return (
+              <div className="files-scope-agent" key={agentChoice.key}>
+                <span className="files-scope-title">{agentChoice.label}</span>
+                <div
+                  className="files-scope-agent-tabs"
+                  role="group"
+                  aria-label={`${agentChoice.label} scope`}
+                >
+                  <button
+                    type="button"
+                    data-active={
+                      !showingCoworkerRouteState &&
+                      agentChoice.key === selected.key
+                        ? 'true'
+                        : 'false'
+                    }
+                    onClick={() => selectScope(agentChoice.key)}
+                  >
+                    Agent
+                  </button>
+                  {relationshipChoice ? (
+                    <button
+                      type="button"
+                      data-active={
+                        !showingCoworkerRouteState &&
+                        relationshipChoice.key === selected.key
+                          ? 'true'
+                          : 'false'
+                      }
+                      onClick={() => selectScope(relationshipChoice.key)}
+                    >
+                      You + Agent
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </aside>
 
@@ -619,10 +736,10 @@ export function FilesPage() {
                     }
                     onClick={() => openFile(entry.path)}
                   >
-                    <strong>{entry.path}</strong>
-                    <small>
+                    <span className="files-scope-title">{entry.path}</span>
+                    <span className="files-scope-meta">
                       v{entry.currentVersion} · {shortHash(entry.contentSha256)}
-                    </small>
+                    </span>
                   </button>
                 ))}
               </div>
@@ -649,16 +766,13 @@ export function FilesPage() {
                     </p>
                   </div>
                 ) : !visibleFile ? (
-                  <div className="work-main-empty">
-                    <span className="work-main-icon">▱</span>
-                    <h1>
+                  <div className="files-viewer-idle">
+                    <p>
                       {fileState === 'loading'
                         ? 'Loading file…'
-                        : 'Choose a file'}
-                    </h1>
-                    <p>
-                      This surface shows ContextFS product facts, never a
-                      provider cwd.
+                        : listing?.entries.length
+                          ? 'Choose a file from the list.'
+                          : 'No files in this scope yet.'}
                     </p>
                   </div>
                 ) : (

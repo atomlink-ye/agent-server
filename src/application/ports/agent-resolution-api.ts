@@ -17,6 +17,8 @@ export type ResolvedAgentVersion = Readonly<{
   readonly definitionId?: string;
   /** Agent resource owner; distinct from the actor executing this turn. */
   readonly agentOwner?: ResourceOwner;
+  /** The Computer namespace this Agent runs under; null is the shared default. */
+  readonly computerId?: string | null;
   readonly instructions: string;
   readonly modelPolicyRef: ModelPolicyRef;
   readonly proposalLimit?: number;

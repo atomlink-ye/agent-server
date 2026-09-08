@@ -310,10 +310,36 @@ describe('ExecutionRuntimeChatTurnProvider', () => {
     });
 
     expect(creator.calls[0]?.configuration.cwd).toBe(
-      '/tmp/recording/agent-definition-1',
+      '/tmp/recording/default/agent-definition-1',
     );
     expect(creator.calls[1]?.configuration.cwd).toBe(
-      '/tmp/recording/agent-definition-2',
+      '/tmp/recording/default/agent-definition-2',
+    );
+  });
+
+  it('places an Agent bound to a Computer under that Computer namespace instead of default', async () => {
+    const creator = new RecordingDesiredSpec([
+      runtimeSession('runtime-session-1'),
+    ]);
+    const provider = new ExecutionRuntimeChatTurnProvider(
+      creator,
+      new RecordingTurnExecutor(),
+      recordingConfiguration,
+    );
+
+    await provider.runTurn({
+      ...turnIdentity('agent-definition-1', 'agent-version-1'),
+      brain: chatBrain({
+        agentDefinitionId: 'agent-definition-1',
+        computerId: 'computer-abc',
+      }),
+      messages: [
+        { authorType: 'principal', authorId: 'principal-1', body: 'hello' },
+      ],
+    });
+
+    expect(creator.calls[0]?.configuration.cwd).toBe(
+      '/tmp/recording/computer-abc/agent-definition-1',
     );
   });
 
@@ -633,6 +659,7 @@ function chatBrain(
     agentHome?: Record<string, unknown>;
     toolRefs?: readonly string[];
     actor?: { readonly type: string; readonly id: string };
+    computerId?: string | null;
   } = {},
 ): ResolvedChatBrain {
   const agentDefinitionId = input.agentDefinitionId ?? 'agent-definition-1';
@@ -678,6 +705,7 @@ function chatBrain(
       triggerMessageId,
     },
     agentOwner,
+    computerId: input.computerId ?? null,
     instructions: input.instructions ?? 'Reply concisely.',
     capabilitySummary: input.capabilitySummary ?? {},
     agentHome: input.agentHome ?? {},

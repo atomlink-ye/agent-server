@@ -8,4 +8,8 @@ export interface ComputerRepository {
     readonly workspaceId: string;
     readonly id: string;
   }): Promise<Computer | null>;
+  listByWorkspace(input: {
+    readonly tenantId: string;
+    readonly workspaceId: string;
+  }): Promise<readonly Computer[]>;
 }

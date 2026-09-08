@@ -31,6 +31,7 @@ import { registerAgentRoutes } from '../entrypoints/api/routes/agents.js';
 import { registerWorkerRoutes } from '../entrypoints/api/routes/workers.js';
 import { registerAgentProfileRoute } from '../entrypoints/api/routes/agent-profile.js';
 import { registerAgentWorkCatalogRoute } from '../entrypoints/api/routes/agent-work-catalog.js';
+import { registerComputerRoutes } from '../entrypoints/api/routes/computers.js';
 import { registerCoworkerAuthoringRoute } from '../entrypoints/api/routes/coworker-authoring.js';
 import { registerEnvironmentRoutes } from '../entrypoints/api/routes/environments.js';
 import { registerProductWorkDefinitionRoutes } from '../entrypoints/api/routes/product-work-definitions.js';
@@ -38,6 +39,7 @@ import { registerSkillRoutes } from '../entrypoints/api/routes/skills.js';
 import { registerTeamRoutes } from '../entrypoints/api/routes/teams.js';
 import { LocalSkillCatalog } from '../infrastructure/filesystem/local-skill-catalog.js';
 import { PostgresAgentHomeRepository } from '../infrastructure/postgres/postgres-agent-home-repository.js';
+import { PostgresComputerRepository } from '../infrastructure/postgres/postgres-computer-repository.js';
 import { PostgresAgentRegistry } from '../infrastructure/postgres/postgres-agent-registry.js';
 import { PostgresWorkerRegistry } from '../infrastructure/postgres/postgres-worker-registry.js';
 import { PostgresConversationRepository } from '../infrastructure/postgres/postgres-conversation-repository.js';
@@ -114,6 +116,7 @@ export async function createResourceModule(
   });
 
   const agentRegistry = new PostgresAgentRegistry(options.database);
+  const computerRepository = new PostgresComputerRepository(options.database);
   const workerRegistry = new PostgresWorkerRegistry(options.database);
   const invokableRepository = new PostgresInvokableRepository(options.database);
   const environmentRegistry = new PostgresEnvironmentRegistry(options.database);
@@ -131,6 +134,7 @@ export async function createResourceModule(
   const agentResolutionApi = new ResolveAgentVersion(
     agentRegistry,
     skillCatalog,
+    agentRegistry,
   );
   const workerResolutionApi = new ResolveWorkerVersion(
     workerRegistry,
@@ -241,9 +245,11 @@ export async function createResourceModule(
           ? { coworkerProvisioning: configuredCoworkerProvisioning }
           : {}),
       });
+      registerComputerRoutes(app, { config, computerRepository });
       registerCoworkerAuthoringRoute(app, {
         config,
         agentRegistry,
+        computerRepository,
         ...(configuredCoworkerProvisioning
           ? { coworkerProvisioning: configuredCoworkerProvisioning }
           : {}),

@@ -33,6 +33,16 @@ export class ResolveAgentVersion implements AgentResolutionApi {
   public constructor(
     private readonly managed: CanonicalAgentVersionRead,
     private readonly skillCatalog: SkillCatalogPort,
+    /**
+     * Optional: narrow test/runtime shims for `managed` predate the Computer
+     * assignment and do not carry a definition lookup. Where absent, every
+     * resolution keeps returning the shared default namespace exactly as
+     * before instead of failing closed.
+     */
+    private readonly definitions?: Pick<
+      ManagedAgentDefinitionRead,
+      'findManagedDefinitionByTenant'
+    >,
   ) {}
 
   public async resolvePublished(
@@ -47,11 +57,24 @@ export class ResolveAgentVersion implements AgentResolutionApi {
     if (managedVersion) {
       if (managedVersion.status !== 'published') return null;
       const identity = resolvedIdentity(managedVersion);
+      // The Computer assignment lives on the Agent definition, not the
+      // immutable version package, so it is a separate read rather than
+      // something a version snapshot could carry.
+      const computerId =
+        identity.definitionId && this.definitions
+          ? ((
+              await this.definitions.findManagedDefinitionByTenant({
+                tenantId: scope.tenantId,
+                definitionId: identity.definitionId,
+              })
+            )?.computerId ?? null)
+          : null;
       if (options.resolveExtensions === false) {
         return {
           source: 'managed',
           id: managedVersion.id,
           ...identity,
+          computerId,
           instructions: managedVersion.package.spec.instructions,
           modelPolicyRef: readModelPolicyRef(managedVersion),
           proposalLimit: managedVersion.package.spec.memory?.proposalLimit ?? 0,
@@ -89,6 +112,7 @@ export class ResolveAgentVersion implements AgentResolutionApi {
         source: 'managed',
         id: managedVersion.id,
         ...identity,
+        computerId,
         instructions: managedVersion.package.spec.instructions,
         modelPolicyRef: readModelPolicyRef(managedVersion),
         proposalLimit: managedVersion.package.spec.memory?.proposalLimit ?? 0,

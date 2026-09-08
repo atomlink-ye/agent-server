@@ -37,20 +37,18 @@
 .execution-transcript__body {
   border: 1px solid var(--trace-line);
   border-radius: 8px;
-  display: grid;
-  grid-template-columns: 270px minmax(0, 1fr);
+  display: block;
   margin-top: 16px;
   min-height: 360px;
   overflow: hidden;
 }
 .execution-transcript__attempts {
   background: var(--trace-wash);
-  border-right: 1px solid var(--trace-line);
-  display: grid;
-  align-content: start;
-  max-height: 620px;
-  overflow: auto;
-  padding: 8px;
+  border-bottom: 1px solid var(--trace-line);
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 9px 12px;
 }
 .execution-transcript__attempts button {
   background: transparent;
@@ -59,9 +57,11 @@
   color: var(--trace-ink);
   cursor: pointer;
   display: grid;
+  flex: 0 0 auto;
   font: inherit;
   gap: 3px;
-  padding: 10px;
+  min-width: 150px;
+  padding: 8px 10px;
   text-align: left;
 }
 .execution-transcript__attempts button + button {
@@ -89,9 +89,7 @@
 }
 .execution-transcript__detail {
   min-width: 0;
-  padding: 16px 18px 24px;
-  max-height: 620px;
-  overflow: auto;
+  padding: 20px clamp(18px, 3vw, 36px) 32px;
 }
 .execution-transcript__detail > header {
   align-items: start;
@@ -111,6 +109,9 @@
   color: var(--trace-muted);
   font-size: 9px;
 }
+.execution-transcript__selected-header {
+  gap: 16px;
+}
 .execution-transcript__notice {
   color: var(--trace-muted);
   font-size: 10px;
@@ -121,6 +122,7 @@
   display: grid;
   gap: 22px;
   margin-top: 16px;
+  max-width: 920px;
 }
 .execution-transcript__events h3 {
   color: var(--trace-muted);
@@ -134,6 +136,7 @@
 .execution-transcript__timeline {
   display: grid;
   gap: 8px;
+  max-width: 920px;
 }
 .execution-transcript__messages article,
 .execution-transcript__answer article,
@@ -246,15 +249,8 @@
   padding: 24px;
 }
 @media (max-width: 920px) {
-  .execution-transcript__body {
-    grid-template-columns: 1fr;
-  }
   .execution-transcript__attempts {
-    border-bottom: 1px solid var(--trace-line);
-    border-right: 0;
-    grid-auto-columns: minmax(180px, 1fr);
-    grid-auto-flow: column;
-    overflow-x: auto;
+    padding-inline: 8px;
   }
 }
 
@@ -263,6 +259,7 @@
   border: 1px solid var(--trace-soft-line);
   border-radius: 6px;
   margin: 12px 0;
+  max-width: 920px;
   padding: 12px;
 }
 .execution-transcript__summary dl {

@@ -213,10 +213,10 @@ export function SessionTranscripts({
       <div className="execution-transcript__heading">
         <div>
           <p className="work-shell-kicker">Session transcripts</p>
-          <h2>Session conversation and execution activity</h2>
+          <h2>What the Workers did</h2>
           <p>
-            This Work Run is {humanize(productState)}. Captured messages and
-            activity are grouped by Worker.
+            This Work Run is {humanize(productState)}. Choose a Worker to see
+            its captured conversation, completed activity, and any block.
           </p>
         </div>
         <span>
@@ -226,7 +226,7 @@ export function SessionTranscripts({
       <div className="execution-transcript__body">
         <nav
           className="execution-transcript__attempts"
-          aria-label="Sessions"
+          aria-label="Workers"
           data-testid="session-role-nav"
         >
           {data.sessions.map((session) => {
@@ -253,10 +253,14 @@ export function SessionTranscripts({
             );
           })}
         </nav>
-        <div className="execution-transcript__detail" aria-live="polite">
+        <div
+          className="execution-transcript__detail"
+          aria-live="polite"
+          data-testid="transcript-reading-column"
+        >
           {selected ? (
             <>
-              <header>
+              <header className="execution-transcript__selected-header">
                 <div>
                   <strong>{selected.label.name}</strong>
                   <span>
@@ -266,7 +270,12 @@ export function SessionTranscripts({
                     Session {humanize(selected.label.status)}
                   </span>
                 </div>
-                <span>{selected.summary.entry_count} entries</span>
+                <span>
+                  {selected.summary.entry_count} entries ·{' '}
+                  {selected.summary.last_timestamp
+                    ? formatTimestamp(selected.summary.last_timestamp)
+                    : 'no activity captured'}
+                </span>
               </header>
               {agentAttempts.length ? (
                 <nav

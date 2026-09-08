@@ -1,18 +1,24 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import type { WorkListItem } from '@atomlink-ye/agent-server/product-contract';
 
 import {
+  formatWorkListTime,
   latestRunSummary,
   productStatePresentation,
 } from '../work/components/work-presentation';
-import { useObserveAgentParticipation } from './queries/use-observe-agent-participation';
+import {
+  deriveObserveAggregate,
+  type ObserveAggregate,
+} from './observe-aggregate';
+import { useObserveRunMetrics } from './queries/use-observe-run-metrics';
 import {
   useObserveEntries,
   type ObserveEntry,
 } from './queries/use-observe-entries';
+import { stripMarkdownPreview } from './strip-markdown-preview';
 
-const STATUS_OPTIONS: readonly WorkListItem['product_state'][] = [
+export const STATUS_OPTIONS: readonly WorkListItem['product_state'][] = [
   'running',
   'needs_you',
   'complete',
@@ -20,7 +26,18 @@ const STATUS_OPTIONS: readonly WorkListItem['product_state'][] = [
   'not_captured',
 ];
 
-export function ObservePane() {
+export function ObservePane({
+  onAggregateChange,
+}: {
+  /** Lets ObservePage render an aggregate dashboard for the currently
+   * filtered list without a second, duplicate fetch of the same traces --
+   * ObservePane already owns the single fetch of entries + per-Run
+   * metrics. */
+  readonly onAggregateChange?: (
+    aggregate: ObserveAggregate,
+    resolving: boolean,
+  ) => void;
+}) {
   const [searchParams, setSearchParams] = useSearchParams();
   const { status, entries, refresh, autoRefresh, setAutoRefresh } =
     useObserveEntries();
@@ -29,7 +46,7 @@ export function ObservePane() {
     () => entries.filter((entry) => entry.latest_run_summary !== null),
     [entries],
   );
-  const { participation } = useObserveAgentParticipation(traced);
+  const { metrics, resolving } = useObserveRunMetrics(traced);
 
   // Filter options come from the participant labels a Run's own trace
   // already reports, not the Coworker roster: a Coworker's display name and
@@ -38,10 +55,10 @@ export function ObservePane() {
   // value that never matches any traced Run.
   const agentNames = useMemo(() => {
     const seen = new Set<string>();
-    for (const names of participation.values())
-      for (const name of names) seen.add(name);
+    for (const entryMetrics of metrics.values())
+      for (const name of entryMetrics.agentNames) seen.add(name);
     return [...seen].sort();
-  }, [participation]);
+  }, [metrics]);
 
   const selectedWorkId = searchParams.get('work');
   const agentFilter = searchParams.get('agent');
@@ -51,12 +68,16 @@ export function ObservePane() {
     return traced.filter((entry) => {
       if (statusFilter && entry.product_state !== statusFilter) return false;
       if (agentFilter) {
-        const names = participation.get(entry.id) ?? [];
+        const names = metrics.get(entry.id)?.agentNames ?? [];
         if (!names.includes(agentFilter)) return false;
       }
       return true;
     });
-  }, [traced, statusFilter, agentFilter, participation]);
+  }, [traced, statusFilter, agentFilter, metrics]);
+
+  useEffect(() => {
+    onAggregateChange?.(deriveObserveAggregate(filtered, metrics), resolving);
+  }, [filtered, metrics, resolving, onAggregateChange]);
 
   const updateFilter = (key: 'agent' | 'status', value: string): void => {
     const next = new URLSearchParams(searchParams);
@@ -192,7 +213,8 @@ export function ObservePane() {
             <ObserveListRow
               key={entry.id}
               entry={entry}
-              agentNames={participation.get(entry.id) ?? []}
+              agentNames={metrics.get(entry.id)?.agentNames ?? []}
+              durationMs={metrics.get(entry.id)?.durationMs ?? null}
               selected={selectedWorkId === entry.id}
               search={searchParams}
             />
@@ -206,11 +228,13 @@ export function ObservePane() {
 function ObserveListRow({
   entry,
   agentNames,
+  durationMs,
   selected,
   search,
 }: {
   readonly entry: ObserveEntry;
   readonly agentNames: readonly string[];
+  readonly durationMs: number | null;
   readonly selected: boolean;
   readonly search: URLSearchParams;
 }) {
@@ -233,7 +257,17 @@ function ObserveListRow({
         <span className="work-list-copy">
           <strong>{entry.title}</strong>
           <span className="work-list-description">
-            {latestRunSummary(entry)}
+            {stripMarkdownPreview(latestRunSummary(entry))}
+          </span>
+          <span className="observe-row-meta">
+            <span className="observe-row-timestamp">
+              {formatWorkListTime(entry.updated_at)}
+            </span>
+            {durationMs !== null ? (
+              <span className="observe-row-duration">
+                {formatRowDurationMs(durationMs)}
+              </span>
+            ) : null}
           </span>
           {agentNames.length ? (
             <span className="observe-agent-chip">{agentNames.join(', ')}</span>
@@ -252,6 +286,15 @@ function ObserveListRow({
       </Link>
     </li>
   );
+}
+
+/** A compact row-level duration label; mirrors ObserveDetail's headline
+ * formatting but stays terse for the navigation index. */
+function formatRowDurationMs(ms: number): string {
+  const totalSeconds = Math.round(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
 }
 
 export default ObservePane;

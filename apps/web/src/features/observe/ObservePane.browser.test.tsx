@@ -6,15 +6,14 @@ import { expect, it, vi } from 'vitest';
 import { ObservePane } from './ObservePane';
 
 const listWorks = vi.fn();
-const sessionTranscripts = vi.fn();
+const loadSessionTranscripts = vi.fn();
 
 vi.mock('../work/clients/work-client', () => ({
   workClient: { list: (...args: unknown[]) => listWorks(...args) },
 }));
-vi.mock('../work/clients/work-run-client', () => ({
-  workRunClient: {
-    sessionTranscripts: (...args: unknown[]) => sessionTranscripts(...args),
-  },
+vi.mock('../run-trace/run-trace-gateway', () => ({
+  loadSessionTranscripts: (...args: unknown[]) =>
+    loadSessionTranscripts(...args),
 }));
 
 (
@@ -43,18 +42,31 @@ const WORK_ITEM = {
 
 it('lists traced Work, resolves participating Agents, and filters by Agent', async () => {
   listWorks.mockResolvedValue({ works: [WORK_ITEM], next_cursor: null });
-  sessionTranscripts.mockResolvedValue([
-    {
-      label: {
-        name: 'Report Writer',
-        role: null,
-        status: 'idle',
-        status_basis: 'agent_runs',
-        source_refs: {},
+  loadSessionTranscripts.mockResolvedValue({
+    work_id: 'work-1',
+    work_run_id: 'run-1',
+    capture_scope: 'safe_run_events',
+    sessions: [
+      {
+        label: {
+          name: 'Report Writer',
+          role: null,
+          status: 'idle',
+          status_basis: 'agent_runs',
+          source_refs: {},
+        },
+        summary: {
+          status: 'idle',
+          entry_count: 1,
+          last_timestamp: null,
+          last_meaningful: null,
+          work_refs: [],
+          truncated: false,
+        },
+        entries: [],
       },
-      summary: { entry_count: 1, last_meaningful: null },
-    },
-  ]);
+    ],
+  });
 
   const host = document.createElement('div');
   document.body.append(host);
@@ -98,7 +110,12 @@ it('lists traced Work, resolves participating Agents, and filters by Agent', asy
 
 it('shows an empty-filter placeholder when no traced Run matches', async () => {
   listWorks.mockResolvedValue({ works: [WORK_ITEM], next_cursor: null });
-  sessionTranscripts.mockResolvedValue([]);
+  loadSessionTranscripts.mockResolvedValue({
+    work_id: 'work-1',
+    work_run_id: 'run-1',
+    capture_scope: 'safe_run_events',
+    sessions: [],
+  });
 
   const host = document.createElement('div');
   document.body.append(host);

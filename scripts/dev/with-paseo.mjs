@@ -51,6 +51,10 @@ const paseoEnvironmentNames = [
   'PASEO_BIN',
   'OPENCODE_BIN',
   'CLAUDE_CODE_BIN',
+  // Claude Code reads its login from the Keychain, which an isolated HOME
+  // cannot reach. A `setup-token` value carries `user:inference` only, so the
+  // runtime can hold one without touching the operator's own session.
+  'CLAUDE_CODE_OAUTH_TOKEN',
   'CODEX_BIN',
   // Host-authenticated Codex. The daemon environment is the isolated safe set
   // plus the names listed here, so CODEX_HOME must be listed for a developer's

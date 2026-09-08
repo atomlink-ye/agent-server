@@ -186,6 +186,7 @@ const ConfigSchema = z
      * makes the Agent's provider environment the platform's, not a person's.
      */
     PASEO_PROVIDER_HOME: z.string().trim().min(1).optional(),
+    CLAUDE_CODE_OAUTH_TOKEN: z.string().trim().min(1).optional(),
     PASEO_RUNTIME_CELL_ROOT: z.string().min(1).default('.local/runtime-cells'),
     AGENT_SERVER_SKILL_REGISTRY_ROOT: z
       .string()
@@ -353,6 +354,12 @@ export type AppConfig = Readonly<{
     codexHome?: string;
     /** Home directory provider processes run with, when the runtime prepared one. */
     providerHome?: string;
+    /**
+     * Claude Code login for provider sessions. Claude keeps its credential in
+     * the Keychain, which `providerHome` cannot reach, so an isolated session
+     * needs the token handed to it explicitly.
+     */
+    claudeOauthToken?: string;
     workspaceTitle: string;
     model?: string;
     connectTimeoutMs: number;
@@ -483,6 +490,9 @@ export function loadConfig(
               parsed.data.PASEO_PROVIDER_HOME,
             ),
           }
+        : {}),
+      ...(parsed.data.CLAUDE_CODE_OAUTH_TOKEN
+        ? { claudeOauthToken: parsed.data.CLAUDE_CODE_OAUTH_TOKEN }
         : {}),
       ...(parsed.data.PASEO_MODEL ? { model: parsed.data.PASEO_MODEL } : {}),
       connectTimeoutMs: parsed.data.PASEO_CONNECT_TIMEOUT_MS,

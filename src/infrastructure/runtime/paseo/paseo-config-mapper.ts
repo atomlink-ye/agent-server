@@ -42,11 +42,20 @@ export function mapPaseoConfig(
  * the honest behaviour for an operator who chose to run it that way.
  */
 function sessionEnvironment(
-  paseo: Pick<AppConfig['paseo'], 'codexHome' | 'providerHome'>,
+  paseo: Pick<
+    AppConfig['paseo'],
+    'codexHome' | 'providerHome' | 'claudeOauthToken'
+  >,
 ): Pick<PaseoRuntimeProviderOptions, 'sessionEnvironment'> {
   const environment = {
     ...(paseo.codexHome ? { CODEX_HOME: paseo.codexHome } : {}),
     ...(paseo.providerHome ? { HOME: paseo.providerHome } : {}),
+    // Claude Code keeps its login in the Keychain, which the isolated HOME
+    // above cannot reach. Without this the session starts but every turn
+    // fails with runtime_provider_unavailable.
+    ...(paseo.claudeOauthToken
+      ? { CLAUDE_CODE_OAUTH_TOKEN: paseo.claudeOauthToken }
+      : {}),
   };
   return Object.keys(environment).length > 0
     ? { sessionEnvironment: environment }

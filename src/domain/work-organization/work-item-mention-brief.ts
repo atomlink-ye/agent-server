@@ -16,6 +16,7 @@
 
 /** The tool an agent uses to take a WorkItem; see built-in-skills. */
 const CLAIM_TOOL_REF = 'agent-server/work-item-claim';
+const STATUS_TOOL_REF = 'agent-server/work-item-status';
 
 // Enough to carry the point, short enough that the instructions below stay the
 // most prominent thing in the message.
@@ -60,7 +61,9 @@ export function workItemMentionBrief(input: WorkItemMentionBriefInput): string {
   lines.push(
     `To take this work, call ${CLAIM_TOOL_REF} with {"work_item_id":"${input.workItem.id}"}. ` +
       'Claiming is atomic: if it returns that someone else already claimed it, ' +
-      'they are on it and you must not start.' +
+      'they are on it and you must not start. Claiming does not set the status — ' +
+      `call ${STATUS_TOOL_REF} with {"status":"in_progress"} when you start; ` +
+      'if your brief says to wait, leave it in todo.' +
       (onBoard
         ? ' On a successful claim, if this board declares a Doing column, the WorkItem moves there too.'
         : ''),

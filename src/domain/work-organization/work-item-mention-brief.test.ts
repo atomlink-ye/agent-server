@@ -89,8 +89,11 @@ describe('workItemMentionBrief', () => {
       quote: '文'.repeat(4000),
     });
     // English prose is longer than the Chinese it replaced; the bound still
-    // holds the brief to a size an agent reads in one turn.
-    expect(body.length).toBeLessThan(1500);
+    // holds the brief to a size an agent reads in one turn. It rose from 1500
+    // when claiming stopped implying `in_progress`: the wake now has to say who
+    // owns that transition, and a sentence an agent must not miss is worth more
+    // than the 30 characters it costs.
+    expect(body.length).toBeLessThan(1600);
     expect(body).toContain('…');
   });
 

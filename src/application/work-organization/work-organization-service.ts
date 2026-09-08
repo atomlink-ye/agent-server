@@ -616,26 +616,12 @@ export class WorkOrganizationService {
     });
     if (!result.workItem) throw new WorkItemClaimConflictError(result.holderId);
 
-    let workItem = result.workItem;
-    if (result.workItem.status === 'todo') {
-      const transitioned = await this.repository.updateWorkItem({
-        ...owner,
-        id: result.workItem.id,
-        status: 'in_progress',
-        now: this.now().toISOString(),
-      });
-      if (!transitioned) throw new WorkItemNotFoundError();
-      workItem = transitioned;
-      await this.repository.createComment({
-        ...owner,
-        id: randomUUID(),
-        workItemId: transitioned.id,
-        authorId: claimantId,
-        body: 'Claimed this task and started working on it.',
-        mentions: [],
-        now: this.now().toISOString(),
-      });
-    }
+    // Claiming says "this is mine now", not "I have started". An agent that
+    // picks up a task may still find it blocked on something its brief told it
+    // to wait for, and a task parked in `todo` is a truthful account of that;
+    // `in_progress` would not be. The agent moves the status itself once it is
+    // actually working, through the same `work-item-status` tool a person uses.
+    const workItem = result.workItem;
     return {
       workItem,
       movedToColumnId: result.movedToColumnId,

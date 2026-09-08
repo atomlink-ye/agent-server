@@ -753,6 +753,11 @@ describe('Cumora-inspired coworker work organization MVE', () => {
     });
     expect(claim.workItem.assigneeId).toBe(researcher.id);
     expect(claim.movedToColumnId).toBe(doing.id);
+    // Claiming is ownership, not progress: the card moves to Doing because a
+    // holder exists, but the status stays where it was. An agent that finds
+    // itself blocked on something its brief told it to wait for should leave a
+    // truthful `todo` behind rather than an `in_progress` nobody is working on.
+    expect(claim.workItem.status).toBe('todo');
     expect(
       (await service.getBoard(accessContext, board.id)).placements[0]?.columnId,
     ).toBe(doing.id);

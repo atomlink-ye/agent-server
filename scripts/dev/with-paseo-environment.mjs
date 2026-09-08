@@ -30,6 +30,14 @@ export const applicationEnvironmentNames = [
   // whose provider keeps the operator's HOME is briefed with that person's
   // skill library no matter where CODEX_HOME points.
   'PASEO_PROVIDER_HOME',
+  // Claude Code's login lives in the macOS Keychain, which it reaches through
+  // the operator's own HOME -- the very thing PASEO_PROVIDER_HOME replaces. So
+  // the isolation above logs Claude out, and the credential has to travel the
+  // other way: the API process passes this token to Paseo per session, exactly
+  // as it does CODEX_HOME. A `claude setup-token` value carries `user:inference`
+  // only and is not the operator's session credential, so the runtime can hold
+  // one without being able to act as that person.
+  'CLAUDE_CODE_OAUTH_TOKEN',
 ];
 
 export function createApplicationEnvironment({

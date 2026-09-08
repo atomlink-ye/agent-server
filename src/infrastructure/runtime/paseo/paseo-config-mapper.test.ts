@@ -48,4 +48,42 @@ describe('mapPaseoConfig session environment', () => {
         .sessionEnvironment,
     ).toEqual({ HOME: '/srv/runtime/home' });
   });
+
+  it('hands Claude its own credential, because the prepared home is the thing that logged it out', () => {
+    expect(
+      mapPaseoConfig(
+        paseoConfig({
+          provider: 'claude',
+          providerHome: '/srv/runtime/home',
+          claudeOauthToken: 'sk-ant-oat01-example',
+        }),
+      ).sessionEnvironment,
+    ).toEqual({
+      HOME: '/srv/runtime/home',
+      CLAUDE_CODE_OAUTH_TOKEN: 'sk-ant-oat01-example',
+    });
+  });
+
+  it('carries the token for every provider, so switching provider is not a change of credential plumbing', () => {
+    expect(
+      mapPaseoConfig(
+        paseoConfig({
+          codexHome: '/srv/runtime/home/.codex',
+          providerHome: '/srv/runtime/home',
+          claudeOauthToken: 'sk-ant-oat01-example',
+        }),
+      ).sessionEnvironment,
+    ).toEqual({
+      CODEX_HOME: '/srv/runtime/home/.codex',
+      HOME: '/srv/runtime/home',
+      CLAUDE_CODE_OAUTH_TOKEN: 'sk-ant-oat01-example',
+    });
+  });
+
+  it('leaves the credential out when the operator configured none, rather than sending an empty one', () => {
+    expect(
+      mapPaseoConfig(paseoConfig({ providerHome: '/srv/runtime/home' }))
+        .sessionEnvironment?.CLAUDE_CODE_OAUTH_TOKEN,
+    ).toBeUndefined();
+  });
 });

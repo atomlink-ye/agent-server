@@ -12,7 +12,8 @@ import {
   resultCaptureLabel,
 } from '../work-presentation';
 import { workRunResultFilePath, workTabPath } from '@/app/routes';
-import { outcomeBody, outcomeHeadline } from './outcome-headline';
+import { outcomeBody } from './outcome-headline';
+import { humanize } from '../work-presentation';
 
 export function OverviewPane({
   data,
@@ -53,15 +54,15 @@ export function OverviewPane({
           {stateView.label}
         </span>
         <div data-testid="outcome-summary">
-          <p className="work-shell-kicker">Run outcome</p>
+          <p className="work-shell-kicker">Result</p>
           <h2>
             {outcome
-              ? outcomeHeadline(outcome)
+              ? 'What this Run completed'
               : resultCaptureLabel(run.work_run.result_capture_status)}
           </h2>
           <p data-testid="attention-basis">{stateView.description}</p>
           {outcomeDocument ? (
-            <div className="work-overview__outcome">
+            <div className="work-overview__outcome" id="run-result">
               <AssistantMarkdown text={outcomeDocument} />
             </div>
           ) : null}
@@ -77,17 +78,54 @@ export function OverviewPane({
                 originConversationId ?? null,
               )}
             >
-              Open this run’s result
+              Open result file
             </a>
           ) : null}
         </div>
       </div>
-      <RunTrace live={live} trace={trace} />
+      <RunJourney trace={trace} />
+      <RunTrace live={live} presentation="record" trace={trace} />
       <RunRoleCards
         workId={data.work.id}
         runId={run.work_run.id}
         originConversationId={originConversationId}
       />
+    </section>
+  );
+}
+
+function RunJourney({
+  trace,
+}: {
+  readonly trace: NonNullable<WorkDetailData['trace']>;
+}) {
+  if (!trace || trace.workItems.size === 0) return null;
+  return (
+    <section className="work-journey" aria-labelledby="work-journey-heading">
+      <div className="work-section-heading">
+        <p className="work-shell-kicker">How it went</p>
+        <h2 id="work-journey-heading">Key steps</h2>
+        <p>Steps are the Work Items and Attempts recorded for this Run.</p>
+      </div>
+      <ol className="work-journey__steps">
+        {[...trace.workItems.values()].map((item) => (
+          <li key={item.id}>
+            <strong>{item.subject}</strong>
+            <ul>
+              {item.attempts.map((attempt) => (
+                <li key={attempt.id}>
+                  <span>
+                    Attempt {attempt.attemptNo} · {humanize(attempt.status)}
+                  </span>
+                  {attempt.resultSummary ? (
+                    <p>{attempt.resultSummary}</p>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </li>
+        ))}
+      </ol>
     </section>
   );
 }
@@ -158,4 +196,4 @@ function RunRoleCards({
   );
 }
 
-export { outcomeBody, outcomeHeadline } from './outcome-headline';
+export { outcomeBody } from './outcome-headline';

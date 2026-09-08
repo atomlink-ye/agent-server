@@ -25,6 +25,7 @@ export function RunTrace({
   onSelectAttempt,
   view,
   onViewChange,
+  presentation = 'workspace',
 }: {
   readonly trace: NormalizedTrace;
   readonly live?: boolean;
@@ -32,6 +33,8 @@ export function RunTrace({
   readonly onSelectAttempt?: (attemptId: string) => void;
   readonly view?: TraceView;
   readonly onViewChange?: (view: TraceView) => void;
+  /** Work detail keeps the evidence in disclosures instead of a second tab bar. */
+  readonly presentation?: 'workspace' | 'record';
 }) {
   const model = useRunTraceViewModel(
     trace,
@@ -49,6 +52,85 @@ export function RunTrace({
     model.inspector.selectedAttempt !== null ||
     (model.state.inspectorMode === 'conversation' &&
       model.inspector.messages.length > 0);
+  if (presentation === 'record')
+    return (
+      <section
+        className="run-trace run-trace--record"
+        id="execution-record"
+        aria-labelledby="run-trace-heading"
+      >
+        <header className="run-trace__header">
+          <div>
+            <p className="run-trace__eyebrow">Execution record</p>
+            <h2 id="run-trace-heading">Everything captured during this Run</h2>
+          </div>
+          <span className={live ? 'run-trace__live' : 'run-trace__historical'}>
+            {live ? 'Updating' : `${trace.events.length} events`}
+          </span>
+        </header>
+        <p className="run-trace__subhead">
+          Open a section when you need the underlying record; no provider output
+          is inferred from these events.
+        </p>
+        <details className="run-trace__record-section">
+          <summary>Event timeline</summary>
+          <div className="run-trace__record-canvas">
+            <Timeline
+              live={live}
+              model={model.timeline}
+              selectedAttemptId={model.state.selectedAttemptId}
+              trace={trace}
+              onSelect={model.selectAttempt}
+              onSelectMessage={model.selectMessage}
+            />
+          </div>
+        </details>
+        <details className="run-trace__record-section">
+          <summary>Collaboration relationships</summary>
+          <div className="run-trace__record-canvas">
+            <MapView
+              model={model.map}
+              selectedAttemptId={model.state.selectedAttemptId}
+              trace={trace}
+              onSelect={model.selectAttempt}
+              onSelectMessage={model.selectMessage}
+            />
+          </div>
+        </details>
+        <details className="run-trace__record-section">
+          <summary>Recorded tool activity ({trace.activities.length})</summary>
+          <div className="run-trace__record-canvas">
+            <Events
+              model={model.events}
+              onSelectAttempt={model.selectAttempt}
+            />
+          </div>
+        </details>
+        {showInspector ? (
+          <div className="run-trace__record-inspector">
+            <Inspector
+              mode={model.state.inspectorMode}
+              model={model.inspector}
+              onMode={model.setInspectorMode}
+            />
+          </div>
+        ) : null}
+        <details
+          className="run-trace__coverage"
+          data-testid="trace-coverage-disclosure"
+        >
+          <summary>What this record includes</summary>
+          <p>
+            This record covers {humanize(trace.coverage.scope)}; excluded
+            execution:{' '}
+            {trace.coverage.excludedExecution.map(humanize).join(', ')}.
+            {recordedFeedbackCount
+              ? ` ${recordedFeedbackCount} recorded feedback edge${recordedFeedbackCount === 1 ? '' : 's'} present.`
+              : ''}
+          </p>
+        </details>
+      </section>
+    );
   return (
     <section className="run-trace" aria-labelledby="run-trace-heading">
       <header className="run-trace__header">

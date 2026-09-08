@@ -208,7 +208,7 @@ async function renderDetail(
   return { host, root };
 }
 
-it('renders the four-tab Work shell and fixture-backed Overview through Product reads only', async () => {
+it('renders a result-first Work shell and fixture-backed Overview through Product reads only', async () => {
   const fetchMock = mockProductReads();
   const { host, root } = await renderDetail();
   try {
@@ -217,9 +217,12 @@ it('renders the four-tab Work shell and fixture-backed Overview through Product 
       [...host.querySelectorAll<HTMLAnchorElement>('.work-tabs a')].map(
         (item) => item.textContent?.trim(),
       ),
-    ).toEqual(['Overview', 'Runs', 'Transcript', 'Artifacts', 'Definition']);
-    expect(host.textContent).toContain('Historical Run Trace');
-    expect(host.textContent).toContain('About this activity record');
+    ).toEqual(['Runs', 'Conversation', 'Files', 'Definition']);
+    expect(host.textContent).toContain(
+      'The result summary is still unavailable.',
+    );
+    expect(host.textContent).toContain('Key steps');
+    expect(host.textContent).toContain('Everything captured during this Run');
     expect(host.textContent).toContain('Start Run');
     expect(host.textContent).not.toContain('Run unavailable');
     for (const excluded of trace.timeline_coverage.excluded_execution)
@@ -264,10 +267,10 @@ it('renders the exact Product DefinitionVersion used by the selected Run', async
     );
     expect(definitionLink?.getAttribute('href')).not.toContain(`run=`);
     // Other tabs should contain run= parameter (stay on the selected Run)
-    const overviewLink = host.querySelector<HTMLAnchorElement>(
-      '.work-tabs a:not([href*="tab="])',
+    const conversationLink = host.querySelector<HTMLAnchorElement>(
+      '.work-tabs a[href*="tab=transcript"]',
     );
-    expect(overviewLink?.getAttribute('href')).toContain(
+    expect(conversationLink?.getAttribute('href')).toContain(
       `run=${selectedRun.id}`,
     );
   } finally {
@@ -337,7 +340,7 @@ it('does not invent a runnable Work when its current DefinitionVersion is missin
   const { host, root } = await renderDetail();
   try {
     expect(host.textContent).toContain(work.work.title);
-    expect(host.textContent).toContain('Historical Run Trace');
+    expect(host.textContent).toContain('Everything captured during this Run');
     expect(host.textContent).toContain(
       'The current Work Definition version could not be loaded, so runnability cannot be determined.',
     );

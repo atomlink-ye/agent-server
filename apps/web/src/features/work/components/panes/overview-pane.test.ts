@@ -1,23 +1,20 @@
 import { describe, expect, it } from 'vitest';
 
-import { outcomeBody, outcomeHeadline } from './overview-pane';
+import { outcomeBody } from './overview-pane';
 
 describe('Work outcome presentation', () => {
-  it('renders a one-line unheaded result once', () => {
-    expect(outcomeHeadline('Done')).toBe('Done');
-    expect(outcomeBody('Done')).toBe('');
+  it('keeps a one-line result as its complete document', () => {
+    expect(outcomeBody('Done')).toBe('Done');
   });
 
-  it('removes the promoted first line from a multi-paragraph unheaded result', () => {
+  it('keeps the first line of a multi-paragraph result', () => {
     const outcome =
       'Investigation complete\n\nThe root cause was a stale binding.';
-    expect(outcomeHeadline(outcome)).toBe('Investigation complete');
-    expect(outcomeBody(outcome)).toBe('The root cause was a stale binding.');
+    expect(outcomeBody(outcome)).toBe(outcome);
   });
 
-  it('removes an explicit Markdown heading from the rendered body', () => {
+  it('keeps an explicit Markdown heading in the rendered result', () => {
     const outcome = '# Final report\n\n- Finding A\n- Finding B';
-    expect(outcomeHeadline(outcome)).toBe('Final report');
-    expect(outcomeBody(outcome)).toBe('- Finding A\n- Finding B');
+    expect(outcomeBody(outcome)).toBe(outcome);
   });
 });

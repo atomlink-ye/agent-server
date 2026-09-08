@@ -138,6 +138,7 @@ export function WorkDetailPage({
             workId={detail.work.id}
             originConversationId={originConversationId}
             definitionVersion={detail.currentDefinitionVersion}
+            runState={detail.run?.work_run.product_state}
           />
           <WorkTabs
             activeTab={activeTab}

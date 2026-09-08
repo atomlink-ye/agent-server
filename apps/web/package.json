@@ -8,7 +8,7 @@
     "build": "vite build",
     "start": "vite preview --host 0.0.0.0 --port 3001 --strictPort",
     "preview": "vite preview --host 0.0.0.0 --port 3001 --strictPort",
-    "check:types": "tsc --noEmit"
+    "check:types": "tsc -p tsconfig.app.json --noEmit"
   },
   "dependencies": {
     "@atomlink-ye/agent-server": "workspace:*",

@@ -4,6 +4,7 @@ import type {
   Conversation,
   ConversationId,
 } from './contracts';
+import { loadCoworkers } from '../agents/agents-gateway';
 import { apiTransport, ApiTransportError } from '../../api/transport';
 
 /**
@@ -113,6 +114,7 @@ export async function loadWorkCard(workId: string): Promise<WorkChatCard> {
 }
 
 export const chatCommands: ChatCommands = {
+  loadCoworkers,
   loadConversations,
   createConversation,
   loadMessages,

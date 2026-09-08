@@ -28,6 +28,7 @@ function singleAgentTrace(): NormalizedTrace {
         actorId: null,
         workItemId: null,
         taskId: 'task-a',
+        rootTaskId: null,
         startedAt: '2026-01-01T00:00:00.000Z',
         endedAt: '2026-01-01T00:05:00.000Z',
       },

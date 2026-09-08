@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, expect, it, vi } from 'vitest';
 
 import { ChatTranscript } from './ChatTranscript';
-import type { ChatMessage, ConversationId } from './contracts';
+import type { ChatMessage, ConversationId } from '../contracts';
 import type { ConversationMessagesState } from '../stores/messages';
 
 vi.mock('../conversations-gateway', async () => {

@@ -232,10 +232,26 @@ it('exposes a bounded projection error and retries only that read', async () => 
           }),
         } as Response);
   });
-  const plan = {
+  const plan: DefinitionPlan = {
     fingerprint: `sha256:${'c'.repeat(64)}`,
-    resolved: { requiredRuntimeCapabilities: ['external_workspace'] },
-  } as DefinitionPlan;
+    resolved: {
+      kind: 'single_worker',
+      participants: [
+        {
+          name: 'specialist',
+          role: 'primary',
+          source: 'inline',
+          workerVersionId: null,
+          skills: [],
+          tools: [],
+        },
+      ],
+      environment: { source: 'inline', environmentVersionId: null },
+      memoryVersionIds: [],
+      requiredRuntimeCapabilities: ['external_workspace'],
+      platformCapabilities: [],
+    },
+  };
   const planSpy = vi
     .spyOn(workDefinitionClient, 'plan')
     .mockResolvedValue(plan);

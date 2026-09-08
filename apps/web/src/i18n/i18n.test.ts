@@ -10,17 +10,6 @@ import {
   type MessageKey,
 } from './index';
 
-/**
- * `Record<MessageKey, string>` already makes a missing or misspelled key a
- * `tsc` error. This test exists because `apps/web` has no working typecheck
- * command yet — `check:types` points at a solution-style tsconfig with
- * `files: []`, so it checks nothing — and a guarantee that no command enforces
- * is not a guarantee. Delete it once the frontend typecheck actually runs.
- */
-it('translates every message the English source of truth defines', () => {
-  expect(Object.keys(zhCN).sort()).toEqual(Object.keys(en).sort());
-});
-
 it('leaves no message untranslated by copying the English through', () => {
   const untranslated = (Object.keys(en) as MessageKey[]).filter(
     (key) => zhCN[key] === en[key],
@@ -41,6 +30,13 @@ it('names each language in the language itself', () => {
   expect(LOCALES.map(({ code, label }) => [code, label])).toEqual([
     ['en', 'English'],
     ['zh-CN', '简体中文'],
+  ]);
+});
+
+it('gives the rail language control a compact label for each locale', () => {
+  expect(LOCALES.map(({ code, short }) => [code, short])).toEqual([
+    ['en', 'EN'],
+    ['zh-CN', '中'],
   ]);
 });
 

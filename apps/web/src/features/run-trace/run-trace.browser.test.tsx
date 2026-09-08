@@ -197,7 +197,7 @@ it('renders recorder-backed proportional normal and rework geometry', async () =
           lane.querySelector('.run-trace__lane-name small')?.textContent,
         ).toContain('active');
         for (const entry of entries.filter(
-          ({ workItem }) => workItem.actor_id === actor.id,
+          ({ workItem }) => workItem.actorId === actor.id,
         )) {
           const button = attemptButtons.find(
             (candidate) =>

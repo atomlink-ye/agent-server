@@ -6,6 +6,9 @@ export type TranscriptEntry = ProductExecutionDetailEvent & {
 
 export type ProjectedTranscriptEntry = {
   readonly event: TranscriptEntry;
+  /** First and last captured timestamps for this visual activity. */
+  readonly startedAt: string;
+  readonly endedAt: string;
   /** Ordinals that produced this row's own visible event, excluding nested children. */
   readonly detailSourceOrdinals: readonly number[];
   readonly sourceOrdinals: readonly number[];
@@ -80,6 +83,7 @@ export function projectTranscript(
       const existing = toolsByActivity.get(activityKey);
       if (existing) {
         existing.event = mergeToolEvent(existing.event as ToolEntry, entry);
+        existing.endedAt = entry.created_at;
         existing.sourceOrdinals.push(entry.ordinal);
       } else {
         const row = makeRow(entry, runSegment);
@@ -124,6 +128,8 @@ export function projectTranscript(
 
 type MutableRow = {
   event: TranscriptEntry;
+  startedAt: string;
+  endedAt: string;
   detailSourceOrdinals?: number[];
   sourceOrdinals: number[];
   runSegment: number;
@@ -136,7 +142,13 @@ type ReasoningEntry = Extract<
 type ToolEntry = Extract<TranscriptEntry, { readonly kind: 'tool_status' }>;
 
 function makeRow(event: TranscriptEntry, runSegment: number): MutableRow {
-  return { event, sourceOrdinals: [event.ordinal], runSegment };
+  return {
+    event,
+    startedAt: event.created_at,
+    endedAt: event.created_at,
+    sourceOrdinals: [event.ordinal],
+    runSegment,
+  };
 }
 
 function scopedActivityKey(runSegment: number, activityId: string): string {
@@ -262,6 +274,8 @@ function nestChildren(
 function freezeRow(row: MutableRow): ProjectedTranscriptEntry {
   return {
     event: row.event,
+    startedAt: row.startedAt,
+    endedAt: row.endedAt,
     detailSourceOrdinals: row.detailSourceOrdinals ?? row.sourceOrdinals,
     sourceOrdinals: row.sourceOrdinals,
     ...(row.children?.length ? { children: row.children.map(freezeRow) } : {}),

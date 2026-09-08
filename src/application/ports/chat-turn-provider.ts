@@ -6,6 +6,13 @@ export interface ChatTurnMessage {
   readonly sequence?: number;
   readonly authorType: 'principal' | 'agent_definition';
   readonly authorId: string;
+  /**
+   * How this author is named to a person, when the durable message carries a
+   * name at all. An Agent addresses whoever it is talking to, and an opaque id
+   * is not something it can address; where a name exists the transcript uses
+   * it, and where none exists the id is shortened rather than invented.
+   */
+  readonly authorLabel?: string | null;
   readonly body: string;
   readonly workRef?: string | null;
   readonly deliveryId?: string | null;

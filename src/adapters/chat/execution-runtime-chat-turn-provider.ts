@@ -36,6 +36,9 @@ export class ExecutionRuntimeChatTurnProvider implements ChatTurnProvider {
       RuntimeSessionSpecConfiguration,
       'contextEpoch' | 'desiredSystemPrompt'
     >,
+    // A model has no clock of its own. Reading one here, once per turn, is
+    // what makes "by tomorrow" resolvable instead of guessed.
+    private readonly now: () => Date = () => new Date(),
   ) {}
 
   public async runTurn(
@@ -100,10 +103,15 @@ export class ExecutionRuntimeChatTurnProvider implements ChatTurnProvider {
     mode: ChatTurnMode,
   ): Promise<ExecutionOutput> {
     if (!durableSession) throw new Error('chat_runtime_session_missing');
-    const prompt = buildExecutionPrompt(input, mode);
+    // Both prompts describe the same wake-up, so they must state the same
+    // time. Reading the clock twice would put two different moments on one
+    // turn depending on which prompt the Runtime ends up sending.
+    const wokeAt = this.now().toISOString();
+    const prompt = buildExecutionPrompt(input, mode, wokeAt);
     const recoveryPrompt = buildExecutionPrompt(
       input,
       mode === 'delta' ? 'recover' : mode,
+      wokeAt,
     );
     const turn: ExecuteRuntimeTurnInput = {
       runtimeSessionId: durableSession.id,
@@ -184,8 +192,9 @@ function assertRuntimeTurnId(value: string): asserts value is RuntimeTurnId {
 function buildExecutionPrompt(
   input: Parameters<ChatTurnProvider['runTurn']>[0],
   mode: ChatTurnMode,
+  wokeAt: string,
 ): string {
-  return buildTurnPrompt(input, mode);
+  return buildTurnPrompt(input, mode, wokeAt);
 }
 
 /**
@@ -304,98 +313,144 @@ function renderGrantedPlatformTools(
 function buildTurnPrompt(
   input: Parameters<ChatTurnProvider['runTurn']>[0],
   mode: ChatTurnMode,
+  wokeAt: string,
 ): string {
   const turn = input.turn;
   const range = turn
     ? `sequence (${turn.fromSequenceExclusive}, ${turn.throughSequence}]`
     : 'the supplied activation';
-  const context = renderTrustedTurnContext(input);
+  const clock = `Current time (UTC): ${wokeAt} — this is the only clock you have; work out anything about dates, deadlines or elapsed time from it.`;
   if (mode === 'delta') {
     return [
-      context,
-      `CHAT DELTA: process only new durable events for ${range}.`,
-      'Earlier conversation state is already present in this provider session. Do not ask for or reconstruct it unless a supplied delta explicitly requires it.',
-      renderMessages(input.messages),
-      'Respond only with the next assistant reply or use granted tools as needed.',
-    ].join('\n\n');
+      "You've been woken because something new landed in this conversation. Everything before it already happened to you and is still here with you, so read only what is below and answer that. Do not ask for the earlier conversation back, or rebuild it, unless something below actually needs it.",
+      clock,
+      `CHAT DELTA — new since your last turn, ${range}:`,
+      renderMessages(input.messages, input.agentDefinitionId),
+      renderBackgroundContext(input),
+      'Now write your next reply, or use one of your granted tools. Reply as yourself, in your own words — no headers, no ids, no metadata.',
+    ]
+      .filter((section) => section !== null && section !== '')
+      .join('\n\n');
   }
 
   const canonical = input.recoveryMessages ?? input.messages;
   const label =
     mode === 'recover' ? 'CHAT RECOVERY SNAPSHOT' : 'CHAT BOOTSTRAP SNAPSHOT';
   return [
-    context,
-    `${label}: reconstruct the bounded canonical relationship state below.`,
     mode === 'recover'
-      ? 'The previous external provider session was unavailable or no longer satisfied the current Agent Server extension contract. Resume the same Agent relationship from this bounded canonical state.'
-      : 'This is the first provider turn for the current Agent Chat runtime epoch.',
-    renderMessages(canonical),
-    'Then process the current activation and respond only with the next assistant reply or use granted tools as needed.',
-  ].join('\n\n');
+      ? "You've been woken again after the connection carrying your previous session went away or stopped meeting what Agent Server needs of it. You are the same Coworker in the same conversation with the same people — only the connection was replaced. Pick this conversation up where it stands below."
+      : "You've been woken for the first time since your setup last changed. Nothing that already happened to you is undone by that. Pick this conversation up where it stands below.",
+    clock,
+    `${label} — where this conversation stands right now:`,
+    renderMessages(canonical, input.agentDefinitionId),
+    renderBackgroundContext(input),
+    'Now handle what just came in: write your next reply, or use one of your granted tools. Reply as yourself, in your own words — no headers, no ids, no metadata.',
+  ]
+    .filter((section) => section !== null && section !== '')
+    .join('\n\n');
 }
 
 /**
- * Only what this turn adds.
+ * Background this turn adds, and only that.
  *
- * Four things are dropped, all of them restatements: the capability summary
- * repeats the two identifiers the stable prompt already carries, the Agent
- * Home projection of the published instructions repeats the identity the
- * prompt opens with, the identity files were just rendered in full above, and
- * empty namespaces teach an Agent nothing except that most of its prompt is
- * boilerplate. Anything that carries content the Agent has not already been
- * told stays.
+ * The two identifiers this used to open with -- the Conversation ID and the
+ * trigger message ID -- were addressed to the server, not to the Agent. Every
+ * tool that needs them reads them from the bound grant's chat context, never
+ * from anything the model types, so printing them bought an Agent two opaque
+ * UUIDs per wake-up and nothing it could act on.
+ *
+ * What is left is restatement-free by the same rule as before: the published
+ * instructions, the identity files and the `definition` namespace that merely
+ * re-serializes them are all already in the session's system prompt, and an
+ * empty namespace teaches an Agent nothing except that most of its prompt is
+ * boilerplate. Anything carrying content the Agent has not already been told
+ * stays.
  */
-function renderTrustedTurnContext(
+function renderBackgroundContext(
   input: Parameters<ChatTurnProvider['runTurn']>[0],
-): string {
+): string | null {
   const memory = input.brain.memory ?? [];
   const instructions = input.brain.instructions.trim();
   const rendered = new Set(
     identityFileEntries(input).map((entry) => entry.path),
   );
-  const agentHome = Object.fromEntries(
-    Object.entries(input.brain.agentHome)
-      .map(([namespace, entries]) => [
-        namespace,
-        (entries ?? []).filter(
-          (entry) =>
-            entry.content.trim() !== instructions &&
-            !(namespace === 'agent-shared' && rendered.has(entry.path)),
-        ),
-      ])
-      .filter(([, entries]) => (entries as readonly unknown[]).length > 0),
-  );
-  return [
-    'TRUSTED TURN CONTEXT:',
-    `Conversation ID: ${input.conversationId}`,
-    `Trigger message ID: ${input.triggerMessageId}`,
+  const files = Object.entries(input.brain.agentHome)
+    .filter(([namespace]) => namespace !== 'definition')
+    .flatMap(([namespace, entries]) =>
+      (entries ?? []).filter(
+        (entry) =>
+          entry.content.trim() !== '' &&
+          entry.content.trim() !== instructions &&
+          !(namespace === 'agent-shared' && rendered.has(entry.path)),
+      ),
+    );
+  const sections = [
     ...(memory.length
-      ? [`CANONICAL SCOPED MEMORY:\n${renderScopedMemory(memory)}`]
+      ? [`WHAT YOU REMEMBER:\n${renderScopedMemory(memory)}`]
       : []),
-    ...(Object.keys(agentHome).length
-      ? [`ALLOWLISTED AGENT HOME PROJECTION:\n${deterministicJson(agentHome)}`]
+    ...(files.length
+      ? [
+          [
+            'YOUR FILES (as of this wake-up):',
+            ...files.map(
+              (file) => `--- ${file.path} ---\n${file.content.trim()}`,
+            ),
+          ].join('\n\n'),
+        ]
       : []),
-  ].join('\n');
+  ];
+  return sections.length ? sections.join('\n\n') : null;
 }
 
-function renderMessages(messages: readonly ChatTurnMessage[]): string {
-  if (messages.length === 0) return '[no durable chat events in window]';
+/**
+ * A chat transcript, not a protocol frame.
+ *
+ * The sequence number stays because delta semantics are defined in terms of
+ * it, but everything around it is written the way a person reads a thread:
+ * who spoke, then what they said. `author=principal:<uuid>` named nobody the
+ * Agent could answer -- it cannot address a UUID in a reply -- so an author
+ * is rendered as its name when the durable message carries one, as `you` when
+ * it is the Agent's own earlier turn, and otherwise as a shortened id tagged
+ * with what kind of party it is. Delivery ids are dropped outright: they are
+ * how the server de-duplicates a send, and no Agent has ever needed one.
+ */
+function renderMessages(
+  messages: readonly ChatTurnMessage[],
+  selfAgentDefinitionId: string,
+): string {
+  if (messages.length === 0) return '(nothing new landed in this window)';
   return messages
     .map((message, index) => {
-      const ref = message.sequence
-        ? `sequence=${message.sequence}`
-        : `item=${index + 1}`;
-      const metadata = [
-        ref,
-        `author=${message.authorType}:${message.authorId}`,
-        message.workRef ? `work_ref=${message.workRef}` : null,
-        message.deliveryId ? `delivery_id=${message.deliveryId}` : null,
-      ]
-        .filter(Boolean)
-        .join(' ');
-      return `[${metadata}]\n${message.body}`;
+      const ref = message.sequence ?? index + 1;
+      const about = message.workRef ? ` (about work ${message.workRef})` : '';
+      const speaker = speakerLabel(message, selfAgentDefinitionId);
+      return `[#${ref}] ${speaker}${about}: ${message.body}`;
     })
     .join('\n\n');
+}
+
+function speakerLabel(
+  message: ChatTurnMessage,
+  selfAgentDefinitionId: string,
+): string {
+  if (
+    message.authorType === 'agent_definition' &&
+    message.authorId === selfAgentDefinitionId
+  )
+    return 'you';
+  const kind = message.authorType === 'principal' ? 'human' : 'coworker';
+  const name = message.authorLabel?.trim() || shortAuthorId(message.authorId);
+  return `${name} (${kind})`;
+}
+
+/**
+ * Enough of an id to tell two parties apart, short enough to read past. It
+ * stops on a segment boundary so what is left still looks like an identifier
+ * rather than a truncation.
+ */
+function shortAuthorId(authorId: string): string {
+  const short = authorId.split('-').slice(0, 2).join('-');
+  return short.length > 0 && short.length <= 24 ? short : authorId.slice(0, 12);
 }
 
 function deterministicJson(value: unknown): string {

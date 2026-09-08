@@ -21,11 +21,19 @@ const versionId = '00000000-0000-4000-8000-000000000103';
 
 afterEach(() => vi.unstubAllGlobals());
 
-it('scrolls the real Tasks list to its final Task on desktop', async () => {
+it('scrolls real Tasks list and detail content to their final entries on desktop', async () => {
   const items = Array.from({ length: 48 }, (_, index) =>
     taskFor(
       `00000000-0000-4000-8000-${String(index + 500).padStart(12, '0')}`,
       index === 47 ? 'Final real Task' : `Real Task ${index}`,
+    ),
+  );
+  const selectedTaskId = items[0]!.work_item.id;
+  const comments = Array.from({ length: 48 }, (_, index) =>
+    commentFor(
+      selectedTaskId,
+      index === 47 ? 'Final real Task comment' : `Real Task comment ${index}`,
+      String(index + 900).padStart(12, '0'),
     ),
   );
   vi.stubGlobal(
@@ -39,6 +47,9 @@ it('scrolls the real Tasks list to its final Task on desktop', async () => {
         .pathname;
       if (path === '/api/work-items') return json({ work_items: items });
       if (path === '/api/agents') return json({ items: [] });
+      if (path === `/api/work-items/${selectedTaskId}/comments`)
+        return json({ comments });
+      if (path === '/api/work-definitions') return json({ items: [] });
       throw new Error(`Unexpected browser request: ${path}`);
     }),
   );
@@ -50,8 +61,11 @@ it('scrolls the real Tasks list to its final Task on desktop', async () => {
   try {
     await act(async () => {
       root.render(
-        <MemoryRouter initialEntries={['/tasks']}>
-          <AppShell commands={shellCommands()} />
+        <MemoryRouter initialEntries={[`/tasks/${selectedTaskId}`]}>
+          <AppShell
+            commands={shellCommands()}
+            selectedWorkItemId={selectedTaskId}
+          />
         </MemoryRouter>,
       );
     });
@@ -71,6 +85,23 @@ it('scrolls the real Tasks list to its final Task on desktop', async () => {
     expect(finalItem.textContent).toContain('Final real Task');
     expect(finalItem.getBoundingClientRect().bottom).toBeLessThanOrEqual(
       list!.getBoundingClientRect().bottom + 1,
+    );
+
+    const content = host.querySelector<HTMLElement>('.work-org-content');
+    expect(content).not.toBeNull();
+    expect(host.textContent).toContain('Final real Task comment');
+    expect(content!.scrollHeight).toBeGreaterThan(content!.clientHeight);
+    content!.scrollTop = content!.scrollHeight;
+    expect(content!.scrollTop).toBeGreaterThan(0);
+    const finalComment = [
+      ...content!.querySelectorAll<HTMLElement>('.work-org-comment'),
+    ].at(-1)!;
+    expect(finalComment.textContent).toContain('Final real Task comment');
+    expect(finalComment.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+      content!.getBoundingClientRect().top - 1,
+    );
+    expect(finalComment.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+      content!.getBoundingClientRect().bottom + 1,
     );
     await page.screenshot({
       path: '../../../../../.local/tasks-scroll-desktop.png',
@@ -604,9 +635,13 @@ function taskFor(id: string, title: string) {
   };
 }
 
-function commentFor(workItemId: string, body: string) {
+function commentFor(
+  workItemId: string,
+  body: string,
+  commentId = '000000000190',
+) {
   return {
-    id: '00000000-0000-4000-8000-000000000190',
+    id: `00000000-0000-4000-8000-${commentId}`,
     work_item_id: workItemId,
     author_id: 'principal-1',
     body,

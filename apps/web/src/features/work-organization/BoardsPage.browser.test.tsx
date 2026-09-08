@@ -38,7 +38,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-it('scrolls the real Board list and canvas to its final Board and Card on desktop', async () => {
+it('scrolls real Board list, content, and canvas to their final entries on desktop', async () => {
   const boards = Array.from({ length: 48 }, (_, index) => ({
     ...board(),
     id: `00000000-0000-4000-8000-${String(index + 600).padStart(12, '0')}`,
@@ -54,23 +54,35 @@ it('scrolls the real Board list and canvas to its final Board and Card on deskto
     created_at: '2026-08-26T00:00:00.000Z',
     updated_at: '2026-08-26T00:00:00.000Z',
   }));
-  const cards = columns.map((column, index) => ({
-    ...workItem(),
-    id: `00000000-0000-4000-8000-${String(index + 800).padStart(12, '0')}`,
-    title:
-      index === columns.length - 1 ? 'Final real Card' : `Real Card ${index}`,
-  }));
+  const cards = columns
+    .map((column, index) => ({
+      ...workItem(),
+      id: `00000000-0000-4000-8000-${String(index + 800).padStart(12, '0')}`,
+      title:
+        index === columns.length - 1 ? 'Final real Card' : `Real Card ${index}`,
+    }))
+    .concat(
+      Array.from({ length: 40 }, (_, index) => ({
+        ...workItem(),
+        id: `00000000-0000-4000-8000-${String(index + 808).padStart(12, '0')}`,
+        title:
+          index === 39 ? 'Final real Board Card' : `Real Board Card ${index}`,
+      })),
+    );
   const snapshotBody = {
     board: selectedBoard,
     columns,
-    placements: columns.map((column, index) => ({
-      board_id: selectedBoard.id,
-      column_id: column.id,
-      work_item_id: cards[index]!.id,
-      position: 0,
-      created_at: '2026-08-26T00:00:00.000Z',
-      updated_at: '2026-08-26T00:00:00.000Z',
-    })),
+    placements: cards.map((card, index) => {
+      const columnIndex = index < columns.length ? index : 0;
+      return {
+        board_id: selectedBoard.id,
+        column_id: columns[columnIndex]!.id,
+        work_item_id: card.id,
+        position: index < columns.length ? 0 : index - columns.length + 1,
+        created_at: '2026-08-26T00:00:00.000Z',
+        updated_at: '2026-08-26T00:00:00.000Z',
+      };
+    }),
     work_items: cards,
   };
   vi.stubGlobal(
@@ -121,6 +133,25 @@ it('scrolls the real Board list and canvas to its final Board and Card on deskto
       list!.getBoundingClientRect().bottom + 1,
     );
 
+    const content = host.querySelector<HTMLElement>('.work-org-content');
+    expect(content).not.toBeNull();
+    expect(host.textContent).toContain('Final real Board Card');
+    expect(content!.scrollHeight).toBeGreaterThan(content!.clientHeight);
+    content!.scrollTop = content!.scrollHeight;
+    expect(content!.scrollTop).toBeGreaterThan(0);
+    const finalBoardCard = host.querySelector<HTMLElement>(
+      '[data-work-item-id="00000000-0000-4000-8000-000000000847"]',
+    );
+    expect(finalBoardCard).not.toBeNull();
+    expect(finalBoardCard!.textContent).toContain('Final real Board Card');
+    expect(finalBoardCard!.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+      content!.getBoundingClientRect().top - 1,
+    );
+    expect(finalBoardCard!.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+      content!.getBoundingClientRect().bottom + 1,
+    );
+
+    content!.scrollTop = 0;
     const canvas = host.querySelector<HTMLElement>('.work-board-canvas');
     expect(canvas).not.toBeNull();
     expect(host.textContent).toContain('Final real Card');

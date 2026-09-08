@@ -1,6 +1,7 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';
+import { page } from 'vitest/browser';
 
 import type {
   WorkListItem,
@@ -10,7 +11,8 @@ import { MemoryRouter } from 'react-router-dom';
 
 import { WorkPane } from '@/features/work/WorkPane';
 import '../../../index.css';
-import { AppShell } from '../../../app/shell/AppShell';
+import { AppProviders } from '../../../app/providers';
+import { AppRouter } from '../../../app/router';
 import parallelRecording from '@/test-support/fixtures/product-recordings/parallel-success.json';
 import { projectWorkList } from '@/test-support/product-recording-test-helpers';
 
@@ -156,7 +158,9 @@ it('scrolls the real Work list through its final Work item', async () => {
     await act(async () => {
       root.render(
         <MemoryRouter initialEntries={['/work']}>
-          <AppShell commands={shellCommands()} />
+          <AppProviders commands={shellCommands()}>
+            <AppRouter />
+          </AppProviders>
         </MemoryRouter>,
       );
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -170,6 +174,9 @@ it('scrolls the real Work list through its final Work item', async () => {
     expect(finalItem.getBoundingClientRect().bottom).toBeLessThanOrEqual(
       list!.getBoundingClientRect().bottom + 1,
     );
+    await page.screenshot({
+      path: '../../../../../../.local/work-list-scroll-desktop.png',
+    });
   } finally {
     await act(async () => root.unmount());
     host.remove();

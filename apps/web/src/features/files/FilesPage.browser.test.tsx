@@ -5,7 +5,8 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
 
 import '../../index.css';
-import { FilesPage } from './FilesPage';
+import { AppProviders } from '../../app/providers';
+import { AppRouter } from '../../app/router';
 
 (
   globalThis as typeof globalThis & {
@@ -54,6 +55,19 @@ it('scrolls the real Files list to its final file on desktop', async () => {
       if (url.pathname === '/api/context/files') {
         expect(url.searchParams.get('scope')).toBe('workspace');
         body = { access: 'read_write', scope: {}, entries };
+      } else if (url.pathname === '/api/context/file') {
+        expect(url.searchParams.get('scope')).toBe('workspace');
+        expect(url.searchParams.get('path')).toBe('final-real-file.md');
+        body = {
+          entry: {
+            ...entries[47],
+            content: Array.from({ length: 96 }, (_, index) =>
+              index === 95
+                ? '## Final real file preview paragraph'
+                : `Preview paragraph ${index + 1}`,
+            ).join('\n\n'),
+          },
+        };
       } else if (url.pathname === '/api/agents') {
         body = { items: coworkers };
       } else if (url.pathname === '/api/conversations') {
@@ -71,15 +85,16 @@ it('scrolls the real Files list to its final file on desktop', async () => {
     }),
   );
   const host = document.createElement('div');
+  host.style.height = '900px';
   document.body.append(host);
   const root = createRoot(host);
   try {
     await act(async () => {
       root.render(
-        <MemoryRouter>
-          <div className="app-shell" style={{ height: '900px' }}>
-            <FilesPage />
-          </div>
+        <MemoryRouter initialEntries={['/files']}>
+          <AppProviders>
+            <AppRouter />
+          </AppProviders>
         </MemoryRouter>,
       );
       for (let turn = 0; turn < 5; turn += 1)
@@ -108,8 +123,28 @@ it('scrolls the real Files list to its final file on desktop', async () => {
     expect(final.getBoundingClientRect().bottom).toBeLessThanOrEqual(
       fileRegion.getBoundingClientRect().bottom + 1,
     );
+
+    await act(async () => {
+      final.click();
+      for (let turn = 0; turn < 4; turn += 1)
+        await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    const main = host.querySelector<HTMLElement>('.files-main');
+    expect(main).not.toBeNull();
+    expect(main!.textContent).toContain('Final real file preview paragraph');
+    expect(main!.scrollHeight).toBeGreaterThan(main!.clientHeight);
+    main!.scrollTop = main!.scrollHeight;
+    expect(main!.scrollTop).toBeGreaterThan(0);
+    const finalPreview = [
+      ...main!.querySelectorAll<HTMLElement>('.files-rendered-markdown h2'),
+    ].find((item) =>
+      item.textContent?.includes('Final real file preview paragraph'),
+    )!;
+    expect(finalPreview.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+      main!.getBoundingClientRect().bottom + 1,
+    );
     await page.screenshot({
-      path: '../../../../../.local/files-scroll-desktop.png',
+      path: '../../../../../.local/files-main-scroll-desktop.png',
     });
   } finally {
     await act(async () => root.unmount());

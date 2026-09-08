@@ -34,6 +34,7 @@ export type SessionSummary = {
   readonly last_meaningful: SessionMeaningful | null;
   readonly work_refs: readonly string[];
   readonly truncated: boolean;
+  readonly runtime_models?: readonly string[];
 };
 export type SessionEntry = ProductExecutionDetailEvent & {
   readonly ordinal: number;

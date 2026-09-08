@@ -192,6 +192,7 @@ export function createProductProjection(
             updated_at: latestRun.updatedAt,
             result_summary: null,
             result_capture_status: 'not_captured',
+            runtime_models: [],
           }
         : null;
       if (
@@ -212,6 +213,7 @@ export function createProductProjection(
             updated_at: latestRun.updatedAt,
             result_summary: detail.result_summary,
             result_capture_status: detail.result_capture_status,
+            runtime_models: runtimeModels(runs),
           };
         } catch (error) {
           if (!(error instanceof ProductProjectionUnavailableError))
@@ -272,6 +274,10 @@ export function createProductProjection(
       });
     },
   };
+}
+
+function runtimeModels(runs: readonly ExecutionRunFact[]): string[] {
+  return [...new Set(runs.flatMap((run) => (run.model ? [run.model] : [])))];
 }
 
 function singleAgentProjectionFacts(

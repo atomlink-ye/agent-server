@@ -177,6 +177,7 @@ export class GetProductSessionTranscripts {
           last_meaningful: lastMeaningful,
           work_refs: workRefs(responseEntries),
           truncated,
+          runtime_models: runtimeModels(stream.runs),
         },
         entries: responseEntries,
       });
@@ -189,6 +190,12 @@ export class GetProductSessionTranscripts {
       sessions,
     });
   }
+}
+
+function runtimeModels(
+  runs: readonly { readonly model: string | null }[],
+): string[] {
+  return [...new Set(runs.flatMap((run) => (run.model ? [run.model] : [])))];
 }
 
 async function hasMoreRunEvents(

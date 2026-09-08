@@ -38,4 +38,4 @@
 - `pnpm exec vitest run --config vitest.web.config.ts apps/web/src/features/observe/ObservePane.browser.test.tsx apps/web/src/features/observe/ObserveDetail.browser.test.tsx apps/web/src/features/observe/ObservePage.browser.test.tsx`：通过，6 个 Chromium 测试；生成已忽略的 `.local/observe-scroll-desktop.png`。
 - `pnpm typecheck`：通过。
 - `pnpm web:check:types`：通过。
-- `pnpm test:web`：通过，49 个测试文件、266 个测试；运行时输出了既有 BoardCanvas 和 AdvancedDefinitionAuthoring 的 `act(...)` 警告，但无失败。实际基线不是要求中提到的 43 个文件、252 个测试。
+- `pnpm test:web`：通过，49 个测试文件、269 个测试；运行时输出了既有 BoardCanvas 和 AdvancedDefinitionAuthoring 的 `act(...)` 警告，但无失败。实际基线不是要求中提到的 43 个文件、252 个测试。

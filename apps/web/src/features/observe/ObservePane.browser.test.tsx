@@ -2,6 +2,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { expect, it, vi } from 'vitest';
+import '../../index.css';
 
 import { ObservePane } from './ObservePane';
 
@@ -156,4 +157,22 @@ it('shows an empty-filter placeholder when no traced Run matches', async () => {
     await act(async () => root.unmount());
     host.remove();
   }
+});
+
+it('scrolls the real Observe list to its final traced Run on desktop', async () => {
+  listWorks.mockResolvedValue({ works: Array.from({ length: 48 }, (_, index) => ({ ...WORK_ITEM, id: `work-${index}`, title: index === 47 ? 'Final real traced Run' : `Traced Work ${index}`, latest_run_summary: { ...WORK_ITEM.latest_run_summary, id: `run-${index}` } })), next_cursor: null });
+  loadCoworkers.mockResolvedValue([]);
+  loadCoworkerProfile.mockResolvedValue({ workCatalog: [{ definitionId: 'definition-1' }] });
+  loadSessionTranscripts.mockResolvedValue({ work_id: 'work-1', work_run_id: 'run-1', capture_scope: 'safe_run_events', sessions: [] });
+  const host = document.createElement('div'); host.style.height = '900px'; document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => { root.render(<MemoryRouter><div className="app-shell"><ObservePane /></div></MemoryRouter>); for (let turn = 0; turn < 5; turn += 1) await new Promise((resolve) => setTimeout(resolve, 0)); });
+    const region = host.querySelector<HTMLElement>('[data-testid="observe-list"]')!;
+    expect(region.scrollHeight).toBeGreaterThan(region.clientHeight);
+    region.scrollTop = region.scrollHeight;
+    expect(region.scrollTop).toBeGreaterThan(0);
+    const final = [...region.querySelectorAll('a')].find((item) => item.textContent?.includes('Final real traced Run'))!;
+    expect(final.getBoundingClientRect().bottom).toBeLessThanOrEqual(region.getBoundingClientRect().bottom + 1);
+  } finally { await act(async () => root.unmount()); host.remove(); }
 });

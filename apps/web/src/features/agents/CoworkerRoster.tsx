@@ -1,6 +1,6 @@
 import type { Coworker } from './contracts';
+import { useT, type Translate } from '../../i18n';
 import {
-  BUSY_CHAT_HINT,
   BUSY_RUNTIME_STATUSES,
   RUNTIME_STATUS_LABEL,
   STATUS_FILTERS,
@@ -35,28 +35,29 @@ export function CoworkerRoster({
   onChat,
   onNewCoworker,
 }: CoworkerRosterProps) {
+  const t = useT();
   const visibleAgents = statusFilter
     ? agents.filter((agent) => agent.runtimeStatus === statusFilter)
     : agents;
   const empty = agents.length === 0;
 
   return (
-    <section className="agents-roster" aria-label="Coworker roster">
+    <section className="agents-roster" aria-label={t('agents.roster')}>
       <header className="agents-roster-header">
         <div className="agents-roster-copy">
           <h1>
             {empty ? (
-              'Your team starts here'
+              t('agents.teamStarts')
             ) : (
               <>
-                Your team <em>of {agents.length}</em>
+                {t('agents.teamCount', { count: agents.length })}
               </>
             )}
           </h1>
           <p>
             {empty
-              ? 'Add the first Coworker and this becomes the room they work in.'
-              : 'Coworkers work on their own and with each other. They’ll loop you in when they need a call.'}
+              ? t('agents.emptyIntro')
+              : t('agents.teamIntro')}
           </p>
         </div>
         <button
@@ -65,7 +66,7 @@ export function CoworkerRoster({
           data-testid="new-coworker-cta"
           onClick={onNewCoworker}
         >
-          + New Coworker
+          {t('agents.newCoworker')}
         </button>
       </header>
 
@@ -73,7 +74,7 @@ export function CoworkerRoster({
         <div
           className="agents-status-filters"
           role="group"
-          aria-label="Filter Coworkers by status"
+          aria-label={t('agents.filter')}
         >
           {STATUS_FILTERS.map((status) => {
             const count = agents.filter(
@@ -89,7 +90,7 @@ export function CoworkerRoster({
                 data-active={active ? 'true' : 'false'}
                 onClick={() => onFilter(active ? null : status)}
               >
-                {RUNTIME_STATUS_LABEL[status]} · {count}
+                {localizedRuntimeStatus(t, status)} · {count}
               </button>
             );
           })}
@@ -98,17 +99,17 @@ export function CoworkerRoster({
 
       {loading && empty ? (
         <p className="agents-roster-note" role="status">
-          Loading Coworkers…
+          {t('agents.loading')}
         </p>
       ) : null}
 
       {!loading && !empty && visibleAgents.length === 0 ? (
         <p className="agents-roster-note">
-          No Coworkers are{' '}
           {statusFilter
-            ? RUNTIME_STATUS_LABEL[statusFilter].toLowerCase()
-            : 'here'}{' '}
-          right now.
+            ? t('agents.filteredEmpty', {
+                status: localizedRuntimeStatus(t, statusFilter).toLowerCase(),
+              })
+            : t('agents.empty')}
         </p>
       ) : null}
 
@@ -132,10 +133,8 @@ export function CoworkerRoster({
           <span className="agents-roster-add-mark" aria-hidden="true">
             +
           </span>
-          <strong>Add a Coworker</strong>
-          <small>
-            Give them a name, a role, and the kind of help you want.
-          </small>
+          <strong>{t('agents.addCoworker')}</strong>
+          <small>{t('agents.addCoworkerHint')}</small>
         </button>
       </div>
     </section>
@@ -155,6 +154,7 @@ function CoworkerCard({
   readonly onOpenProfile: (agentId: string) => void;
   readonly onChat: (agentId: string) => void;
 }) {
+  const t = useT();
   const busy = BUSY_RUNTIME_STATUSES.has(agent.runtimeStatus);
   return (
     <article className="agents-roster-card">
@@ -175,7 +175,7 @@ function CoworkerCard({
           <span
             className={`agents-runtime agents-runtime--${agent.runtimeStatus}`}
           >
-            {RUNTIME_STATUS_LABEL[agent.runtimeStatus]}
+            {localizedRuntimeStatus(t, agent.runtimeStatus)}
           </span>
         </span>
       </button>
@@ -189,7 +189,7 @@ function CoworkerCard({
         <p className="agents-roster-bio">{agent.summary}</p>
       ) : (
         <p className="agents-roster-bio agents-roster-bio--empty">
-          No summary yet.
+          {t('agents.noSummary')}
         </p>
       )}
       <div className="agents-roster-actions">
@@ -197,18 +197,18 @@ function CoworkerCard({
           className="agents-primary"
           type="button"
           disabled={disabled || chatBlocked(agent.runtimeStatus)}
-          title={busy ? BUSY_CHAT_HINT : undefined}
+          title={busy ? t('agents.busyConversation') : undefined}
           onClick={() => onChat(agent.id)}
         >
-          {opening ? 'Opening…' : busy ? 'Busy' : 'Chat'}
+          {opening ? t('agents.opening') : busy ? t('agents.busy') : t('agents.chat')}
         </button>
         <button
           className="agents-whisper"
           type="button"
           disabled
-          title="Whispers are read-only."
+          title={t('agents.whispersReadOnly')}
         >
-          Whisper
+          {t('agents.whisper')}
         </button>
       </div>
     </article>
@@ -216,3 +216,12 @@ function CoworkerCard({
 }
 
 export default CoworkerRoster;
+
+function localizedRuntimeStatus(
+  t: Translate,
+  status: Coworker['runtimeStatus'],
+): string {
+  if (status === 'available') return t('runtimeStatus.available');
+  if (status === 'draining') return t('runtimeStatus.draining');
+  return t('runtimeStatus.unavailable');
+}

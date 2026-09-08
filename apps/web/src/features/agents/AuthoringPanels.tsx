@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useT } from '../../i18n';
 
 import { isFeatureUnavailable } from '../../api/feature-availability';
 import { ApiTransportError } from '../../api/transport';
@@ -30,6 +31,7 @@ export function NewCoworkerForm({
   }) => void;
   readonly onCancel: () => void;
 }) {
+  const t = useT();
   const [name, setName] = useState('');
   const [role, setRole] = useState('');
   const [summary, setSummary] = useState('');
@@ -63,55 +65,54 @@ export function NewCoworkerForm({
   }
 
   return (
-    <section className="agents-authoring" aria-label="New Coworker">
+    <section className="agents-authoring" aria-label={t('authoring.newCoworker')}>
       <header>
-        <span className="eyebrow">New Coworker</span>
-        <h1>Hire an AI Coworker</h1>
+        <span className="eyebrow">{t('authoring.newCoworker')}</span>
+        <h1>{t('authoring.hire')}</h1>
         <p>
-          Describe the teammate you want. Runtime package details stay behind
-          the product contract.
+          {t('authoring.hireDescription')}
         </p>
       </header>
       <div className="agents-form-grid">
         <Field
-          label="Name"
-          hint="The name you will see in Chat and the roster."
+          label={t('authoring.name')}
+          hint={t('authoring.nameHint')}
         >
           <input
             value={name}
             onChange={(event) => setName(event.target.value)}
-            placeholder="Maya"
+            placeholder={t('authoring.namePlaceholder')}
           />
         </Field>
-        <Field label="Role" hint="A human-readable role, not a runtime type.">
+        <Field label={t('authoring.role')} hint={t('authoring.roleHint')}>
           <input
             value={role}
             onChange={(event) => setRole(event.target.value)}
-            placeholder="Research Analyst"
+            placeholder={t('authoring.rolePlaceholder')}
           />
         </Field>
-        <Field label="What should this Coworker help with?">
+        <Field label={t('authoring.summaryLabel')}>
           <textarea
             value={summary}
             onChange={(event) => setSummary(event.target.value)}
             rows={3}
-            placeholder="Research competitors, track market changes, and challenge assumptions."
+            placeholder={t('authoring.summaryPlaceholder')}
           />
         </Field>
-        <Field label="Working style" hint="Optional standing instructions.">
+        <Field label={t('authoring.workingStyle')} hint={t('authoring.workingStyleHint')}>
           <textarea
             value={instructions}
             onChange={(event) => setInstructions(event.target.value)}
             rows={5}
-            placeholder="Be thorough, concise, and cite evidence before making a recommendation."
+            placeholder={t('authoring.instructionsPlaceholder')}
           />
         </Field>
       </div>
       <details className="agents-advanced">
-        <summary>Advanced</summary>
+        <summary>{t('authoring.advanced')}</summary>
         <Field
-          label="Model policy"
-          hint="Applies to formal Work execution. Chat replies currently use the server's configured runtime model."
+          label={t('authoring.modelPolicy')}
+          hint={t('authoring.modelPolicyHint')}
         >
           <select
             value={modelPolicyRef}
@@ -119,7 +120,7 @@ export function NewCoworkerForm({
               setModelPolicyRef(event.target.value as typeof modelPolicyRef)
             }
           >
-            <option value="free-only">Recommended · free-only</option>
+            <option value="free-only">{t('authoring.recommendedFreeOnly')}</option>
             <option value="claude/deepseek-v4-flash">
               Claude · deepseek-v4-flash
             </option>
@@ -129,9 +130,7 @@ export function NewCoworkerForm({
           </select>
         </Field>
         <p className="agents-form-hint">
-          Formal Work discovery and start tools are attached by the
-          deterministic Coworker compiler. Provider session and permission
-          boilerplate are not user-authored here.
+          {t('authoring.compilerHint')}
         </p>
       </details>
       {error ? (
@@ -141,7 +140,7 @@ export function NewCoworkerForm({
       ) : null}
       <div className="agents-form-actions">
         <button type="button" onClick={onCancel} disabled={busy}>
-          Cancel
+          {t('common.cancel')}
         </button>
         <button
           className="agents-primary"
@@ -149,7 +148,7 @@ export function NewCoworkerForm({
           onClick={() => void submit()}
           disabled={busy || !name.trim() || !role.trim() || !summary.trim()}
         >
-          {busy ? 'Creating…' : 'Create & Chat'}
+          {busy ? t('authoring.creating') : t('authoring.createChat')}
         </button>
       </div>
     </section>
@@ -169,14 +168,6 @@ interface EditableInput {
   readonly maxLength: string;
 }
 
-// feature_unavailable means this workspace does not compose the Product
-// Work surface at all, so validate/plan/apply can never succeed here. This
-// message must stay product prose (not the raw upstream error string), and
-// the state must not offer Retry — see docs/frontend.md "Surface
-// availability".
-const CAPABILITY_UNAVAILABLE_MESSAGE =
-  'This workspace doesn’t currently offer Work execution. Capabilities can’t be previewed or saved here.';
-
 export function CapabilityBuilder({
   agent,
   onCancel,
@@ -188,6 +179,7 @@ export function CapabilityBuilder({
   readonly onSaved: () => Promise<void> | void;
   readonly onStart: (definitionVersionId: string) => void;
 }) {
+  const t = useT();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [mode, setMode] = useState<'single' | 'collaboration'>('single');
@@ -265,13 +257,13 @@ export function CapabilityBuilder({
       setPlan(nextPlan);
       setStatus('ready');
       setMessage(
-        'Ready to save. The preview below shows the resolved plan for this Capability.',
+        t('authoring.readyToSave'),
       );
       return { source, plan: nextPlan };
     } catch (reason) {
       if (isFeatureUnavailable(reason)) {
         setStatus('unavailable');
-        setMessage(CAPABILITY_UNAVAILABLE_MESSAGE);
+        setMessage(t('authoring.capabilityUnavailable'));
         return null;
       }
       const nextDiagnostics = diagnosticsFrom(
@@ -281,7 +273,7 @@ export function CapabilityBuilder({
       setStatus('error');
       setMessage(
         nextDiagnostics.length
-          ? 'Fix the highlighted Capability details before saving.'
+          ? t('authoring.fixDetails')
           : reason instanceof Error
             ? reason.message
             : String(reason),
@@ -300,13 +292,13 @@ export function CapabilityBuilder({
       await associateCapability(agent.id, capabilityBindingFromApply(applied));
       await onSaved();
       setStatus('ready');
-      setMessage('Capability saved to this Coworker’s Work Catalog.');
+      setMessage(t('authoring.saved'));
       setSaveConfirmation(true);
       if (startAfterSave) onStart(applied.versionId);
     } catch (reason) {
       if (isFeatureUnavailable(reason)) {
         setStatus('unavailable');
-        setMessage(CAPABILITY_UNAVAILABLE_MESSAGE);
+        setMessage(t('authoring.capabilityUnavailable'));
         return;
       }
       setStatus('error');
@@ -334,28 +326,27 @@ export function CapabilityBuilder({
   }
 
   return (
-    <section className="agents-authoring" aria-label="Capability Builder">
+    <section className="agents-authoring" aria-label={t('authoring.capabilityBuilder')}>
       <header>
-        <span className="eyebrow">Teach a capability</span>
-        <h1>What can {agent.displayName} formally do?</h1>
+        <span className="eyebrow">{t('authoring.teachCapability')}</span>
+        <h1>{t('authoring.whatCan', { name: agent.displayName })}</h1>
         <p>
-          A Capability is a reusable way for this Coworker to complete a formal
-          kind of Work. The execution details stay behind this builder.
+          {t('authoring.capabilityDescription')}
         </p>
       </header>
 
       <div className="agents-form-grid">
-        <Field label="Capability name">
+        <Field label={t('authoring.capabilityName')}>
           <input
             value={name}
             onChange={(event) => {
               setName(event.target.value);
               resetPreview();
             }}
-            placeholder="Competitor Research"
+            placeholder={t('authoring.capabilityNamePlaceholder')}
           />
         </Field>
-        <Field label="Outcome">
+        <Field label={t('authoring.outcome')}>
           <textarea
             value={description}
             onChange={(event) => {
@@ -363,13 +354,13 @@ export function CapabilityBuilder({
               resetPreview();
             }}
             rows={3}
-            placeholder="Research a company’s major competitors and deliver an evidence-backed comparison."
+            placeholder={t('authoring.outcomePlaceholder')}
           />
         </Field>
       </div>
 
       <div className="agents-authoring-section">
-        <h2>Execution</h2>
+        <h2>{t('authoring.execution')}</h2>
         <div className="agents-choice-row">
           <label>
             <input
@@ -381,7 +372,7 @@ export function CapabilityBuilder({
                 resetPreview();
               }}
             />{' '}
-            One specialist <small>Recommended</small>
+            {t('authoring.oneSpecialist')} <small>{t('authoring.recommended')}</small>
           </label>
           <label>
             <input
@@ -400,7 +391,7 @@ export function CapabilityBuilder({
                 resetPreview();
               }}
             />{' '}
-            A small team
+            {t('authoring.smallTeam')}
           </label>
         </div>
         <div className="agents-participant-list">
@@ -412,10 +403,10 @@ export function CapabilityBuilder({
               <div className="agents-participant-heading">
                 <strong>
                   {index === 0 && mode === 'collaboration'
-                    ? 'Lead'
+                    ? t('authoring.lead')
                     : mode === 'single'
-                      ? 'Specialist'
-                      : `Member ${index}`}
+                      ? t('authoring.specialist')
+                      : t('authoring.member', { index })}
                 </strong>
                 {mode === 'collaboration' && index > 0 ? (
                   <button
@@ -427,11 +418,11 @@ export function CapabilityBuilder({
                       resetPreview();
                     }}
                   >
-                    Remove
+                    {t('authoring.remove')}
                   </button>
                 ) : null}
               </div>
-              <Field label="Name">
+              <Field label={t('authoring.name')}>
                 <input
                   value={participant.name}
                   onChange={(event) =>
@@ -439,7 +430,7 @@ export function CapabilityBuilder({
                   }
                 />
               </Field>
-              <Field label="Role">
+              <Field label={t('authoring.role')}>
                 <input
                   value={participant.role}
                   onChange={(event) =>
@@ -447,7 +438,7 @@ export function CapabilityBuilder({
                   }
                 />
               </Field>
-              <Field label="Instructions">
+              <Field label={t('authoring.instructions')}>
                 <textarea
                   rows={3}
                   value={participant.instructions}
@@ -474,7 +465,7 @@ export function CapabilityBuilder({
               resetPreview();
             }}
           >
-            + Add member
+            {t('authoring.addMember')}
           </button>
         ) : null}
       </div>
@@ -482,8 +473,8 @@ export function CapabilityBuilder({
       <div className="agents-authoring-section">
         <div className="agents-section-heading">
           <div>
-            <h2>Inputs</h2>
-            <p>These fields become the questions shown when starting Work.</p>
+            <h2>{t('authoring.inputs')}</h2>
+            <p>{t('authoring.inputsDescription')}</p>
           </div>
           <button
             type="button"
@@ -492,35 +483,34 @@ export function CapabilityBuilder({
               resetPreview();
             }}
           >
-            + Add input
+            {t('authoring.addInput')}
           </button>
         </div>
         {inputs.length === 0 ? (
           <p className="agents-empty-note">
-            No input fields yet. The Capability can still be started with an
-            empty input object.
+            {t('authoring.noInputs')}
           </p>
         ) : null}
         {inputs.map((input) => (
           <article className="agents-input-row" key={input.id}>
             <input
-              aria-label="Input label"
+              aria-label={t('authoring.inputLabel')}
               value={input.label}
-              placeholder="Company"
+              placeholder={t('authoring.companyPlaceholder')}
               onChange={(event) =>
                 changeInput(input.id, { label: event.target.value })
               }
             />
             <input
-              aria-label="Input key"
+              aria-label={t('authoring.inputKey')}
               value={input.key}
-              placeholder="company"
+              placeholder={t('authoring.companyKeyPlaceholder')}
               onChange={(event) =>
                 changeInput(input.id, { key: event.target.value })
               }
             />
             <select
-              aria-label="Input type"
+              aria-label={t('authoring.inputType')}
               value={input.type}
               onChange={(event) =>
                 changeInput(input.id, {
@@ -528,11 +518,11 @@ export function CapabilityBuilder({
                 })
               }
             >
-              <option value="text">Text</option>
-              <option value="select">Choice</option>
-              <option value="number">Number</option>
-              <option value="integer">Integer</option>
-              <option value="boolean">Yes / No</option>
+              <option value="text">{t('authoring.text')}</option>
+              <option value="select">{t('authoring.choice')}</option>
+              <option value="number">{t('authoring.number')}</option>
+              <option value="integer">{t('authoring.integer')}</option>
+              <option value="boolean">{t('authoring.yesNo')}</option>
             </select>
             <label className="agents-inline-check">
               <input
@@ -542,13 +532,13 @@ export function CapabilityBuilder({
                   changeInput(input.id, { required: event.target.checked })
                 }
               />{' '}
-              Required
+              {t('authoring.required')}
             </label>
             {input.type === 'select' ? (
               <input
                 className="agents-input-wide"
                 value={input.choices}
-                placeholder="OpenAI, Anthropic, Google"
+                placeholder={t('authoring.choicesPlaceholder')}
                 onChange={(event) =>
                   changeInput(input.id, { choices: event.target.value })
                 }
@@ -559,7 +549,7 @@ export function CapabilityBuilder({
                 <input
                   type="number"
                   value={input.minLength}
-                  placeholder="Min length"
+                  placeholder={t('authoring.minLength')}
                   onChange={(event) =>
                     changeInput(input.id, { minLength: event.target.value })
                   }
@@ -567,7 +557,7 @@ export function CapabilityBuilder({
                 <input
                   type="number"
                   value={input.maxLength}
-                  placeholder="Max length"
+                  placeholder={t('authoring.maxLength')}
                   onChange={(event) =>
                     changeInput(input.id, { maxLength: event.target.value })
                   }
@@ -579,7 +569,7 @@ export function CapabilityBuilder({
                 <input
                   type="number"
                   value={input.minimum}
-                  placeholder="Minimum"
+                  placeholder={t('authoring.minimum')}
                   onChange={(event) =>
                     changeInput(input.id, { minimum: event.target.value })
                   }
@@ -587,7 +577,7 @@ export function CapabilityBuilder({
                 <input
                   type="number"
                   value={input.maximum}
-                  placeholder="Maximum"
+                  placeholder={t('authoring.maximum')}
                   onChange={(event) =>
                     changeInput(input.id, { maximum: event.target.value })
                   }
@@ -603,7 +593,7 @@ export function CapabilityBuilder({
                 resetPreview();
               }}
             >
-              Remove
+              {t('authoring.remove')}
             </button>
           </article>
         ))}
@@ -612,8 +602,8 @@ export function CapabilityBuilder({
       <div className="agents-authoring-section">
         <div className="agents-section-heading">
           <div>
-            <h2>Preview</h2>
-            <p>Check how this Capability will work before saving.</p>
+            <h2>{t('authoring.preview')}</h2>
+            <p>{t('authoring.previewDescription')}</p>
           </div>
           <button
             type="button"
@@ -624,7 +614,7 @@ export function CapabilityBuilder({
               surfaceUnavailable
             }
           >
-            {status === 'previewing' ? 'Resolving…' : 'Preview plan'}
+            {status === 'previewing' ? t('authoring.resolving') : t('authoring.previewPlan')}
           </button>
         </div>
         {plan ? <PlanPreview plan={plan} inputs={inputs} /> : null}
@@ -640,10 +630,10 @@ export function CapabilityBuilder({
           </ul>
         ) : null}
         <details className="agents-advanced">
-          <summary>Advanced · generated canonical source</summary>
+          <summary>{t('authoring.generatedSource')}</summary>
           <pre className="agents-source-preview">
             {generatedSource ||
-              'Preview the plan to generate canonical WorkDefinition source.'}
+              t('authoring.previewSource')}
           </pre>
         </details>
       </div>
@@ -666,14 +656,14 @@ export function CapabilityBuilder({
       ) : null}
       <div className="agents-form-actions">
         <button type="button" onClick={onCancel} disabled={status === 'saving'}>
-          Cancel
+          {t('common.cancel')}
         </button>
         <button
           type="button"
           onClick={() => void save(false)}
           disabled={status === 'saving' || surfaceUnavailable}
         >
-          {status === 'saving' ? 'Saving…' : 'Save capability'}
+          {status === 'saving' ? t('authoring.saving') : t('authoring.save')}
         </button>
         <button
           className="agents-primary"
@@ -681,7 +671,7 @@ export function CapabilityBuilder({
           onClick={() => void save(true)}
           disabled={status === 'saving' || surfaceUnavailable}
         >
-          Save & start Work
+          {t('authoring.saveStart')}
         </button>
       </div>
     </section>
@@ -705,18 +695,19 @@ function PlanPreview({
   readonly plan: DefinitionPlan;
   readonly inputs: readonly EditableInput[];
 }) {
+  const t = useT();
   return (
     <div className="agents-plan-preview">
       <div>
-        <span className="eyebrow">Execution</span>
+        <span className="eyebrow">{t('authoring.execution')}</span>
         <strong>
           {plan.resolved.kind === 'single_worker'
-            ? 'One specialist'
-            : 'Small team'}
+            ? t('authoring.oneSpecialistPlan')
+            : t('authoring.smallTeamPlan')}
         </strong>
       </div>
       <div>
-        <span className="eyebrow">Participants</span>
+        <span className="eyebrow">{t('authoring.participants')}</span>
         {plan.resolved.participants.map((participant) => (
           <p key={`${participant.role}:${participant.name}`}>
             <strong>{participant.name}</strong> · {participant.role}
@@ -724,36 +715,36 @@ function PlanPreview({
         ))}
       </div>
       <div>
-        <span className="eyebrow">Tools & Skills</span>
+        <span className="eyebrow">{t('authoring.toolsSkills')}</span>
         <p>
           {unique(
             plan.resolved.participants.flatMap(
               (participant) => participant.tools,
             ),
-          ).join(', ') || 'No domain tools declared'}
+          ).join(', ') || t('authoring.noDomainTools')}
         </p>
         <p>
           {unique(
             plan.resolved.participants.flatMap(
               (participant) => participant.skills,
             ),
-          ).join(', ') || 'No skills declared'}
+          ).join(', ') || t('authoring.noSkills')}
         </p>
       </div>
       <div>
-        <span className="eyebrow">Runtime requirements</span>
+        <span className="eyebrow">{t('authoring.runtimeRequirements')}</span>
         {plan.resolved.requiredRuntimeCapabilities.length ? (
           <ul className="agents-runtime-requirements">
             {plan.resolved.requiredRuntimeCapabilities.map((token) => (
-              <li key={token}>{describeRuntimeCapability(token)}</li>
+              <li key={token}>{describeRuntimeCapability(t, token)}</li>
             ))}
           </ul>
         ) : (
-          <p>This Capability needs no additional runtime capability.</p>
+          <p>{t('authoring.noRuntimeCapability')}</p>
         )}
       </div>
       <div>
-        <span className="eyebrow">Inputs</span>
+        <span className="eyebrow">{t('authoring.inputs')}</span>
         <p>
           {inputs.length
             ? inputs
@@ -762,14 +753,14 @@ function PlanPreview({
                     `${input.label || input.key}${input.required ? ' *' : ''}`,
                 )
                 .join(', ')
-            : 'No required input'}
+            : t('authoring.noRequiredInput')}
         </p>
       </div>
       <div>
-        <span className="eyebrow">Platform</span>
+        <span className="eyebrow">{t('authoring.platform')}</span>
         <p>
           {plan.resolved.platformCapabilities.join(', ') ||
-            'No additional platform capabilities'}
+            t('authoring.noPlatformCapabilities')}
         </p>
       </div>
     </div>
@@ -790,33 +781,34 @@ function SkillPicker({
   readonly selected: readonly string[];
   readonly onChange: (skills: readonly string[]) => void;
 }) {
+  const t = useT();
   if (catalog.status === 'loading')
-    return <p className="agents-empty-note">Loading Skills…</p>;
+    return <p className="agents-empty-note">{t('authoring.loadingSkills')}</p>;
   if (catalog.status === 'unavailable')
     // feature_unavailable means this workspace does not compose the Product
     // Work surface, so Skill selection can never succeed here. No Retry.
     return (
       <p className="agents-empty-note">
-        This workspace doesn’t currently offer Skills.
+        {t('authoring.skillsUnavailable')}
       </p>
     );
   if (catalog.status === 'error')
     return (
       <p className="agents-error" role="alert">
-        Skills could not be loaded.{' '}
+        {t('authoring.skillsLoadError')}{' '}
         <button type="button" onClick={catalog.refresh}>
-          Retry
+          {t('common.retry')}
         </button>
       </p>
     );
   if (catalog.skills.length === 0)
     return (
       <p className="agents-empty-note">
-        No Skills are published in this workspace yet.
+        {t('authoring.noPublishedSkills')}
       </p>
     );
   return (
-    <Field label="Skills" hint="What this participant can formally do.">
+    <Field label={t('authoring.skillsLabel')} hint={t('authoring.skillsHint')}>
       <div className="agents-skill-list">
         {catalog.skills.map((skill) => (
           <label className="agents-inline-check" key={skill.ref}>
@@ -841,10 +833,10 @@ function SkillPicker({
             */}
             {skill.requiredToolRefs.length ? (
               <span className="agents-skill-grant">
-                grants {skill.requiredToolRefs.join(', ')}
+                {t('authoring.grants', { tools: skill.requiredToolRefs.join(', ') })}
               </span>
             ) : (
-              <span className="agents-skill-grant">grants no extra tools</span>
+              <span className="agents-skill-grant">{t('authoring.grantsNone')}</span>
             )}
           </label>
         ))}
@@ -949,17 +941,9 @@ function unique(values: readonly string[]): string[] {
 // they are internal vocabulary rather than user-facing copy. Translate before
 // the author ever commits to creating a Work: some deployments do not support every token, and finding that out
 // only after Run start is the exact gap this preview closes.
-const RUNTIME_CAPABILITY_EXPLANATIONS: Readonly<Record<string, string>> = {
-  external_workspace:
-    'Needs a persistent project workspace outside the chat session. Some deployments do not provide this yet — if this one doesn’t, Runs of this Capability cannot start.',
-  reusable_session:
-    'Reuses one runtime session across the whole Work instead of starting a fresh one each time.',
-  platform_mcp:
-    'Uses this deployment’s shared platform tools during execution.',
-};
-function describeRuntimeCapability(token: string): string {
-  return (
-    RUNTIME_CAPABILITY_EXPLANATIONS[token] ??
-    `Requires the "${token}" runtime capability.`
-  );
+function describeRuntimeCapability(t: ReturnType<typeof useT>, token: string): string {
+  if (token === 'external_workspace') return t('authoring.externalWorkspace');
+  if (token === 'reusable_session') return t('authoring.reusableSession');
+  if (token === 'platform_mcp') return t('authoring.platformMcp');
+  return t('authoring.runtimeCapabilityRequired', { token });
 }

@@ -19,10 +19,10 @@
  *     from, which is the wrong default for someone reading English at work and
  *     Chinese at home.
  */
-import { useSyncExternalStore } from 'react';
+import { useCallback, useSyncExternalStore } from 'react';
 
-import { en } from './en';
-import { zhCN } from './zh-CN';
+import { en } from './en.js';
+import { zhCN } from './zh-CN.js';
 
 export type Locale = 'en' | 'zh-CN';
 export type MessageKey = keyof typeof en;
@@ -170,7 +170,7 @@ export function useLocale(): Locale {
 /** The translator for components. Re-renders its caller on a locale switch. */
 export function useT(): Translate {
   const locale = useLocale();
-  return (key, vars) => translate(locale, key, vars);
+  return useCallback((key, vars) => translate(locale, key, vars), [locale]);
 }
 
 /**

@@ -169,6 +169,8 @@ export const zhCN: Record<MessageKey, string> = {
   'workStage.not_captured.description': '我们没拿到这个 Work 的状态更新。',
 
   // --- A Coworker's reachability -------------------------------------------
+  'runtimeStatus.working': '工作中',
+  'runtimeStatus.thinking': '思考中',
   'runtimeStatus.available': '在线',
   'runtimeStatus.draining': '收尾中',
   'runtimeStatus.unavailable': '不在线',

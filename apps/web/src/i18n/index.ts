@@ -55,7 +55,8 @@ const DICTIONARIES: Record<Locale, Partial<Record<MessageKey, string>>> = {
   'zh-CN': zhCN,
 };
 
-const STORAGE_KEY = 'agent-server.locale';
+/** The per-device locale preference. Kept public for tests and integration docs. */
+export const LOCALE_STORAGE_KEY = 'agent-server.locale';
 
 function isLocale(value: string | null): value is Locale {
   return LOCALES.some(({ code }) => code === value);
@@ -87,7 +88,7 @@ function detectLocale(): Locale {
 function readStoredLocale(): Locale {
   if (typeof window === 'undefined') return 'en';
   try {
-    const stored = window.localStorage.getItem(STORAGE_KEY);
+    const stored = window.localStorage.getItem(LOCALE_STORAGE_KEY);
     if (isLocale(stored)) return stored;
   } catch {
     // Private mode or storage disabled: fall through to browser detection.
@@ -124,15 +125,15 @@ export function getLocale(): Locale {
 }
 
 export function setLocale(next: Locale): void {
-  if (next === current) return;
+  const changed = next !== current;
   current = next;
   syncDocumentLanguage(next);
   try {
-    window.localStorage.setItem(STORAGE_KEY, next);
+    window.localStorage.setItem(LOCALE_STORAGE_KEY, next);
   } catch {
     // A locale that cannot be remembered is still worth applying now.
   }
-  listeners.forEach((listener) => listener());
+  if (changed) listeners.forEach((listener) => listener());
 }
 
 /**

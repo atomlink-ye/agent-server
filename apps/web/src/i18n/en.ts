@@ -168,6 +168,8 @@ export const en = {
     'We don’t have a status update for this Work.',
 
   // --- A Coworker's reachability -------------------------------------------
+  'runtimeStatus.working': 'Working',
+  'runtimeStatus.thinking': 'Thinking',
   'runtimeStatus.available': 'Available',
   'runtimeStatus.draining': 'Draining',
   'runtimeStatus.unavailable': 'Unavailable',

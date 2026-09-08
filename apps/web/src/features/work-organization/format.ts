@@ -55,6 +55,10 @@ export function runtimeStatusLabel(status: string): string {
   switch (status) {
     case 'available':
       return t('runtimeStatus.available');
+    case 'working':
+      return t('runtimeStatus.working');
+    case 'thinking':
+      return t('runtimeStatus.thinking');
     case 'draining':
       return t('runtimeStatus.draining');
     case 'unavailable':

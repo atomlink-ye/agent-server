@@ -19,6 +19,7 @@ import { CoworkerRoster } from './CoworkerRoster';
 import {
   BUSY_RUNTIME_STATUSES,
   STATUS_FILTERS,
+  runtimeStatusLabel,
 } from './runtime-status';
 import TitleBar from '../../app/shell/TitleBar';
 import AccountName from '../../app/shell/AccountName';
@@ -228,7 +229,7 @@ export function AgentsPage() {
                   data-active={active ? 'true' : 'false'}
                   onClick={() => setStatusFilter(active ? null : status)}
                 >
-                  {localizedRuntimeStatus(t, status)} · {count}
+                  {runtimeStatusLabel(t, status)} · {count}
                 </button>
               );
             })}
@@ -250,7 +251,7 @@ export function AgentsPage() {
             <p className="pane-placeholder">
               {statusFilter
                 ? t('agents.filteredEmpty', {
-                    status: localizedRuntimeStatus(t, statusFilter).toLowerCase(),
+                    status: runtimeStatusLabel(t, statusFilter).toLowerCase(),
                   })
                 : t('agents.empty')}
             </p>
@@ -285,7 +286,7 @@ export function AgentsPage() {
               <span
                 className={`agents-runtime agents-runtime--${agent.runtimeStatus}`}
               >
-                {localizedRuntimeStatus(t, agent.runtimeStatus)}
+                {runtimeStatusLabel(t, agent.runtimeStatus)}
               </span>
             </button>
           ))}
@@ -369,7 +370,7 @@ export function AgentsPage() {
                       <span
                         className={`agents-runtime agents-runtime--${profile.agent.runtimeStatus}`}
                       >
-                        {localizedRuntimeStatus(t, profile.agent.runtimeStatus)}
+                        {runtimeStatusLabel(t, profile.agent.runtimeStatus)}
                       </span>
                       {profile.capabilities.modelPolicyRef ? (
                         <span
@@ -514,7 +515,7 @@ export function AgentsPage() {
                       <dl>
                         <dt>{t('agents.status')}</dt>
                         <dd>
-                          {localizedRuntimeStatus(t, profile.agent.runtimeStatus)}
+                          {runtimeStatusLabel(t, profile.agent.runtimeStatus)}
                         </dd>
                         <dt>{t('agents.publishedVersion')}</dt>
                         <dd className="agents-mono">
@@ -571,12 +572,3 @@ function humanize(value: string): string {
 }
 
 export default AgentsPage;
-
-function localizedRuntimeStatus(
-  t: Translate,
-  status: Coworker['runtimeStatus'],
-): string {
-  if (status === 'available') return t('runtimeStatus.available');
-  if (status === 'draining') return t('runtimeStatus.draining');
-  return t('runtimeStatus.unavailable');
-}

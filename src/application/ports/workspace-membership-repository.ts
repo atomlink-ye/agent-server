@@ -24,12 +24,21 @@ export interface WorkspaceMembershipRepository {
     readonly principalIds: readonly string[];
   }): Promise<ReadonlyMap<string, string>>;
 
-  /** Sets or replaces the name a workspace member is called by. */
+  /**
+   * Sets or replaces the name a workspace member is called by. Resolves to
+   * `false` -- instead of silently succeeding -- when no membership row
+   * matched, so a caller never reports a rename that did not land.
+   */
   setDisplayName(input: {
     readonly tenantId: string;
     readonly workspaceId: string;
     readonly principalType: string;
     readonly principalId: string;
     readonly displayName: string;
-  }): Promise<void>;
+  }): Promise<boolean>;
+}
+
+/** No membership row existed to receive the rename. */
+export class WorkspaceMemberNotFoundError extends Error {
+  public readonly code = 'workspace_member_not_found';
 }

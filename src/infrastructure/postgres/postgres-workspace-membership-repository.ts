@@ -7,6 +7,10 @@ interface Queryable {
   ): Promise<{
     readonly rows?: readonly Row[];
     readonly rowCount?: number | null;
+    // PGlite reports affectedRows where node-postgres reports rowCount for
+    // UPDATE/DELETE statements -- both are read below so this stays correct
+    // against either driver.
+    readonly affectedRows?: number | null;
   }>;
 }
 
@@ -69,9 +73,9 @@ export class PostgresWorkspaceMembershipRepository implements WorkspaceMembershi
     readonly principalType: string;
     readonly principalId: string;
     readonly displayName: string;
-  }): Promise<void> {
+  }): Promise<boolean> {
     const now = new Date().toISOString();
-    await this.db.query(
+    const result = await this.db.query(
       `UPDATE workspace_members SET display_name=$5,updated_at=$6
         WHERE tenant_id=$1 AND workspace_id=$2 AND principal_type=$3
           AND principal_id=$4`,
@@ -84,5 +88,6 @@ export class PostgresWorkspaceMembershipRepository implements WorkspaceMembershi
         now,
       ],
     );
+    return (result.rowCount ?? result.affectedRows ?? 0) > 0;
   }
 }

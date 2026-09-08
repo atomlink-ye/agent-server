@@ -175,6 +175,63 @@ pnpm test:web:canonical
 
 `web:check:architecture` is the structural regression guard. It fails if the duplicate `apps/web-vite` tree, Next.js config/runtime dependencies, `server-only`, or the old coexistence configs return.
 
+## Language and copy
+
+The browser application ships English and Simplified Chinese. `apps/web/src/i18n` is the whole
+mechanism; there is no i18n library.
+
+```text
+apps/web/src/i18n/
+  en.ts        English — the source of truth for the key vocabulary
+  zh-CN.ts     Simplified Chinese — Record<MessageKey, string>
+  index.ts     locale state, detection, storage, lookup, interpolation
+  rich.tsx     sentences whose placeholders are React nodes
+```
+
+Three rules hold the layer together:
+
+- **English defines the vocabulary.** `MessageKey` is `keyof typeof en`, and every other
+  dictionary is a _total_ `Record<MessageKey, string>`. A key a translation forgot is
+  `TS2739`; a key it misspelled is `TS2353`. Runtime lookup still falls back to English, so a
+  stale bundle renders a mixed UI rather than an empty one.
+- **Product nouns stay English in every locale** — Work, Run, Agent, Coworker, Board,
+  Workspace. They name things in this product; a translated name is a second name for the same
+  thing, and a reader would have to learn both.
+- **The register matches the English, which is plain and direct.** The product says
+  "Coworkers work on their own and with each other", so the Chinese says
+  「同事各自工作，也彼此协作」— not 「智能体实例自主执行任务」.
+
+The locale is a per-device choice in `localStorage` under `agent-server.locale`, detected from
+the browser on a first visit (anything `zh*` resolves to `zh-CN`). It is not an account
+preference: one language pushed onto every browser someone signs in from is the wrong default
+for a person reading English at work and Chinese at home.
+
+### Migrating a surface
+
+1. Add the English strings to `en.ts` under a namespaced key (`conversations.list.empty`).
+   Copy the existing literal exactly — a migration extracts copy, it does not reword it.
+2. Add the Chinese to `zh-CN.ts`. `tsc` will not let you skip one.
+3. In a component, `const t = useT()`. It re-renders on a language switch.
+4. In module scope — a shared label table, a store that produces an error string — use the
+   non-reactive `t()`. `App` subscribes to the locale at the root, which is what carries a
+   switch down to callers that cannot subscribe themselves. A helper that a component calls
+   during render should take the translator as its first argument instead, so the dependency
+   is visible.
+5. A sentence with markup inside it (`<strong>{name}</strong> assigned …`) is one template
+   with `{placeholders}`, rendered through `useRichT()`. Never concatenate fragments in JSX:
+   concatenation hard-codes English word order, and Chinese puts the same three nodes in a
+   different order.
+6. A label table stops being a frozen `const` and becomes a function, so it reads the current
+   locale at call time.
+
+### Known gap
+
+`pnpm web:check:types` runs `tsc --noEmit` against a solution-style `tsconfig.json` with
+`files: []` and project references, which checks nothing. The real command is
+`tsc -p tsconfig.app.json --noEmit`, and it currently reports eight pre-existing errors
+unrelated to translation. Until that is cleaned up, `apps/web/src/i18n/i18n.test.ts` asserts
+dictionary parity at runtime so the guarantee is enforced by a command that actually runs.
+
 ## Source-of-truth rule
 
 Backend Work/Run/Conversation/WorkItem facts remain canonical. The frontend may format product states but must not create a second WorkItem/Work state machine, infer formal Artifacts from raw messages/tool output, or map a successful-looking transcript directly to `in_review`/`done`.

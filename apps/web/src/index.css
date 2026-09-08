@@ -248,6 +248,67 @@ textarea {
   color: var(--skype-deep);
 }
 
+/* The language control sits at the foot of the rail: chrome that is present on
+   every screen, below the sections rather than among them. */
+.rail-language {
+  position: relative;
+  margin-top: auto;
+}
+
+.rail-language-button {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: var(--radius-md);
+  color: var(--ink-500);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.rail-language-button:hover:not(:disabled),
+.rail-language-button[aria-expanded='true'] {
+  background: var(--cloud);
+  box-shadow: var(--shadow-soft);
+  color: var(--skype-deep);
+}
+
+.rail-language-menu {
+  position: absolute;
+  bottom: 0;
+  left: calc(100% + 8px);
+  z-index: 20;
+  display: flex;
+  min-width: 132px;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid var(--ink-100);
+  border-radius: var(--radius-lg);
+  background: var(--cloud);
+  box-shadow: var(--shadow-soft);
+  padding: 6px;
+}
+
+.rail-language-option {
+  border-radius: var(--radius-sm);
+  padding: 7px 10px;
+  color: var(--ink-500);
+  font-size: var(--text-md);
+  text-align: start;
+  white-space: nowrap;
+}
+
+.rail-language-option:hover {
+  background: var(--sky-100);
+  color: var(--skype-deep);
+}
+
+.rail-language-option[aria-checked='true'] {
+  color: var(--skype-deep);
+  font-weight: 700;
+}
+
 .rail-tab[data-active='true']::before {
   position: absolute;
   left: -8px;

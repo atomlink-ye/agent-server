@@ -1,3 +1,4 @@
+import { t } from '../../../i18n';
 import type { AppStore } from './app';
 import type { Conversation } from '../contracts';
 import type { StoreListener } from './app';
@@ -85,7 +86,7 @@ export function createConversationsStore(
         setSnapshot({
           ...snapshot,
           status: 'error',
-          error: 'Unable to load conversations.',
+          error: t('conversations.list.loadError'),
         });
       }
     },

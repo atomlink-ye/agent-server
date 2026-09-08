@@ -1,4 +1,5 @@
 import { ISend } from '../../../components/icons';
+import { useT } from '../../../i18n';
 
 export interface ChatComposerProps {
   readonly draft: string;
@@ -21,6 +22,7 @@ export function ChatComposer({
   onSend,
   onRetry,
 }: ChatComposerProps) {
+  const t = useT();
   const sendDisabled = disabled || sending || draft.trim().length === 0;
 
   const submit = (): void => {
@@ -35,7 +37,7 @@ export function ChatComposer({
           <span>{sendError}</span>
           {canRetry ? (
             <button type="button" disabled={sending} onClick={onRetry}>
-              Retry
+              {t('common.retry')}
             </button>
           ) : null}
         </div>
@@ -48,13 +50,13 @@ export function ChatComposer({
         }}
       >
         <label className="sr-only" htmlFor="message">
-          Message
+          {t('composer.field.label')}
         </label>
         <textarea
           id="message"
           value={draft}
           disabled={disabled || sending}
-          placeholder="Write a message..."
+          placeholder={t('composer.field.placeholder')}
           rows={1}
           onChange={(event) => onDraftChange(event.target.value)}
           onKeyDown={(event) => {
@@ -68,16 +70,14 @@ export function ChatComposer({
           <button
             className="send-button"
             type="submit"
-            aria-label={sending ? 'Sending message' : 'Send message'}
+            aria-label={sending ? t('composer.sending') : t('composer.send')}
             disabled={sendDisabled}
           >
             <ISend aria-hidden="true" />
           </button>
         </div>
       </form>
-      <p className="composer-hint">
-        Press Enter to send · Shift + Enter for a new line
-      </p>
+      <p className="composer-hint">{t('composer.hint')}</p>
     </>
   );
 }

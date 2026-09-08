@@ -1,6 +1,7 @@
 import type { ChatMessage, ConversationId } from '../contracts';
 import type { StoreListener } from './app';
 import { isResourceNotFound } from '../../../api/feature-availability';
+import { t } from '../../../i18n';
 import { CONVERSATION_NOT_FOUND_CODE } from '@atomlink-ye/agent-server/product-contract';
 
 export type MessageListStatus =
@@ -141,7 +142,7 @@ export function createMessagesStore(): MessagesStore {
             : 'error',
           error: isResourceNotFound(reason, CONVERSATION_NOT_FOUND_CODE)
             ? null
-            : 'Unable to load messages.',
+            : t('transcript.loadError'),
         }));
       } finally {
         if (loadInFlightVersions.get(conversationId) === requestVersion) {

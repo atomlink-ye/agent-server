@@ -1,4 +1,6 @@
 import { useMemo, useRef, useState, useSyncExternalStore } from 'react';
+
+import { useT, type Translate } from '../../i18n';
 import type { ChatCommands, Conversation, ConversationId } from './contracts';
 import type { Coworker } from '../agents/contracts';
 import { ConversationsList } from './components/ConversationsList';
@@ -23,6 +25,7 @@ export function ConversationsPane({
   onSelectConversation,
   selectedConversationMissing = false,
 }: ConversationsPaneProps) {
+  const t = useT();
   const [createOpen, setCreateOpen] = useState(false);
   // The picker's open/closed intent is read back by toggleCreate in the same
   // React batch that a close can be dispatched in, and batched state is not
@@ -51,7 +54,7 @@ export function ConversationsPane({
       .filter((conversation) =>
         query.length === 0
           ? true
-          : conversationSearchLabel(conversation)
+          : conversationSearchLabel(t, conversation)
               .toLocaleLowerCase()
               .includes(query),
       )
@@ -59,7 +62,7 @@ export function ConversationsPane({
         filter === 'all' ? true : isRecentConversation(conversation),
       )
       .sort(compareUpdatedAt);
-  }, [filter, search, state.conversations]);
+  }, [filter, search, state.conversations, t]);
 
   const select = (conversationId: ConversationId): void => {
     appStore.select(conversationId);
@@ -129,15 +132,19 @@ export function ConversationsPane({
   };
 
   return (
-    <aside className="sidebar" aria-label="Conversations navigation">
+    <aside className="sidebar" aria-label={t('conversations.nav.label')}>
       <div className="pane-heading">
         <div>
-          <span className="eyebrow">Workspace</span>
-          <h1>Conversations</h1>
+          <span className="eyebrow">
+            {t('conversations.eyebrow.workspace')}
+          </span>
+          <h1>{t('conversations.title')}</h1>
         </div>
         <span
           className="pane-count"
-          aria-label={`${state.conversations.length} conversations`}
+          aria-label={t('conversations.count', {
+            count: state.conversations.length,
+          })}
         >
           {state.conversations.length}
         </span>
@@ -151,7 +158,7 @@ export function ConversationsPane({
         onClick={toggleCreate}
       >
         <span aria-hidden="true">+</span>
-        New conversation
+        {t('conversations.new')}
       </button>
 
       {createOpen ? (
@@ -159,10 +166,12 @@ export function ConversationsPane({
           className="new-conversation-form"
           aria-busy={coworkerStatus === 'pending' || createStatus === 'pending'}
         >
-          <span className="eyebrow">Choose a coworker</span>
-          {coworkerStatus === 'pending' ? <p>Loading coworkers…</p> : null}
+          <span className="eyebrow">{t('conversations.chooseCoworker')}</span>
+          {coworkerStatus === 'pending' ? (
+            <p>{t('conversations.loadingCoworkers')}</p>
+          ) : null}
           {coworkerStatus === 'ready' && coworkers.length === 0 ? (
-            <p>No published Coworkers found.</p>
+            <p>{t('conversations.noCoworkers')}</p>
           ) : null}
           {coworkerStatus === 'ready' ? (
             <div className="new-conversation-actions">
@@ -187,7 +196,7 @@ export function ConversationsPane({
                   >
                     {coworker.displayName}
                     {secondary ? ` · ${secondary}` : ''}
-                    {existing ? ' · Open' : ''}
+                    {existing ? ` · ${t('conversations.openExisting')}` : ''}
                     {!available ? ` · ${coworker.runtimeStatus}` : ''}
                   </button>
                 );
@@ -203,7 +212,7 @@ export function ConversationsPane({
                   void loadCoworkers();
                 }}
               >
-                Retry
+                {t('common.retry')}
               </button>
             ) : null}
             <button
@@ -211,7 +220,7 @@ export function ConversationsPane({
               disabled={createStatus === 'pending'}
               onClick={closeCreate}
             >
-              Cancel
+              {t('common.cancel')}
             </button>
           </div>
           {createError !== null ? <p role="alert">{createError}</p> : null}
@@ -220,20 +229,20 @@ export function ConversationsPane({
 
       <div className="conversation-tools">
         <label className="sr-only" htmlFor="conversation-search">
-          Search conversations
+          {t('conversations.search.label')}
         </label>
         <input
           id="conversation-search"
           className="conversation-search"
           type="search"
-          placeholder="Search conversations"
+          placeholder={t('conversations.search.placeholder')}
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
         <div
           className="conversation-filters"
           role="group"
-          aria-label="Conversation filters"
+          aria-label={t('conversations.filters.label')}
         >
           <button
             className="filter-chip"
@@ -242,7 +251,7 @@ export function ConversationsPane({
             data-active={filter === 'all' ? 'true' : 'false'}
             onClick={() => setFilter('all')}
           >
-            All
+            {t('conversations.filters.all')}
           </button>
           <button
             className="filter-chip"
@@ -251,7 +260,7 @@ export function ConversationsPane({
             data-active={filter === 'recent' ? 'true' : 'false'}
             onClick={() => setFilter('recent')}
           >
-            Recent
+            {t('conversations.filters.recent')}
           </button>
         </div>
       </div>
@@ -272,11 +281,17 @@ export function ConversationsPane({
   );
 }
 
-function conversationSearchLabel(conversation: Conversation): string {
+function conversationSearchLabel(
+  t: Translate,
+  conversation: Conversation,
+): string {
   if (conversation.kind === 'direct') {
-    return conversation.directAgent?.displayName?.trim() || 'Agent';
+    return (
+      conversation.directAgent?.displayName?.trim() ||
+      t('conversations.fallback.agent')
+    );
   }
-  return conversation.title?.trim() || 'Conversation';
+  return conversation.title?.trim() || t('conversations.fallback.title');
 }
 
 function existingDirectConversation(

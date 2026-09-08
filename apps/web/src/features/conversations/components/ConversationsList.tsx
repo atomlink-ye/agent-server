@@ -1,3 +1,4 @@
+import { useT, type Translate } from '../../../i18n';
 import type { Conversation, ConversationId } from './contracts';
 import type { ConversationListState } from '../stores/conversations';
 
@@ -18,21 +19,26 @@ export function ConversationsList({
   onSelect,
   onRetry,
 }: ConversationsListProps) {
+  const t = useT();
   const conversations = visibleConversations ?? state.conversations;
 
   if (
     (state.status === 'idle' || state.status === 'loading') &&
     state.conversations.length === 0
   ) {
-    return <p className="conversation-placeholder">Loading conversations…</p>;
+    return (
+      <p className="conversation-placeholder">
+        {t('conversations.list.loading')}
+      </p>
+    );
   }
 
   if (state.status === 'error' && state.conversations.length === 0) {
     return (
       <div className="conversation-placeholder" role="alert">
-        <p>{state.error ?? 'Unable to load conversations.'}</p>
+        <p>{state.error ?? t('conversations.list.loadError')}</p>
         <button type="button" onClick={onRetry}>
-          Retry
+          {t('common.retry')}
         </button>
       </div>
     );
@@ -42,16 +48,19 @@ export function ConversationsList({
     return (
       <p className="conversation-placeholder">
         {selectedConversationMissing
-          ? 'The selected Conversation is unavailable.'
+          ? t('conversations.list.selectionUnavailable')
           : state.conversations.length === 0
-            ? 'No conversations yet.'
-            : 'No matching conversations.'}
+            ? t('conversations.list.empty')
+            : t('conversations.list.noMatches')}
       </p>
     );
   }
 
   return (
-    <div className="conversation-list" aria-label="Conversations">
+    <div
+      className="conversation-list"
+      aria-label={t('conversations.list.label')}
+    >
       {conversations.map((conversation) => (
         <button
           key={conversation.id}
@@ -67,10 +76,10 @@ export function ConversationsList({
             className={`conversation-avatar conversation-avatar--${avatarTone(conversation)}`}
             aria-hidden="true"
           >
-            {conversationInitials(conversation)}
+            {conversationInitials(t, conversation)}
           </span>
           <span className="conversation-row-copy">
-            <strong>{conversationDisplayName(conversation)}</strong>
+            <strong>{conversationDisplayName(t, conversation)}</strong>
             <time dateTime={conversation.updatedAt}>
               {formatUpdatedTime(conversation.updatedAt)}
             </time>
@@ -79,9 +88,9 @@ export function ConversationsList({
       ))}
       {state.status === 'error' ? (
         <div className="conversation-refresh-error" role="alert">
-          <span>{state.error ?? 'Unable to refresh conversations.'}</span>
+          <span>{state.error ?? t('conversations.list.refreshError')}</span>
           <button type="button" onClick={onRetry}>
-            Retry
+            {t('common.retry')}
           </button>
         </div>
       ) : null}
@@ -89,9 +98,12 @@ export function ConversationsList({
   );
 }
 
-function conversationInitials(conversation: Conversation): string {
+function conversationInitials(
+  t: Translate,
+  conversation: Conversation,
+): string {
   const source =
-    conversationDisplayName(conversation).trim() || conversation.id;
+    conversationDisplayName(t, conversation).trim() || conversation.id;
   const words = source.split(/\s+/).filter(Boolean);
   return (
     words.length > 1
@@ -100,11 +112,17 @@ function conversationInitials(conversation: Conversation): string {
   ).toUpperCase();
 }
 
-function conversationDisplayName(conversation: Conversation): string {
+function conversationDisplayName(
+  t: Translate,
+  conversation: Conversation,
+): string {
   if (conversation.kind === 'direct') {
-    return conversation.directAgent?.displayName?.trim() || 'Agent';
+    return (
+      conversation.directAgent?.displayName?.trim() ||
+      t('conversations.fallback.agent')
+    );
   }
-  return conversation.title ?? 'Conversation';
+  return conversation.title ?? t('conversations.fallback.title');
 }
 
 function avatarTone(conversation: Conversation): number {

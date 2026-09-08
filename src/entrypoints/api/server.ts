@@ -5,6 +5,7 @@ import { loadConfig } from '../../shared/config.js';
 import { createLogger } from '../../shared/observability/logger.js';
 import { createBrowserFeatureAvailabilityGuard } from './routes/browser-feature-availability.js';
 import { PRODUCT_WORK_BROWSER_ROUTE_PREFIXES } from './routes/browser-route-prefixes.js';
+import { registerBrowserAccountRoutes } from './routes/browser-account.js';
 import { registerBrowserContextRoutes } from './routes/browser-context.js';
 import { registerBrowserCoworkerRoutes } from './routes/browser-coworkers.js';
 import { registerBrowserWebRoutes } from './routes/browser-web.js';
@@ -79,6 +80,7 @@ if (config.productWorkSurface !== 'composed') {
     ),
   );
 }
+registerBrowserAccountRoutes(app, config);
 registerBrowserCoworkerRoutes(app, config);
 registerBrowserContextRoutes(app, config);
 registerBrowserWebRoutes(app, config, logger);

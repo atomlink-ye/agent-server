@@ -23,6 +23,7 @@ import {
   STATUS_FILTERS,
 } from './runtime-status';
 import TitleBar from '../../app/shell/TitleBar';
+import AccountName from '../../app/shell/AccountName';
 import './agents.css';
 
 function describeOpenConversationError(reason: unknown): string {
@@ -142,7 +143,7 @@ export function AgentsPage() {
   if (!selectedAgentId) {
     return (
       <main className="chat-panel agents-main agents-roster-main">
-        <TitleBar section="Agents" />
+        <TitleBar section="Agents" right={<AccountName />} />
         {error ? (
           <p className="agents-error" role="alert">
             {error}
@@ -290,7 +291,7 @@ export function AgentsPage() {
       </aside>
 
       <main className="chat-panel agents-main">
-        <TitleBar section="Agents" />
+        <TitleBar section="Agents" right={<AccountName />} />
         {authoring === 'coworker' && !invalidAgentId ? (
           <NewCoworkerForm
             onCancel={() => setAuthoring(null)}

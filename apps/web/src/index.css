@@ -570,6 +570,44 @@ textarea {
   font-weight: 800;
 }
 
+.title-bar-right {
+  margin-left: auto;
+}
+
+.account-name-badge {
+  border: none;
+  background: none;
+  color: var(--ink-500);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+
+.account-name-badge:hover {
+  color: var(--ink-700);
+  text-decoration: underline;
+}
+
+.account-name-form {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.account-name-input {
+  font: inherit;
+  padding: 2px 6px;
+}
+
+.account-name-error {
+  color: var(--ink-900);
+  background: var(--coral-soft);
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-weight: 600;
+}
+
 .chat-header {
   display: flex;
   align-items: center;
@@ -1228,7 +1266,11 @@ textarea {
   gap: var(--space-3);
   padding: var(--space-8);
   background:
-    radial-gradient(ellipse 60% 50% at 50% 0%, rgb(194 230 251 / 42%), transparent 70%),
+    radial-gradient(
+      ellipse 60% 50% at 50% 0%,
+      rgb(194 230 251 / 42%),
+      transparent 70%
+    ),
     var(--paper);
   color: var(--ink-500);
   text-align: center;

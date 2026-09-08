@@ -33,13 +33,8 @@ import {
 } from './work-item-extensions';
 import { CommentCount, MentionRow, StatusBadge } from './WorkItemMeta';
 import './work-organization.css';
+import { useT, type Translate } from '../../i18n';
 
-const BOARDS_LOAD_ERROR =
-  'Unable to load Boards. Check your connection and try again.';
-const BOARDS_UNAVAILABLE =
-  'Board collaboration is not enabled in this workspace yet.';
-const BOARDS_ACTION_ERROR =
-  'Unable to save this Board change. Please try again.';
 
 /**
  * How often an open Board re-reads its snapshot.
@@ -56,15 +51,17 @@ const BOARD_REFRESH_INTERVAL_MS = 5000;
 const CARD_MIME = 'application/x-agent-server-work-item';
 const COLUMN_MIME = 'application/x-agent-server-board-column';
 
-const COLUMN_KIND_OPTIONS: readonly {
+function columnKindOptions(t: Translate): readonly {
   readonly value: BoardColumnKind | '';
   readonly label: string;
-}[] = [
-  { value: 'todo', label: 'Todo' },
-  { value: 'doing', label: 'Doing' },
-  { value: 'done', label: 'Done' },
-  { value: '', label: 'Not declared' },
-];
+}[] {
+  return [
+    { value: 'todo', label: t('boards.todo') },
+    { value: 'doing', label: t('boards.doing') },
+    { value: 'done', label: t('boards.done') },
+    { value: '', label: t('boards.notDeclared') },
+  ];
+}
 
 type RecoverableError = {
   readonly source: 'snapshot' | 'action';
@@ -83,6 +80,7 @@ export interface BoardsPageProps {
 }
 
 export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
+  const t = useT();
   const navigate = useNavigate();
   const invalidBoardId =
     selectedBoardId !== null && !isValidDetailId('board', selectedBoardId);
@@ -143,7 +141,7 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
       setSelectionStatus('error');
       setError({
         source: 'snapshot',
-        message: BOARDS_LOAD_ERROR,
+        message: t('boards.loadError'),
         retry: () => void loadSnapshot(),
       });
       setSnapshot(null);
@@ -242,17 +240,17 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
       setCreatingBoard(false);
       navigate(`/boards/${encodeURIComponent(board.id)}`);
     } catch {
-      setError({ source: 'action', message: BOARDS_ACTION_ERROR });
+      setError({ source: 'action', message: t('boards.actionError') });
     }
   }
 
   return (
     <>
-      <aside className="sidebar work-org-pane" aria-label="Board navigation">
+      <aside className="sidebar work-org-pane" aria-label={t('boards.navigation')}>
         <div className="pane-heading work-org-heading">
           <div>
-            <span className="eyebrow">AI Coworker workspace</span>
-            <h1>Boards</h1>
+            <span className="eyebrow">{t('boards.eyebrow')}</span>
+            <h1>{t('boards.title')}</h1>
           </div>
           <button
             type="button"
@@ -260,7 +258,7 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
             disabled={listStatus === 'unavailable' || listStatus === 'error'}
             onClick={() => setCreatingBoard(true)}
           >
-            + New Board
+            {t('boards.new')}
           </button>
         </div>
         {creatingBoard ? (
@@ -270,36 +268,36 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
           >
             <input
               autoFocus
-              aria-label="New Board title"
+              aria-label={t('boards.newTitle')}
               value={newBoardTitle}
               onChange={(event) => setNewBoardTitle(event.target.value)}
-              placeholder="Board title"
+              placeholder={t('boards.titlePlaceholder')}
             />
-            <button type="submit">Create</button>
+            <button type="submit">{t('boards.create')}</button>
             <button type="button" onClick={() => setCreatingBoard(false)}>
-              Cancel
+              {t('boards.cancel')}
             </button>
           </form>
         ) : null}
         <div className="work-org-list">
           {listStatus === 'loading' && boards.length === 0 ? (
-            <p className="pane-placeholder">Loading Boards…</p>
+            <p className="pane-placeholder">{t('boards.loading')}</p>
           ) : null}
           {listStatus === 'unavailable' ? (
             <div className="pane-placeholder" role="status">
-              <p>{BOARDS_UNAVAILABLE}</p>
+              <p>{t('boards.unavailable')}</p>
             </div>
           ) : null}
           {listStatus === 'error' ? (
             <div className="pane-placeholder" role="alert">
-              <p>{BOARDS_LOAD_ERROR}</p>
+              <p>{t('boards.loadError')}</p>
               <button type="button" onClick={() => void loadBoards()}>
-                Try again
+                {t('common.tryAgain')}
               </button>
             </div>
           ) : null}
           {listStatus === 'ready' && boards.length === 0 ? (
-            <p className="pane-placeholder">No Boards yet.</p>
+            <p className="pane-placeholder">{t('boards.empty')}</p>
           ) : null}
           {listStatus === 'ready'
             ? boards.map((board) => (
@@ -315,7 +313,7 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
                   <strong>{board.title}</strong>
                   <small>
                     {board.description ??
-                      'A Board shared by people and AI Coworkers'}
+                      t('boards.defaultDescription')}
                   </small>
                 </button>
               ))
@@ -325,12 +323,12 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
 
       <main className="chat-panel work-board-main">
         <TitleBar section="Boards" />
-        <section className="work-org-content" aria-label="Board canvas">
+        <section className="work-org-content" aria-label={t('boards.canvas')}>
           <div className="work-org-mobile-picker">
             <label>
-              <span>Board</span>
+              <span>{t('boards.title').replace(/s$/u, '')}</span>
               <select
-                aria-label="Select a Board"
+                aria-label={t('boards.select')}
                 value={selectedBoardId ?? ''}
                 onChange={(event) =>
                   navigate(
@@ -340,7 +338,7 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
                   )
                 }
               >
-                <option value="">Select a Board</option>
+                <option value="">{t('boards.select')}</option>
                 {boards.map((board) => (
                   <option key={board.id} value={board.id}>
                     {board.title}
@@ -354,7 +352,7 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
               disabled={listStatus === 'unavailable' || listStatus === 'error'}
               onClick={() => setCreatingBoard(true)}
             >
-              + New Board
+              {t('boards.new')}
             </button>
           </div>
           {error &&
@@ -365,39 +363,39 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
               <p>{error.message}</p>
               {error.retry ? (
                 <button type="button" onClick={error.retry}>
-                  Try again
+                  {t('common.tryAgain')}
                 </button>
               ) : null}
             </div>
           ) : null}
           {invalidBoardId ? (
             <NotFoundContent
-              title="This Board link is invalid."
+              title={t('boards.invalidLink')}
               to="/boards"
-              linkLabel="Back to Boards"
-              eyebrow="Board link"
+              linkLabel={t('boards.back')}
+              eyebrow={t('boards.linkEyebrow')}
               mark="!"
               variant="detail"
             >
-              Check the link, or return to Boards.
+              {t('boards.checkLink')}
             </NotFoundContent>
           ) : listStatus === 'unavailable' ? (
             <div className="work-main-empty" data-testid="boards-unavailable">
               <span className="work-main-icon" aria-hidden="true">
                 ▦
               </span>
-              <h1>Boards are unavailable</h1>
-              <p>{BOARDS_UNAVAILABLE}</p>
+              <h1>{t('boards.unavailableTitle')}</h1>
+              <p>{t('boards.unavailable')}</p>
             </div>
           ) : listStatus === 'error' ? (
             <div className="work-main-empty" data-testid="boards-error">
               <span className="work-main-icon" aria-hidden="true">
                 ▦
               </span>
-              <h1>Unable to load Boards</h1>
-              <p>{BOARDS_LOAD_ERROR}</p>
+              <h1>{t('boards.loadTitle')}</h1>
+              <p>{t('boards.loadError')}</p>
               <button type="button" onClick={() => void loadBoards()}>
-                Try again
+                {t('common.tryAgain')}
               </button>
             </div>
           ) : selectionStatus === 'loading' ? (
@@ -408,17 +406,17 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
               <span className="work-main-icon" aria-hidden="true">
                 ▦
               </span>
-              <h1>Loading the selected Board…</h1>
+              <h1>{t('boards.loadingSelected')}</h1>
             </div>
           ) : selectionStatus === 'not_found' ? (
             <div data-testid="boards-not-found">
               <NotFoundContent
-                title="This Board is unavailable."
+                title={t('boards.unavailableSelectedTitle')}
                 to="/boards"
-                linkLabel="Back to Boards"
-                eyebrow="Board unavailable"
+                linkLabel={t('boards.back')}
+                eyebrow={t('boards.unavailableEyebrow')}
               >
-                It may have been removed, or you may not have access.
+                {t('boards.missingBody')}
               </NotFoundContent>
             </div>
           ) : selectionStatus === 'error' ? (
@@ -429,11 +427,11 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
               <span className="work-main-icon" aria-hidden="true">
                 ▦
               </span>
-              <h1>Unable to load Boards</h1>
-              <p>{BOARDS_LOAD_ERROR}</p>
-              <Link to="/boards">Back to Boards</Link>
+              <h1>{t('boards.loadTitle')}</h1>
+              <p>{t('boards.loadError')}</p>
+              <Link to="/boards">{t('boards.back')}</Link>
               <button type="button" onClick={() => void loadSnapshot()}>
-                Try again
+                {t('common.tryAgain')}
               </button>
             </div>
           ) : creatingBoard ? (
@@ -467,13 +465,12 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
               <span className="work-main-icon" aria-hidden="true">
                 ▦
               </span>
-              <h1>Select a Board</h1>
+              <h1>{t('boards.selectTitle')}</h1>
               <p>
-                Use a Board to organize the work before it enters formal Work
-                execution.
+                {t('boards.selectPrompt')}
               </p>
               <button type="button" onClick={() => setCreatingBoard(true)}>
-                New Board
+                {t('boards.newShort')}
               </button>
             </div>
           )}
@@ -531,6 +528,7 @@ function BoardAuthoringForm({
   readonly onSubmit: (event: React.FormEvent) => Promise<void>;
   readonly children: React.ReactNode;
 }) {
+  const t = useT();
   return (
     <form
       className={`work-org-card work-org-board-create work-org-form ${className}`}
@@ -548,7 +546,7 @@ function BoardAuthoringForm({
           {submitLabel}
         </button>
         <button type="button" onClick={onCancel}>
-          Cancel
+          {t('boards.cancel')}
         </button>
       </div>
     </form>
@@ -568,23 +566,24 @@ function BoardCreationForm({
   readonly onChange: (title: string) => void;
   readonly onSubmit: (event: React.FormEvent) => Promise<void>;
 }) {
+  const t = useT();
   return (
     <BoardAuthoringForm
       className={className}
-      eyebrow="New Board"
-      heading="Name this Board"
-      submitLabel="Create Board"
+      eyebrow={t('boards.newEyebrow')}
+      heading={t('boards.name')}
+      submitLabel={t('boards.createBoard')}
       submitDisabled={!title.trim()}
       onCancel={onCancel}
       onSubmit={onSubmit}
     >
       <label>
-        Board title
+        {t('boards.boardTitle')}
         <input
           autoFocus
           value={title}
           onChange={(event) => onChange(event.target.value)}
-          placeholder="Board title"
+          placeholder={t('boards.titlePlaceholder')}
         />
       </label>
     </BoardAuthoringForm>
@@ -608,6 +607,7 @@ function BoardCanvas({
   readonly onBoardDeleted: () => Promise<void>;
   readonly onError: (message: string) => void;
 }) {
+  const t = useT();
   const navigate = useNavigate();
   const [newColumnTitle, setNewColumnTitle] = useState('');
   const [newColumnKind, setNewColumnKind] = useState<BoardColumnKind | null>(
@@ -723,7 +723,7 @@ function BoardCanvas({
       setAddingColumn(false);
       await refresh();
     } catch {
-      onError(BOARDS_ACTION_ERROR);
+      onError(t('boards.actionError'));
     }
   }
 
@@ -776,7 +776,7 @@ function BoardCanvas({
       }
       setAuthoring(null);
     } catch {
-      onError(BOARDS_ACTION_ERROR);
+      onError(t('boards.actionError'));
     }
   }
 
@@ -809,7 +809,7 @@ function BoardCanvas({
         });
       await refresh();
     } catch {
-      onError(BOARDS_ACTION_ERROR);
+      onError(t('boards.actionError'));
       // The optimistic snapshot is now a claim nobody backs. Whatever the
       // server says replaces it, even if only part of a renumber landed.
       await refresh().catch(() => undefined);
@@ -850,7 +850,7 @@ function BoardCanvas({
         );
       await refresh();
     } catch {
-      onError(BOARDS_ACTION_ERROR);
+      onError(t('boards.actionError'));
       await refresh().catch(() => undefined);
     } finally {
       onMutationEnd();
@@ -859,7 +859,7 @@ function BoardCanvas({
 
   /** The server owns the claim transition, including any Board placement. */
   async function refreshAfterClaim() {
-    await refresh().catch(() => onError(BOARDS_ACTION_ERROR));
+    await refresh().catch(() => onError(t('boards.actionError')));
   }
 
   function readDragKind(event: React.DragEvent): 'card' | 'column' | null {
@@ -875,7 +875,7 @@ function BoardCanvas({
     <>
       <header className="work-board-toolbar">
         <div>
-          <span className="eyebrow">Shared work</span>
+        <span className="eyebrow">{t('boards.sharedWork')}</span>
           <h1>{snapshot.board.title}</h1>
           {snapshot.board.description ? (
             <p className="work-org-muted">{snapshot.board.description}</p>
@@ -891,20 +891,20 @@ function BoardCanvas({
               })
             }
           >
-            Rename
+            {t('boards.rename')}
           </button>
           <button
             type="button"
             onClick={() => setAuthoring({ kind: 'delete-board' })}
           >
-            Delete
+            {t('boards.delete')}
           </button>
           <button
             type="button"
             className="work-org-primary"
             onClick={() => setAddingColumn(true)}
           >
-            + New column
+            {t('boards.newColumn')}
           </button>
         </div>
       </header>
@@ -913,28 +913,28 @@ function BoardCanvas({
           className="work-board-authoring"
           eyebrow={
             authoring.kind === 'create-card'
-              ? 'New Task'
+              ? t('boards.newShort')
               : authoring.kind.startsWith('delete')
-                ? 'Confirm deletion'
-                : 'Edit Board'
+                ? t('boards.confirmDeletion')
+                : t('boards.editBoard')
           }
           heading={
             authoring.kind === 'rename-board'
-              ? 'Rename this Board'
+              ? t('boards.renameBoard')
               : authoring.kind === 'rename-column'
-                ? 'Edit this column'
+                ? t('boards.editColumn')
                 : authoring.kind === 'create-card'
-                  ? 'Add a Task card'
+                  ? t('boards.addTaskCard')
                   : authoring.kind === 'delete-board'
-                    ? `Delete “${snapshot.board.title}”?`
-                    : `Delete the “${authoring.title}” column?`
+                    ? t('boards.deleteBoardConfirm', { title: snapshot.board.title })
+                    : t('boards.deleteColumnConfirm', { title: authoring.title })
           }
           submitLabel={
             authoring.kind.startsWith('delete')
-              ? 'Delete'
+              ? t('boards.delete')
               : authoring.kind === 'create-card'
-                ? 'Add Task'
-                : 'Save'
+                ? t('boards.addTask')
+                : t('tasks.save')
           }
           submitDisabled={
             authoring.kind === 'create-card'
@@ -960,8 +960,8 @@ function BoardCanvas({
             <>
               <label>
                 {authoring.kind === 'rename-board'
-                  ? 'Board title'
-                  : 'Column title'}
+                  ? t('boards.boardTitle')
+                  : t('boards.columnTitle')}
                 <input
                   autoFocus
                   value={authoring.title}
@@ -978,9 +978,9 @@ function BoardCanvas({
               </label>
               {authoring.kind === 'rename-column' ? (
                 <label>
-                  Workflow stage
+                  {t('boards.workflowStage')}
                   <select
-                    aria-label="Workflow stage"
+                    aria-label={t('boards.workflowStage')}
                     value={authoring.columnKind ?? ''}
                     onChange={(event) =>
                       setAuthoring((current) =>
@@ -995,7 +995,7 @@ function BoardCanvas({
                       )
                     }
                   >
-                    {COLUMN_KIND_OPTIONS.map((option) => (
+                    {columnKindOptions(t).map((option) => (
                       <option key={option.value} value={option.value}>
                         {option.label}
                       </option>
@@ -1007,7 +1007,7 @@ function BoardCanvas({
           ) : authoring.kind === 'create-card' ? (
             <>
               <MentionTextField
-                label="Task title"
+                label={t('boards.taskTitle')}
                 value={authoring.title}
                 onChange={(title) =>
                   setAuthoring((current) =>
@@ -1017,7 +1017,7 @@ function BoardCanvas({
                   )
                 }
                 participants={participants}
-                placeholder="Task title…"
+                placeholder={t('boards.taskTitlePlaceholder')}
                 maxLength={200}
                 multiline
                 rows={2}
@@ -1025,13 +1025,12 @@ function BoardCanvas({
                 autoFocus
                 hint={
                   <small className="work-org-muted">
-                    Press Enter for a new line, or ⌘/Ctrl + Enter to submit.
-                    Type @ to mention an AI Coworker or team member.
+                    {t('boards.enterHint')} {t('tasks.mentionHint')}
                   </small>
                 }
               />
               <MentionTextField
-                label="Description (optional)"
+                label={t('boards.taskDescriptionOptional')}
                 value={authoring.description}
                 onChange={(description) =>
                   setAuthoring((current) =>
@@ -1041,12 +1040,12 @@ function BoardCanvas({
                   )
                 }
                 participants={participants}
-                placeholder="Describe this Task"
+                placeholder={t('boards.taskDescriptionPlaceholder')}
                 multiline
                 rows={4}
                 hint={
                   <small className="work-org-muted">
-                    Type @ to mention an AI Coworker or team member.
+                    {t('tasks.mentionHint')}
                   </small>
                 }
               />
@@ -1054,8 +1053,8 @@ function BoardCanvas({
           ) : (
             <p>
               {authoring.kind === 'delete-board'
-                ? 'Tasks will remain; only this Board view will be removed.'
-                : 'Cards will remain as Tasks, but will be removed from this Board.'}
+                ? t('boards.tasksRemain')
+                : t('boards.cardsRemain')}
             </p>
           )}
         </BoardAuthoringForm>
@@ -1114,7 +1113,7 @@ function BoardCanvas({
                     draggable
                     role="button"
                     tabIndex={0}
-                    aria-label={`Drag ${column.title} to reorder columns`}
+                    aria-label={t('boards.dragReorder', { title: column.title })}
                     data-testid="work-board-column-handle"
                     data-column-id={column.id}
                     onDragStart={(event) => {
@@ -1135,7 +1134,7 @@ function BoardCanvas({
                   <div className="work-board-column-actions">
                     <button
                       type="button"
-                      aria-label={`Edit ${column.title}`}
+                      aria-label={t('boards.editColumnAria', { title: column.title })}
                       onClick={() =>
                         setAuthoring({
                           kind: 'rename-column',
@@ -1149,7 +1148,7 @@ function BoardCanvas({
                     </button>
                     <button
                       type="button"
-                      aria-label={`Delete ${column.title}`}
+                      aria-label={t('boards.deleteColumnAria', { title: column.title })}
                       onClick={() =>
                         setAuthoring({
                           kind: 'delete-column',
@@ -1232,7 +1231,7 @@ function BoardCanvas({
                     })
                   }
                 >
-                  + New Task
+                  {t('boards.newTask')}
                 </button>
               </section>
             );
@@ -1246,12 +1245,12 @@ function BoardCanvas({
                 autoFocus
                 value={newColumnTitle}
                 onChange={(event) => setNewColumnTitle(event.target.value)}
-                placeholder="Column title"
+                placeholder={t('boards.columnTitle')}
               />
               <label>
-                Workflow stage
+                {t('boards.workflowStage')}
                 <select
-                  aria-label="Workflow stage"
+                  aria-label={t('boards.workflowStage')}
                   value={newColumnKind ?? ''}
                   onChange={(event) =>
                     setNewColumnKind(
@@ -1259,7 +1258,7 @@ function BoardCanvas({
                     )
                   }
                 >
-                  {COLUMN_KIND_OPTIONS.map((option) => (
+                  {columnKindOptions(t).map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
                     </option>
@@ -1268,7 +1267,7 @@ function BoardCanvas({
               </label>
               <div className="work-org-actions">
                 <button type="submit" className="work-org-primary">
-                  Add
+                  {t('boards.add')}
                 </button>
                 <button
                   type="button"
@@ -1278,7 +1277,7 @@ function BoardCanvas({
                     setAddingColumn(false);
                   }}
                 >
-                  Cancel
+                  {t('boards.cancel')}
                 </button>
               </div>
             </form>
@@ -1288,7 +1287,7 @@ function BoardCanvas({
               className="work-board-column work-board-add-column"
               onClick={() => setAddingColumn(true)}
             >
-              + Add column
+              {t('boards.addColumn')}
             </button>
           )}
         </div>
@@ -1380,6 +1379,7 @@ function BoardCard({
   readonly onOpenTask: () => void;
   readonly onMoveTo: (columnId: string) => void;
 }) {
+  const t = useT();
   const preview = descriptionPreview(item.description, 120);
   return (
     <article
@@ -1425,17 +1425,17 @@ function BoardCard({
       </span>
       <div className="work-board-card-actions">
         <button type="button" onClick={onOpenPeek}>
-          Card details
+          {t('boards.cardDetails')}
         </button>
         <button type="button" onClick={onOpenTask}>
-          Open Task
+          {t('boards.openTask')}
         </button>
       </div>
       {columns.length > 1 ? (
         <label className="work-board-card-move">
-          <span>Move to</span>
+          <span>{t('boards.moveTo')}</span>
           <select
-            aria-label={`Move ${item.title} to another column`}
+            aria-label={t('boards.moveToAnother', { title: item.title })}
             defaultValue=""
             onChange={(event) => {
               const target = event.currentTarget.value;
@@ -1443,7 +1443,7 @@ function BoardCard({
               if (target) onMoveTo(target);
             }}
           >
-            <option value="">Select a column…</option>
+            <option value="">{t('boards.selectColumn')}</option>
             {columns
               .filter((target) => target.id !== columnId)
               .map((target) => (

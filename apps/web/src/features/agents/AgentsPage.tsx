@@ -17,26 +17,26 @@ import { CoworkerHomeFiles } from './CoworkerHomeFiles';
 import { CoworkerRecentActivity } from './CoworkerRecentActivity';
 import { CoworkerRoster } from './CoworkerRoster';
 import {
-  BUSY_CHAT_HINT,
   BUSY_RUNTIME_STATUSES,
-  RUNTIME_STATUS_LABEL,
   STATUS_FILTERS,
 } from './runtime-status';
 import TitleBar from '../../app/shell/TitleBar';
 import AccountName from '../../app/shell/AccountName';
+import { useT, type Translate } from '../../i18n';
 import './agents.css';
 
-function describeOpenConversationError(reason: unknown): string {
+function describeOpenConversationError(reason: unknown, t: Translate): string {
   if (
     reason instanceof ApiTransportError &&
     reason.code === 'chat_runtime_unavailable'
   ) {
-    return 'This Coworker is handling another conversation right now. Wait for it to finish, then try Chat again.';
+    return t('agents.busyConversation');
   }
   return reason instanceof Error ? reason.message : String(reason);
 }
 
 export function AgentsPage() {
+  const t = useT();
   const navigate = useNavigate();
   const { agentId: selectedAgentId } = useParams<{ agentId?: string }>();
   const invalidAgentId =
@@ -79,7 +79,7 @@ export function AgentsPage() {
       },
       () => {
         if (!active) return;
-        setError('Unable to load Agents. Check your connection and try again.');
+        setError(t('agents.loadError'));
         setLoading(false);
       },
     );
@@ -123,7 +123,7 @@ export function AgentsPage() {
       const conversation = await createConversation(agentId);
       navigate(`/conversations/${encodeURIComponent(conversation.id)}`);
     } catch (reason) {
-      setError(describeOpenConversationError(reason));
+      setError(describeOpenConversationError(reason, t));
       setOpeningAgentId(null);
     }
   }
@@ -179,7 +179,7 @@ export function AgentsPage() {
 
   return (
     <>
-      <aside className="sidebar agents-pane" aria-label="Agents navigation">
+      <aside className="sidebar agents-pane" aria-label={t('agents.navigation')}>
         <button
           className="agents-roster-back"
           type="button"
@@ -188,31 +188,31 @@ export function AgentsPage() {
             navigate('/agents');
           }}
         >
-          ← All Coworkers
+          {t('agents.backAll')}
         </button>
         <div className="pane-heading">
           <div>
-            <span className="eyebrow">Coworkers</span>
+            <span className="eyebrow">{t('agents.roster')}</span>
             <h1>Agents</h1>
           </div>
           <button
             className="agents-new-coworker-cta"
             type="button"
-            aria-label="New Coworker"
+            aria-label={t('authoring.newCoworker')}
             data-testid="new-coworker-cta"
             onClick={() => {
               setAuthoring('coworker');
               setError(null);
             }}
           >
-            + New Coworker
+            {t('agents.newCoworker')}
           </button>
         </div>
         {agents.length > 0 ? (
           <div
             className="agents-status-filters"
             role="group"
-            aria-label="Filter Coworkers by status"
+            aria-label={t('agents.filter')}
           >
             {STATUS_FILTERS.map((status) => {
               const count = agents.filter(
@@ -228,7 +228,7 @@ export function AgentsPage() {
                   data-active={active ? 'true' : 'false'}
                   onClick={() => setStatusFilter(active ? null : status)}
                 >
-                  {RUNTIME_STATUS_LABEL[status]} · {count}
+                  {localizedRuntimeStatus(t, status)} · {count}
                 </button>
               );
             })}
@@ -236,21 +236,23 @@ export function AgentsPage() {
         ) : null}
         <div className="agents-list">
           {loading && agents.length === 0 ? (
-            <p className="pane-placeholder">Loading Coworkers…</p>
+            <p className="pane-placeholder">{t('agents.loading')}</p>
           ) : null}
           {!loading && agents.length === 0 ? (
             <div className="pane-placeholder">
-              <p>No Coworkers yet.</p>
+              <p>{t('agents.empty')}</p>
               <button type="button" onClick={() => setAuthoring('coworker')}>
-                Create your first Coworker
+                {t('agents.createFirst')}
               </button>
             </div>
           ) : null}
           {!loading && agents.length > 0 && visibleAgents.length === 0 ? (
             <p className="pane-placeholder">
-              No Coworkers are{' '}
-              {statusFilter ? RUNTIME_STATUS_LABEL[statusFilter] : ''} right
-              now.
+              {statusFilter
+                ? t('agents.filteredEmpty', {
+                    status: localizedRuntimeStatus(t, statusFilter).toLowerCase(),
+                  })
+                : t('agents.empty')}
             </p>
           ) : null}
           {visibleAgents.map((agent) => (
@@ -283,7 +285,7 @@ export function AgentsPage() {
               <span
                 className={`agents-runtime agents-runtime--${agent.runtimeStatus}`}
               >
-                {RUNTIME_STATUS_LABEL[agent.runtimeStatus]}
+                {localizedRuntimeStatus(t, agent.runtimeStatus)}
               </span>
             </button>
           ))}
@@ -309,7 +311,7 @@ export function AgentsPage() {
           />
         ) : null}
         {authoring === null || invalidAgentId ? (
-          <section className="agents-detail" aria-label="Agent profile">
+          <section className="agents-detail" aria-label={t('agents.profile')}>
             {error && !invalidAgentId ? (
               <p className="agents-error" role="alert">
                 {error}
@@ -317,42 +319,42 @@ export function AgentsPage() {
             ) : null}
             {invalidAgentId ? (
               <NotFoundContent
-                title="This Agent link is invalid."
+                title={t('agents.invalidLink')}
                 to="/agents"
-                linkLabel="Back to Agents"
-                eyebrow="Agent link"
+                linkLabel={t('agents.backAll')}
+                eyebrow={t('agents.linkEyebrow')}
                 mark="!"
                 variant="detail"
               >
-                Check the link, or return to Agents.
+                {t('agents.checkLink')}
               </NotFoundContent>
             ) : profileStatus === 'not_found' ? (
               <NotFoundContent
-                title="This Agent is unavailable."
+                title={t('agents.unavailableTitle')}
                 to="/agents"
-                linkLabel="Back to Agents"
-                eyebrow="Agent unavailable"
+                linkLabel={t('agents.backAll')}
+                eyebrow={t('agents.unavailableEyebrow')}
               >
-                It may have been removed, or you may not have access.
+                {t('agents.missingBody')}
               </NotFoundContent>
             ) : profileStatus === 'error' ? (
               <NotFoundContent
-                title="This Agent couldn’t be loaded."
+                title={t('agents.loadTitle')}
                 to="/agents"
-                linkLabel="Back to Agents"
-                eyebrow="Agent unavailable"
+                linkLabel={t('agents.backAll')}
+                eyebrow={t('agents.unavailableEyebrow')}
                 onRetry={() => setReload((value) => value + 1)}
                 mark="!"
               >
-                Try again in a moment, or return to Agents.
+                {t('agents.retryBody')}
               </NotFoundContent>
             ) : profileStatus === 'loading' || !profile ? (
               <div className="work-main-empty" role="status">
                 <span className="work-main-icon" aria-hidden="true">
                   ◎
                 </span>
-                <h1>Loading Agent…</h1>
-                <p>Opening this Agent&apos;s profile.</p>
+                  <h1>{t('agents.loadingProfile')}</h1>
+                  <p>{t('agents.openingProfile')}</p>
               </div>
             ) : (
               <>
@@ -367,12 +369,12 @@ export function AgentsPage() {
                       <span
                         className={`agents-runtime agents-runtime--${profile.agent.runtimeStatus}`}
                       >
-                        {RUNTIME_STATUS_LABEL[profile.agent.runtimeStatus]}
+                        {localizedRuntimeStatus(t, profile.agent.runtimeStatus)}
                       </span>
                       {profile.capabilities.modelPolicyRef ? (
                         <span
                           className="agents-host-badge"
-                          title="Model policy backing this Coworker (this project has no paired-device concept, so the model/engine reference stands in for Cumora's host badge)"
+                          title={t('agents.modelPolicyTitle')}
                         >
                           {profile.capabilities.modelPolicyRef}
                         </span>
@@ -384,7 +386,7 @@ export function AgentsPage() {
                       and pushed the Work capabilities below the fold.
                     */}
                     <p className="agents-profile-bio">
-                      {profile.agent.summary ?? 'No summary provided.'}
+                      {profile.agent.summary ?? t('agents.noSummaryProvided')}
                     </p>
                   </div>
                   <div className="agents-profile-actions">
@@ -400,23 +402,23 @@ export function AgentsPage() {
                       }
                       title={
                         BUSY_RUNTIME_STATUSES.has(profile.agent.runtimeStatus)
-                          ? BUSY_CHAT_HINT
+                          ? t('agents.busyConversation')
                           : undefined
                       }
                     >
                       {openingAgentId !== null
-                        ? 'Opening…'
-                        : BUSY_RUNTIME_STATUSES.has(profile.agent.runtimeStatus)
-                          ? 'Busy'
-                          : 'Chat'}
+                          ? t('agents.opening')
+                          : BUSY_RUNTIME_STATUSES.has(profile.agent.runtimeStatus)
+                          ? t('agents.busy')
+                          : t('agents.chat')}
                     </button>
                     <button
                       className="agents-whisper"
                       type="button"
                       disabled
-                      title="Whispers are read-only."
+                      title={t('agents.whispersReadOnly')}
                     >
-                      Whisper
+                      {t('agents.whisper')}
                     </button>
                   </div>
                 </header>
@@ -434,16 +436,16 @@ export function AgentsPage() {
                   >
                     <div className="agents-section-heading">
                       <div>
-                        <span className="eyebrow">Can do</span>
+                        <span className="eyebrow">{t('agents.canDo')}</span>
                         <h2 id="coworker-capabilities-heading">
-                          Formal capabilities
+                          {t('agents.formalCapabilities')}
                         </h2>
                       </div>
                       <button
                         type="button"
                         onClick={() => setAuthoring('capability')}
                       >
-                        + Add capability
+                        {t('agents.addCapability')}
                       </button>
                     </div>
                     {profile.workCatalog.length ? (
@@ -457,16 +459,14 @@ export function AgentsPage() {
                               <h3>{humanize(capability.name)}</h3>
                               <p>
                                 {capability.description ??
-                                  'Formal Work capability'}
+                                  t('agents.formalWorkCapability')}
                               </p>
                             </div>
                             <div className="agents-capability-meta">
                               <span>
-                                {
-                                  Object.keys(capability.inputSchema.properties)
-                                    .length
-                                }{' '}
-                                inputs
+                                {t('agents.inputs', {
+                                  count: Object.keys(capability.inputSchema.properties).length,
+                                })}
                               </span>
                             </div>
                             <button
@@ -476,19 +476,19 @@ export function AgentsPage() {
                                 startCapability(capability.definitionVersionId)
                               }
                             >
-                              Start Work
+                              {t('agents.startWork')}
                             </button>
                           </article>
                         ))}
                       </div>
                     ) : (
                       <div className="agents-empty-capabilities">
-                        <p>This Coworker has no formal Capabilities yet.</p>
+                        <p>{t('agents.noCapabilities')}</p>
                         <button
                           type="button"
                           onClick={() => setAuthoring('capability')}
                         >
-                          Teach the first capability
+                          {t('agents.teachCapability')}
                         </button>
                       </div>
                     )}
@@ -507,27 +507,27 @@ export function AgentsPage() {
                 />
 
                 <details className="agents-advanced agents-technical-details">
-                  <summary>Advanced · runtime and package details</summary>
+                  <summary>{t('agents.advancedRuntime')}</summary>
                   <div className="agents-card-grid">
                     <article className="agents-card">
-                      <h3>Runtime</h3>
+                      <h3>{t('agents.runtime')}</h3>
                       <dl>
-                        <dt>Status</dt>
+                        <dt>{t('agents.status')}</dt>
                         <dd>
-                          {RUNTIME_STATUS_LABEL[profile.agent.runtimeStatus]}
+                          {localizedRuntimeStatus(t, profile.agent.runtimeStatus)}
                         </dd>
-                        <dt>Published version</dt>
+                        <dt>{t('agents.publishedVersion')}</dt>
                         <dd className="agents-mono">
                           {profile.agent.activeAgentVersionId}
                         </dd>
-                        <dt>Model policy</dt>
+                        <dt>{t('agents.modelPolicy')}</dt>
                         <dd>{profile.capabilities.modelPolicyRef}</dd>
                       </dl>
                     </article>
                     <article className="agents-card">
-                      <h3>Package capabilities</h3>
+                      <h3>{t('agents.packageCapabilities')}</h3>
                       <p>
-                        <strong>Tools</strong>
+                        <strong>{t('agents.tools')}</strong>
                       </p>
                       <div className="agents-chips">
                         {profile.capabilities.tools.length ? (
@@ -535,11 +535,11 @@ export function AgentsPage() {
                             <span key={tool}>{tool}</span>
                           ))
                         ) : (
-                          <em>No declared tools</em>
+                          <em>{t('agents.noDeclaredTools')}</em>
                         )}
                       </div>
                       <p>
-                        <strong>Skills</strong>
+                        <strong>{t('agents.skills')}</strong>
                       </p>
                       <div className="agents-chips">
                         {profile.capabilities.skills.length ? (
@@ -547,7 +547,7 @@ export function AgentsPage() {
                             <span key={skill}>{skill}</span>
                           ))
                         ) : (
-                          <em>No declared skills</em>
+                          <em>{t('agents.noDeclaredSkills')}</em>
                         )}
                       </div>
                     </article>
@@ -571,3 +571,12 @@ function humanize(value: string): string {
 }
 
 export default AgentsPage;
+
+function localizedRuntimeStatus(
+  t: Translate,
+  status: Coworker['runtimeStatus'],
+): string {
+  if (status === 'available') return t('runtimeStatus.available');
+  if (status === 'draining') return t('runtimeStatus.draining');
+  return t('runtimeStatus.unavailable');
+}

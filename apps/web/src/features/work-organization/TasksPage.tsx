@@ -42,14 +42,7 @@ import {
 } from './WorkItemMeta';
 import { readCommentCount, readMentionIds } from './work-item-extensions';
 import './work-organization.css';
-
-const TASKS_LOAD_ERROR =
-  'Unable to load Tasks. Check your connection and try again.';
-const TASKS_UNAVAILABLE =
-  'Task management is not enabled in this workspace yet.';
-const TASKS_ACTION_ERROR = 'Unable to save this Task change. Please try again.';
-const DEFINITIONS_UNAVAILABLE =
-  'Work execution is not enabled in this workspace yet.';
+import { useT } from '../../i18n';
 
 type RecoverableError = {
   readonly source: 'comments' | 'action';
@@ -69,6 +62,7 @@ export interface TasksPageProps {
 }
 
 export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
+  const t = useT();
   const navigate = useNavigate();
   const invalidWorkItemId =
     selectedWorkItemId !== null && !isValidDetailId('task', selectedWorkItemId);
@@ -153,11 +147,11 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
       if (request !== commentsRequest.current) return;
       setError({
         source: 'comments',
-        message: 'Unable to load comments for this Task. Please try again.',
+        message: t('tasks.commentsLoadError'),
         retry: () => void loadComments(),
       });
     }
-  }, [invalidWorkItemId, selectedWorkItemId]);
+  }, [invalidWorkItemId, selectedWorkItemId, t]);
 
   useEffect(() => {
     void loadComments();
@@ -217,11 +211,11 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
 
   return (
     <>
-      <aside className="sidebar work-org-pane" aria-label="Task navigation">
+      <aside className="sidebar work-org-pane" aria-label={t('tasks.navigation')}>
         <div className="pane-heading work-org-heading">
           <div>
-            <span className="eyebrow">AI Coworker workspace</span>
-            <h1>Tasks</h1>
+            <span className="eyebrow">{t('tasks.eyebrow')}</span>
+            <h1>{t('tasks.title')}</h1>
           </div>
           <button
             type="button"
@@ -229,10 +223,10 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
             disabled={listStatus === 'unavailable' || listStatus === 'error'}
             onClick={() => setCreating(true)}
           >
-            + New Task
+            {t('tasks.new')}
           </button>
         </div>
-        <div className="work-org-filters" aria-label="Filter Tasks by status">
+        <div className="work-org-filters" aria-label={t('tasks.filter.label')}>
           {(['all', 'todo', 'in_progress', 'in_review', 'done'] as const).map(
             (value) => (
               <button
@@ -241,34 +235,34 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
                 data-active={filter === value ? 'true' : 'false'}
                 onClick={() => setFilter(value)}
               >
-                {value === 'all' ? 'All' : statusLabel(value)}
+                {value === 'all' ? t('tasks.filter.all') : statusLabel(value)}
               </button>
             ),
           )}
         </div>
         <div className="work-org-list">
           {listStatus === 'loading' && items.length === 0 ? (
-            <p className="pane-placeholder">Loading Tasks…</p>
+            <p className="pane-placeholder">{t('tasks.loading')}</p>
           ) : null}
           {listStatus === 'unavailable' ? (
             <div className="pane-placeholder" role="status">
-              <p>{TASKS_UNAVAILABLE}</p>
+              <p>{t('tasks.unavailable')}</p>
             </div>
           ) : null}
           {listStatus === 'error' ? (
             <div className="pane-placeholder" role="alert">
-              <p>{TASKS_LOAD_ERROR}</p>
+              <p>{t('tasks.loadError')}</p>
               <button type="button" onClick={() => void load()}>
-                Try again
+                {t('common.tryAgain')}
               </button>
             </div>
           ) : null}
           {listStatus === 'ready' && visibleItems.length === 0 ? (
             <div className="pane-placeholder">
-              <p>There are no Tasks in this view.</p>
+              <p>{t('tasks.empty')}</p>
               {filter !== 'all' ? (
                 <button type="button" onClick={() => setFilter('all')}>
-                  View all Tasks
+                  {t('tasks.viewAll')}
                 </button>
               ) : null}
             </div>
@@ -291,12 +285,12 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
 
       <main className="chat-panel work-org-main">
         <TitleBar section="Tasks" />
-        <section className="work-org-content" aria-label="Task details">
+        <section className="work-org-content" aria-label={t('tasks.details')}>
           <div className="work-org-mobile-picker">
             <label>
-              <span>Task</span>
+              <span>{t('tasks.taskEyebrow')}</span>
               <select
-                aria-label="Select a Task"
+                aria-label={t('tasks.select')}
                 value={selectedWorkItemId ?? ''}
                 onChange={(event) =>
                   navigate(
@@ -306,7 +300,7 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
                   )
                 }
               >
-                <option value="">Select a Task</option>
+                <option value="">{t('tasks.select')}</option>
                 {visibleItems.map((entry) => (
                   <option key={entry.work_item.id} value={entry.work_item.id}>
                     {entry.work_item.title}
@@ -320,7 +314,7 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
               disabled={listStatus === 'unavailable' || listStatus === 'error'}
               onClick={() => setCreating(true)}
             >
-              + New Task
+              {t('tasks.new')}
             </button>
           </div>
           {error && !invalidWorkItemId && selectionStatus !== 'not_found' ? (
@@ -328,39 +322,39 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
               <p>{error.message}</p>
               {error.retry ? (
                 <button type="button" onClick={error.retry}>
-                  Try again
+                  {t('common.tryAgain')}
                 </button>
               ) : null}
             </div>
           ) : null}
           {invalidWorkItemId ? (
             <NotFoundContent
-              title="This Task link is invalid."
+              title={t('tasks.invalidLink')}
               to="/tasks"
-              linkLabel="Back to Tasks"
-              eyebrow="Task link"
+              linkLabel={t('tasks.back')}
+              eyebrow={t('tasks.linkEyebrow')}
               mark="!"
               variant="detail"
             >
-              Check the link, or return to Tasks.
+              {t('tasks.checkLink')}
             </NotFoundContent>
           ) : listStatus === 'unavailable' ? (
             <div className="work-main-empty" data-testid="tasks-unavailable">
               <span className="work-main-icon" aria-hidden="true">
                 ☑
               </span>
-              <h1>Tasks are unavailable</h1>
-              <p>{TASKS_UNAVAILABLE}</p>
+              <h1>{t('tasks.unavailableTitle')}</h1>
+              <p>{t('tasks.unavailable')}</p>
             </div>
           ) : listStatus === 'error' ? (
             <div className="work-main-empty" data-testid="tasks-error">
               <span className="work-main-icon" aria-hidden="true">
                 ☑
               </span>
-              <h1>Unable to load Tasks</h1>
-              <p>{TASKS_LOAD_ERROR}</p>
+              <h1>{t('tasks.loadTitle')}</h1>
+              <p>{t('tasks.loadError')}</p>
               <button type="button" onClick={() => void load()}>
-                Try again
+                {t('common.tryAgain')}
               </button>
             </div>
           ) : selectionStatus === 'loading' ? (
@@ -371,17 +365,17 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
               <span className="work-main-icon" aria-hidden="true">
                 ☑
               </span>
-              <h1>Loading the selected Task…</h1>
+              <h1>{t('tasks.loadingSelected')}</h1>
             </div>
           ) : selectionStatus === 'not_found' ? (
             <div data-testid="tasks-not-found">
               <NotFoundContent
-                title="This Task is unavailable."
+                title={t('tasks.unavailableSelectedTitle')}
                 to="/tasks"
-                linkLabel="Back to Tasks"
-                eyebrow="Task unavailable"
+                linkLabel={t('tasks.back')}
+                eyebrow={t('tasks.unavailableEyebrow')}
               >
-                It may have been removed, or you may not have access.
+                {t('tasks.missingBody')}
               </NotFoundContent>
             </div>
           ) : selectionStatus === 'error' ? (
@@ -389,11 +383,11 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
               <span className="work-main-icon" aria-hidden="true">
                 ☑
               </span>
-              <h1>Unable to load Tasks</h1>
-              <p>{TASKS_LOAD_ERROR}</p>
-              <Link to="/tasks">Back to Tasks</Link>
+              <h1>{t('tasks.loadTitle')}</h1>
+              <p>{t('tasks.loadError')}</p>
+              <Link to="/tasks">{t('tasks.back')}</Link>
               <button type="button" onClick={() => void load()}>
-                Try again
+                {t('common.tryAgain')}
               </button>
             </div>
           ) : creating ? (
@@ -442,10 +436,10 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
               <span className="work-main-icon" aria-hidden="true">
                 ☑
               </span>
-              <h1>Select a Task</h1>
-              <p>Capture the work here before it becomes a formal Work.</p>
+              <h1>{t('tasks.selectTitle')}</h1>
+              <p>{t('tasks.capturePrompt')}</p>
               <button type="button" onClick={() => setCreating(true)}>
-                New Task
+                {t('tasks.newShort')}
               </button>
             </div>
           )}
@@ -475,6 +469,7 @@ function TaskListItem({
   readonly active: boolean;
   readonly onOpen: () => void;
 }) {
+  const t = useT();
   const item = detail.work_item;
   const preview = descriptionPreview(item.description, 120);
   return (
@@ -505,7 +500,7 @@ function TaskListItem({
         <CommentCount count={readCommentCount(item)} />
         {detail.linked_work ? (
           <span className="work-org-chip">
-            Work · {productStateLabel(detail.linked_work.product_state)}
+            {t('workOrg.linkedWork')} · {productStateLabel(detail.linked_work.product_state)}
           </span>
         ) : null}
       </span>
@@ -528,6 +523,7 @@ function CreateTaskForm({
   readonly onCreated: (detail: WorkItemDetailDto) => void;
   readonly onError: (message: string | null) => void;
 }) {
+  const t = useT();
   const state = source as {
     sourceConversationId?: unknown;
     sourceMessageId?: unknown;
@@ -565,7 +561,7 @@ function CreateTaskForm({
       });
       onCreated(detail);
     } catch {
-      onError(TASKS_ACTION_ERROR);
+      onError(t('tasks.actionError'));
     } finally {
       setSaving(false);
     }
@@ -576,15 +572,15 @@ function CreateTaskForm({
       className="work-org-card work-org-form"
       onSubmit={(event) => void submit(event)}
     >
-      <span className="eyebrow">New Task</span>
-      <h1>Capture work</h1>
+      <span className="eyebrow">{t('tasks.newEyebrow')}</span>
+      <h1>{t('tasks.captureTitle')}</h1>
       {sourceConversationId ? (
         <p className="work-org-source-note">
-          Linked to the source message in this conversation.
+          {t('tasks.linkedSource')}
         </p>
       ) : null}
       <MentionTextField
-        label="Title"
+        label={t('tasks.titleLabel')}
         value={title}
         onChange={setTitle}
         participants={participants}
@@ -592,7 +588,7 @@ function CreateTaskForm({
         autoFocus
       />
       <MentionTextField
-        label="Description"
+        label={t('tasks.descriptionLabel')}
         value={description}
         onChange={setDescription}
         participants={participants}
@@ -600,7 +596,7 @@ function CreateTaskForm({
         rows={5}
         hint={
           <small className="work-org-muted">
-            Type @ to mention an AI Coworker or team member.
+            {t('tasks.mentionHint')}
           </small>
         }
       />
@@ -611,14 +607,14 @@ function CreateTaskForm({
       />
       <div className="work-org-actions">
         <button type="button" onClick={onCancel}>
-          Cancel
+          {t('common.cancel')}
         </button>
         <button
           type="submit"
           className="work-org-primary"
           disabled={saving || !title.trim()}
         >
-          {saving ? 'Creating…' : 'Create Task'}
+          {saving ? t('tasks.creating') : t('tasks.create')}
         </button>
       </div>
     </form>
@@ -646,6 +642,7 @@ function TaskDetail({
   ) => void;
   readonly onError: (message: string | null) => void;
 }) {
+  const t = useT();
   const navigate = useNavigate();
   const item = detail.work_item;
   const [title, setTitle] = useState(item.title);
@@ -693,7 +690,7 @@ function TaskDetail({
     try {
       onChanged(await workOrganizationClient.updateWorkItem(item.id, input));
     } catch {
-      onError(TASKS_ACTION_ERROR);
+      onError(t('tasks.actionError'));
     } finally {
       setSaving(false);
     }
@@ -717,7 +714,7 @@ function TaskDetail({
       onCommentsChanged([...comments, created]);
       setComment('');
     } catch {
-      onError(TASKS_ACTION_ERROR);
+      onError(t('tasks.actionError'));
     }
   }
 
@@ -736,7 +733,7 @@ function TaskDetail({
         }),
       );
     } catch {
-      onError(TASKS_ACTION_ERROR);
+      onError(t('tasks.actionError'));
     } finally {
       setSaving(false);
     }
@@ -747,7 +744,7 @@ function TaskDetail({
       <article className="work-org-card work-org-form">
         <div className="work-org-detail-header">
           <div>
-            <span className="eyebrow">Task</span>
+            <span className="eyebrow">{t('tasks.taskEyebrow')}</span>
             <h1>
               <MentionedText text={item.title} participants={participants} />
             </h1>
@@ -757,8 +754,7 @@ function TaskDetail({
                 id={item.assignee_id}
               />
               <span className="work-org-muted">
-                Created by {participantLabel(participants, item.created_by)} ·{' '}
-                {formatWorkTime(item.created_at)}
+                {t('tasks.createdBy', { name: participantLabel(participants, item.created_by), time: formatWorkTime(item.created_at) })}
               </span>
               <MentionRow
                 ids={readMentionIds(item)}
@@ -768,7 +764,7 @@ function TaskDetail({
             </div>
           </div>
           <select
-            aria-label="Task status"
+            aria-label={t('tasks.statusLabel')}
             value={item.status}
             disabled={saving}
             onChange={(event) =>
@@ -783,14 +779,14 @@ function TaskDetail({
           </select>
         </div>
         <MentionTextField
-          label="Title"
+          label={t('tasks.titleLabel')}
           value={title}
           onChange={setTitle}
           participants={participants}
           maxLength={200}
         />
         <MentionTextField
-          label="Description"
+          label={t('tasks.descriptionLabel')}
           value={description}
           onChange={setDescription}
           participants={participants}
@@ -798,7 +794,7 @@ function TaskDetail({
           rows={6}
           hint={
             <small className="work-org-muted">
-              Type @ to mention an AI Coworker or team member.
+              {t('tasks.mentionHint')}
             </small>
           }
         />
@@ -814,7 +810,7 @@ function TaskDetail({
             disabled={saving || !title.trim()}
             onClick={() => void saveFields()}
           >
-            {saving ? 'Saving…' : 'Save'}
+            {saving ? t('tasks.saving') : t('tasks.save')}
           </button>
           {item.source_conversation_id ? (
             <button
@@ -825,7 +821,7 @@ function TaskDetail({
                 )
               }
             >
-              Back to conversation
+              {t('tasks.backToConversation')}
             </button>
           ) : null}
         </div>
@@ -833,7 +829,7 @@ function TaskDetail({
 
       <aside className="work-org-stack">
         <article className="work-org-card">
-          <span className="eyebrow">Formal execution</span>
+          <span className="eyebrow">{t('tasks.formalExecution')}</span>
           {detail.linked_work ? (
             <>
               <h2>{detail.linked_work.title}</h2>
@@ -852,15 +848,14 @@ function TaskDetail({
                   )
                 }
               >
-                Open Work
+                {t('tasks.openWork')}
               </button>
             </>
           ) : (
             <>
-              <h2>Start Work</h2>
+              <h2>{t('tasks.startWork')}</h2>
               <p className="work-org-muted">
-                Select a published Definition to create a formal Work. To create
-                or edit a Definition, go to “New Work”.
+                {t('tasks.startWorkDescription')}
               </p>
               <PublishedDefinitionField
                 definitions={definitions}
@@ -879,7 +874,7 @@ function TaskDetail({
                 }
                 onClick={() => void promote()}
               >
-                Create Work
+                {t('tasks.createWork')}
               </button>
             </>
           )}
@@ -887,11 +882,10 @@ function TaskDetail({
 
         {item.status === 'in_review' ? (
           <article className="work-org-card work-org-review-card">
-            <span className="eyebrow">Human review</span>
-            <h2>Your decision is needed</h2>
+            <span className="eyebrow">{t('tasks.humanReview')}</span>
+            <h2>{t('tasks.decisionNeeded')}</h2>
             <p className="work-org-muted">
-              Review the linked Work and conversation, then mark this Task
-              complete once the collaboration is finished.
+              {t('tasks.reviewDescription')}
             </p>
             <div className="work-org-actions">
               <button
@@ -900,7 +894,7 @@ function TaskDetail({
                 disabled={saving}
                 onClick={() => void update({ status: 'done' })}
               >
-                Mark Task complete
+                {t('tasks.markComplete')}
               </button>
               {detail.linked_work ? (
                 <button
@@ -911,7 +905,7 @@ function TaskDetail({
                     )
                   }
                 >
-                  Review Work
+                  {t('tasks.reviewWork')}
                 </button>
               ) : null}
               {item.source_conversation_id ? (
@@ -923,7 +917,7 @@ function TaskDetail({
                     )
                   }
                 >
-                  Open conversation
+                  {t('tasks.openConversation')}
                 </button>
               ) : null}
             </div>
@@ -931,10 +925,10 @@ function TaskDetail({
         ) : null}
 
         <article className="work-org-card">
-          <span className="eyebrow">Comments</span>
+          <span className="eyebrow">{t('tasks.comments')}</span>
           <div className="work-org-comments">
             {comments.length === 0 ? (
-              <p className="work-org-muted">No comments yet.</p>
+              <p className="work-org-muted">{t('tasks.noComments')}</p>
             ) : null}
             {comments.map((entry) => (
               <div key={entry.id} className="work-org-comment">
@@ -964,20 +958,20 @@ function TaskDetail({
             ))}
           </div>
           <MentionTextField
-            ariaLabel="Add a comment"
+            ariaLabel={t('tasks.addComment')}
             value={comment}
             onChange={setComment}
             participants={participants}
             multiline
             rows={3}
-            placeholder="Write a comment. Your @mentions will be saved in the shared work record."
+            placeholder={t('tasks.commentPlaceholder')}
           />
           <button
             type="button"
             disabled={!comment.trim()}
             onClick={() => void addComment()}
           >
-            Comment
+            {t('tasks.comment')}
           </button>
         </article>
       </aside>
@@ -994,18 +988,19 @@ function AssigneeField({
   readonly value: string;
   readonly onChange: (value: string) => void;
 }) {
+  const t = useT();
   return (
     <label>
-      Assignee
+      {t('tasks.assignee')}
       <select value={value} onChange={(event) => onChange(event.target.value)}>
-        <option value="">Unassigned</option>
+        <option value="">{t('tasks.unassigned')}</option>
         {agents.map((agent) => (
           <option value={agent.id} key={agent.id}>
-            {coworkerOptionLabel(agent)}
+            {coworkerOptionLabel(agent, t)}
           </option>
         ))}
         {value && !agents.some((agent) => agent.id === value) ? (
-          <option value={value}>Unavailable member</option>
+          <option value={value}>{t('tasks.unavailableMember')}</option>
         ) : null}
       </select>
     </label>
@@ -1025,37 +1020,38 @@ function PublishedDefinitionField({
   readonly onChange: (value: string) => void;
   readonly onRetry: () => void;
 }) {
+  const t = useT();
   if (state === 'loading')
-    return <p className="work-org-muted">Loading published Definitions…</p>;
+    return <p className="work-org-muted">{t('tasks.loadingDefinitions')}</p>;
   if (state === 'unavailable')
     // feature_unavailable means this workspace does not compose the
     // Product Work surface at all, so reloading can never succeed. No
     // Retry here — see docs/frontend.md "Surface availability".
-    return <p className="work-org-muted">{DEFINITIONS_UNAVAILABLE}</p>;
+    return <p className="work-org-muted">{t('tasks.definitionsUnavailable')}</p>;
   if (state === 'error')
     return (
       <div className="work-org-error" role="alert">
-        <p>Unable to load published Definitions.</p>
+        <p>{t('tasks.definitionsLoadError')}</p>
         <button type="button" onClick={onRetry}>
-          Try again
+          {t('common.tryAgain')}
         </button>
       </div>
     );
   if (definitions.length === 0)
     return (
       <p className="work-org-muted">
-        There are no published Definitions yet. Create one in “New Work” first.
+        {t('tasks.noDefinitions')}
       </p>
     );
   return (
     <label>
-      Published Definitions
+      {t('tasks.publishedDefinitions')}
       <select
-        aria-label="Published Work Definition"
+        aria-label={t('tasks.publishedWorkDefinition')}
         value={value}
         onChange={(event) => onChange(event.target.value)}
       >
-        <option value="">Select a published Definition</option>
+        <option value="">{t('tasks.selectDefinition')}</option>
         {definitions.map((definition) => (
           <option key={definition.definitionId} value={definition.definitionId}>
             {definition.displayName}
@@ -1066,7 +1062,7 @@ function PublishedDefinitionField({
   );
 }
 
-function coworkerOptionLabel(agent: Coworker): string {
+function coworkerOptionLabel(agent: Coworker, t: ReturnType<typeof useT>): string {
   return [
     agent.displayName,
     agent.roleLabel ?? coworkerRoleFallback(),

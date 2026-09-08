@@ -1,3 +1,5 @@
+import { t } from '../../i18n/index.js';
+
 export type CapabilityInputType =
   'text' | 'number' | 'integer' | 'boolean' | 'select';
 
@@ -58,31 +60,33 @@ export function compileCapabilityDraft(
   skillCatalog: readonly SkillCatalogEntry[],
 ): CompiledCapabilityDraft {
   const normalizedName = slug(draft.name);
-  if (!draft.name.trim()) throw new Error('Give this Capability a name.');
+  if (!draft.name.trim()) throw new Error(t('authoring.error.name'));
   if (!draft.description.trim())
-    throw new Error('Describe the outcome this Capability should deliver.');
+    throw new Error(t('authoring.error.description'));
   if (draft.mode === 'single' && draft.participants.length !== 1)
     throw new Error(
-      'A single-specialist Capability needs exactly one participant.',
+      t('authoring.error.singleParticipants'),
     );
   if (draft.mode === 'collaboration' && draft.participants.length < 2)
     throw new Error(
-      'A small-team Capability needs a lead and at least one member.',
+      t('authoring.error.collaborationParticipants'),
     );
   if (draft.participants.length > 17)
-    throw new Error('A Capability can include at most 17 participants.');
+    throw new Error(t('authoring.error.maxParticipants'));
 
   const participantNames = new Set<string>();
   for (const participant of draft.participants) {
     if (!participant.name.trim() || !participant.role.trim())
-      throw new Error('Every participant needs a name and role.');
+      throw new Error(t('authoring.error.participantNameRole'));
     if (!participant.instructions.trim())
       throw new Error(
-        `Add working instructions for ${participant.name || 'the participant'}.`,
+        t('authoring.error.participantInstructions', {
+          name: participant.name || 'the participant',
+        }),
       );
     const key = participant.name.trim().toLocaleLowerCase();
     if (participantNames.has(key))
-      throw new Error('Participant names must be unique.');
+      throw new Error(t('authoring.error.uniqueParticipants'));
     participantNames.add(key);
   }
 
@@ -90,14 +94,14 @@ export function compileCapabilityDraft(
     normalizeInputKey(input.key || input.label),
   );
   if (new Set(inputKeys).size !== inputKeys.length)
-    throw new Error('Input field names must be unique.');
+    throw new Error(t('authoring.error.uniqueInputs'));
   for (const input of draft.inputs) {
-    if (!input.label.trim()) throw new Error('Every input needs a label.');
+    if (!input.label.trim()) throw new Error(t('authoring.error.inputLabel'));
     if (
       input.type === 'select' &&
       !(input.choices ?? []).some((choice) => choice.trim())
     )
-      throw new Error(`${input.label} needs at least one choice.`);
+      throw new Error(t('authoring.error.choice', { label: input.label }));
     if (
       input.type === 'text' &&
       (input.minLength !== undefined || input.maxLength !== undefined)
@@ -107,14 +111,14 @@ export function compileCapabilityDraft(
         (!Number.isInteger(input.minLength) || input.minLength < 0)
       )
         throw new Error(
-          `${input.label} needs a non-negative whole-number minimum length.`,
+          t('authoring.error.minLength', { label: input.label }),
         );
       if (
         input.maxLength !== undefined &&
         (!Number.isInteger(input.maxLength) || input.maxLength < 0)
       )
         throw new Error(
-          `${input.label} needs a non-negative whole-number maximum length.`,
+          t('authoring.error.maxLength', { label: input.label }),
         );
       if (
         input.minLength !== undefined &&
@@ -122,20 +126,20 @@ export function compileCapabilityDraft(
         input.minLength > input.maxLength
       )
         throw new Error(
-          `${input.label} minimum length cannot exceed its maximum.`,
+          t('authoring.error.lengthOrder', { label: input.label }),
         );
     }
     if (input.type === 'number' || input.type === 'integer') {
       if (input.minimum !== undefined && !Number.isFinite(input.minimum))
-        throw new Error(`${input.label} has an invalid minimum.`);
+        throw new Error(t('authoring.error.minimum', { label: input.label }));
       if (input.maximum !== undefined && !Number.isFinite(input.maximum))
-        throw new Error(`${input.label} has an invalid maximum.`);
+        throw new Error(t('authoring.error.maximum', { label: input.label }));
       if (
         input.minimum !== undefined &&
         input.maximum !== undefined &&
         input.minimum > input.maximum
       )
-        throw new Error(`${input.label} minimum cannot exceed its maximum.`);
+      throw new Error(t('authoring.error.numberOrder', { label: input.label }));
     }
   }
 
@@ -267,7 +271,7 @@ function workerSource(
         const entry = skillCatalog.find((skill) => skill.ref === ref);
         if (!entry)
           throw new Error(
-            `The Skill "${ref}" is no longer published in this workspace. Deselect it, or publish it again before saving.`,
+            t('authoring.error.skillUnavailable', { ref }),
           );
         return entry.requiredToolRefs;
       }),
@@ -348,7 +352,7 @@ export function normalizeInputKey(value: string): string {
     ? normalized
     : `input_${normalized}`;
   if (!prefixed || prefixed === 'input_')
-    throw new Error('Input fields need a stable name.');
+    throw new Error(t('authoring.error.stableName'));
   return prefixed.slice(0, 64);
 }
 
@@ -382,12 +386,12 @@ function indent(value: string, spaces: number): string[] {
 function nonNegativeInteger(value: number, label: string): number {
   if (!Number.isInteger(value) || value < 0)
     throw new Error(
-      `${label || 'Input'} needs a non-negative whole-number bound.`,
+      t('authoring.error.numericBound', { label: label || 'Input' }),
     );
   return value;
 }
 function finite(value: number, label: string): number {
   if (!Number.isFinite(value))
-    throw new Error(`${label || 'Input'} has an invalid numeric bound.`);
+    throw new Error(t('authoring.error.numericBound', { label: label || 'Input' }));
   return value;
 }

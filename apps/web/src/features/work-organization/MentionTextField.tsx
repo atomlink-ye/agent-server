@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useT } from '../../i18n';
 
 import {
   completeMention,
@@ -72,6 +73,7 @@ export function MentionTextField({
   className,
   hint,
 }: MentionTextFieldProps) {
+  const t = useT();
   const controlRef = useRef<Control | null>(null);
   const [draft, setDraft] = useState<MentionDraft | null>(null);
   const [highlight, setHighlight] = useState(0);
@@ -230,7 +232,7 @@ export function MentionTextField({
           data-testid="mention-suggestions"
           id={listboxId}
           role="listbox"
-          aria-label="Mention a member"
+          aria-label={t('workOrg.mentionMember')}
         >
           {suggestions.map((participant, index) => (
             <li key={participant.id} role="presentation">

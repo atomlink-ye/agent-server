@@ -19,12 +19,8 @@ import {
   ParticipantAvatar,
   StatusBadge,
 } from './WorkItemMeta';
+import { useT } from '../../i18n';
 
-const PEEK_LOAD_ERROR = 'Unable to load this card’s details. Please try again.';
-const CLAIM_UNSUPPORTED =
-  'Task claiming is not enabled in this deployment yet.';
-const CLAIM_FAILED =
-  'Unable to claim this Task. Someone else may have claimed it first. Refresh and try again.';
 
 type Comments = Awaited<ReturnType<typeof workOrganizationClient.listComments>>;
 type PeekStatus = 'loading' | 'ready' | 'error';
@@ -53,6 +49,7 @@ export function BoardCardPeek({
   readonly onClaimUnsupported: () => void;
   readonly onClose: () => void;
 }) {
+  const t = useT();
   const navigate = useNavigate();
   const [detail, setDetail] = useState<WorkItemDetailDto | null>(null);
   const [comments, setComments] = useState<Comments>([]);
@@ -91,7 +88,7 @@ export function BoardCardPeek({
     try {
       const result = await workOrganizationClient.claimWorkItem(workItemId);
       if (!result.supported) {
-        setNotice(CLAIM_UNSUPPORTED);
+        setNotice(t('boards.claimUnsupported'));
         onClaimUnsupported();
         return;
       }
@@ -99,7 +96,7 @@ export function BoardCardPeek({
       onClaimed(workItemId);
       await load();
     } catch {
-      setNotice(CLAIM_FAILED);
+      setNotice(t('boards.claimFailed'));
     } finally {
       setClaiming(false);
     }
@@ -115,29 +112,29 @@ export function BoardCardPeek({
       setComments((current) => [...current, created]);
       setComment('');
     } catch {
-      setNotice('Unable to post your comment. Please try again.');
+      setNotice(t('tasks.commentPostError'));
     }
   }
 
   return (
     <aside
       className="work-board-peek"
-      aria-label="Card details"
+      aria-label={t('boards.cardDetails')}
       data-testid="work-board-peek"
     >
       <header className="work-board-peek-head">
-        <span className="eyebrow">Card details</span>
-        <button type="button" aria-label="Close card details" onClick={onClose}>
+        <span className="eyebrow">{t('boards.cardDetails')}</span>
+        <button type="button" aria-label={t('boards.closeCard')} onClick={onClose}>
           ×
         </button>
       </header>
       {status === 'loading' ? (
-        <p className="work-org-muted">Loading card details…</p>
+        <p className="work-org-muted">{t('boards.loadingCardDetails')}</p>
       ) : status === 'error' ? (
         <div className="work-org-error" role="alert">
-          <p>{PEEK_LOAD_ERROR}</p>
+          <p>{t('boards.cardLoadError')}</p>
           <button type="button" onClick={() => void load()}>
-            Try again
+            {t('common.tryAgain')}
           </button>
         </div>
       ) : detail ? (
@@ -159,8 +156,7 @@ export function BoardCardPeek({
             />
           </h2>
           <p className="work-org-muted">
-            Created by{' '}
-            {participantLabel(participants, detail.work_item.created_by)}
+              {t('boards.createdBy', { name: participantLabel(participants, detail.work_item.created_by) })}
           </p>
           {detail.work_item.description ? (
             <p className="work-board-peek-description">
@@ -171,7 +167,7 @@ export function BoardCardPeek({
             </p>
           ) : (
             <p className="work-org-muted">
-              This card does not have a description yet.
+              {t('boards.cardNoDescription')}
             </p>
           )}
           <MentionRow
@@ -204,19 +200,19 @@ export function BoardCardPeek({
                 navigate(`/tasks/${encodeURIComponent(workItemId)}`)
               }
             >
-              Open Task
+              {t('boards.openTask')}
             </button>
           </div>
           <section
             className="work-board-peek-comments"
-            aria-label="Card comments"
+            aria-label={t('boards.cardComments')}
           >
             <div className="work-board-peek-comments-head">
-              <span className="eyebrow">Comments</span>
+              <span className="eyebrow">{t('tasks.comments')}</span>
               <CommentCount count={comments.length} />
             </div>
             {comments.length === 0 ? (
-              <p className="work-org-muted">No comments yet.</p>
+              <p className="work-org-muted">{t('tasks.noComments')}</p>
             ) : null}
             {comments.map((entry) => (
               <div key={entry.id} className="work-org-comment">
@@ -241,20 +237,20 @@ export function BoardCardPeek({
               </div>
             ))}
             <MentionTextField
-              ariaLabel="Add a comment"
+              ariaLabel={t('tasks.addComment')}
               value={comment}
               onChange={setComment}
               participants={participants}
               multiline
               rows={3}
-              placeholder="Write a comment. Your @mentions will be saved in the shared work record."
+              placeholder={t('tasks.commentPlaceholder')}
             />
             <button
               type="button"
               disabled={!comment.trim()}
               onClick={() => void addComment()}
             >
-              Comment
+              {t('tasks.comment')}
             </button>
           </section>
         </>
@@ -281,6 +277,7 @@ function ClaimButton({
   readonly claiming: boolean;
   readonly onClaim: () => void;
 }) {
+  const t = useT();
   const now = Date.now();
   if (!isClaimable(detail.work_item, now))
     return (
@@ -296,7 +293,7 @@ function ClaimButton({
       disabled={claiming}
       onClick={onClaim}
     >
-      {claiming ? 'Claiming…' : 'Claim Task'}
+      {claiming ? t('boards.claiming') : t('boards.claimTask')}
     </button>
   );
 }

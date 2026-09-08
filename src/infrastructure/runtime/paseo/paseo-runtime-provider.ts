@@ -1,4 +1,3 @@
-import { mkdir } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 
 import {
@@ -35,6 +34,7 @@ import { PaseoSdkClient } from '../../../adapters/paseo/paseo-sdk-client.js';
 import { PaseoTurnRunner } from '../../../adapters/paseo/paseo-turn-runner.js';
 import { normalizePaseoRequestedModel } from './paseo-model-normalizer.js';
 import { mapPaseoConfig } from './paseo-config-mapper.js';
+import { ensureAgentWorkspaceRoot } from '../agent-workspace-root.js';
 import type { ExecutionOutput } from '../../../application/ports/runtime-execution-session.js';
 
 const PASEO_RUNTIME_PROVIDER_CAPABILITIES: RuntimeProviderCapabilities = {
@@ -72,6 +72,16 @@ export interface PaseoRuntimeProviderOptions {
   readonly additionalProviders?: readonly ManagedEnvironmentProvider[];
   readonly workspaceTitle: string;
   readonly requestedModel?: string;
+  /**
+   * Environment the provider process for an Agent session runs with.
+   *
+   * A provider CLI reads a home directory for global instructions, MCP
+   * servers, plugins and skills. Left to its default that is the home of
+   * whoever runs the server, so a product Agent would start every session
+   * briefed with that person's development setup. Naming the runtime's own
+   * home here is how the Agent gets only what the platform granted it.
+   */
+  readonly sessionEnvironment?: Readonly<Record<string, string>>;
   readonly connectTimeoutMs: number;
   readonly executionTimeoutMs: number;
   readonly executionTimeoutSource?: 'env' | 'default';
@@ -154,7 +164,7 @@ export class PaseoRuntimeProvider implements RuntimeExecutionProvider {
       provider: this.#options.provider,
       model: this.#options.requestedModel ?? null,
     });
-    await mkdir(this.#options.cwd, { recursive: true });
+    await ensureAgentWorkspaceRoot(this.#options.cwd);
     const workspaceId = await this.#gateway.createWorkspace(this.#options.cwd);
     const invocationId = `one-shot:${randomUUID()}`;
     const agent = await this.#gateway.createAgent({
@@ -164,6 +174,9 @@ export class PaseoRuntimeProvider implements RuntimeExecutionProvider {
       model,
       systemPrompt: input.systemPrompt,
       runId: invocationId,
+      ...(this.#options.sessionEnvironment
+        ? { env: this.#options.sessionEnvironment }
+        : {}),
     });
     if (!agent.id)
       throw new ProtocolViolationError(
@@ -243,7 +256,7 @@ export class PaseoRuntimeProvider implements RuntimeExecutionProvider {
   ): Promise<ProviderSessionHandle> {
     await this.#initialize();
     const { provider, model } = this.#resolveLaunch(desired);
-    await mkdir(desired.cwd, { recursive: true });
+    await ensureAgentWorkspaceRoot(desired.cwd);
 
     let workspaceId: string;
     try {
@@ -269,6 +282,9 @@ export class PaseoRuntimeProvider implements RuntimeExecutionProvider {
         model,
         systemPrompt: desired.systemPrompt,
         runId: desired.runtimeSessionId,
+        ...(this.#options.sessionEnvironment
+          ? { env: this.#options.sessionEnvironment }
+          : {}),
         ...(desired.title ? { title: desired.title } : {}),
         ...(desired.labels ? { labels: desired.labels } : {}),
         ...(desired.extensions?.mcpServers

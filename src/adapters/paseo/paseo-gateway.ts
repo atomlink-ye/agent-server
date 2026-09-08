@@ -64,6 +64,7 @@ export class PaseoGateway {
     readonly title?: string;
     readonly labels?: Readonly<Record<string, string>>;
     readonly mcpServers?: readonly ExecutionMcpServerConfig[];
+    readonly env?: Readonly<Record<string, string>>;
   }): Promise<PaseoCreatedAgent> {
     // The pinned 0.1.x compatibility port still contains an initialPrompt
     // field, but the real SDK does not use it. Keeping it empty preserves the

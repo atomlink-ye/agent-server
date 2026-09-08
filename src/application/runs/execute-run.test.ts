@@ -992,7 +992,7 @@ describe('ExecuteRun', () => {
         source: { kind: 'run', runId: claim.run.id },
         prompt: 'private prompt',
         desiredSystemPrompt: expect.objectContaining({
-          text: 'Runtime contract: execute the supplied task input using the published agent instructions. Do not infer or access other session history.\n\nPublished AgentVersion instructions:\nmanaged instructions',
+          text: 'managed instructions\n\nRuntime contract: execute the supplied task input using the published agent instructions. Do not infer or access other session history.',
           digest: expect.any(String),
         }),
         recoveryPrompt: `private prompt\n\n${RUNTIME_RECOVERY_INSTRUCTION}`,

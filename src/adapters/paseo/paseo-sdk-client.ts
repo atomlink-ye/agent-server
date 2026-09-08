@@ -106,6 +106,7 @@ export class PaseoSdkClient implements PaseoClientPort {
     readonly title?: string;
     readonly labels?: Readonly<Record<string, string>>;
     readonly mcpServers?: readonly ExecutionMcpServerConfig[];
+    readonly env?: Readonly<Record<string, string>>;
   }): Promise<PaseoCreatedAgent> {
     const agent = await this.#client.createAgent({
       provider: input.provider,
@@ -117,6 +118,7 @@ export class PaseoSdkClient implements PaseoClientPort {
       cwd: input.cwd,
       workspaceId: input.workspaceId,
       systemPrompt: input.systemPrompt,
+      ...(input.env ? { env: { ...input.env } } : {}),
       ...(input.title ? { title: input.title } : {}),
       ...(input.mcpServers
         ? {

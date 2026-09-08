@@ -63,6 +63,11 @@ function encodeEnvelopeAtom(value: string, label: string): string {
   }
 }
 
+/**
+ * Identity leads. The runtime contract is a rule about the turn; the published
+ * instructions are the participant the rule applies to, and an Agent that meets
+ * the platform before it meets itself answers as the platform.
+ */
 export function buildBootstrapPrompt(
   instructions?: string,
   skills: readonly {
@@ -72,10 +77,8 @@ export function buildBootstrapPrompt(
   }[] = [],
 ): string {
   return [
+    ...(instructions ? [instructions.trim()] : []),
     PLATFORM_RUNTIME_KERNEL,
-    ...(instructions
-      ? [`Published AgentVersion instructions:\n${instructions}`]
-      : []),
     ...(skills.length
       ? [
           `Resolved Skills:\n${skills

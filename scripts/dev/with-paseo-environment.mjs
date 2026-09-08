@@ -20,6 +20,11 @@ export const applicationEnvironmentNames = [
   // The API process selects the Claude launch mode from the active transport, so
   // it needs the transport flag itself. Bedrock credentials stay with the daemon.
   'CLAUDE_CODE_USE_BEDROCK',
+  // The Codex home the runtime prepared. The API process passes it to Paseo
+  // per session so a product Agent's provider process never falls back to the
+  // operator's own `~/.codex` -- which would brief it with that person's
+  // global AGENTS.md, MCP servers and plugins.
+  'CODEX_HOME',
 ];
 
 export function createApplicationEnvironment({

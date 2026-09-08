@@ -223,6 +223,7 @@ export interface PaseoClientPort {
     readonly title?: string;
     readonly labels?: Readonly<Record<string, string>>;
     readonly mcpServers?: readonly ExecutionMcpServerConfig[];
+    readonly env?: Readonly<Record<string, string>>;
   }): Promise<PaseoCreatedAgent>;
   sendAgentMessage(agentId: string, text: string): Promise<void>;
   subscribeAgentStream?(

@@ -178,6 +178,170 @@ it('does not merge the same provider activity id across sequence-reset runs', ()
   expect(tools.map((entry) => entry.sourceOrdinals)).toEqual([[2], [5]]);
 });
 
+it('merges independent incremental assistant_text chunks into one row', () => {
+  const input = [
+    at(1, {
+      kind: 'assistant_text',
+      text: 'Hello, ',
+      sequence: 1,
+      created_at: timestamp,
+    }),
+    at(2, {
+      kind: 'assistant_text',
+      text: 'world',
+      sequence: 2,
+      created_at: timestamp,
+    }),
+    at(3, {
+      kind: 'assistant_text',
+      text: '!',
+      sequence: 3,
+      created_at: timestamp,
+    }),
+  ];
+  const output = projectTranscript(input);
+  expect(output).toHaveLength(1);
+  expect(
+    (output[0].event as Extract<TranscriptEntry, { kind: 'assistant_text' }>)
+      .text,
+  ).toBe('Hello, world!');
+  expect(output[0].sourceOrdinals).toEqual([1, 2, 3]);
+});
+
+it('still keeps only the latest cumulative-snapshot assistant_text (no regression)', () => {
+  const input = [
+    at(1, {
+      kind: 'assistant_text',
+      text: 'A',
+      sequence: 1,
+      created_at: timestamp,
+    }),
+    at(2, {
+      kind: 'assistant_text',
+      text: 'AB',
+      sequence: 2,
+      created_at: timestamp,
+    }),
+    at(3, {
+      kind: 'assistant_text',
+      text: 'ABC',
+      sequence: 3,
+      created_at: timestamp,
+    }),
+  ];
+  const output = projectTranscript(input);
+  expect(output).toHaveLength(1);
+  expect(
+    (output[0].event as Extract<TranscriptEntry, { kind: 'assistant_text' }>)
+      .text,
+  ).toBe('ABC');
+  expect(output[0].sourceOrdinals).toEqual([1, 2, 3]);
+});
+
+it('does not merge two real assistant_text turns separated by a tool call', () => {
+  const input = [
+    at(1, {
+      kind: 'assistant_text',
+      text: 'Let me check that file.',
+      sequence: 1,
+      created_at: timestamp,
+    }),
+    at(2, {
+      kind: 'tool_status',
+      activity_id: 'read-1',
+      category: 'read',
+      status: 'completed',
+      label: 'Read',
+      summary: 'config.ts',
+      provider: null,
+      tool_name: null,
+      detail_kind: 'read',
+      detail_text: 'detail',
+      exit_code: 0,
+      parent_activity_id: null,
+      sequence: 2,
+      created_at: timestamp,
+    }),
+    at(3, {
+      kind: 'assistant_text',
+      text: 'The file looks fine.',
+      sequence: 3,
+      created_at: timestamp,
+    }),
+  ];
+  const output = projectTranscript(input);
+  const assistantRows = output.filter(
+    (entry) => entry.event.kind === 'assistant_text',
+  );
+  expect(assistantRows).toHaveLength(2);
+  expect(
+    (
+      assistantRows[0].event as Extract<
+        TranscriptEntry,
+        { kind: 'assistant_text' }
+      >
+    ).text,
+  ).toBe('Let me check that file.');
+  expect(
+    (
+      assistantRows[1].event as Extract<
+        TranscriptEntry,
+        { kind: 'assistant_text' }
+      >
+    ).text,
+  ).toBe('The file looks fine.');
+});
+
+it('does not merge assistant_text across a runSegment (sequence rollback) boundary', () => {
+  const input = [
+    at(1, {
+      kind: 'lifecycle',
+      status: 'started',
+      sequence: 1,
+      created_at: timestamp,
+    }),
+    at(2, {
+      kind: 'assistant_text',
+      text: 'Final answer from run one.',
+      sequence: 2,
+      created_at: timestamp,
+    }),
+    at(3, {
+      kind: 'lifecycle',
+      status: 'started',
+      sequence: 1,
+      created_at: timestamp,
+    }),
+    at(4, {
+      kind: 'assistant_text',
+      text: 'Final answer from run two.',
+      sequence: 2,
+      created_at: timestamp,
+    }),
+  ];
+  const output = projectTranscript(input);
+  const assistantRows = output.filter(
+    (entry) => entry.event.kind === 'assistant_text',
+  );
+  expect(assistantRows).toHaveLength(2);
+  expect(
+    (
+      assistantRows[0].event as Extract<
+        TranscriptEntry,
+        { kind: 'assistant_text' }
+      >
+    ).text,
+  ).toBe('Final answer from run one.');
+  expect(
+    (
+      assistantRows[1].event as Extract<
+        TranscriptEntry,
+        { kind: 'assistant_text' }
+      >
+    ).text,
+  ).toBe('Final answer from run two.');
+});
+
 it('nests tool_status rows with parent_activity_id under their parent', () => {
   const input = [
     at(1, {

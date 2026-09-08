@@ -91,13 +91,23 @@ export function projectTranscript(
 
     if (entry.kind === 'assistant_text') {
       const previous = rows.at(-1);
-      // Keep the latest only when the observed text proves this is a cumulative
-      // snapshot; real provider text may also arrive as independent chunks.
+      // The provider may republish the same turn as a cumulative snapshot
+      // (each event contains the full text so far) or as independent
+      // incremental chunks (each event is only the newly generated slice).
+      // rows.at(-1) being assistant_text already proves nothing of another
+      // kind (a tool call, a reasoning block, a run boundary) landed between
+      // this entry and the previous one, since any of those would have
+      // pushed their own row and become the new tail; runSegment is checked
+      // explicitly because a sequence rollback can still leave an
+      // assistant_text row as the tail of the prior run.
       if (
         previous?.event.kind === 'assistant_text' &&
-        entry.text.startsWith(previous.event.text)
+        previous.runSegment === runSegment
       ) {
-        previous.event = entry;
+        previous.event = {
+          ...entry,
+          text: mergeAssistantText(previous.event.text, entry.text),
+        };
         previous.sourceOrdinals.push(entry.ordinal);
       } else {
         rows.push(makeRow(entry, runSegment));
@@ -177,6 +187,12 @@ function mergeAdjacentReasoning(rows: readonly MutableRow[]): MutableRow[] {
           : null;
   }
   return merged;
+}
+
+function mergeAssistantText(previous: string, next: string): string {
+  if (next.startsWith(previous)) return next;
+  if (previous.startsWith(next)) return previous;
+  return `${previous}${next}`;
 }
 
 function mergeReasoningText(

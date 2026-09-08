@@ -14,13 +14,13 @@
 - Tasks 与 Boards：`.work-org-list` 和 `.work-org-content`。
 - Whispers：`.whispers-list` 和 `.whisper-message-log`。
 
-浏览器证据位于 `apps/web/src/app/shell/scroll-regions.browser.test.ts`。该 Chromium 测试在宽 1440px 的 `.app-shell` 夹具中，为上述每个实际面板类填充足量内容，断言 `scrollHeight > clientHeight`、写入 `scrollTop` 后位置变化，并以每个面板的 `bottom marker` 的实际边界仍落在滚动视口内证明末项可见；另断言长不可断行内容可横向滚动。视觉证据为已忽略的 `.local/scroll-regions-browser.png`，不提交。Settings 页面在当前路由与实现中不存在，因此没有虚构该页面或测试。
+浏览器测试固定使用 Chromium 的 1440×900 视口。`apps/web/src/features/work/components/work-list.browser.test.tsx` 将真实 AppShell 挂载到 `/work`，用 48 条真实 Work fixture 断言 `.work-list` 溢出、`scrollTop` 改变，且最终 Work 条目进入可视区。`apps/web/src/features/whispers/WhispersPage.browser.test.tsx` 在真实 WhispersPage 中以 48 个频道和 48 条消息断言 `.whispers-list` 与 `.whisper-message-log` 的同一行为，并验证最后一条真实消息可见。视觉证据为已忽略的 `.local/whispers-scroll-desktop.png`，不提交。旧的 class-only 测试已删除。Settings 页面在当前路由与实现中不存在，因此没有虚构该页面或测试。
 
 中文文案按三组修订：一是统一保留 Work、Run、Board、Workspace、Agent、Coworker、Definition、Capability 等产品对象，同时去除重复或不自然的拼接；二是把任务、Board、Work 状态、Trace 与 Observe 的操作说明改为直接、可执行的中文；三是重写 Coworker 创建、Capability 编写和验证错误提示，减少机译式句法并明确用户下一步。英文词典键和中英文键结构未变。
 
 实际运行的命令：
 
-- `pnpm exec vitest run --config vitest.web.config.ts apps/web/src/app/shell/scroll-regions.browser.test.ts`：通过，1 个 Chromium 测试。
+- `pnpm exec vitest run --config vitest.web.config.ts apps/web/src/features/whispers/WhispersPage.browser.test.tsx apps/web/src/features/work/components/work-list.browser.test.tsx`：通过，6 个 Chromium 测试。
 - `pnpm typecheck`：通过。
 - `pnpm web:check:types`：通过。
 - `pnpm test:web`：通过，48 个测试文件、258 个测试；运行时输出了既有 BoardCanvas 和 AdvancedDefinitionAuthoring 的 `act(...)` 警告，但无失败。实际基线不是要求中提到的 43 个文件、252 个测试。

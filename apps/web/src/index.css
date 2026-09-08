@@ -176,6 +176,8 @@ textarea {
   min-width: 0;
   min-height: 0;
   overflow: auto;
+}
+
 .app-account {
   position: absolute;
   top: 14px;

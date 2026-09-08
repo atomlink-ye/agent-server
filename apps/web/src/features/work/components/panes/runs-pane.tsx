@@ -6,6 +6,7 @@ import {
   productStatePresentation,
   workTabHref,
 } from '../work-presentation';
+import { useT } from '../../../../i18n';
 
 export function RunsPane({
   data,
@@ -14,23 +15,21 @@ export function RunsPane({
   readonly data: WorkDetailData;
   readonly originConversationId?: string | null;
 }) {
+  const t = useT();
   if (data.runs.length === 0)
     return (
       <section className="work-detail-state">
-        <p className="work-shell-kicker">Runs</p>
-        <h2>Start the first Run when this Work is ready.</h2>
+        <p className="work-shell-kicker">{t('work.tab.runs')}</p>
+        <h2>{t('work.runs.emptyTitle')}</h2>
       </section>
     );
 
   return (
     <section className="work-runs" aria-labelledby="work-runs-heading">
       <div className="work-section-heading">
-        <p className="work-shell-kicker">Runs</p>
-        <h2 id="work-runs-heading">Historical execution records</h2>
-        <p>
-          Each Run remains pinned to the exact immutable Definition version it
-          used.
-        </p>
+        <p className="work-shell-kicker">{t('work.tab.runs')}</p>
+        <h2 id="work-runs-heading">{t('work.runs.historyTitle')}</h2>
+        <p>{t('work.runs.historyBody')}</p>
       </div>
       <ol className="work-run-list">
         {data.runs.map((run, index) => {
@@ -42,13 +41,13 @@ export function RunsPane({
           return (
             <li data-selected={selected ? 'true' : undefined} key={run.id}>
               <div className="work-run-list__identity">
-                <strong>{index === 0 ? 'Latest Run' : 'Historical Run'}</strong>
+                <strong>{index === 0 ? t('work.latestRun') : t('work.historicalRun')}</strong>
                 <time dateTime={run.created_at}>
                   {formatTimestamp(run.created_at)}
                 </time>
               </div>
               <div className="work-run-list__definition">
-                <span>Definition</span>
+                <span>{t('work.tab.definition')}</span>
                 {exactDefinition ? (
                   <strong>{exactDefinition}</strong>
                 ) : (
@@ -66,7 +65,7 @@ export function RunsPane({
                 </span>
               ) : (
                 <span className="work-run-list__quiet">
-                  Outcome loads on open
+                  {t('work.outcomeLoads')}
                 </span>
               )}
               <a
@@ -77,7 +76,7 @@ export function RunsPane({
                   originConversationId,
                 )}
               >
-                {selected ? 'View Overview' : 'Open Run'}
+                {selected ? t('work.viewOverview') : t('work.openRun')}
               </a>
               <a
                 href={workTabHref(
@@ -87,7 +86,7 @@ export function RunsPane({
                   originConversationId,
                 )}
               >
-                Definition used
+                {t('work.definitionUsed')}
               </a>
             </li>
           );

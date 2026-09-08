@@ -17,6 +17,7 @@ import {
 } from './run-trace-gateway';
 import { selectAttemptEntries } from './selectors';
 import type { NormalizedTrace, TraceEdge } from './normalized';
+import { useT } from '../../i18n';
 import './execution-transcript.css';
 import './transcript-stream.css';
 
@@ -43,6 +44,7 @@ export function SessionTranscripts({
   readonly initialSelectedIndex?: number;
   readonly productState?: string;
 }) {
+  const t = useT();
   const [state, setState] = useState<FetchState>({ status: 'idle' });
   // Neither name nor role is unique inside a Run: a team can run several
   // 'member' sessions with the same role. Selection addresses the session by
@@ -129,8 +131,8 @@ export function SessionTranscripts({
       >
         <div className="execution-transcript__heading">
           <div>
-            <p className="work-shell-kicker">Session transcripts</p>
-            <h2>Loading session transcripts…</h2>
+            <p className="work-shell-kicker">{t('trace.sessions')}</p>
+            <h2>{t('trace.sessions.loading')}</h2>
           </div>
         </div>
       </section>
@@ -138,12 +140,12 @@ export function SessionTranscripts({
 
   if (state.status === 'unavailable') {
     const statusCode = state.statusCode;
-    let message = 'Captured session transcripts are not available.';
+    let message = t('trace.sessions.unavailable');
     if (statusCode === 404) {
-      message = 'This Run has not been bound to a provider session yet.';
+      message = t('trace.sessions.unavailable');
     } else if (statusCode === 503) {
       message =
-        'The service that reads session transcripts is temporarily unavailable. Please try again in a moment.';
+        t('trace.sessions.unavailable');
     }
     return (
       <section
@@ -152,8 +154,8 @@ export function SessionTranscripts({
       >
         <div className="execution-transcript__heading">
           <div>
-            <p className="work-shell-kicker">Session transcripts</p>
-            <h2>Session transcripts are not available for this Run.</h2>
+            <p className="work-shell-kicker">{t('trace.sessions')}</p>
+            <h2>{t('trace.sessions.unavailable')}</h2>
             <p>{message}</p>
           </div>
         </div>
@@ -196,12 +198,12 @@ export function SessionTranscripts({
       >
         <div className="execution-transcript__heading">
           <div>
-            <p className="work-shell-kicker">Session transcripts</p>
-            <h2>No sessions were captured for this Run.</h2>
+            <p className="work-shell-kicker">{t('trace.sessions')}</p>
+            <h2>{t('trace.sessions.empty')}</h2>
             <p>
               {live
-                ? 'Session data has not started streaming for this Run yet.'
-                : 'The Run completed but no session data was recorded.'}
+                ? t('trace.sessions.notStarted')
+                : t('trace.sessions.noRecordedData')}
             </p>
           </div>
         </div>
@@ -212,8 +214,8 @@ export function SessionTranscripts({
     <section className="execution-transcript" data-testid="session-transcripts">
       <div className="execution-transcript__heading">
         <div>
-          <p className="work-shell-kicker">Session transcripts</p>
-          <h2>What the Workers did</h2>
+          <p className="work-shell-kicker">{t('trace.sessions')}</p>
+          <h2>{t('trace.sessions.workers')}</h2>
           <p>
             This Work Run is {humanize(productState)}. Choose a Worker to see
             its captured conversation, completed activity, and any block.
@@ -226,7 +228,7 @@ export function SessionTranscripts({
       <div className="execution-transcript__body">
         <nav
           className="execution-transcript__attempts"
-          aria-label="Workers"
+          aria-label={t('trace.sessions.workerFilter')}
           data-testid="session-role-nav"
         >
           {data.sessions.map((session) => {

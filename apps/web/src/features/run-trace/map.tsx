@@ -2,6 +2,7 @@ import type { CSSProperties } from 'react';
 
 import { actorTone, humanize, type MapModel } from './selectors';
 import type { NormalizedTrace } from './normalized';
+import { useT } from '../../i18n';
 
 export function MapView({
   model,
@@ -16,6 +17,7 @@ export function MapView({
   readonly onSelect: (id: string) => void;
   readonly onSelectMessage: (messageId: string) => void;
 }) {
+  const t = useT();
   // The Map draws a dependency DAG over Work Item Attempts, a Team concept.
   // A single-agent Work has none -- rendering an empty board with a
   // "0 Attempt node(s)" counter would look like a capture failure rather
@@ -27,14 +29,14 @@ export function MapView({
       <section
         className="run-trace__map run-trace__map--empty"
         data-testid="trace-map"
-        aria-label="Run causal map"
+        aria-label={t('trace.causalMap')}
       >
-        <p className="work-shell-kicker">Causal map</p>
-        <h3>No collaboration graph was recorded for this Work.</h3>
+        <p className="work-shell-kicker">{t('trace.causalMap.title')}</p>
+        <h3>{t('trace.causalMap.emptyTitle')}</h3>
         <p>
           {trace.actors.size === 0
-            ? 'The Map plots Work Item Attempts and their relations, a Team concept. This Work ran as a single Agent, so there is no Attempt or dependency graph to show here.'
-            : 'The Map plots Work Item Attempts and their relations. No Attempt has been captured yet for this Run.'}
+            ? t('trace.causalMap.emptySingle')
+            : t('trace.causalMap.empty')}
         </p>
       </section>
     );
@@ -42,11 +44,11 @@ export function MapView({
     <section
       className="run-trace__map"
       data-testid="trace-map"
-      aria-label="Run causal map"
+      aria-label={t('trace.causalMap')}
     >
       <div className="run-trace__map-heading">
         <div>
-          <strong>Causal map</strong>
+          <strong>{t('trace.causalMap.title')}</strong>
           <p>
             Work Item Attempts are nodes. Duration is deliberately not encoded.
           </p>
@@ -71,8 +73,8 @@ export function MapView({
             <span className="run-trace__map-node-agent">
               {entry.workItem.actorId
                 ? (trace.actors.get(entry.workItem.actorId)?.name ??
-                  'Name not captured')
-                : 'Name not captured'}
+                  t('trace.nameNotCaptured'))
+                : t('trace.nameNotCaptured')}
             </span>
             <strong>{entry.workItem.subject}</strong>
             <span>
@@ -94,12 +96,13 @@ function MapRelations({
   readonly model: MapModel;
   readonly onSelectMessage: (messageId: string) => void;
 }) {
+  const t = useT();
   return (
     <div
       className="run-trace__map-relations"
-      aria-label="Captured causal relations"
+      aria-label={t('trace.causalMap.relations')}
     >
-      <h4>Captured relations</h4>
+      <h4>{t('trace.causalMap.relations')}</h4>
       {model.relations.length ? (
         model.relations.map((row) =>
           row.messageId ? (
@@ -120,7 +123,7 @@ function MapRelations({
           ),
         )
       ) : (
-        <p>No relation rows were captured.</p>
+        <p>{t('trace.causalMap.noRelations')}</p>
       )}
     </div>
   );

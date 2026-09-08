@@ -8,6 +8,7 @@ import {
   productStatePresentation,
 } from './components/work-presentation';
 import { useWorkList, type WorkListQuery } from './queries/use-work-list';
+import { useT } from '../../i18n';
 
 export interface WorkPaneProps {
   readonly onCreateNew: () => void;
@@ -32,6 +33,7 @@ export function WorkPane({
   onWorksChange,
   selectedLatestRunState = null,
 }: WorkPaneProps) {
+  const t = useT();
   const { status, works, refresh } = useWorkList();
 
   // The list/detail split of a Work destination must read the same load
@@ -57,11 +59,11 @@ export function WorkPane({
   const controlsDisabled = status === 'unavailable' || status === 'error';
 
   return (
-    <aside className="sidebar work-pane" aria-label="Work navigation">
+    <aside className="sidebar work-pane" aria-label={t('work.navigation')}>
       <div className="pane-heading">
         <div>
-          <span className="eyebrow">Workspace</span>
-          <h1>Work</h1>
+          <span className="eyebrow">{t('work.workspace')}</span>
+          <h1>{t('work.title')}</h1>
         </div>
         <div className="work-pane-actions">
           {/* The count is only known once a load has actually succeeded. A
@@ -70,7 +72,7 @@ export function WorkPane({
           {status === 'ready' ? (
             <span
               className="pane-count"
-              aria-label={`${works.length} Work items`}
+              aria-label={t('work.itemCount', { count: works.length })}
             >
               {works.length}
             </span>
@@ -79,7 +81,7 @@ export function WorkPane({
             className="pane-refresh"
             type="button"
             data-testid="new-work-cta"
-            aria-label="Create Work"
+            aria-label={t('work.create')}
             disabled={controlsDisabled}
             onClick={onCreateNew}
           >
@@ -88,7 +90,7 @@ export function WorkPane({
           <button
             className="pane-refresh"
             type="button"
-            aria-label="Refresh Work"
+            aria-label={t('work.refresh')}
             disabled={status === 'loading' || controlsDisabled}
             onClick={refresh}
           >
@@ -108,7 +110,7 @@ export function WorkPane({
           role="status"
           aria-live="polite"
         >
-          Loading Work…
+          {t('work.loadingList')}
         </p>
       ) : null}
       {works.length === 0 && status === 'unavailable' ? (
@@ -117,11 +119,11 @@ export function WorkPane({
           data-testid="work-list-unavailable"
           role="status"
         >
-          <p className="eyebrow">Work unavailable</p>
+          <p className="eyebrow">{t('work.detailUnavailable.eyebrow')}</p>
           {/* feature_unavailable means this workspace does not compose the
               Product Work surface at all. Offering Retry would be a false
               promise, so this state has no Retry control. */}
-          <p>This workspace doesn&apos;t have Work execution enabled.</p>
+          <p>{t('work.unavailable.body')}</p>
         </div>
       ) : null}
       {works.length === 0 && status === 'error' ? (
@@ -130,18 +132,15 @@ export function WorkPane({
           data-testid="work-list-error"
           role="alert"
         >
-          <p className="eyebrow">Connection interrupted</p>
+          <p className="eyebrow">{t('work.connectionInterrupted')}</p>
           {/* A failed read must not be mistaken for a statement about any
               Work's own state, and must not leak the upstream error string
               (which can be control-plane prose). The backend owns product
               state; an empty pane here means "we could not ask", not
               "nothing needs you". */}
-          <p>
-            This is a connection problem. Your existing Work may still be
-            available when the connection returns.
-          </p>
+          <p>{t('work.connectionProblem')}</p>
           <button type="button" onClick={refresh}>
-            Retry
+            {t('work.retry')}
           </button>
         </div>
       ) : null}
@@ -151,19 +150,16 @@ export function WorkPane({
           data-testid="work-list-empty"
           role="status"
         >
-          <p>
-            No formal Work yet. Start with an objective you want an Agent to
-            run.
-          </p>
+          <p>{t('work.empty')}</p>
           <button type="button" onClick={onCreateNew}>
-            New Work
+            {t('work.new')}
           </button>
         </div>
       ) : null}
       {works.length > 0 ? (
         <ul
           className="work-list"
-          aria-label="Work items"
+          aria-label={t('work.items')}
           data-testid="work-list"
         >
           {works.map((work) => (
@@ -192,6 +188,7 @@ function WorkListRow({
   readonly originConversationId: string | null;
   readonly stateOverride: WorkPaneProps['selectedLatestRunState'];
 }) {
+  const t = useT();
   const latestRun = work.latest_run_summary;
   const productState =
     stateOverride?.workId === work.id && stateOverride.runId === latestRun?.id
@@ -221,7 +218,7 @@ function WorkListRow({
                 {stateView.label}
               </span>
             ) : (
-              <span>No runs yet</span>
+              <span>{t('work.noRuns')}</span>
             )}
             <time dateTime={timestamp}>
               {latestRun

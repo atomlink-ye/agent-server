@@ -1,15 +1,15 @@
+import { useT } from '../../../../i18n';
+
 export function ArtifactsPane() {
+  const t = useT();
   return (
     <section
       className="work-capability-unavailable"
       data-testid="artifacts-unavailable"
     >
-      <p className="work-shell-kicker">Artifacts</p>
-      <h2>Delivered Artifacts are not available yet.</h2>
-      <p>
-        Use Overview to open the result from a completed Run. This area will
-        show delivered Artifacts when Work supports them.
-      </p>
+      <p className="work-shell-kicker">{t('work.artifacts')}</p>
+      <h2>{t('work.artifacts.emptyTitle')}</h2>
+      <p>{t('work.artifacts.emptyBody')}</p>
     </section>
   );
 }

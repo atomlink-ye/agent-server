@@ -8,6 +8,7 @@ import {
   type InspectorModel,
   type InspectorMode,
 } from './selectors';
+import { useT } from '../../i18n';
 
 export function Inspector({
   mode,
@@ -18,6 +19,7 @@ export function Inspector({
   readonly model: InspectorModel;
   readonly onMode: (mode: InspectorMode) => void;
 }) {
+  const t = useT();
   const selectedAttempt = model.selectedAttempt;
   if (!selectedAttempt && !(mode === 'conversation' && model.messages.length))
     return null;
@@ -27,7 +29,7 @@ export function Inspector({
       aria-live="polite"
       aria-labelledby="trace-inspector-heading"
     >
-      <h3 id="trace-inspector-heading">Execution Inspector</h3>
+      <h3 id="trace-inspector-heading">{t('trace.inspector')}</h3>
       {selectedAttempt ? (
         <div className="run-trace__selected-execution">
           <h4>{selectedAttempt.workItem.subject}</h4>
@@ -37,7 +39,7 @@ export function Inspector({
       <div
         className="run-trace__inspector-tabs"
         role="tablist"
-        aria-label="Inspector detail"
+        aria-label={t('trace.inspectorDetail')}
       >
         {(['overview', 'conversation', 'activity'] as const).map((item) => (
           <button
@@ -72,45 +74,46 @@ function InspectorOverview({
   readonly actorName: string;
   readonly selectedAttempt: NonNullable<InspectorModel['selectedAttempt']>;
 }) {
+  const t = useT();
   return (
     <>
-      <InspectorGroup title="Identity">
-        <Fact label="Work Item" value={selectedAttempt.workItem.subject} />
-        <Fact label="Agent" value={actorName} />
+      <InspectorGroup title={t('trace.identity')}>
+        <Fact label={t('trace.workItem')} value={selectedAttempt.workItem.subject} />
+        <Fact label={t('trace.agent')} value={actorName} />
       </InspectorGroup>
-      <InspectorGroup title="Execution facts">
-        <Fact label="State" value={humanize(selectedAttempt.attempt.status)} />
+      <InspectorGroup title={t('trace.executionFacts')}>
+        <Fact label={t('trace.state')} value={humanize(selectedAttempt.attempt.status)} />
         <Fact
-          label="Attempt"
+          label={t('trace.attempt')}
           value={`${selectedAttempt.attempt.attemptNo} / ${selectedAttempt.workItem.attempts.length}`}
         />
         <Fact
-          label="Started"
+          label={t('trace.started')}
           value={recordedTimestamp(selectedAttempt.attempt.startedAt)}
         />
         <Fact
-          label="Ended"
+          label={t('trace.ended')}
           value={recordedTimestamp(selectedAttempt.attempt.endedAt)}
         />
         <Fact
-          label="Duration"
+          label={t('trace.duration')}
           value={
             selectedAttempt.attempt.durationMs === null
-              ? 'Not captured'
+              ? t('trace.notCaptured')
               : `${(selectedAttempt.attempt.durationMs / 1000).toFixed(1)} seconds`
           }
         />
       </InspectorGroup>
-      <InspectorGroup title="Result / feedback">
+      <InspectorGroup title={t('trace.resultFeedback')}>
         <Fact
-          label="Result"
+          label={t('trace.result')}
           value={
             selectedAttempt.attempt.resultSummary ??
             captureLabel(selectedAttempt.attempt.resultCaptureStatus)
           }
         />
         <Fact
-          label="Feedback"
+          label={t('trace.feedback')}
           value={
             selectedAttempt.attempt.feedbackSummary ??
             captureLabel(selectedAttempt.attempt.feedbackCaptureStatus)
@@ -128,6 +131,7 @@ function ConversationDetail({
   readonly model: InspectorModel;
   readonly selectedAttempt: InspectorModel['selectedAttempt'];
 }) {
+  const t = useT();
   return (
     <section
       className="run-trace__transcript"
@@ -150,12 +154,12 @@ function ConversationDetail({
             key={edge.messageId}
           >
             <header>
-              <strong>{message?.senderName ?? 'Agent'}</strong>
-              <span>→ {message?.recipientName ?? 'Agent'}</span>
+              <strong>{message?.senderName ?? t('trace.agent')}</strong>
+              <span>→ {message?.recipientName ?? t('trace.agent')}</span>
             </header>
             <p>
               {message?.summary ??
-                'Message body not captured in the Product projection.'}
+                t('trace.messageBodyMissing')}
             </p>
             <time dateTime={edge.sourceCreatedAt}>
               {formatTimestamp(edge.sourceCreatedAt)}
@@ -170,7 +174,7 @@ function ConversationDetail({
       {selectedAttempt?.attempt.resultSummary ? (
         <article className="run-trace__transcript-result">
           <header>
-            <strong>Agent result</strong>
+            <strong>{t('trace.agentResult')}</strong>
           </header>
           <p>{selectedAttempt.attempt.resultSummary}</p>
         </article>
@@ -180,6 +184,7 @@ function ConversationDetail({
 }
 
 function ActivityDetail({ model }: { readonly model: InspectorModel }) {
+  const t = useT();
   return (
     <section
       className="run-trace__activity-detail"
@@ -205,7 +210,7 @@ function ActivityDetail({ model }: { readonly model: InspectorModel }) {
           </article>
         ))
       ) : (
-        <p>No MCP activity is associated with this Work Item.</p>
+        <p>{t('trace.noMcpActivity')}</p>
       )}
     </section>
   );

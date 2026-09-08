@@ -22,6 +22,7 @@ import {
 import { workRunResultFilePath, workTabPath } from '@/app/routes';
 import { outcomeBody } from './outcome-headline';
 import { humanize } from '../work-presentation';
+import { useT } from '../../../../i18n';
 
 export function OverviewPane({
   data,
@@ -30,15 +31,13 @@ export function OverviewPane({
   readonly data: WorkDetailData;
   readonly originConversationId?: string | null;
 }) {
+  const t = useT();
   if (!data.run || !data.trace)
     return (
       <section className="work-detail-state" data-testid="work-no-runs">
-        <p className="work-shell-kicker">Overview</p>
-        <h2>Your first Run starts here.</h2>
-        <p>
-          When a Run starts, its outcome, trace, and collaborator activity
-          appear here.
-        </p>
+        <p className="work-shell-kicker">{t('work.overview.empty')}</p>
+        <h2>{t('work.overview.firstRun')}</h2>
+        <p>{t('work.overview.firstRunBody')}</p>
       </section>
     );
 
@@ -60,6 +59,7 @@ function OverviewContent({
   };
   readonly originConversationId?: string | null;
 }) {
+  const t = useT();
   const run = data.run;
   const trace = data.trace;
   const [outcome, setOutcome] = useState<string | null>(null);
@@ -93,10 +93,10 @@ function OverviewContent({
           {stateView.label}
         </span>
         <div data-testid="outcome-summary">
-          <p className="work-shell-kicker">Result</p>
+          <p className="work-shell-kicker">{t('work.result')}</p>
           <h2>
             {outcome
-              ? 'What this Run completed'
+              ? t('work.result.completed')
               : resultCaptureLabel(run.work_run.result_capture_status)}
           </h2>
           <p data-testid="attention-basis">{stateView.description}</p>
@@ -106,7 +106,7 @@ function OverviewContent({
             </div>
           ) : null}
           {live ? (
-            <p className="work-live-note">Updating while this Run is active.</p>
+            <p className="work-live-note">{t('work.result.updating')}</p>
           ) : null}
           {hasSuccessfulResult ? (
             <a
@@ -117,7 +117,7 @@ function OverviewContent({
                 originConversationId ?? null,
               )}
             >
-              Open result file
+              {t('work.result.openFile')}
             </a>
           ) : null}
         </div>
@@ -162,13 +162,14 @@ function RunJourney({
 }: {
   readonly trace: NonNullable<WorkDetailData['trace']>;
 }) {
+  const t = useT();
   if (!trace || trace.workItems.size === 0) return null;
   return (
     <section className="work-journey" aria-labelledby="work-journey-heading">
       <div className="work-section-heading">
-        <p className="work-shell-kicker">How it went</p>
-        <h2 id="work-journey-heading">Key steps</h2>
-        <p>Steps are the Work Items and Attempts recorded for this Run.</p>
+        <p className="work-shell-kicker">{t('work.journey.eyebrow')}</p>
+        <h2 id="work-journey-heading">{t('work.journey.title')}</h2>
+        <p>{t('work.journey.body')}</p>
       </div>
       <ol className="work-journey__steps">
         {[...trace.workItems.values()].map((item) => (
@@ -178,7 +179,7 @@ function RunJourney({
               {item.attempts.map((attempt) => (
                 <li key={attempt.id}>
                   <span>
-                    Attempt {attempt.attemptNo} · {humanize(attempt.status)}
+                    {t('work.attempt', { number: attempt.attemptNo })} · {humanize(attempt.status)}
                   </span>
                   {attempt.resultSummary ? (
                     <p>{attempt.resultSummary}</p>
@@ -202,6 +203,7 @@ function RunRoleCards({
   readonly runId: string;
   readonly originConversationId?: string | null;
 }) {
+  const t = useT();
   const [sessions, setSessions] = useState<readonly AgentSummary[] | null>(
     null,
   );
@@ -249,8 +251,7 @@ function RunRoleCards({
               <span>{session.label.role}</span>
             ) : null}
             <span>
-              Session {session.label.status} · {session.summary.entry_count}{' '}
-              entries
+              {t('work.sessionSummary', { status: session.label.status, count: session.summary.entry_count })}
             </span>
           </button>
         );

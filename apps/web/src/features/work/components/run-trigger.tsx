@@ -9,6 +9,7 @@ import {
 import { workTabHref } from './work-presentation';
 import { useRunAvailability } from '../queries/use-run-availability';
 import type { WorkListItem } from '@atomlink-ye/agent-server/product-contract';
+import { useT } from '../../../i18n';
 
 type RunTriggerState =
   | { readonly kind: 'idle' }
@@ -30,6 +31,7 @@ export function RunTrigger({
   readonly definitionVersion?: ProductWorkDefinitionVersionResponse | null;
   readonly runState?: WorkListItem['product_state'] | null;
 }) {
+  const t = useT();
   const [state, setState] = useState<RunTriggerState>({ kind: 'idle' });
   const availability = useRunAvailability(definitionVersion);
 
@@ -37,7 +39,7 @@ export function RunTrigger({
     return (
       <div className="work-run-trigger">
         <a className="work-run-trigger__result" href="#run-result">
-          Read result
+          {t('work.run.readResult')}
         </a>
       </div>
     );
@@ -46,7 +48,7 @@ export function RunTrigger({
     return (
       <div className="work-run-trigger">
         <a className="work-run-trigger__result" href="#execution-record">
-          Follow progress
+          {t('work.run.followProgress')}
         </a>
       </div>
     );
@@ -86,9 +88,9 @@ export function RunTrigger({
     availability.status === 'ready' ? availability.missingCapability : null;
   const friendlyCapability = missingCapability
     ? ({
-        external_workspace: 'External workspace',
-        reusable_session: 'Reusable session',
-        platform_mcp: 'Platform tools',
+        external_workspace: t('work.run.externalWorkspace'),
+        reusable_session: t('work.run.reusableSession'),
+        platform_mcp: t('work.run.platformTools'),
       }[missingCapability] ?? missingCapability.replaceAll('_', ' '))
     : null;
 
@@ -101,44 +103,44 @@ export function RunTrigger({
         type="button"
       >
         {availability.status === 'loading'
-          ? 'Checking availability…'
+          ? t('work.run.checkingAvailability')
           : blockedByCapability || availability.status === 'unavailable'
-            ? 'Can’t start Run'
+            ? t('work.run.cantStart')
             : state.kind === 'starting'
-              ? 'Starting…'
+              ? t('work.run.starting')
               : state.kind === 'error'
                 ? state.permanent
-                  ? 'Can’t start Run'
-                  : 'Error — Retry'
+                  ? t('work.run.cantStart')
+                  : t('work.run.errorRetry')
                 : runState === 'problem'
-                  ? 'Retry Run'
-                  : 'Start Run'}
+                  ? t('work.run.retry')
+                  : t('work.run.start')}
       </button>
       {availability.status === 'loading' ? (
-        <p role="status">Checking whether this Work can run here…</p>
+        <p role="status">{t('work.run.checkingBody')}</p>
       ) : null}
       {availability.status === 'error' ? (
         <div className="work-run-availability-error">
-          <p role="alert">We couldn’t check whether this Work can run here.</p>
+          <p role="alert">{t('work.run.checkError')}</p>
           <button type="button" onClick={availability.retry}>
-            Retry availability check
+            {t('work.run.retryAvailability')}
           </button>
         </div>
       ) : null}
       {blockedByCapability && friendlyCapability ? (
         <section className="work-run-unavailable" role="status">
-          <p className="work-run-unavailable__eyebrow">Run unavailable</p>
-          <h2>This Work can’t run in this deployment.</h2>
+          <p className="work-run-unavailable__eyebrow">{t('work.run.unavailable')}</p>
+          <h2>{t('work.run.unavailableTitle')}</h2>
           <p id={reasonId}>
-            It requires {friendlyCapability}, which isn’t available here.
+            {t('work.run.requires', { capability: friendlyCapability })}
           </p>
         </section>
       ) : null}
       {availability.status === 'unavailable' ? (
         <p id={reasonId} role="status">
           {availability.reason === 'current_definition_missing'
-            ? 'The current Work Definition version could not be loaded, so runnability cannot be determined.'
-            : 'Work management is not available in this environment.'}
+            ? t('work.run.definitionMissing')
+            : t('work.run.managementUnavailable')}
         </p>
       ) : null}
       {state.kind === 'error' ? <p role="alert">{state.message}</p> : null}

@@ -3,6 +3,7 @@ import type { WorkResponse } from '@atomlink-ye/agent-server/product-contract';
 import type { AnchoredRun } from '../clients/work-run-client';
 import { workRootPath } from '../../../app/routes';
 import { productStatePresentation } from './work-presentation';
+import { useT } from '../../../i18n';
 
 export function WorkDetailHeader({
   work,
@@ -15,11 +16,12 @@ export function WorkDetailHeader({
   readonly latestRunId: string | undefined;
   readonly originConversationId?: string | null;
 }) {
+  const t = useT();
   const runContext = !run
-    ? 'No runs yet'
+    ? t('work.noRuns')
     : run.work_run.id === latestRunId
-      ? 'Latest Run'
-      : 'Historical Run';
+      ? t('work.latestRun')
+      : t('work.historicalRun');
   return (
     <>
       <p className="work-shell-breadcrumb">
@@ -27,11 +29,11 @@ export function WorkDetailHeader({
             navigated out of the Work tab entirely. Kept as a plain anchor to
             match the tab and run-list links in this same tree, which render
             without a Router in their tests. */}
-        <a href={workRootPath(originConversationId)}>My Work</a> / {work.title}
+        <a href={workRootPath(originConversationId)}>{t('work.myWork')}</a> / {work.title}
       </p>
       <header className="work-detail-header work-detail-header--stacked">
         <div>
-          <p className="work-shell-kicker">Work</p>
+          <p className="work-shell-kicker">{t('work.title')}</p>
           <h1>{work.title}</h1>
           <p className="work-detail-header__summary">
             {runContext}
@@ -41,23 +43,23 @@ export function WorkDetailHeader({
           </p>
           {!run ? (
             <p className="work-detail-surface-note">
-              Start a Run when you are ready to begin this Work.
+              {t('work.startRunHint')}
             </p>
           ) : run.work_run.product_state === 'complete' ? (
             <p className="work-detail-surface-note">
-              Read the result first, then inspect how the Work reached it.
+              {t('work.completeHint')}
             </p>
           ) : run.work_run.product_state === 'problem' ? (
             <p className="work-detail-surface-note">
-              Review what was captured before retrying this Work.
+              {t('work.problemHint')}
             </p>
           ) : run.work_run.product_state === 'not_captured' ? (
             <p className="work-detail-surface-note">
-              This Run’s status was not captured. Review its recorded activity.
+              {t('work.notCapturedHint')}
             </p>
           ) : (
             <p className="work-detail-surface-note">
-              Follow the result and progress of this active Run here.
+              {t('work.activeHint')}
             </p>
           )}
         </div>

@@ -171,6 +171,9 @@ it('renders per-session transcripts with switching between sessions that share a
   vi.stubGlobal('fetch', fetchMock);
 
   const host = document.createElement('div');
+  // At 1440px, the persistent rail and Work list leave 1030px. The Work
+  // shell's 32px gutters yield this 966px representative content width.
+  host.style.width = '966px';
   document.body.append(host);
   const root = createRoot(host);
 
@@ -199,6 +202,11 @@ it('renders per-session transcripts with switching between sessions that share a
     // First role is selected by default — entries are visible
     const entries = host.querySelector('[data-testid="session-entries"]');
     expect(entries).not.toBeNull();
+    const readingColumn = host.querySelector<HTMLElement>(
+      '[data-testid="transcript-reading-column"]',
+    );
+    expect(readingColumn).not.toBeNull();
+    expect(readingColumn!.getBoundingClientRect().width).toBe(966);
     // Projected activity rows preserve the lifecycle, tool, and permission entries.
     const eventElements = entries!.querySelectorAll(
       '[data-testid="transcript-activity-row"], .transcript__lifecycle-start',

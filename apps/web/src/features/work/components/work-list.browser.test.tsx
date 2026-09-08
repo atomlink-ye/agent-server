@@ -24,7 +24,7 @@ const stateCases = [
   ['needs_you', 'Needs You'],
   ['complete', 'Complete'],
   ['problem', 'Problem'],
-  ['not_captured', 'State unavailable'],
+  ['not_captured', 'Status unknown'],
 ] as const;
 
 const populatedWorkList: WorkListResponse = {
@@ -95,7 +95,10 @@ it('renders Product Work state and latest Run summary with one list read', async
     for (const [index, [, stateLabel]] of stateCases.entries()) {
       const card = cards[index]!;
       expect(card.textContent).toContain(stateLabel);
-      expect(card.textContent).toContain(`Latest recorded result ${index + 1}`);
+      // The list row is a navigation index, not a place to read a Run's
+      // result: it shows state and a compact timestamp, not result text.
+      expect(card.textContent).not.toContain(`Latest recorded result ${index + 1}`);
+      expect(card.querySelector('time')?.textContent).toMatch(/^Run /);
       expect(
         card
           .querySelector('[data-product-state]')

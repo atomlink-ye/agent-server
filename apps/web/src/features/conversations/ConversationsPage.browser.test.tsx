@@ -319,7 +319,7 @@ it('reports a selected Conversation whose message read returns 404 without Retry
       await Promise.resolve();
     });
     expect(host.textContent).toContain(
-      'The selected Conversation is unavailable.',
+      'This Conversation is unavailable.',
     );
     expect(host.textContent).toContain('Back to Conversations');
     expect(

@@ -153,7 +153,7 @@ it('shows a missing selected Task without Retry, while a transport failure remai
       );
     });
     await act(settle);
-    expect(host.textContent).toContain('The selected Task is unavailable.');
+    expect(host.textContent).toContain('This Task is unavailable.');
     expect(host.textContent).toContain('Back to Tasks');
     expect(
       [...host.querySelectorAll('button')].some(
@@ -235,7 +235,7 @@ it('keeps Retry when a selected Task 500 carries its canonical not-found code', 
     );
     await act(settle);
     expect(host.textContent).toContain('Unable to load Tasks');
-    expect(host.textContent).not.toContain('The selected Task is unavailable.');
+    expect(host.textContent).not.toContain('This Task is unavailable.');
     expect(
       [...host.querySelectorAll('button')].some(
         (button) => button.textContent === 'Try again',
@@ -296,7 +296,7 @@ it('keeps the newer Task selection when an older selected read finishes late', a
     );
     await act(settle);
     expect(host.textContent).toContain('Second Task');
-    expect(host.textContent).not.toContain('The selected Task is unavailable.');
+    expect(host.textContent).not.toContain('This Task is unavailable.');
   } finally {
     await act(async () => root.unmount());
     host.remove();

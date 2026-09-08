@@ -271,10 +271,13 @@ it('renders per-session transcripts with switching between sessions that share a
       roleButtons[0]!.click();
     });
 
-    // 4. Derived summary has "not provider text" labeling
+    // 4. Derived summary discloses it is assembled, not provider text
     const summaryBlock = host.querySelector('[data-testid="session-summary"]');
     expect(summaryBlock).not.toBeNull();
-    expect(summaryBlock!.textContent).toContain('not provider text');
+    expect(summaryBlock!.textContent).toContain('About this summary');
+    expect(summaryBlock!.textContent).toContain(
+      'This is assembled from captured messages and actions. Original wording appears in the conversation below.',
+    );
     expect(
       summaryBlock!.querySelector('[data-testid="session-platform-tool-count"]')
         ?.textContent,

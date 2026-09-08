@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 
 import type { AuthorizedRuntimeToolContext } from '../../application/runtime/authorize-runtime-tool.js';
 import {
+  AGENT_SERVER_PRODUCT_WORK_READ_TOOL_REF,
+  AGENT_SERVER_PRODUCT_WORK_RUN_READ_TOOL_REF,
+  AGENT_SERVER_PRODUCT_WORK_RUN_TRANSCRIPT_TOOL_REF,
   AGENT_SERVER_WHISPER_OPEN_TOOL_REF,
   AGENT_SERVER_WHISPER_SEND_TOOL_REF,
   AGENT_SERVER_WORKSPACE_LIST_TOOL_REF,
@@ -13,6 +16,7 @@ import {
 } from '../../application/agents/built-in-skills.js';
 import { runtimeToolMcpNames } from '../../application/agents/runtime-tool-mcp-names.js';
 import { registerAgentWorkspaceMcpTools } from './agent-workspace-mcp-tools.js';
+import { registerProductWorkMcpTools } from './product-work-mcp-tools.js';
 import { registerWorkOrganizationMcpTools } from './work-organization-mcp-tools.js';
 import { registerWhisperMcpTools } from './whisper-mcp-tools.js';
 
@@ -27,6 +31,9 @@ describe('runtime tool MCP names', () => {
       AGENT_SERVER_WORKSPACE_LIST_TOOL_REF,
       AGENT_SERVER_WORKSPACE_READ_TOOL_REF,
       AGENT_SERVER_WORKSPACE_WRITE_TOOL_REF,
+      AGENT_SERVER_PRODUCT_WORK_READ_TOOL_REF,
+      AGENT_SERVER_PRODUCT_WORK_RUN_READ_TOOL_REF,
+      AGENT_SERVER_PRODUCT_WORK_RUN_TRANSCRIPT_TOOL_REF,
       AGENT_SERVER_WORK_ITEM_CLAIM_TOOL_REF,
       AGENT_SERVER_WORK_ITEM_COMMENT_TOOL_REF,
       AGENT_SERVER_WORK_ITEM_STATUS_TOOL_REF,
@@ -56,6 +63,15 @@ describe('runtime tool MCP names', () => {
       authorize,
       agentHome: unusedDependency as never,
       agentIdentities: unusedDependency as never,
+    });
+    registerProductWorkMcpTools({
+      server,
+      grant,
+      authorize,
+      workIdentity: unusedDependency as never,
+      startWorkRun: unusedDependency as never,
+      productProjection: unusedDependency as never,
+      sessionTranscripts: unusedDependency as never,
     });
     registerWorkOrganizationMcpTools({
       server,

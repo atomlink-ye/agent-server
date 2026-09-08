@@ -10,6 +10,9 @@ import { parseForImport } from './validate-agent-package.js';
 const WORK_TOOLS = [
   'agent-server/product-work-create',
   'agent-server/product-work-run-start',
+  'agent-server/product-work-read',
+  'agent-server/product-work-run-read',
+  'agent-server/product-work-run-transcript',
   'agent-server/list-agent-workflows',
   'agent-server/describe-workflow',
   'agent-server/work-item-claim',

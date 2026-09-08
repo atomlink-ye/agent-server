@@ -286,6 +286,8 @@ export function createWorkModule(options: CreateWorkModuleOptions): WorkModule {
         ...context,
         workIdentity,
         startWorkRun,
+        productProjection: projection,
+        sessionTranscripts,
         definitions: definitionSources,
         ...(options.conversations
           ? { conversations: options.conversations }

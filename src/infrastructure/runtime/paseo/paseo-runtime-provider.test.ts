@@ -300,7 +300,7 @@ describe('PaseoRuntimeProvider', () => {
       checks: [
         { name: 'paseo_websocket', ready: true },
         { name: 'paseo_workspace', ready: true },
-        { name: 'opencode_model', ready: true },
+        { name: 'runtime_model', ready: true },
       ],
     });
 

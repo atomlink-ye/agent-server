@@ -72,7 +72,7 @@
     "clean": "node scripts/dev/clean.mjs"
   },
   "dependencies": {
-    "@getpaseo/client": "0.1.110",
+    "@getpaseo/client": "^0.7.2",
     "@hono/node-server": "2.0.11",
     "@larksuiteoapi/node-sdk": "1.71.1",
     "@modelcontextprotocol/sdk": "1.30.0",

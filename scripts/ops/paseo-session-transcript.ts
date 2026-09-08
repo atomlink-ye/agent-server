@@ -7,7 +7,7 @@
 // With no --member it prints one derived overview per roster member. Read-only:
 // one SELECT and one Paseo timeline fetch per member, no writes anywhere.
 import { Pool } from 'pg';
-import { DaemonClient } from '@getpaseo/client';
+import { DaemonClient } from '@getpaseo/client/internal/daemon-client';
 
 import { PostgresSessionAgentBindingLookup } from '../../src/infrastructure/postgres/postgres-session-agent-binding-lookup.js';
 import { SessionTranscriptReader } from '../../src/adapters/paseo/session-transcript-reader.js';

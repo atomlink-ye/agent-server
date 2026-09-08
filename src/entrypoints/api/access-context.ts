@@ -5,10 +5,8 @@ import type {
 } from '../../domain/access-context.js';
 
 /**
- * Carries a stable human identifier from the browser BFF to the real API so
- * `requireServiceAccountAccess` can mint a `UserAccessContext` on top of the
- * already-authenticated service account, instead of every browser-originated
- * write being attributed to the shared service account.
+ * Internal BFF-to-API identity propagation. The browser never supplies this
+ * header; the browser session middleware establishes it before forwarding.
  */
 export const USER_ID_HEADER = 'x-agent-server-user-id';
 
@@ -39,4 +37,11 @@ export function getRequestAccessContext(
   return (
     request.get('userAccessContext') ?? getAuthenticatedAccessContext(request)
   );
+}
+
+/** Returns only the identity established by the server session middleware. */
+export function getBrowserUserId(request: {
+  get(key: 'browserUserId'): string | null;
+}): string | null {
+  return request.get('browserUserId');
 }

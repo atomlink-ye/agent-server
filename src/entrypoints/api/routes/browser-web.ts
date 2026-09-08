@@ -46,7 +46,7 @@ import {
 } from '../../../contracts/runtime-capabilities.js';
 import { createConfiguredRuntimeCapabilities } from '../../../composition/create-runtime-capabilities.js';
 import type { ApiEnvironment } from '../http-types.js';
-import { USER_ID_HEADER } from '../access-context.js';
+import { getBrowserUserId, USER_ID_HEADER } from '../access-context.js';
 import type { AppConfig } from '../../../shared/config.js';
 import type { Logger } from '../../../shared/observability/logger.js';
 import { decodeProductResponse } from '../browser-product-decoder.js';
@@ -571,11 +571,8 @@ async function forwardDecoded(
 ): Promise<Response> {
   let upstream: Response;
   try {
-    // The browser's human identifier has to survive the gateway hop, or every
-    // browser-originated call reaches the API as the shared service account
-    // and each person sees -- and can open -- everyone else's conversations.
-    // This mirrors what the work-organization gateway already forwards.
-    const userId = context.req.header(USER_ID_HEADER)?.trim();
+    // Forward the session-derived human identity across the internal gateway.
+    const userId = getBrowserUserId(context);
     upstream = await fetchAuthenticated(config, path, {
       ...init,
       headers: {

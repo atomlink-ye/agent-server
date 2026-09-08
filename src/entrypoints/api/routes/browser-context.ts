@@ -1,6 +1,7 @@
 import type { Hono } from 'hono';
 
 import type { ApiEnvironment } from '../http-types.js';
+import { getBrowserUserId, USER_ID_HEADER } from '../access-context.js';
 import type { AppConfig } from '../../../shared/config.js';
 import {
   fetchAuthenticated,
@@ -37,10 +38,10 @@ export function registerBrowserContextRoutes(
   config: AppConfig,
 ): void {
   app.get('/api/context/files', (c) =>
-    forward(config, `/api/v1/context/files${querySuffix(c.req.url)}`, 'GET'),
+    forward(c, config, `/api/v1/context/files${querySuffix(c.req.url)}`, 'GET'),
   );
   app.get('/api/context/file', (c) =>
-    forward(config, `/api/v1/context/file${querySuffix(c.req.url)}`, 'GET'),
+    forward(c, config, `/api/v1/context/file${querySuffix(c.req.url)}`, 'GET'),
   );
 
   for (const [path, schema] of Object.entries(CONTEXT_MUTATION_CONTRACTS)) {
@@ -53,7 +54,7 @@ export function registerBrowserContextRoutes(
         return invalidContextRequest();
       }
       if (!schema.safeParse(parsed).success) return invalidContextRequest();
-      return forward(config, `/api/v1/context/${path}`, 'POST', body);
+      return forward(c, config, `/api/v1/context/${path}`, 'POST', body);
     });
   }
 }
@@ -71,6 +72,7 @@ function invalidContextRequest(): Response {
 }
 
 async function forward(
+  context: { get(key: 'browserUserId'): string | null },
   config: AppConfig,
   path: string,
   method: 'GET' | 'POST',
@@ -81,6 +83,9 @@ async function forward(
     upstream = await fetchAuthenticated(config, path, {
       method,
       headers: {
+        ...(getBrowserUserId(context)
+          ? { [USER_ID_HEADER]: getBrowserUserId(context)! }
+          : {}),
         ...(method === 'POST'
           ? { 'content-type': 'application/json; charset=utf-8' }
           : {}),

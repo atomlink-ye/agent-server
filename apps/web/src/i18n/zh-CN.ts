@@ -18,6 +18,18 @@ import type { MessageKey } from './index.js';
  *     彼此协作」, not 「智能体实例自主执行任务」.
  */
 export const zhCN: Record<MessageKey, string> = {
+  'auth.loginTitle': '登录 Agent Server',
+  'auth.registerTitle': '创建 Agent Server 账户',
+  'auth.subtitle': '你的对话和 Workspace 会跟随账户保存。',
+  'auth.username': '用户名',
+  'auth.password': '密码',
+  'auth.login': '登录',
+  'auth.register': '创建账户',
+  'auth.logout': '退出登录',
+  'auth.working': '请稍候…',
+  'auth.error': '无法完成身份验证。',
+  'auth.switchRegister': '还没有账户？创建一个',
+  'auth.switchLogin': '已有账户？登录',
   // --- Shared verbs and controls -------------------------------------------
   'common.retry': '重试',
   'common.cancel': '取消',
@@ -370,7 +382,8 @@ export const zhCN: Record<MessageKey, string> = {
   'agents.loadingProfile': '正在加载 Agent…',
   'agents.openingProfile': '正在打开此 Agent 的资料。',
   'agents.profile': 'Agent 资料',
-  'agents.modelPolicyTitle': '此 Coworker 使用的模型策略',
+  'agents.modelPolicyTitle':
+    '为此 Coworker 提供支持的模型策略（此项目没有配对设备概念，因此用模型/引擎引用代替 Cumora 的主机徽章）',
   'agents.noSummaryProvided': '未提供简介。',
   'agents.canDo': '能做什么',
   'agents.formalCapabilities': '正式能力',

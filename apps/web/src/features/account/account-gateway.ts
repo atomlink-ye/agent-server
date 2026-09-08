@@ -1,5 +1,49 @@
 import { apiTransport } from '../../api/transport';
 
+export interface AuthIdentity {
+  readonly userId: string;
+  readonly username: string;
+  readonly displayName: string;
+}
+
+export async function loadAuthIdentity(): Promise<AuthIdentity> {
+  return parseAuth(await apiTransport.request('/api/auth/me'));
+}
+export async function login(
+  username: string,
+  password: string,
+): Promise<AuthIdentity> {
+  return parseAuth(
+    await apiTransport.request('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+    }),
+  );
+}
+export async function register(
+  username: string,
+  password: string,
+): Promise<AuthIdentity> {
+  return parseAuth(
+    await apiTransport.request('/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+    }),
+  );
+}
+export async function logout(): Promise<void> {
+  await apiTransport.request('/api/auth/logout', { method: 'POST' });
+}
+function parseAuth(value: unknown): AuthIdentity {
+  const payload = record(value);
+  if (!payload) throw new Error('Invalid authentication response.');
+  return {
+    userId: text(payload.user_id),
+    username: text(payload.username),
+    displayName: text(payload.display_name),
+  };
+}
+
 export interface Account {
   readonly principalId: string;
   readonly principalType: string;

@@ -8,7 +8,7 @@ import {
 } from '../../../contracts/account.js';
 import type { ApiEnvironment } from '../http-types.js';
 import type { AppConfig } from '../../../shared/config.js';
-import { USER_ID_HEADER } from '../access-context.js';
+import { getBrowserUserId, USER_ID_HEADER } from '../access-context.js';
 import { decodeProductResponse } from '../browser-product-decoder.js';
 import {
   fetchAuthenticated,
@@ -29,12 +29,8 @@ export function registerBrowserAccountRoutes(
   config: AppConfig,
 ): void {
   app.get('/api/account', async (c) => {
-    // Without forwarding the caller's own human identifier here, the
-    // protected route falls back to the shared service account's own
-    // identity, and the browser would read (and later rename) the wrong
-    // principal. See browser-coworkers.ts:47-52 for the write-side version
-    // of this same failure mode.
-    const userId = c.req.header(USER_ID_HEADER)?.trim();
+    // Forward the identity established by the server-side session middleware.
+    const userId = getBrowserUserId(c);
     return forwardValidated(
       config,
       '/api/v1/account',
@@ -53,11 +49,9 @@ export function registerBrowserAccountRoutes(
       await c.req.json().catch(() => undefined),
     );
     if (!parsed.success) return invalidRequest('The display name is invalid.');
-    // A person may only ever rename themselves: the caller's own
-    // x-agent-server-user-id is forwarded as-is, and the request body has no
-    // principal id for this route to accept or relay on someone else's
-    // behalf.
-    const userId = c.req.header(USER_ID_HEADER)?.trim();
+    // A person may only ever rename themselves; the request body has no
+    // principal id for it to accept or relay on someone else's behalf.
+    const userId = getBrowserUserId(c);
     return forwardValidated(
       config,
       '/api/v1/account/display-name',

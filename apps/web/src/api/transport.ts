@@ -1,35 +1,4 @@
-const USER_ID_HEADER = 'x-agent-server-user-id';
-const USER_ID_STORAGE_KEY = 'agent-server.user-id';
-
-let pageUserId: string | null = null;
-
-/**
- * Identifies the person using this browser. There is no login yet, so the
- * identifier is minted here and kept in `localStorage`; the API treats it as a
- * real human principal (`principalType: 'user'`) and admits them to the
- * workspace on first contact.
- *
- * When `localStorage` is unavailable the identifier lives only as long as the
- * page. It is deliberately never a fixed constant: two people whose browsers
- * both refuse storage must not collapse into one principal and inherit each
- * other's conversations.
- */
-function resolveUserId(): string {
-  try {
-    const existing = window.localStorage.getItem(USER_ID_STORAGE_KEY);
-    if (existing) return existing;
-    const generated = newUserId();
-    window.localStorage.setItem(USER_ID_STORAGE_KEY, generated);
-    return generated;
-  } catch {
-    pageUserId ??= newUserId();
-    return pageUserId;
-  }
-}
-
-function newUserId(): string {
-  return `user-${crypto.randomUUID()}`;
-}
+// Browser identity is carried by the HttpOnly server session cookie.
 
 export class ApiTransportError extends Error {
   readonly status: number;
@@ -59,7 +28,6 @@ export class ApiTransport {
         credentials: 'same-origin',
         headers: {
           accept: 'application/json',
-          [USER_ID_HEADER]: resolveUserId(),
           ...(init.body === undefined
             ? {}
             : { 'content-type': 'application/json' }),
@@ -73,6 +41,8 @@ export class ApiTransport {
         'The service is unavailable.',
       );
     }
+
+    if (response.status === 204) return null;
 
     const payload = await response.json().catch(() => null);
     if (!response.ok) {

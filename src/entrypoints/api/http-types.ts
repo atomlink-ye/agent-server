@@ -13,6 +13,7 @@ export type ApiVariables = {
    * service account.
    */
   userAccessContext: UserAccessContext | null;
+  browserUserId: string | null;
 };
 
 export type ApiEnvironment = {

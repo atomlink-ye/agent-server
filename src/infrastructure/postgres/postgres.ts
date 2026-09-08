@@ -104,6 +104,7 @@ export const durableKernelMigrationFileNames = [
   '0070_work_chat_wake_not_started.sql',
   '0071_workspace_member_display_name.sql',
   '0072_agent_computers.sql',
+  '0073_username_password_auth.sql',
 ] as const;
 const durableKernelMigrationRegistryTable = 'durable_kernel_schema_migrations';
 const durableKernelMigrationAdvisoryLock = [

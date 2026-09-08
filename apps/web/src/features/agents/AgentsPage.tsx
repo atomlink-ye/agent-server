@@ -22,7 +22,6 @@ import {
   runtimeStatusLabel,
 } from './runtime-status';
 import TitleBar from '../../app/shell/TitleBar';
-import AccountName from '../../app/shell/AccountName';
 import { useT, type Translate } from '../../i18n';
 import './agents.css';
 

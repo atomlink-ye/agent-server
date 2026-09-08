@@ -160,6 +160,7 @@ textarea {
 }
 
 .app-shell {
+  position: relative;
   display: grid;
   grid-template-columns: 72px minmax(270px, 340px) minmax(0, 1fr);
   width: 100%;
@@ -175,6 +176,11 @@ textarea {
   min-width: 0;
   min-height: 0;
   overflow: auto;
+.app-account {
+  position: absolute;
+  top: 14px;
+  right: 22px;
+  z-index: 5;
 }
 
 .rail {
@@ -683,6 +689,73 @@ textarea {
   border-radius: 6px;
   padding: 2px 6px;
   font-weight: 600;
+}
+
+.account-name-wrap {
+  display: inline-flex;
+  align-items: center;
+}
+
+.account-logout {
+  margin-left: 8px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  color: var(--ink-500);
+}
+
+.auth-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background: var(--paper);
+}
+
+.auth-card {
+  width: min(380px, calc(100vw - 40px));
+  display: grid;
+  gap: 14px;
+  padding: 36px;
+  background: white;
+  border: 1px solid var(--ink-100);
+  border-radius: 16px;
+  box-shadow: 0 12px 40px rgb(0 0 0 / 8%);
+}
+
+.auth-card label {
+  display: grid;
+  gap: 6px;
+  color: var(--ink-700);
+  font-weight: 600;
+}
+
+.auth-card input {
+  padding: 10px 12px;
+  border: 1px solid var(--ink-200);
+  border-radius: 8px;
+  font: inherit;
+}
+
+.auth-card button {
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--ink-900);
+  color: white;
+  font: inherit;
+  cursor: pointer;
+}
+
+.auth-card .auth-switch {
+  background: transparent;
+  color: var(--ink-600);
+}
+
+.auth-error {
+  color: var(--ink-900);
+  background: var(--coral-soft);
+  padding: 8px;
+  border-radius: 8px;
 }
 
 .chat-header {

@@ -1,7 +1,7 @@
 import type { Context, Hono } from 'hono';
 import { z, type ZodType } from 'zod';
 
-import { USER_ID_HEADER } from '../access-context.js';
+import { getBrowserUserId, USER_ID_HEADER } from '../access-context.js';
 import {
   ClaimWorkItemRequestSchema,
   ClaimWorkItemResponseSchema,
@@ -325,7 +325,7 @@ async function forward(
   successStatus = 200,
 ): Promise<Response> {
   try {
-    const userId = context.req.header(USER_ID_HEADER)?.trim();
+    const userId = getBrowserUserId(context);
     const upstream = await fetchAuthenticated(config, path, {
       ...init,
       headers: {

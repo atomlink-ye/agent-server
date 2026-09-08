@@ -37,8 +37,23 @@ export class AdmitWorkspaceMember {
       workspaceId: access.workspaceId,
       principalType: access.principalType,
       principalId: access.principalId,
+      displayName: defaultDisplayName(access.principalId),
     });
     if (this.admitted.size >= this.memoLimit) this.admitted.clear();
     this.admitted.add(key);
   }
+}
+
+/**
+ * A name to call someone by before they have picked one for themselves. Only
+ * takes effect on first insert -- `ensureMember` leaves an existing row's
+ * name untouched -- so this never overwrites a name a person already chose.
+ */
+function defaultDisplayName(principalId: string): string {
+  const digits = principalId
+    .replace(/[^a-zA-Z0-9]/g, '')
+    .slice(-4)
+    .padStart(4, '0')
+    .toUpperCase();
+  return `Guest ${digits}`;
 }

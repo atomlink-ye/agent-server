@@ -120,6 +120,7 @@ export async function createApplication(
     sessions,
     conversations,
     conversationWorkEntitlements,
+    workspaceMembers,
     chatDispatches,
     submitSessionTurn,
     events,
@@ -264,6 +265,7 @@ export async function createApplication(
           conversationWorkLinks,
           logger,
           conversationWorkEntitlements,
+          workspaceMembers,
           workerId,
           leaseMs: leaseDurationMs,
         });

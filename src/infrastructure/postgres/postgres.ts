@@ -102,6 +102,7 @@ export const durableKernelMigrationFileNames = [
   '0068_chat_message_work_item_dispatch.sql',
   '0069_workspace_membership.sql',
   '0070_work_chat_wake_not_started.sql',
+  '0071_workspace_member_display_name.sql',
 ] as const;
 const durableKernelMigrationRegistryTable = 'durable_kernel_schema_migrations';
 const durableKernelMigrationAdvisoryLock = [

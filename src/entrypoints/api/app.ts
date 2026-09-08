@@ -41,6 +41,7 @@ import type { WorkspaceMembershipRepository } from '../../application/ports/work
 import { registerConversationRoutes } from './routes/conversations.js';
 import type { WhisperRepository } from '../../application/ports/whisper-repository.js';
 import { registerWhisperRoutes } from './routes/whispers.js';
+import { registerAccountRoutes } from './routes/account.js';
 
 export interface AppDependencies {
   readonly config: AppConfig;
@@ -184,6 +185,14 @@ export function createHttpApp(
     registerWhisperRoutes(app, {
       config: dependencies.config,
       whispers: dependencies.whispers,
+    });
+  }
+  // Independent of the Direct Chat plane gate: display name is a general
+  // identity feature, not a Chat-plane-shaped one.
+  if (dependencies.workspaceMembers) {
+    registerAccountRoutes(app, {
+      config: dependencies.config,
+      workspaceMembers: dependencies.workspaceMembers,
     });
   }
 

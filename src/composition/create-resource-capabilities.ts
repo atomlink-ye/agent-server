@@ -7,7 +7,6 @@ import {
   AGENT_SERVER_MEMORY_API_SKILL_REF,
   AGENT_SERVER_MEMORY_READ_TOOL_REF,
 } from '../application/agents/built-in-skills.js';
-import { EnsureCoworkerDefaultCapability } from '../application/agents/ensure-coworker-default-capability.js';
 import { WriteAgentHomeEntry } from '../application/agents/agent-home.js';
 import { SeedCoworkerIdentityFiles } from '../application/agents/seed-coworker-identity-files.js';
 import { EnsureCoworkerConversation } from '../application/chat/ensure-coworker-conversation.js';
@@ -177,12 +176,6 @@ export async function createResourceModule(
   const productWorkEnabled = options.config.productWorkSurface === 'composed';
   // Only where Product Work is composed: a Capability this deployment could
   // not execute is worse than none, because the Coworker would offer it.
-  const coworkerDefaultCapability = productWorkEnabled
-    ? new EnsureCoworkerDefaultCapability(
-        productWorkDefinitions,
-        workDefinitionSources,
-      )
-    : undefined;
   // The Agent's own workspace is a Chat-plane store, so identity files compose
   // under the same gate as the Conversation they are read in.
   const coworkerIdentityFiles = directChatEnabled
@@ -255,9 +248,6 @@ export async function createResourceModule(
           : {}),
         ...(httpOptions?.workspaceMembers
           ? { workspaceMembers: httpOptions.workspaceMembers }
-          : {}),
-        ...(coworkerDefaultCapability
-          ? { defaultCapability: coworkerDefaultCapability }
           : {}),
         ...(coworkerIdentityFiles
           ? { identityFiles: coworkerIdentityFiles }

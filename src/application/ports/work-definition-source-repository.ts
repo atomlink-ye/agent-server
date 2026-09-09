@@ -129,4 +129,17 @@ export interface WorkDefinitionSourceRepository {
       readonly version: WorkDefinitionSourceVersion;
     }[]
   >;
+  /** Reverse catalog lookup used by Definition-first availability management. */
+  listAgentWorkBindingsForDefinition?(input: {
+    readonly tenantId: string;
+    readonly workspaceId: string;
+    readonly principalType: string;
+    readonly principalId: string;
+    readonly definitionId: string;
+  }): Promise<
+    readonly {
+      readonly agentDefinitionId: string;
+      readonly definitionVersionId: string;
+    }[]
+  >;
 }

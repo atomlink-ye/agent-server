@@ -569,6 +569,42 @@ export class PostgresWorkDefinitionSourceRepository implements WorkDefinitionSou
       } as VersionRow),
     }));
   }
+
+  public async listAgentWorkBindingsForDefinition(input: {
+    readonly tenantId: string;
+    readonly workspaceId: string;
+    readonly principalType: string;
+    readonly principalId: string;
+    readonly definitionId: string;
+  }): Promise<
+    readonly {
+      readonly agentDefinitionId: string;
+      readonly definitionVersionId: string;
+    }[]
+  > {
+    const result = await this.db.query<{
+      agent_definition_id: string;
+      active_work_definition_version_id: string;
+    }>(
+      `SELECT agent_definition_id,active_work_definition_version_id
+         FROM agent_work_bindings
+        WHERE tenant_id=$1 AND workspace_id=$2
+          AND principal_type=$3 AND principal_id=$4
+          AND work_definition_id=$5 AND status='enabled'
+        ORDER BY created_at ASC,agent_definition_id ASC`,
+      [
+        input.tenantId,
+        input.workspaceId,
+        input.principalType,
+        input.principalId,
+        input.definitionId,
+      ],
+    );
+    return (result.rows ?? []).map((row) => ({
+      agentDefinitionId: row.agent_definition_id,
+      definitionVersionId: row.active_work_definition_version_id,
+    }));
+  }
 }
 
 function productVersionSelect(where: string): string {

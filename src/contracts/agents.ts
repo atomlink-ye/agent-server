@@ -112,6 +112,37 @@ export const AssociateAgentCapabilityResponseSchema = z
   })
   .strict();
 
+/** Definition-first catalog management always pins the exact published
+ * version selected from a catalog read. */
+export const WorkDefinitionAgentBindingRequestSchema = z
+  .object({
+    definition_version_id: AgentIdSchema,
+  })
+  .strict();
+export const WorkDefinitionAgentBindingResponseSchema = z
+  .object({
+    associated: z.literal(true),
+    definition_id: AgentIdSchema,
+    definition_version_id: AgentIdSchema,
+    agent_definition_id: AgentIdSchema,
+  })
+  .strict();
+export const WorkDefinitionAgentAvailabilitySchema = z
+  .object({
+    agent_definition_id: AgentIdSchema,
+    definition_version_id: AgentIdSchema,
+    display_name: z.string().min(1).max(200),
+    role_label: z.string().nullable(),
+  })
+  .strict();
+export const WorkDefinitionAgentAvailabilityResponseSchema = z
+  .object({
+    definition_id: AgentIdSchema,
+    definition_version_id: AgentIdSchema,
+    agents: z.array(WorkDefinitionAgentAvailabilitySchema).max(100),
+  })
+  .strict();
+
 const definitionLinksSchema = z
   .object({
     self: definitionSelfLinkSchema,

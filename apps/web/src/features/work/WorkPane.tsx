@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { WorkListItem } from '@atomlink-ye/agent-server/product-contract';
 
@@ -8,6 +8,12 @@ import {
   productStatePresentation,
 } from './components/work-presentation';
 import { useWorkList, type WorkListQuery } from './queries/use-work-list';
+import {
+  workDefinitionClient,
+  type WorkDefinitionCatalogEntry,
+} from './clients/work-definition-client';
+import { loadCoworkers } from '../agents/agents-gateway';
+import type { Coworker } from '../agents/contracts';
 import { useT } from '../../i18n';
 
 export interface WorkPaneProps {
@@ -156,6 +162,7 @@ export function WorkPane({
           </button>
         </div>
       ) : null}
+      {status === 'ready' ? <WorkCatalog works={works} /> : null}
       {works.length > 0 ? (
         <ul
           className="work-list scroll-region"
@@ -233,3 +240,160 @@ function WorkListRow({
 }
 
 export default WorkPane;
+
+function WorkCatalog({ works }: { readonly works: readonly WorkListItem[] }) {
+  const t = useT();
+  const [catalog, setCatalog] = useState<readonly WorkDefinitionCatalogEntry[]>(
+    [],
+  );
+  const [coworkers, setCoworkers] = useState<readonly Coworker[]>([]);
+  const [bindingDefinitionId, setBindingDefinitionId] = useState<string | null>(
+    null,
+  );
+  const [bindingError, setBindingError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    // Let the history pane commit its first paint before the independent
+    // catalog fan-out begins. This keeps a long/empty catalog read from
+    // delaying the existing Work list navigation.
+    const timer = window.setTimeout(() => {
+      void workDefinitionClient.listCatalog().then(
+        (items) => {
+          if (active) setCatalog(items);
+        },
+        () => undefined,
+      );
+      void loadCoworkers().then(
+        (items) => {
+          if (active) setCoworkers(items);
+        },
+        () => undefined,
+      );
+    }, 0);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, []);
+
+  async function bindDefinition(
+    definition: WorkDefinitionCatalogEntry,
+    agentId: string,
+  ): Promise<void> {
+    if (!agentId || bindingDefinitionId) return;
+    setBindingDefinitionId(definition.definitionId);
+    setBindingError(null);
+    try {
+      await workDefinitionClient.bindAgent(
+        definition.definitionId,
+        agentId,
+        definition.definitionVersionId,
+      );
+      const next = await workDefinitionClient.listCatalog();
+      setCatalog(next);
+    } catch {
+      setBindingError(t('work.bindingFailed'));
+    } finally {
+      setBindingDefinitionId(null);
+    }
+  }
+
+  const launchableAgent = (definition: WorkDefinitionCatalogEntry) =>
+    definition.availableTo.find(
+      (agent) => agent.definitionVersionId === definition.definitionVersionId,
+    );
+
+  if (catalog.length === 0) return null;
+  return (
+    <section className="work-catalog" aria-label={t('work.catalog')}>
+      {bindingError ? (
+        <p role="alert" className="pane-placeholder">
+          {bindingError}
+        </p>
+      ) : null}
+      <div className="pane-section-heading">
+        <span className="eyebrow">{t('work.catalog')}</span>
+        <strong>{t('work.definitions')}</strong>
+      </div>
+      <ul className="work-list" data-testid="work-definition-catalog">
+        {catalog.map((definition) => {
+          const matchingWork = works.find(
+            (work) => work.definition_id === definition.definitionId,
+          );
+          const agent = launchableAgent(definition);
+          return (
+            <li key={definition.definitionId}>
+              <div className="work-list-item">
+                <span className="work-list-mark" aria-hidden="true">
+                  {definition.name.slice(0, 1).toUpperCase()}
+                </span>
+                <span className="work-list-copy">
+                  <strong>{definition.name}</strong>
+                  <span className="work-list-meta">
+                    {definition.description ? (
+                      <span>{definition.description}</span>
+                    ) : null}
+                    <span>
+                      {definition.composition === 'collaboration'
+                        ? t('work.teamComposition')
+                        : t('work.singleComposition')}
+                    </span>
+                    <span>
+                      {definition.availableTo.length
+                        ? `${t('work.availableTo', { count: definition.availableTo.length })}: ${definition.availableTo.map((item) => item.displayName).join(', ')}`
+                        : t('work.notAssigned')}
+                    </span>
+                    {definition.roster.length > 0 ? (
+                      <span>
+                        {t('work.roster')}:{' '}
+                        {definition.roster
+                          .map((person) => `${person.name} (${person.role})`)
+                          .join(', ')}
+                      </span>
+                    ) : null}
+                    {matchingWork?.latest_run_summary ? (
+                      <span>
+                        {t('work.latestRunStatus')}:{' '}
+                        {
+                          productStatePresentation(matchingWork.product_state)
+                            .label
+                        }
+                      </span>
+                    ) : (
+                      <span>{t('work.noRuns')}</span>
+                    )}
+                  </span>
+                  {agent ? (
+                    <a
+                      href={`/work?new=1&agent=${encodeURIComponent(agent.agentDefinitionId)}&capability=${encodeURIComponent(definition.definitionVersionId)}`}
+                    >
+                      {t('work.create')}
+                    </a>
+                  ) : null}
+                  {coworkers.length > 0 ? (
+                    <select
+                      aria-label={t('work.bindCoworker')}
+                      defaultValue=""
+                      disabled={bindingDefinitionId === definition.definitionId}
+                      onChange={(event) =>
+                        void bindDefinition(definition, event.target.value)
+                      }
+                    >
+                      <option value="">{t('work.bindCoworker')}</option>
+                      {coworkers.map((coworker) => (
+                        <option key={coworker.id} value={coworker.id}>
+                          {coworker.displayName}
+                        </option>
+                      ))}
+                    </select>
+                  ) : null}
+                </span>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}

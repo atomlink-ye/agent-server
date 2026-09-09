@@ -154,3 +154,84 @@ describe('Work Definition apply client mapping', () => {
     expect(result.definitionId).not.toBe(result.versionId);
   });
 });
+
+describe('Work Definition catalog client', () => {
+  it('keeps a published unbound Definition visible in the catalog', async () => {
+    const source = {
+      apiVersion: 'agentserver.dev/v1alpha1',
+      kind: 'WorkDefinition',
+      metadata: { name: 'Shared Research', description: 'Reusable brief.' },
+      spec: { kind: 'single_worker' },
+    };
+    vi.spyOn(apiTransport, 'request').mockImplementation(async (path) => {
+      if (path === '/api/work-definitions')
+        return {
+          items: [
+            {
+              definitionId,
+              displayName: 'Shared Research',
+              currentPublishedVersionId: versionId,
+            },
+          ],
+        };
+      if (path === `/api/work-definition-versions/${versionId}`)
+        return {
+          version: {
+            id: versionId,
+            definition_id: definitionId,
+            status: 'published',
+            fingerprint,
+            source,
+            source_yaml: 'kind: WorkDefinition',
+            resolved: { resource_manifest_fingerprint: null },
+            created_at: '2026-08-26T00:00:00.000Z',
+            published_at: '2026-08-26T00:00:00.000Z',
+            links: {
+              self: `/api/v1/work-definition-versions/${versionId}`,
+              definition: `/api/v1/work-definitions/${definitionId}`,
+            },
+          },
+        };
+      if (path === `/api/work-definitions/${definitionId}/agents`)
+        return {
+          definition_id: definitionId,
+          definition_version_id: versionId,
+          agents: [],
+        };
+      if (path === '/api/work-definitions/plan')
+        return {
+          valid: true,
+          fingerprint,
+          metadata: { normalized_name: 'shared-research' },
+          resolved: {
+            kind: 'single_worker',
+            participants: [],
+            environment: {
+              source: 'referenced',
+              environment_version_id: environmentVersionId,
+            },
+            memory_version_ids: [],
+            required_runtime_capabilities: [],
+            platform_capabilities: [],
+            materialization: {
+              inline_workers: 0,
+              inline_environment: false,
+              internal_team: false,
+            },
+          },
+          diagnostics: [],
+        };
+      throw new Error(`unexpected request: ${String(path)}`);
+    });
+
+    const catalog = await new WorkDefinitionClient().listCatalog();
+    expect(catalog).toHaveLength(1);
+    expect(catalog[0]).toMatchObject({
+      definitionId,
+      definitionVersionId: versionId,
+      name: 'Shared Research',
+      description: 'Reusable brief.',
+      availableTo: [],
+    });
+  });
+});

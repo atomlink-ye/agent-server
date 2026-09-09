@@ -101,7 +101,14 @@ Automatic provisioning is allowed only when the Direct Chat caller is exactly th
 
 Shared/cross-owner Coworkers do not receive a guessed Work entitlement. They may still have a Direct Conversation, but the existing explicit `POST /api/v1/conversations/{conversationId}/work-context` boundary remains the supported path when a caller is authorized to select/attach context.
 
-`ChatDeliveryReconciler` continues to bind `list_agent_workflows` / `start_work` only when a valid entitlement exists. This implementation changes provisioning, not authorization bypass.
+`ChatDeliveryReconciler` continues to bind `list_agent_workflows` / `start_work` only when a valid entitlement exists. Coworker hiring does not create a default `*-assignment` Work Definition or binding; an empty catalog directs the user to the shared Work catalog or Definition authoring. Existing legacy bindings remain readable and startable.
+
+The reverse Work catalog surface is definition-first:
+
+- `GET /api/v1/work-definitions/{definition_id}/agents` lists enabled Coworker bindings, including each binding's exact published `definition_version_id`.
+- `PUT /api/v1/work-definitions/{definition_id}/agents/{agent_id}` binds that Coworker to the exact published version supplied in `{ "definition_version_id": "..." }`.
+
+The same Definition may be bound to multiple Coworkers. Binding changes affect future catalog visibility only; they do not rewrite Work, WorkRun, manifest, or transcript history.
 
 ## Agent Chat RuntimeSession identity
 

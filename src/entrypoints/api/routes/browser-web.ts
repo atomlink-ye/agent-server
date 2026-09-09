@@ -30,6 +30,8 @@ import {
   PostWorkChatMessageResponseSchema,
   RetryWorkChatMessageResponseSchema,
   WorkChatMessagesResponseSchema,
+  ConfirmWorkPreparationRequestSchema,
+  ConfirmWorkPreparationResponseSchema,
 } from '../../../contracts/work-chat.js';
 import {
   ChatWorkCardSchema,
@@ -313,6 +315,22 @@ export function registerBrowserWebRoutes(
       `/api/v1/works/${encodeURIComponent(workId)}/chat/${encodeURIComponent(messageId)}/retry`,
       {},
       RetryWorkChatMessageResponseSchema,
+    );
+  });
+  app.post('/api/works/:workId/preparation/confirm', async (c) => {
+    const workId = c.req.param('workId');
+    if (!isUuid(workId)) return invalidProductRequest();
+    const parsed = ConfirmWorkPreparationRequestSchema.safeParse(
+      await c.req.json().catch(() => undefined),
+    );
+    if (!parsed.success) return invalidProductRequest();
+    return writeProductJson(
+      c,
+      config,
+      logger,
+      `/api/v1/works/${encodeURIComponent(workId)}/preparation/confirm`,
+      parsed.data,
+      ConfirmWorkPreparationResponseSchema,
     );
   });
   app.get('/api/works/:workId/definition', async (c) => {

@@ -11,6 +11,7 @@ import type {
   PaseoTimelinePage,
 } from './paseo-client-port.js';
 import type { PaseoModelDescriptor } from './model-selector.js';
+import type { PaseoProviderOptions } from './paseo-client-port.js';
 import {
   isPaseoExplicitMissingSessionError,
   PaseoClientInspectionUnavailableError,
@@ -65,6 +66,7 @@ export class PaseoGateway {
     readonly labels?: Readonly<Record<string, string>>;
     readonly mcpServers?: readonly ExecutionMcpServerConfig[];
     readonly env?: Readonly<Record<string, string>>;
+    readonly providerOptions?: PaseoProviderOptions;
   }): Promise<PaseoCreatedAgent> {
     // The pinned 0.1.x compatibility port still contains an initialPrompt
     // field, but the real SDK does not use it. Keeping it empty preserves the

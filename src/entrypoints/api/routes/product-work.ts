@@ -21,11 +21,19 @@ import { requireServiceAccountAccess } from '../authentication.js';
 import type { ApiEnvironment } from '../http-types.js';
 import type { AppConfig } from '../../../shared/config.js';
 import type { WorkChatService } from '../../../application/work-chat/work-chat-service.js';
+import type { WorkPreparationService } from '../../../application/work/work-preparation-service.js';
+import {
+  WorkPreparationNotReadyError,
+  WorkPreparationRevisionMismatchError,
+  WorkPreparationVersionMismatchError,
+} from '../../../application/work/work-preparation-service.js';
 import {
   PostWorkChatMessageRequestSchema,
   PostWorkChatMessageResponseSchema,
   RetryWorkChatMessageResponseSchema,
   WorkChatMessagesResponseSchema,
+  ConfirmWorkPreparationRequestSchema,
+  ConfirmWorkPreparationResponseSchema,
 } from '../../../contracts/work-chat.js';
 import { readBoundedJson } from '../read-bounded-json.js';
 
@@ -35,6 +43,7 @@ interface ProductWorkRouteDependencies {
   readonly executionDetail?: Pick<GetProductExecutionDetail, 'execute'>;
   readonly sessionTranscripts?: Pick<GetProductSessionTranscripts, 'execute'>;
   readonly workChat?: WorkChatService;
+  readonly workPreparation?: WorkPreparationService;
 }
 
 export function registerProductWorkRoutes(
@@ -75,10 +84,20 @@ export function registerProductWorkRoutes(
         },
         workId,
       });
+      const preparation = dependencies.workPreparation
+        ? await dependencies.workPreparation.get({
+            owner: {
+              tenantId: access.tenantId,
+              workspaceId: access.workspaceId,
+            },
+            workId,
+          })
+        : null;
       return context.json(
         WorkChatMessagesResponseSchema.parse({
           work_id: workId,
           messages: messages.map(toWorkChatResponse),
+          preparation: preparation ? toPreparationResponse(preparation) : null,
         }),
         200,
       );
@@ -89,6 +108,59 @@ export function registerProductWorkRoutes(
           'work_not_found',
           'The requested Work was not found.',
         );
+      return mapProjectionError(context, error);
+    }
+  });
+
+  app.post('/api/v1/works/:workId/preparation/confirm', async (context) => {
+    const workId = context.req.param('workId');
+    if (!z.uuid().safeParse(workId).success) return invalidPath(context);
+    if (!dependencies.workPreparation)
+      return context.json(
+        {
+          error: {
+            code: 'projection_unavailable',
+            message: 'Work preparation is unavailable.',
+          },
+        },
+        503,
+      );
+    const parsed = ConfirmWorkPreparationRequestSchema.safeParse(
+      await readBoundedJson(context.req.raw, 16 * 1024),
+    );
+    if (!parsed.success)
+      throw new HttpError(
+        400,
+        'invalid_request',
+        'A valid preparation confirmation is required.',
+      );
+    const access = getAuthenticatedAccessContext(context);
+    try {
+      const result = await dependencies.workPreparation.confirm({
+        owner: { tenantId: access.tenantId, workspaceId: access.workspaceId },
+        accessContext: access,
+        workId,
+        preparationId: parsed.data.preparation_id,
+        expectedRevision: parsed.data.expected_revision,
+      });
+      return context.json(
+        ConfirmWorkPreparationResponseSchema.parse({
+          preparation: toPreparationResponse(result.preparation),
+          work_run:
+            'workRun' in result && result.workRun
+              ? toWorkRunResponse(result.workRun)
+              : null,
+          reused: result.reused,
+        }),
+        200,
+      );
+    } catch (error) {
+      if (
+        error instanceof WorkPreparationVersionMismatchError ||
+        error instanceof WorkPreparationRevisionMismatchError ||
+        error instanceof WorkPreparationNotReadyError
+      )
+        throw new HttpError(409, error.code, error.message);
       return mapProjectionError(context, error);
     }
   });
@@ -439,5 +511,42 @@ function toWorkChatResponse(
     reply_to_message_id: message.replyToMessageId,
     failure_code: message.failureCode,
     created_at: message.createdAt,
+  };
+}
+
+function toPreparationResponse(
+  preparation: import('../../../domain/work/work-preparation.js').WorkPreparation,
+) {
+  return {
+    id: preparation.id,
+    work_id: preparation.workId,
+    revision: preparation.revision,
+    status: preparation.status,
+    definition_version_id: preparation.definitionVersionId,
+    schema_fingerprint: preparation.schemaFingerprint,
+    candidate_input: preparation.candidateInput,
+    confirmed_fingerprint: preparation.confirmedFingerprint,
+    start_intent: preparation.startIntent,
+    work_run_id: preparation.workRunId,
+    missing: preparation.missing,
+    ambiguities: preparation.ambiguities,
+    created_at: preparation.createdAt,
+    updated_at: preparation.updatedAt,
+  };
+}
+
+function toWorkRunResponse(
+  run: import('../../../domain/work/work-run.js').WorkRun,
+) {
+  return {
+    id: run.id,
+    work_id: run.workId,
+    definition_version_id: run.definitionVersionId,
+    trigger_kind: run.triggerKind,
+    trigger_ref: run.triggerRef,
+    expires_at: run.expiresAt,
+    bound_at: run.boundAt,
+    created_at: run.createdAt,
+    updated_at: run.updatedAt,
   };
 }

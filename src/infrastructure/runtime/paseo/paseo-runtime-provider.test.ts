@@ -36,6 +36,7 @@ const timeline: PaseoTimelinePage = {
 
 class FakeClient implements PaseoClientPort {
   status = 'idle';
+  createInputs: Array<Record<string, unknown>> = [];
   timelineError: Error | null = null;
   actualProvider = 'opencode';
   actualModel = 'free/model';
@@ -56,7 +57,8 @@ class FakeClient implements PaseoClientPort {
   async listModels() {
     return [{ id: 'free/model', label: 'free' }];
   }
-  async createAgent() {
+  async createAgent(input: Record<string, unknown>) {
+    this.createInputs.push(input);
     return {
       id: 'agent-1',
       provider: this.actualProvider,
@@ -312,6 +314,32 @@ describe('PaseoRuntimeProvider', () => {
     await expect(provider().closeSession(binding())).rejects.toBeInstanceOf(
       UnsupportedCapabilityError,
     );
+  });
+
+  it('passes deny-all native permissions only when the runtime policy disables native tools', async () => {
+    const client = new FakeClient();
+    const runtimeProvider = provider(client);
+    await runtimeProvider.create({
+      runtimeSessionId,
+      provider: 'opencode',
+      model: 'free/model',
+      cwd: '/tmp/paseo-provider-test',
+      systemPrompt: 'system',
+      nativeTools: 'disabled',
+    });
+    expect(client.createInputs[0]?.providerOptions).toEqual({
+      settings: { permissions: { deny: ['*'] } },
+    });
+
+    const enabledClient = new FakeClient();
+    await provider(enabledClient).create({
+      runtimeSessionId,
+      provider: 'opencode',
+      model: 'free/model',
+      cwd: '/tmp/paseo-provider-test',
+      systemPrompt: 'system',
+    });
+    expect(enabledClient.createInputs[0]).not.toHaveProperty('providerOptions');
   });
 });
 

@@ -290,6 +290,9 @@ export class PaseoRuntimeProvider implements RuntimeExecutionProvider {
         ...(desired.extensions?.mcpServers
           ? { mcpServers: desired.extensions.mcpServers }
           : {}),
+        ...(desired.nativeTools === 'disabled'
+          ? { providerOptions: { settings: { permissions: { deny: ['*'] } } } }
+          : {}),
       });
     } catch (error) {
       throw new ExecutionPlaneUnavailableError(

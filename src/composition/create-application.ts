@@ -280,6 +280,7 @@ export async function createApplication(
             desiredSpec: ensureDesiredRuntimeSpec,
             turnExecutor: runtimeTurns,
             runtimeTurns: runtimeTurnStore,
+            preparations: workModule.preparation,
           },
           {
             workerId: `${workerId}:work-chat-messages`,

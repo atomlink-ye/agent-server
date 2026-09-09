@@ -42,6 +42,7 @@ export interface StartPendingWorkRunInput {
   readonly triggerRef?: string;
   readonly predecessorWorkRunId?: string;
   readonly accessContext: AccessContext;
+  readonly expectedDefinitionVersionId?: string;
 }
 
 export interface WorkIdentityApiOptions {
@@ -129,11 +130,33 @@ export class WorkIdentityApi {
     this.assertAccessOwner(input.owner, input.accessContext);
     const work = await this.repository.findWorkById(input.workId, input.owner);
     if (!work) throw new WorkNotFoundError();
+    if (
+      input.expectedDefinitionVersionId &&
+      work.currentDefinitionVersionId !== input.expectedDefinitionVersionId
+    )
+      throw new WorkDefinitionValidationError(
+        'The Work Definition changed before admission.',
+      );
     await this.resolveDefinition(
       work.definitionId,
       work.currentDefinitionVersionId,
       input.accessContext,
     );
+    const admissionWork = await this.repository.findWorkById(
+      input.workId,
+      input.owner,
+    );
+    if (
+      !admissionWork ||
+      admissionWork.currentDefinitionVersionId !==
+        work.currentDefinitionVersionId ||
+      (input.expectedDefinitionVersionId !== undefined &&
+        admissionWork.currentDefinitionVersionId !==
+          input.expectedDefinitionVersionId)
+    )
+      throw new WorkDefinitionValidationError(
+        'The Work Definition changed before admission.',
+      );
     const triggerRef = input.triggerRef ?? randomUUID();
     validateTriggerRef(triggerRef);
     const idempotencyKey = deriveWorkRunIdempotencyKey(
@@ -155,6 +178,9 @@ export class WorkIdentityApi {
       idempotencyKey,
       expiresAt: new Date(now.getTime() + this.pendingTtlMs).toISOString(),
       now: now.toISOString(),
+      ...(input.expectedDefinitionVersionId !== undefined
+        ? { expectedDefinitionVersionId: input.expectedDefinitionVersionId }
+        : {}),
     });
   }
 

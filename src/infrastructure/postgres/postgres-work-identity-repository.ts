@@ -18,6 +18,7 @@ import {
   PendingWorkRunExpiredError,
   ResolvedManifestConflictError,
   WorkRunBindingConflictError,
+  WorkRunDefinitionVersionMismatchError,
   WorkRunNotFoundError,
   type WorkRun,
   type BoundWorkRun,
@@ -201,7 +202,11 @@ export class PostgresWorkIdentityRepository implements WorkIdentityRepository {
     const inserted = await this.database.query<WorkRunRow>(
       `INSERT INTO work_runs
        (id,tenant_id,workspace_id,work_id,definition_version_id,predecessor_work_run_id,trigger_kind,trigger_ref,idempotency_key,root_task_id,expires_at,bound_at,created_at,updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NULL,$10,NULL,$11,$12)
+       SELECT $1,w.tenant_id,w.workspace_id,w.id,$5,$6,$7,$8,$9,NULL,$10,NULL,$11,$12
+       FROM works w
+       WHERE w.id=$4 AND w.tenant_id=$2 AND w.workspace_id=$3
+         AND ($13::uuid IS NULL OR w.current_definition_version_id=$13::uuid)
+       FOR UPDATE
        ON CONFLICT (tenant_id,workspace_id,idempotency_key) DO NOTHING
        RETURNING ${runColumns}`,
       [
@@ -220,6 +225,7 @@ export class PostgresWorkIdentityRepository implements WorkIdentityRepository {
           input.now ??
           input.createdAt ??
           new Date().toISOString(),
+        input.expectedDefinitionVersionId ?? null,
       ],
     );
     const row =
@@ -231,7 +237,23 @@ export class PostgresWorkIdentityRepository implements WorkIdentityRepository {
           [input.owner.tenantId, input.owner.workspaceId, input.idempotencyKey],
         )
       ).rows?.[0];
-    if (!row) throw new Error('The pending work run could not be persisted.');
+    if (!row) {
+      if (input.expectedDefinitionVersionId) {
+        const current = await this.database.query<{
+          current_definition_version_id: string;
+        }>(
+          `SELECT current_definition_version_id FROM works
+           WHERE id=$1 AND tenant_id=$2 AND workspace_id=$3`,
+          [input.workId, input.owner.tenantId, input.owner.workspaceId],
+        );
+        if (
+          current.rows?.[0]?.current_definition_version_id !==
+          input.expectedDefinitionVersionId
+        )
+          throw new WorkRunDefinitionVersionMismatchError();
+      }
+      throw new Error('The pending work run could not be persisted.');
+    }
     const run = mapWorkRun(row);
     if (
       run.workId !== input.workId ||

@@ -64,6 +64,8 @@ import type { Pool } from 'pg';
 import { PostgresExecutionFactQuery } from '../infrastructure/postgres/postgres-execution-fact-query.js';
 import { PostgresWorkChatRepository } from '../infrastructure/postgres/postgres-work-chat-repository.js';
 import { WorkChatService } from '../application/work-chat/work-chat-service.js';
+import { WorkPreparationService } from '../application/work/work-preparation-service.js';
+import { PostgresWorkPreparationRepository } from '../infrastructure/postgres/postgres-work-preparation-repository.js';
 
 export interface WorkModuleHttpOptions {
   readonly teamDriver?: Pick<TeamDriver, 'decideCompletion'>;
@@ -79,6 +81,7 @@ export interface WorkModule {
   readonly execution: WorkExecutionService;
   readonly contextFiles: LogicalFileStore;
   readonly contextViews: ContextViewResolver;
+  readonly preparation: WorkPreparationService;
   createChatWorkCardProjection(): ChatWorkCardProjection;
   installHttp(
     app: Hono<ApiEnvironment>,
@@ -105,6 +108,7 @@ export interface InstallWorkHttpRoutesOptions {
   readonly executionDetail: Pick<GetProductExecutionDetail, 'execute'>;
   readonly sessionTranscripts: Pick<GetProductSessionTranscripts, 'execute'>;
   readonly workChat: WorkChatService;
+  readonly workPreparation: WorkPreparationService;
   readonly teamDriver?: Pick<TeamDriver, 'decideCompletion'>;
   readonly teamExecutions?: Pick<
     TeamExecutionRepository,
@@ -139,6 +143,7 @@ export function installWorkHttpRoutes(
     executionDetail,
     sessionTranscripts,
     workChat,
+    workPreparation,
     teamDriver,
     teamExecutions,
   } = dependencies;
@@ -159,6 +164,7 @@ export function installWorkHttpRoutes(
     executionDetail,
     sessionTranscripts,
     workChat,
+    workPreparation,
   });
   registerWorkCardRoutes(app, {
     config,
@@ -262,6 +268,29 @@ export function createWorkModule(options: CreateWorkModuleOptions): WorkModule {
   const workChat = new WorkChatService(
     new PostgresWorkChatRepository(options.database),
   );
+  const workPreparation = new WorkPreparationService({
+    repository: new PostgresWorkPreparationRepository(options.database),
+    identity: workIdentity,
+    startWorkRun: startWorkRunPrimitive,
+    schemaForVersion: async ({ versionId, accessContext }) => {
+      const productVersion = await definitionSources.findProductVersion(
+        versionId,
+        {
+          tenantId: accessContext.tenantId,
+          workspaceId: accessContext.workspaceId,
+          principalType: accessContext.principalType,
+          principalId: accessContext.principalId,
+        },
+      );
+      if (!productVersion) return null;
+      const parsed = validateProductWorkDefinition(
+        JSON.stringify(productVersion.authorSource),
+      );
+      return parsed.valid
+        ? { schema: parsed.document.spec.input_schema }
+        : null;
+    },
+  });
 
   return {
     identity: workIdentity,
@@ -269,6 +298,7 @@ export function createWorkModule(options: CreateWorkModuleOptions): WorkModule {
     execution,
     contextFiles,
     contextViews,
+    preparation: workPreparation,
     createChatWorkCardProjection() {
       return createChatWorkCardProjection({
         workIdentity: workIdentityQuery,
@@ -285,6 +315,7 @@ export function createWorkModule(options: CreateWorkModuleOptions): WorkModule {
         executionDetail,
         sessionTranscripts,
         workChat,
+        workPreparation,
         ...(extras?.teamDriver ? { teamDriver: extras.teamDriver } : {}),
         ...(extras?.teamExecutions
           ? { teamExecutions: extras.teamExecutions }

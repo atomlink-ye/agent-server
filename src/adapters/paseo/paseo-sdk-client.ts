@@ -19,6 +19,7 @@ import {
   type PaseoTimelinePage,
   type PaseoToolCall,
   type PaseoToolDetail,
+  type PaseoProviderOptions,
 } from './paseo-client-port.js';
 
 /**
@@ -109,6 +110,7 @@ export class PaseoSdkClient implements PaseoClientPort {
     readonly labels?: Readonly<Record<string, string>>;
     readonly mcpServers?: readonly ExecutionMcpServerConfig[];
     readonly env?: Readonly<Record<string, string>>;
+    readonly providerOptions?: PaseoProviderOptions;
   }): Promise<PaseoCreatedAgent> {
     const agent = await this.#client.createAgent({
       provider: input.provider,
@@ -121,6 +123,9 @@ export class PaseoSdkClient implements PaseoClientPort {
       workspaceId: input.workspaceId,
       systemPrompt: input.systemPrompt,
       ...(input.env ? { env: { ...input.env } } : {}),
+      ...(input.providerOptions
+        ? { providerOptions: input.providerOptions }
+        : {}),
       ...(input.title ? { title: input.title } : {}),
       ...(input.mcpServers
         ? {

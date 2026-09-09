@@ -18,6 +18,8 @@ import type {
 } from '../../shared/workers/step-worker.js';
 import type { AccessContext } from '../../domain/access-context.js';
 import type { RuntimeTurnStore } from '../ports/runtime-turn-store.js';
+import type { WorkPreparationService } from '../work/work-preparation-service.js';
+import type { ProductWorkInputSchema } from '../work/validate-product-work-definition.js';
 
 export interface WorkChatWorkerOptions {
   readonly workerId: string;
@@ -37,6 +39,10 @@ export interface WorkChatWorkerDependencies {
   readonly desiredSpec: Pick<EnsureDesiredRuntimeSpec, 'execute'>;
   readonly turnExecutor: Pick<ExecuteRuntimeTurn, 'execute'>;
   readonly runtimeTurns: Pick<RuntimeTurnStore, 'findById'>;
+  readonly preparations?: Pick<
+    WorkPreparationService,
+    'observeLead' | 'getIntakeContext'
+  >;
 }
 
 /** Serially drains Work Chat messages and invokes the Definition-resolved lead. */
@@ -114,6 +120,31 @@ export class WorkChatWorker implements StepWorker {
       workChatTurnId(claim.workId, claim.id),
     );
     if (turn?.status !== 'succeeded' || turn.outputText === null) return false;
+    const owner: WorkChatOwner = {
+      tenantId: claim.tenantId,
+      workspaceId: claim.workspaceId,
+      principalType: this.#options.ownerPrincipalType,
+      principalId: this.#options.ownerPrincipalId,
+    };
+    const accessContext: AccessContext = {
+      tenantId: owner.tenantId,
+      workspaceId: owner.workspaceId,
+      principalType: this.#options.ownerPrincipalType,
+      principalId: this.#options.ownerPrincipalId,
+      policySnapshotVersion: 'work-chat',
+    };
+    const lead = parseLeadOutput(turn.outputText);
+    if (this.dependencies.preparations) {
+      await this.dependencies.preparations.observeLead({
+        owner,
+        workId: claim.workId,
+        accessContext,
+        candidateInput: lead.candidateInput,
+        missing: lead.missing,
+        ambiguities: lead.ambiguities,
+        sourceMessageId: claim.id,
+      });
+    }
     const now = this.#options.now().toISOString();
     const completed = await this.dependencies.repository.complete({
       id: claim.id,
@@ -121,7 +152,7 @@ export class WorkChatWorker implements StepWorker {
       leaseFence: claim.leaseFence,
       reply: {
         id: cryptoRandomUuid(),
-        body: turn.outputText.trim() || 'I could not produce a reply.',
+        body: lead.replyText,
         sourceRuntimeTurnId: turn.id,
         createdAt: now,
       },
@@ -188,12 +219,20 @@ export class WorkChatWorker implements StepWorker {
           `${message.sequence} ${message.kind === 'lead' ? 'Lead' : 'User'}: ${message.body}`,
       )
       .join('\n');
+    const intake = this.dependencies.preparations
+      ? await this.dependencies.preparations.getIntakeContext({
+          owner,
+          workId: claim.workId,
+          accessContext,
+        })
+      : null;
     const systemPrompt = createDesiredRuntimeSystemPrompt(
       [
         worker.instructions,
         'You are the temporary Lead for one shared Work Chat.',
         'Reply to the latest User message using the shared transcript below.',
-        'Answer in plain text. Do not use tools, start a WorkRun, or claim that execution changed.',
+        'Return only JSON: {"reply":"...","candidate_input":{},"missing":[],"ambiguities":[]}. candidate_input must contain only fields you actually collected. Do not use tools, start a WorkRun, or claim that execution changed.',
+        renderWorkChatInputSchemaPrompt(intake?.schema),
         `Shared Work Chat transcript:\n${transcript}`,
       ].join('\n\n'),
     );
@@ -221,18 +260,85 @@ export class WorkChatWorker implements StepWorker {
       recoveryPrompt: claim.body,
       desiredSystemPrompt: systemPrompt,
     });
-    await this.dependencies.repository.complete({
+    const lead = parseLeadOutput(output.text);
+    if (this.dependencies.preparations) {
+      await this.dependencies.preparations.observeLead({
+        owner,
+        workId: claim.workId,
+        accessContext,
+        candidateInput: lead.candidateInput,
+        missing: lead.missing,
+        ambiguities: lead.ambiguities,
+        sourceMessageId: claim.id,
+      });
+    }
+    const completed = await this.dependencies.repository.complete({
       id: claim.id,
       workerId: this.#options.workerId,
       leaseFence: claim.leaseFence,
       reply: {
         id: cryptoRandomUuid(),
-        body: output.text.trim() || 'I could not produce a reply.',
+        body: lead.replyText,
         sourceRuntimeTurnId: turnId,
         createdAt: this.#options.now().toISOString(),
       },
       updatedAt: this.#options.now().toISOString(),
     });
+  }
+}
+
+export function renderWorkChatInputSchemaPrompt(
+  schema: ProductWorkInputSchema | undefined,
+): string {
+  if (!schema)
+    return 'No typed input schema is available. Do not invent candidate_input fields; keep it empty.';
+  return [
+    'The current Definition input schema is authoritative for candidate_input.',
+    'candidate_input may contain only these declared properties; schema-external context belongs in reply/missing, never candidate_input.',
+    JSON.stringify({
+      properties: schema.properties,
+      required: schema.required,
+      additional_properties: schema.additional_properties,
+    }),
+  ].join('\n');
+}
+
+export interface ParsedWorkChatLeadReply {
+  readonly replyText: string;
+  readonly candidateInput: Readonly<Record<string, unknown>>;
+  readonly missing: readonly string[];
+  readonly ambiguities: readonly string[];
+}
+
+/** Accepts only the bounded envelope; arbitrary model prose remains safe text. */
+export function parseLeadOutput(text: string): ParsedWorkChatLeadReply {
+  const fallback = {
+    replyText: text.trim() || 'I could not produce a reply.',
+    candidateInput: {},
+    missing: [],
+    ambiguities: [],
+  } as const;
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
+      return fallback;
+    const value = parsed as Record<string, unknown>;
+    if (typeof value.reply !== 'string' || !value.reply.trim()) return fallback;
+    const candidate = value.candidate_input;
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate))
+      return fallback;
+    const list = (input: unknown): readonly string[] =>
+      Array.isArray(input) && input.every((item) => typeof item === 'string')
+        ? input
+        : [];
+    return {
+      replyText: value.reply.trim(),
+      candidateInput: candidate as Record<string, unknown>,
+      missing: list(value.missing),
+      ambiguities: list(value.ambiguities),
+    };
+  } catch {
+    return fallback;
   }
 }
 

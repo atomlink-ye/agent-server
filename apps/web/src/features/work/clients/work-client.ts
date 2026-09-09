@@ -12,6 +12,8 @@ import {
   RetryWorkChatMessageResponseSchema,
   WorkChatMessagesResponseSchema,
   type WorkChatMessagesResponse,
+  ConfirmWorkPreparationResponseSchema,
+  type WorkPreparationResponse,
 } from '@atomlink-ye/agent-server/product-contract';
 
 import { apiTransport } from '../../../api/transport';
@@ -128,6 +130,35 @@ export class WorkClient {
       ),
     );
     return response.message;
+  }
+
+  async confirmPreparation(
+    workId: string,
+    preparationId: string,
+    revision: number,
+    clientRequestId = crypto.randomUUID(),
+  ): Promise<WorkPreparationResponse> {
+    try {
+      const response = parseProduct(
+        ConfirmWorkPreparationResponseSchema,
+        await apiTransport.request(
+          `/api/works/${encodeURIComponent(workId)}/preparation/confirm`,
+          {
+            method: 'POST',
+            cache: 'no-store',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              preparation_id: preparationId,
+              expected_revision: revision,
+              client_request_id: clientRequestId,
+            }),
+          },
+        ),
+      );
+      return response.preparation;
+    } catch (error) {
+      return productMutationError(error);
+    }
   }
 }
 

@@ -64,6 +64,14 @@ export class WorkRunBindingConflictError extends Error {
   }
 }
 
+export class WorkRunDefinitionVersionMismatchError extends Error {
+  public readonly code = 'work_definition_version_mismatch';
+  public constructor() {
+    super('The Work Definition changed before the WorkRun could be admitted.');
+    this.name = 'WorkRunDefinitionVersionMismatchError';
+  }
+}
+
 export class PendingWorkRunExpiredError extends Error {
   public constructor() {
     super('The pending work run has expired and cannot be bound.');

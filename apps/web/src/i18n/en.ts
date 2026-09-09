@@ -709,6 +709,15 @@ export const en = {
   'work.chat.failed': 'Reply failed · retry',
   'work.chat.loadError': 'Unable to load Work Chat.',
   'work.chat.sendError': 'Unable to send this message.',
+  'work.chat.preparationTitle': 'Preparation',
+  'work.chat.preparationStatus': 'Status',
+  'work.chat.preparationVersion': 'Definition version',
+  'work.chat.missing': 'Missing',
+  'work.chat.ambiguities': 'Needs clarification',
+  'work.chat.confirmStart': 'Confirm and start',
+  'work.chat.starting': 'Confirming the start result…',
+  'work.chat.versionMismatch':
+    'The Definition changed. Prepare this Work again before starting.',
   'work.artifacts': 'Artifacts',
   'work.artifacts.emptyTitle': 'Delivered Artifacts are not available yet.',
   'work.artifacts.emptyBody':

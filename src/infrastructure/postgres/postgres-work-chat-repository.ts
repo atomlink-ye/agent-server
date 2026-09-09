@@ -32,6 +32,8 @@ interface Row extends Record<string, unknown> {
   tenant_id: string;
   workspace_id: string;
   work_id: string;
+  preparation_id: string | null;
+  work_run_id: string | null;
   sequence: number | string;
   kind: WorkChatMessageKind;
   body: string;
@@ -48,7 +50,7 @@ interface Row extends Record<string, unknown> {
   updated_at: string | Date;
 }
 
-const COLUMNS = `id,tenant_id,workspace_id,work_id,sequence,kind,body,status,
+const COLUMNS = `id,tenant_id,workspace_id,work_id,preparation_id,work_run_id,sequence,kind,body,status,
  reply_to_message_id,client_request_id,lease_owner,lease_fence,lease_expires_at,
  attempt_count,source_runtime_turn_id,failure_code,created_at,updated_at`;
 
@@ -353,6 +355,8 @@ function mapRow(row: Row): WorkChatMessage {
     tenantId: row.tenant_id,
     workspaceId: row.workspace_id,
     workId: row.work_id,
+    preparationId: row.preparation_id ?? null,
+    workRunId: row.work_run_id ?? null,
     sequence: Number(row.sequence),
     kind: row.kind,
     body: row.body,

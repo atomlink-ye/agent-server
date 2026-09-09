@@ -21,6 +21,7 @@ import type {
 import { ApiTransportError } from '@/api/transport';
 import { workRunFailureMessage } from '@/features/work/clients/errors';
 import { isFeatureUnavailable } from '@/api/feature-availability';
+import { useT } from '@/i18n';
 
 type StartState = 'idle' | 'loading' | 'creating' | 'starting' | 'error';
 type ErrorKind =
@@ -32,13 +33,20 @@ export function NewWork({
   originConversationId = null,
   initialAgentId = null,
   initialCapabilityVersionId = null,
+  initialDefinitionId = null,
+  initialDefinitionVersionId = null,
+  initialInitiatorId = null,
   onWorkCreated,
 }: {
   readonly originConversationId?: string | null;
   readonly initialAgentId?: string | null;
   readonly initialCapabilityVersionId?: string | null;
+  readonly initialDefinitionId?: string | null;
+  readonly initialDefinitionVersionId?: string | null;
+  readonly initialInitiatorId?: string | null;
   readonly onWorkCreated?: () => void;
 }) {
+  const t = useT();
   const navigate = (path: string): void => {
     window.location.assign(path);
   };
@@ -47,6 +55,8 @@ export function NewWork({
   // stale deep-link id from causing an unnecessary profile request.
   const [agentId, setAgentId] = useState('');
   const [profile, setProfile] = useState<CoworkerProfile | null>(null);
+  const [definitionCapability, setDefinitionCapability] =
+    useState<CoworkerCapability | null>(null);
   const [capabilityVersionId, setCapabilityVersionId] = useState(
     initialCapabilityVersionId ?? '',
   );
@@ -59,9 +69,18 @@ export function NewWork({
   const [createdWorkId, setCreatedWorkId] = useState<string | null>(null);
   const [rosterAttempt, setRosterAttempt] = useState(0);
   const [profileAttempt, setProfileAttempt] = useState(0);
+  const [definitionAttempt, setDefinitionAttempt] = useState(0);
   const [invalidField, setInvalidField] = useState<string | null>(null);
+  const definitionFirst = Boolean(
+    initialDefinitionId && initialDefinitionVersionId,
+  );
 
   useEffect(() => {
+    if (definitionFirst) {
+      setAgentId(initialInitiatorId ?? '');
+      setState('idle');
+      return;
+    }
     let active = true;
     void loadCoworkers().then(
       (items) => {
@@ -97,9 +116,59 @@ export function NewWork({
     return () => {
       active = false;
     };
-  }, [initialAgentId, initialCapabilityVersionId, rosterAttempt]);
+  }, [
+    definitionFirst,
+    initialAgentId,
+    initialCapabilityVersionId,
+    initialInitiatorId,
+    rosterAttempt,
+  ]);
 
   useEffect(() => {
+    if (!definitionFirst || !initialDefinitionVersionId) return;
+    let active = true;
+    setState('loading');
+    void workDefinitionClient.getVersion(initialDefinitionVersionId).then(
+      (version) => {
+        if (!active) return;
+        const capability =
+          version && version.definition_id === initialDefinitionId
+            ? capabilityFromDefinition(
+                version.source,
+                version.id,
+                version.definition_id,
+              )
+            : null;
+        setDefinitionCapability(capability);
+        if (capability) {
+          setTitle(humanize(capability.name));
+          setState('idle');
+        } else {
+          setState('error');
+          setErrorKind('load');
+          setMessage(t('work.definitionUnavailable'));
+        }
+      },
+      () => {
+        if (!active) return;
+        setState('error');
+        setErrorKind('load');
+        setMessage(t('work.definitionLoadFailed'));
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [
+    definitionAttempt,
+    definitionFirst,
+    initialDefinitionId,
+    initialDefinitionVersionId,
+    t,
+  ]);
+
+  useEffect(() => {
+    if (definitionFirst) return;
     if (!agentId) {
       setProfile(null);
       setCapabilityVersionId('');
@@ -143,14 +212,22 @@ export function NewWork({
     return () => {
       active = false;
     };
-  }, [agentId, initialAgentId, initialCapabilityVersionId, profileAttempt]);
+  }, [
+    agentId,
+    definitionFirst,
+    initialAgentId,
+    initialCapabilityVersionId,
+    profileAttempt,
+  ]);
 
   const capability = useMemo(
     () =>
+      definitionCapability ??
       profile?.workCatalog.find(
         (item) => item.definitionVersionId === capabilityVersionId,
-      ) ?? null,
-    [capabilityVersionId, profile],
+      ) ??
+      null,
+    [capabilityVersionId, definitionCapability, profile],
   );
 
   useEffect(() => {
@@ -180,6 +257,7 @@ export function NewWork({
     setSelectionNotice(null);
     setRosterAttempt((value) => value + 1);
     setProfileAttempt((value) => value + 1);
+    setDefinitionAttempt((value) => value + 1);
   }
 
   async function startWork(): Promise<void> {
@@ -261,80 +339,92 @@ export function NewWork({
         <span className="eyebrow">New Work</span>
         <h2>Start formal Work</h2>
         <p>
-          Choose a Coworker and one of its saved Capabilities, then answer a few
-          questions to start the Work.
+          {definitionFirst
+            ? t('work.definitionStartIntro')
+            : 'Choose a Coworker and one of its saved Capabilities, then answer a few questions to start the Work.'}
         </p>
       </div>
 
       <div className="new-work-form__content">
         <div className="new-work-form__column">
-          <div className="new-work-form__field">
-            <label htmlFor="work-coworker">Coworker</label>
-            <select
-              id="work-coworker"
-              value={agentId}
-              onChange={(event) => {
-                setAgentId(event.target.value);
-                setSelectionNotice(null);
-                setMessage(null);
-              }}
-              disabled={state === 'creating' || state === 'starting'}
-            >
-              <option value="">Choose a Coworker…</option>
-              {coworkers.map((coworker) => (
-                <option key={coworker.id} value={coworker.id}>
-                  {coworker.displayName} · {coworker.roleLabel ?? 'Coworker'}
-                </option>
-              ))}
-            </select>
-          </div>
+          {!definitionFirst ? (
+            <div className="new-work-form__field">
+              <label htmlFor="work-coworker">Coworker</label>
+              <select
+                id="work-coworker"
+                value={agentId}
+                onChange={(event) => {
+                  setAgentId(event.target.value);
+                  setSelectionNotice(null);
+                  setMessage(null);
+                }}
+                disabled={state === 'creating' || state === 'starting'}
+              >
+                <option value="">Choose a Coworker…</option>
+                {coworkers.map((coworker) => (
+                  <option key={coworker.id} value={coworker.id}>
+                    {coworker.displayName} · {coworker.roleLabel ?? 'Coworker'}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
 
-          <div className="new-work-form__field">
-            <label htmlFor="work-capability">Capability</label>
-            <select
-              id="work-capability"
-              value={capabilityVersionId}
-              onChange={(event) => {
-                setCapabilityVersionId(event.target.value);
-                setSelectionNotice(null);
-                setMessage(null);
-              }}
-              disabled={
-                !profile || state === 'creating' || state === 'starting'
-              }
-            >
-              <option value="">Choose what this Coworker should do…</option>
-              {profile?.workCatalog.map((item) => (
-                <option
-                  key={item.definitionVersionId}
-                  value={item.definitionVersionId}
-                >
-                  {humanize(item.name)}
-                </option>
-              ))}
-            </select>
-            {profile && profile.workCatalog.length === 0 ? (
-              <div className="new-work-form__hint">
-                This Coworker has no formal Capabilities yet. Add one from the
-                Coworker profile.
-                <button
-                  type="button"
-                  className="new-work-form__link"
-                  onClick={() =>
-                    navigate(`/agents/${encodeURIComponent(agentId)}`)
-                  }
-                >
-                  Add a Capability
-                </button>
-              </div>
-            ) : null}
-          </div>
+          {!definitionFirst ? (
+            <div className="new-work-form__field">
+              <label htmlFor="work-capability">Capability</label>
+              <select
+                id="work-capability"
+                value={capabilityVersionId}
+                onChange={(event) => {
+                  setCapabilityVersionId(event.target.value);
+                  setSelectionNotice(null);
+                  setMessage(null);
+                }}
+                disabled={
+                  !profile || state === 'creating' || state === 'starting'
+                }
+              >
+                <option value="">Choose what this Coworker should do…</option>
+                {profile?.workCatalog.map((item) => (
+                  <option
+                    key={item.definitionVersionId}
+                    value={item.definitionVersionId}
+                  >
+                    {humanize(item.name)}
+                  </option>
+                ))}
+              </select>
+              {profile && profile.workCatalog.length === 0 ? (
+                <div className="new-work-form__hint">
+                  This Coworker has no formal Capabilities yet. Add one from the
+                  Coworker profile.
+                  <button
+                    type="button"
+                    className="new-work-form__link"
+                    onClick={() =>
+                      navigate(`/agents/${encodeURIComponent(agentId)}`)
+                    }
+                  >
+                    Add a Capability
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
 
           {capability ? (
             <>
               <div className="new-work-form__capability-summary">
                 <strong>{humanize(capability.name)}</strong>
                 <p>{capability.description ?? 'Formal Work capability'}</p>
+                {definitionFirst ? (
+                  <p>
+                    {t('work.definitionExecutor', {
+                      initiator: agentId ? t('work.definitionInitiator') : '',
+                    })}
+                  </p>
+                ) : null}
               </div>
               <div className="new-work-form__field">
                 <label htmlFor="work-title">Work Title</label>
@@ -392,7 +482,7 @@ export function NewWork({
             </div>
           ) : null}
 
-          {state === 'idle' && coworkers.length === 0 ? (
+          {!definitionFirst && state === 'idle' && coworkers.length === 0 ? (
             <div
               className="new-work-form__status new-work-form__status--error"
               role="status"
@@ -704,6 +794,80 @@ function humanize(value: string): string {
     .replaceAll('_', ' ')
     .replaceAll('-', ' ')
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function capabilityFromDefinition(
+  source: Record<string, unknown>,
+  definitionVersionId: string,
+  definitionId: string,
+): CoworkerCapability | null {
+  const metadata = asRecord(source.metadata);
+  const spec = asRecord(source.spec);
+  const name = typeof metadata?.name === 'string' ? metadata.name : null;
+  if (!name) return null;
+  const schema = asRecord(spec?.input_schema);
+  const properties = asRecord(schema?.properties) ?? {};
+  const parsedProperties: Record<string, CapabilityInputProperty> = {};
+  for (const [key, value] of Object.entries(properties)) {
+    const property = asRecord(value);
+    if (!property) return null;
+    const type = property?.type;
+    if (type === 'string') {
+      parsedProperties[key] = {
+        type,
+        ...(typeof property.min_length === 'number'
+          ? { minLength: property.min_length }
+          : {}),
+        ...(typeof property.max_length === 'number'
+          ? { maxLength: property.max_length }
+          : {}),
+        ...(Array.isArray(property.enum) &&
+        property.enum.every((item) => typeof item === 'string')
+          ? { choices: property.enum }
+          : {}),
+      };
+      continue;
+    }
+    if (type === 'number' || type === 'integer') {
+      parsedProperties[key] = {
+        type,
+        ...(typeof property.minimum === 'number'
+          ? { minimum: property.minimum }
+          : {}),
+        ...(typeof property.maximum === 'number'
+          ? { maximum: property.maximum }
+          : {}),
+      };
+      continue;
+    }
+    if (type === 'boolean') {
+      parsedProperties[key] = { type };
+      continue;
+    }
+    return null;
+  }
+  return {
+    definitionId,
+    definitionVersionId,
+    name,
+    description:
+      typeof metadata?.description === 'string' ? metadata.description : null,
+    inputSchema: {
+      properties: parsedProperties,
+      required: Array.isArray(schema?.required)
+        ? schema.required.filter(
+            (value): value is string => typeof value === 'string',
+          )
+        : [],
+      additionalProperties: schema?.additional_properties === true,
+    },
+  };
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
 }
 
 function AdvancedDefinitionAuthoring({

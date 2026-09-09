@@ -46,6 +46,9 @@ export function WorkPage({
       requested: query.get('new') === '1',
       agentId: query.get('agent'),
       capabilityVersionId: query.get('capability'),
+      definitionId: query.get('definition'),
+      definitionVersionId: query.get('version'),
+      initiatorId: query.get('initiator'),
     };
   }, [location.search]);
   const [showNewWork, setShowNewWork] = useState(authoringRequest.requested);
@@ -151,6 +154,9 @@ export function WorkPage({
               originConversationId={returnConversationId}
               initialAgentId={authoringRequest.agentId}
               initialCapabilityVersionId={authoringRequest.capabilityVersionId}
+              initialDefinitionId={authoringRequest.definitionId}
+              initialDefinitionVersionId={authoringRequest.definitionVersionId}
+              initialInitiatorId={authoringRequest.initiatorId}
               onWorkCreated={() => refreshWorkList?.()}
             />
           ) : null}

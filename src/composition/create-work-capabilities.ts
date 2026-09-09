@@ -197,15 +197,12 @@ export function createWorkModule(options: CreateWorkModuleOptions): WorkModule {
     runtimeCapabilities: options.runtimeCapabilities,
     productDefinitions: {
       async getInputContract({ versionId, accessContext }) {
-        const productVersion = await definitionSources.findProductVersion(
-          versionId,
-          {
+        const productVersion =
+          await definitionSources.findProductVersionByWorkspace({
+            versionId,
             tenantId: accessContext.tenantId,
             workspaceId: accessContext.workspaceId,
-            principalType: accessContext.principalType,
-            principalId: accessContext.principalId,
-          },
-        );
+          });
         if (!productVersion) return null;
         const parsed = validateProductWorkDefinition(
           JSON.stringify(productVersion.authorSource),
@@ -273,15 +270,12 @@ export function createWorkModule(options: CreateWorkModuleOptions): WorkModule {
     identity: workIdentity,
     startWorkRun: startWorkRunPrimitive,
     schemaForVersion: async ({ versionId, accessContext }) => {
-      const productVersion = await definitionSources.findProductVersion(
-        versionId,
-        {
+      const productVersion =
+        await definitionSources.findProductVersionByWorkspace({
+          versionId,
           tenantId: accessContext.tenantId,
           workspaceId: accessContext.workspaceId,
-          principalType: accessContext.principalType,
-          principalId: accessContext.principalId,
-        },
-      );
+        });
       if (!productVersion) return null;
       const parsed = validateProductWorkDefinition(
         JSON.stringify(productVersion.authorSource),

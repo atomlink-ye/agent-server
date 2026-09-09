@@ -5,7 +5,10 @@ import type {
 import type { DefinitionReadApi } from '../ports/definition-read-api.js';
 import type { EnvironmentReadApi } from '../ports/environment-read-api.js';
 import type { MemoryVersionReadApi } from '../ports/memory-version-read-api.js';
-import type { WorkDefinitionSourceRepository } from '../ports/work-definition-source-repository.js';
+import type {
+  WorkDefinitionSourceOwner,
+  WorkDefinitionSourceRepository,
+} from '../ports/work-definition-source-repository.js';
 import type {
   ResolveWorkDefinitionInput,
   WorkDefinitionResolutionPort,
@@ -37,7 +40,10 @@ export interface ResolveWorkDefinitionOptions {
   readonly environments: EnvironmentReadApi;
   readonly authoredDefinitions?: Pick<
     WorkDefinitionSourceRepository,
-    'findDefinition' | 'findPublishedVersion'
+    | 'findDefinition'
+    | 'findPublishedVersion'
+    | 'findDefinitionByWorkspace'
+    | 'findPublishedVersionByWorkspace'
   >;
   readonly memories?: MemoryVersionReadApi;
 }
@@ -67,9 +73,23 @@ export class ResolveWorkDefinition implements WorkDefinitionResolutionPort {
     const repository = this.options.authoredDefinitions;
     if (!repository) return null;
     const owner = definitionSourceOwner(input);
+    const workspaceOwner = {
+      tenantId: input.accessContext.tenantId,
+      workspaceId: input.accessContext.workspaceId,
+    };
     const [definition, version] = await Promise.all([
-      repository.findDefinition(input.definitionId, owner),
-      repository.findPublishedVersion(input.definitionVersionId, owner),
+      repository.findDefinitionByWorkspace
+        ? repository.findDefinitionByWorkspace(
+            input.definitionId,
+            workspaceOwner,
+          )
+        : repository.findDefinition(input.definitionId, owner),
+      repository.findPublishedVersionByWorkspace
+        ? repository.findPublishedVersionByWorkspace(
+            input.definitionVersionId,
+            workspaceOwner,
+          )
+        : repository.findPublishedVersion(input.definitionVersionId, owner),
     ]);
     if (!definition && !version) return null;
     if (!definition || !version || version.definitionId !== definition.id)
@@ -85,22 +105,29 @@ export class ResolveWorkDefinition implements WorkDefinitionResolutionPort {
     definition: WorkDefinitionSourceDefinition,
     version: WorkDefinitionSourceVersion,
   ): Promise<ResolvedWorkDefinition> {
+    const authorOwner = version.owner;
     const memories = await this.resolveMemories(
       input,
       version.source.memoryVersionIds,
+      authorOwner,
     );
     if (version.source.kind === 'single_worker') {
       const environment = await this.resolveEnvironment(
         input,
         version.source.environmentVersionId,
         '$.resources.environment',
+        authorOwner,
       );
-      const participant = await this.resolveWorkerParticipant(input, {
-        logicalName: definition.name,
-        role: 'primary',
-        workerVersionId: version.source.workerVersionId,
-        diagnosticPath: '$.participants.primary',
-      });
+      const participant = await this.resolveWorkerParticipant(
+        input,
+        {
+          logicalName: definition.name,
+          role: 'primary',
+          workerVersionId: version.source.workerVersionId,
+          diagnosticPath: '$.participants.primary',
+        },
+        authorOwner,
+      );
       const needsPlatformMcp =
         participant.toolRefs.length > 0 || participant.skills.length > 0;
       const platformCapabilities = Object.freeze(
@@ -141,6 +168,7 @@ export class ResolveWorkDefinition implements WorkDefinitionResolutionPort {
       definition,
       version,
       memories,
+      authorOwner,
     );
   }
 
@@ -154,10 +182,11 @@ export class ResolveWorkDefinition implements WorkDefinitionResolutionPort {
       >;
     },
     memories: readonly ResolvedMemoryRef[],
+    authorOwner: WorkDefinitionSourceOwner,
   ): Promise<ResolvedWorkDefinition> {
     const team = await this.options.definitions.findPublishedTeamVersionById(
       version.source.teamVersionId,
-      invokableOwner(input),
+      authorOwner,
     );
     if (!team)
       throw new WorkCompositionResolutionError(
@@ -173,23 +202,32 @@ export class ResolveWorkDefinition implements WorkDefinitionResolutionPort {
       input,
       version.source.environmentVersionId,
       '$.resources.environment',
+      authorOwner,
     );
     const participants: ResolvedWorkParticipant[] = [
-      await this.resolveWorkerParticipant(input, {
-        logicalName: team.spec.lead.name,
-        role: 'lead',
-        workerVersionId: team.spec.lead.workerVersionId,
-        diagnosticPath: '$.participants.lead',
-      }),
+      await this.resolveWorkerParticipant(
+        input,
+        {
+          logicalName: team.spec.lead.name,
+          role: 'lead',
+          workerVersionId: team.spec.lead.workerVersionId,
+          diagnosticPath: '$.participants.lead',
+        },
+        authorOwner,
+      ),
     ];
     for (const [index, member] of team.spec.roster.entries()) {
       participants.push(
-        await this.resolveWorkerParticipant(input, {
-          logicalName: member.name,
-          role: 'member',
-          workerVersionId: member.workerVersionId,
-          diagnosticPath: `$.participants.members[${index}]`,
-        }),
+        await this.resolveWorkerParticipant(
+          input,
+          {
+            logicalName: member.name,
+            role: 'member',
+            workerVersionId: member.workerVersionId,
+            diagnosticPath: `$.participants.members[${index}]`,
+          },
+          authorOwner,
+        ),
       );
     }
     const base = {
@@ -225,9 +263,10 @@ export class ResolveWorkDefinition implements WorkDefinitionResolutionPort {
     input: ResolveWorkDefinitionInput,
     versionId: string,
     path: string,
+    owner: WorkDefinitionSourceOwner,
   ) {
     const environment = await this.options.environments.findVersion(
-      managedOwner(input),
+      owner,
       versionId,
     );
     if (!environment || environment.status !== 'published')
@@ -244,6 +283,7 @@ export class ResolveWorkDefinition implements WorkDefinitionResolutionPort {
   private async resolveMemories(
     input: ResolveWorkDefinitionInput,
     versionIds: readonly string[],
+    owner: WorkDefinitionSourceOwner,
   ): Promise<readonly ResolvedMemoryRef[]> {
     if (versionIds.length === 0) return Object.freeze([]);
     if (!this.options.memories)
@@ -253,10 +293,7 @@ export class ResolveWorkDefinition implements WorkDefinitionResolutionPort {
       );
     const memories: ResolvedMemoryRef[] = [];
     for (const [index, versionId] of versionIds.entries()) {
-      const memory = await this.options.memories.findVersion(
-        versionId,
-        invokableOwner(input),
-      );
+      const memory = await this.options.memories.findVersion(versionId, owner);
       if (!memory)
         throw new WorkCompositionResolutionError(
           'The Work references an unavailable immutable Memory version.',
@@ -281,10 +318,11 @@ export class ResolveWorkDefinition implements WorkDefinitionResolutionPort {
       readonly workerVersionId: string;
       readonly diagnosticPath: string;
     },
+    owner: WorkDefinitionSourceOwner,
   ): Promise<ResolvedWorkParticipant> {
     const resolved = await this.options.workerResolution.resolvePublished(
       participant.workerVersionId,
-      invokableOwner(input),
+      owner,
       { resolveExtensions: true },
     );
     if (!resolved)
@@ -304,7 +342,7 @@ export class ResolveWorkDefinition implements WorkDefinitionResolutionPort {
         );
     }
     const worker = await this.options.workers.findVersion(
-      managedOwner(input),
+      owner,
       participant.workerVersionId,
     );
     if (!worker || worker.status !== 'published')
@@ -326,15 +364,6 @@ export class ResolveWorkDefinition implements WorkDefinitionResolutionPort {
       skills: Object.freeze(skills),
     });
   }
-}
-
-function managedOwner(input: ResolveWorkDefinitionInput) {
-  return {
-    tenantId: input.accessContext.tenantId,
-    workspaceId: input.accessContext.workspaceId,
-    principalType: input.accessContext.principalType,
-    principalId: input.accessContext.principalId,
-  };
 }
 
 function invokableOwner(input: ResolveWorkDefinitionInput) {

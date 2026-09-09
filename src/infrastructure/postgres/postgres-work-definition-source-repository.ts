@@ -90,6 +90,19 @@ export class PostgresWorkDefinitionSourceRepository implements WorkDefinitionSou
     return result.rows?.[0] ? mapDefinition(result.rows[0]) : null;
   }
 
+  public async findDefinitionByWorkspace(
+    id: string,
+    owner: Pick<WorkDefinitionSourceOwner, 'tenantId' | 'workspaceId'>,
+  ): Promise<WorkDefinitionSourceDefinition | null> {
+    const result = await this.db.query<DefinitionRow>(
+      `SELECT ${definitionColumns}
+         FROM work_definition_source_definitions
+        WHERE id=$1 AND tenant_id=$2 AND workspace_id=$3`,
+      [id, owner.tenantId, owner.workspaceId],
+    );
+    return result.rows?.[0] ? mapDefinition(result.rows[0]) : null;
+  }
+
   public async listProductDefinitions(input: {
     readonly owner: WorkDefinitionSourceOwner;
     readonly limit: number;
@@ -142,6 +155,19 @@ export class PostgresWorkDefinitionSourceRepository implements WorkDefinitionSou
         WHERE id=$1 AND tenant_id=$2 AND workspace_id=$3
           AND principal_type=$4 AND principal_id=$5 AND status='published'`,
       ownerValues(id, owner),
+    );
+    return result.rows?.[0] ? mapVersion(result.rows[0]) : null;
+  }
+
+  public async findPublishedVersionByWorkspace(
+    id: string,
+    owner: Pick<WorkDefinitionSourceOwner, 'tenantId' | 'workspaceId'>,
+  ): Promise<WorkDefinitionSourceVersion | null> {
+    const result = await this.db.query<VersionRow>(
+      `SELECT ${versionColumns}
+         FROM work_definition_source_versions
+        WHERE id=$1 AND tenant_id=$2 AND workspace_id=$3 AND status='published'`,
+      [id, owner.tenantId, owner.workspaceId],
     );
     return result.rows?.[0] ? mapVersion(result.rows[0]) : null;
   }
@@ -242,6 +268,20 @@ export class PostgresWorkDefinitionSourceRepository implements WorkDefinitionSou
          AND v.principal_type=$4 AND v.principal_id=$5`,
       ),
       ownerValues(id, owner),
+    );
+    const row = result.rows?.[0];
+    if (!row || !row.author_source || !row.author_fingerprint) return null;
+    return mapProductVersion(row);
+  }
+
+  public async findProductVersionByWorkspace(input: {
+    readonly versionId: string;
+    readonly tenantId: string;
+    readonly workspaceId: string;
+  }): Promise<ProductWorkDefinitionVersionRecord | null> {
+    const result = await this.db.query<ProductVersionRow>(
+      productVersionSelect(`v.id=$1 AND v.tenant_id=$2 AND v.workspace_id=$3`),
+      [input.versionId, input.tenantId, input.workspaceId],
     );
     const row = result.rows?.[0];
     if (!row || !row.author_source || !row.author_fingerprint) return null;

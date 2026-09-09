@@ -70,6 +70,16 @@ export interface WorkDefinitionSourceRepository {
     id: string,
     owner: WorkDefinitionSourceOwner,
   ): Promise<WorkDefinitionSourceVersion | null>;
+  /** Resolve an already-pinned authored Definition within a workspace. */
+  findDefinitionByWorkspace?(
+    id: string,
+    owner: Pick<WorkDefinitionSourceOwner, 'tenantId' | 'workspaceId'>,
+  ): Promise<WorkDefinitionSourceDefinition | null>;
+  /** Resolve an already-pinned authored Definition version within a workspace. */
+  findPublishedVersionByWorkspace?(
+    id: string,
+    owner: Pick<WorkDefinitionSourceOwner, 'tenantId' | 'workspaceId'>,
+  ): Promise<WorkDefinitionSourceVersion | null>;
   publish(input: PublishWorkDefinitionSourceInput): Promise<{
     readonly definition: WorkDefinitionSourceDefinition;
     readonly version: WorkDefinitionSourceVersion;
@@ -79,6 +89,16 @@ export interface WorkDefinitionSourceRepository {
     id: string,
     owner: WorkDefinitionSourceOwner,
   ): Promise<ProductWorkDefinitionVersionRecord | null>;
+  /**
+   * Resolve an already-pinned Product Definition version within a workspace.
+   * Preparation is a workspace-scoped operation; this lookup intentionally
+   * does not require the caller's principal to match the authoring principal.
+   */
+  findProductVersionByWorkspace?(input: {
+    readonly versionId: string;
+    readonly tenantId: string;
+    readonly workspaceId: string;
+  }): Promise<ProductWorkDefinitionVersionRecord | null>;
   findProductVersionByAuthorFingerprint?(input: {
     readonly definitionId: string;
     readonly owner: WorkDefinitionSourceOwner;

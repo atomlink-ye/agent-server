@@ -7,6 +7,11 @@ export interface ChatComposerProps {
   readonly disabled: boolean;
   readonly sendError: string | null;
   readonly canRetry: boolean;
+  readonly placeholder?: string;
+  readonly fieldLabel?: string;
+  readonly sendLabel?: string;
+  readonly sendingLabel?: string;
+  readonly hint?: string;
   readonly onDraftChange: (draft: string) => void;
   readonly onSend: (body: string) => void;
   readonly onRetry: () => void;
@@ -18,6 +23,11 @@ export function ChatComposer({
   disabled,
   sendError,
   canRetry,
+  placeholder,
+  fieldLabel,
+  sendLabel,
+  sendingLabel,
+  hint,
   onDraftChange,
   onSend,
   onRetry,
@@ -50,17 +60,21 @@ export function ChatComposer({
         }}
       >
         <label className="sr-only" htmlFor="message">
-          {t('composer.field.label')}
+          {fieldLabel ?? t('composer.field.label')}
         </label>
         <textarea
           id="message"
           value={draft}
           disabled={disabled || sending}
-          placeholder={t('composer.field.placeholder')}
+          placeholder={placeholder ?? t('composer.field.placeholder')}
           rows={1}
           onChange={(event) => onDraftChange(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key === 'Enter' && !event.shiftKey) {
+            if (
+              event.key === 'Enter' &&
+              !event.shiftKey &&
+              !event.nativeEvent.isComposing
+            ) {
               event.preventDefault();
               submit();
             }
@@ -70,14 +84,18 @@ export function ChatComposer({
           <button
             className="send-button"
             type="submit"
-            aria-label={sending ? t('composer.sending') : t('composer.send')}
+            aria-label={
+              sending
+                ? (sendingLabel ?? t('composer.sending'))
+                : (sendLabel ?? t('composer.send'))
+            }
             disabled={sendDisabled}
           >
             <ISend aria-hidden="true" />
           </button>
         </div>
       </form>
-      <p className="composer-hint">{t('composer.hint')}</p>
+      <p className="composer-hint">{hint ?? t('composer.hint')}</p>
     </>
   );
 }

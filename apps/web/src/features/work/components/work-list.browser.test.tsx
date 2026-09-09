@@ -282,7 +282,8 @@ it('renders bound and unbound catalog cards without clipping their controls', as
           {
             agent_definition_id: catalogAgentId,
             definition_version_id: catalogVersionId,
-            display_name: 'Maya',
+            display_name:
+              'Maya with an intentionally long coworker name for wrapping coverage',
             role_label: 'Researcher',
           },
         ],
@@ -302,7 +303,8 @@ it('renders bound and unbound catalog cards without clipping their controls', as
         items: [
           {
             id: catalogAgentId,
-            display_name: 'Maya',
+            display_name:
+              'Maya with an intentionally long coworker name for wrapping coverage',
             role_label: 'Researcher',
             summary: 'Researches workflows.',
             active_agent_version_id: uuid(906),
@@ -315,6 +317,12 @@ it('renders bound and unbound catalog cards without clipping their controls', as
   ]);
   const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
     const path = String(input);
+    if (
+      path ===
+      `/api/work-definitions/${catalogDefinitionId}/agents/${catalogAgentId}`
+    ) {
+      return jsonResponse({ associated: true });
+    }
     if (path === '/api/work-definitions/plan')
       return catalogPlanResponse('catalog-workflow');
     const body = responses.get(path);
@@ -353,12 +361,25 @@ it('renders bound and unbound catalog cards without clipping their controls', as
 
     for (const card of cards) {
       const cardRect = card.getBoundingClientRect();
-      const select = card.querySelector<HTMLSelectElement>('select');
-      expect(select).not.toBeNull();
-      expect(select!.getBoundingClientRect().right).toBeLessThanOrEqual(
+      const bindMenu = card.querySelector<HTMLElement>('details');
+      expect(bindMenu).not.toBeNull();
+      expect(bindMenu!.getBoundingClientRect().right).toBeLessThanOrEqual(
         cardRect.right + 1,
       );
     }
+    const menu = cards[0]!.querySelector<HTMLDetailsElement>('details')!;
+    const summary = menu.querySelector('summary')!;
+    expect(summary.tabIndex).toBe(0);
+    await act(async () => summary.click());
+    expect(menu.open).toBe(true);
+    const coworkerButton = menu.querySelector<HTMLButtonElement>('button')!;
+    expect(coworkerButton.textContent).toContain('intentionally long');
+    expect(getComputedStyle(coworkerButton).overflowWrap).toBe('break-word');
+    await act(async () => coworkerButton.click());
+    expect(menu.open).toBe(false);
+    expect(fetchMock.mock.calls.map(([input]) => String(input))).toContain(
+      `/api/work-definitions/${catalogDefinitionId}/agents/${catalogAgentId}`,
+    );
     expect(
       cards[0]!.querySelector('a.work-catalog-card__create'),
     ).not.toBeNull();

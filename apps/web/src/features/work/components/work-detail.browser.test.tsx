@@ -153,12 +153,21 @@ function mockProductReads(
     readonly definition?: ReturnType<typeof productDefinitionVersion>;
     readonly currentDefinitionMissing?: boolean;
     readonly sessionTranscripts?: ProductSessionTranscriptsResponse;
+    readonly chatMessages?: readonly unknown[];
   } = {},
 ) {
   const runList = input.runList ?? runs;
   const runId = input.selectedRunId ?? selectedRun.id;
   const definition = input.definition ?? definitionVersion;
   const responses = new Map<string, unknown>([
+    [
+      '/api/auth/me',
+      {
+        user_id: 'browser-test-user',
+        username: 'browser-test',
+        display_name: 'Browser Test',
+      },
+    ],
     ['/api/works', { works: projectedWorks.works, next_cursor: null }],
     [
       '/api/runtime-capabilities',
@@ -182,6 +191,14 @@ function mockProductReads(
     [
       `/api/works/${work.work.id}/runs/${runId}/session-transcripts`,
       input.sessionTranscripts,
+    ],
+    [
+      `/api/works/${work.work.id}/chat`,
+      {
+        work_id: work.work.id,
+        messages: input.chatMessages ?? [],
+        preparation: null,
+      },
     ],
   ]);
   const fetchMock = vi.fn().mockImplementation(async (path: string) => {
@@ -242,6 +259,20 @@ const longTranscript: ProductSessionTranscriptsResponse = {
   ],
 };
 
+const longChatMessages = Array.from({ length: 80 }, (_, index) => ({
+  id: `00000000-0000-4000-8000-${String(index + 800).padStart(12, '0')}`,
+  sequence: index + 1,
+  role: index % 2 === 0 ? 'lead' : 'user',
+  body:
+    index === 79
+      ? 'Final visible Work Chat message'
+      : `Recorded Work Chat message ${index + 1}`,
+  status: 'replied',
+  reply_to_message_id: null,
+  failure_code: null,
+  created_at: `2026-08-13T03:${String(index % 60).padStart(2, '0')}:00.000Z`,
+}));
+
 function shellCommands() {
   return {
     loadCoworkers: async () => [],
@@ -301,6 +332,55 @@ it('scrolls the real Work detail transcript to its final entry in the AppShell r
     );
     await page.screenshot({
       path: '../../../../../../.local/work-detail-transcript-scroll-desktop.png',
+    });
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
+it('keeps the Work Chat composer visible when the main Work viewport reaches the latest message', async () => {
+  mockProductReads({ chatMessages: longChatMessages });
+  const host = document.createElement('div');
+  host.style.height = '900px';
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(
+        <MemoryRouter
+          initialEntries={[
+            `/work/${work.work.id}?tab=chat&run=${selectedRun.id}`,
+          ]}
+        >
+          <AppProviders commands={shellCommands()}>
+            <AppRouter />
+          </AppProviders>
+        </MemoryRouter>,
+      );
+      for (let turn = 0; turn < 8; turn += 1)
+        await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    const content = host.querySelector<HTMLElement>('.work-main-content');
+    const shell = host.querySelector<HTMLElement>('.work-shell');
+    const composer = host.querySelector<HTMLElement>('.work-chat-composer');
+    expect(content).not.toBeNull();
+    expect(shell).not.toBeNull();
+    expect(composer).not.toBeNull();
+    expect(content!.textContent).toContain('Final visible Work Chat message');
+    content!.scrollTop = content!.scrollHeight;
+    const contentRect = content!.getBoundingClientRect();
+    const shellRect = shell!.getBoundingClientRect();
+    const composerRect = composer!.getBoundingClientRect();
+    expect(
+      Math.abs(shellRect.top + content!.scrollTop - contentRect.top),
+    ).toBeLessThanOrEqual(1);
+    expect(composerRect.top).toBeGreaterThanOrEqual(contentRect.top);
+    expect(composerRect.bottom).toBeLessThanOrEqual(contentRect.bottom);
+    await page.screenshot({
+      path: '../../../../../../.local/work-chat-composer-bottom-desktop.png',
     });
   } finally {
     await act(async () => root.unmount());

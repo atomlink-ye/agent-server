@@ -254,6 +254,7 @@ function WorkCatalog({ works }: { readonly works: readonly WorkListItem[] }) {
   const [choosingInitiatorFor, setChoosingInitiatorFor] = useState<
     string | null
   >(null);
+  const [openBindMenuFor, setOpenBindMenuFor] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -285,6 +286,7 @@ function WorkCatalog({ works }: { readonly works: readonly WorkListItem[] }) {
     agentId: string,
   ): Promise<void> {
     if (!agentId || bindingDefinitionId) return;
+    setOpenBindMenuFor(null);
     setBindingDefinitionId(definition.definitionId);
     setBindingError(null);
     try {
@@ -435,24 +437,35 @@ function WorkCatalog({ works }: { readonly works: readonly WorkListItem[] }) {
                       </span>
                     ) : null}
                     {coworkers.length > 0 ? (
-                      <select
-                        className="work-catalog-card__select"
-                        aria-label={t('work.bindCoworker')}
-                        defaultValue=""
-                        disabled={
-                          bindingDefinitionId === definition.definitionId
-                        }
-                        onChange={(event) =>
-                          void bindDefinition(definition, event.target.value)
+                      <details
+                        className="work-catalog-card__bind-menu"
+                        open={openBindMenuFor === definition.definitionId}
+                        onToggle={(event) =>
+                          setOpenBindMenuFor(
+                            event.currentTarget.open
+                              ? definition.definitionId
+                              : null,
+                          )
                         }
                       >
-                        <option value="">{t('work.bindCoworker')}</option>
-                        {coworkers.map((coworker) => (
-                          <option key={coworker.id} value={coworker.id}>
-                            {coworker.displayName}
-                          </option>
-                        ))}
-                      </select>
+                        <summary>{t('work.bindCoworker')}</summary>
+                        <div role="group" aria-label={t('work.bindCoworker')}>
+                          {coworkers.map((coworker) => (
+                            <button
+                              key={coworker.id}
+                              type="button"
+                              disabled={
+                                bindingDefinitionId === definition.definitionId
+                              }
+                              onClick={() =>
+                                void bindDefinition(definition, coworker.id)
+                              }
+                            >
+                              {coworker.displayName}
+                            </button>
+                          ))}
+                        </div>
+                      </details>
                     ) : null}
                   </span>
                 </span>

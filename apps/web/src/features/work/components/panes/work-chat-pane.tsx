@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useT } from '../../../../i18n';
+import { IChat } from '../../../../components/icons';
+import { ChatComposer } from '../../../conversations/components/ChatComposer';
+import { AssistantMarkdown } from '../../../conversations/components/assistant-markdown';
 import { workClient } from '../../clients/work-client';
 import { ProductMutationError } from '../../clients/errors';
 import type {
@@ -97,51 +100,72 @@ export function WorkChatPane({ workId }: { readonly workId: string }) {
       {loading ? <p aria-live="polite">{t('work.detail.loading')}</p> : null}
       {error ? <p role="alert">{t('work.chat.loadError')}</p> : null}
       {!loading && !messages.length ? (
-        <>
+        <div className="work-chat-empty-state">
+          <div className="work-chat-empty-state__icon" aria-hidden="true">
+            <IChat />
+          </div>
           <h2>{t('work.chat.emptyTitle')}</h2>
           <p>{t('work.chat.emptyBody')}</p>
-        </>
+        </div>
       ) : null}
       <div className="work-chat-history" aria-live="polite">
         {messages.map((message) => (
-          <article
+          <div
             className={`work-chat-message work-chat-message--${message.role}`}
             key={message.id}
           >
-            <strong>
+            <span className="work-chat-message__avatar" aria-hidden="true">
               {message.role === 'lead'
-                ? 'Lead'
+                ? 'L'
                 : message.role === 'system'
-                  ? 'System'
-                  : 'User'}
-            </strong>
-            <p>{message.body}</p>
-            {message.status === 'queued' ? (
-              <small>{t('work.chat.queued')}</small>
-            ) : null}
-            {message.status === 'processing' ? (
-              <small>{t('work.chat.processing')}</small>
-            ) : null}
-            {message.status === 'failed' ? (
-              <small>
-                {t('work.chat.failed')}{' '}
-                <button
-                  type="button"
-                  onClick={() =>
-                    void workClient
-                      .retryChat(workId, message.id)
-                      .then(() =>
-                        workClient
-                          .chat(workId)
-                          .then((response) => setMessages(response.messages)),
-                      )
-                  }
-                >
-                  {t('common.retry')}
-                </button>
-              </small>
-            ) : null}
-          </article>
+                  ? '·'
+                  : 'Y'}
+            </span>
+            <article
+              className="chat-message"
+              data-author-type={
+                message.role === 'user' ? 'principal' : 'agent_definition'
+              }
+            >
+              <span className="work-chat-message__author">
+                {message.role === 'lead'
+                  ? 'Lead'
+                  : message.role === 'system'
+                    ? 'System'
+                    : 'User'}
+              </span>
+              {message.role === 'user' ? (
+                <p>{message.body}</p>
+              ) : (
+                <AssistantMarkdown text={message.body} />
+              )}
+              {message.status === 'queued' ? (
+                <small>{t('work.chat.queued')}</small>
+              ) : null}
+              {message.status === 'processing' ? (
+                <small>{t('work.chat.processing')}</small>
+              ) : null}
+              {message.status === 'failed' ? (
+                <small>
+                  {t('work.chat.failed')}{' '}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void workClient
+                        .retryChat(workId, message.id)
+                        .then(() =>
+                          workClient
+                            .chat(workId)
+                            .then((response) => setMessages(response.messages)),
+                        )
+                    }
+                  >
+                    {t('common.retry')}
+                  </button>
+                </small>
+              ) : null}
+            </article>
+          </div>
         ))}
       </div>
       {preparation ? (
@@ -189,37 +213,23 @@ export function WorkChatPane({ workId }: { readonly workId: string }) {
           {preparationError ? <p role="alert">{preparationError}</p> : null}
         </aside>
       ) : null}
-      <form
-        className="work-chat-composer"
-        onSubmit={(event) => {
-          event.preventDefault();
-          void send();
-        }}
-      >
-        <label htmlFor="work-chat-message">{t('composer.field.label')}</label>
-        <textarea
-          id="work-chat-message"
-          value={body}
-          onChange={(event) => setBody(event.target.value)}
-          onKeyDown={(event) => {
-            if (
-              event.key === 'Enter' &&
-              !event.shiftKey &&
-              !event.nativeEvent.isComposing
-            ) {
-              event.preventDefault();
-              void send();
-            }
-          }}
+      <div className="work-chat-composer">
+        <ChatComposer
+          draft={body}
+          sending={sending}
+          disabled={false}
+          sendError={error ? t('work.chat.sendError') : null}
+          canRetry={Boolean(body.trim())}
+          fieldLabel={t('composer.field.label')}
           placeholder={t('work.chat.placeholder')}
-          rows={3}
-          disabled={sending}
+          sendLabel={t('work.chat.send')}
+          sendingLabel={t('work.chat.sending')}
+          hint={t('composer.hint')}
+          onDraftChange={setBody}
+          onSend={() => void send()}
+          onRetry={() => void send()}
         />
-        <button type="submit" disabled={sending || !body.trim()}>
-          {sending ? t('work.chat.sending') : t('work.chat.send')}
-        </button>
-        {error ? <p role="alert">{t('work.chat.sendError')}</p> : null}
-      </form>
+      </div>
     </section>
   );
 }

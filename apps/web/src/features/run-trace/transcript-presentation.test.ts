@@ -75,6 +75,7 @@ it('keeps the captured actor on a lifecycle row', () => {
       {
         kind: 'lifecycle',
         status: 'started',
+        ordinal: 1,
         sequence: 1,
         created_at: '2026-09-09T02:11:34.000Z',
       },

@@ -36,6 +36,10 @@ export type RuntimeScope =
   | Readonly<{
       readonly kind: 'run';
       readonly id: string;
+    }>
+  | Readonly<{
+      readonly kind: 'work_chat';
+      readonly id: string;
     }>;
 
 export interface RuntimeSessionOwner {

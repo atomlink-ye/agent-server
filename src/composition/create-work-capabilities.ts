@@ -62,6 +62,8 @@ import type { AppConfig } from '../shared/config.js';
 import type { Logger } from '../shared/observability/logger.js';
 import type { Pool } from 'pg';
 import { PostgresExecutionFactQuery } from '../infrastructure/postgres/postgres-execution-fact-query.js';
+import { PostgresWorkChatRepository } from '../infrastructure/postgres/postgres-work-chat-repository.js';
+import { WorkChatService } from '../application/work-chat/work-chat-service.js';
 
 export interface WorkModuleHttpOptions {
   readonly teamDriver?: Pick<TeamDriver, 'decideCompletion'>;
@@ -102,6 +104,7 @@ export interface InstallWorkHttpRoutesOptions {
   readonly chatWorkCard: ReturnType<typeof createChatWorkCardProjection>;
   readonly executionDetail: Pick<GetProductExecutionDetail, 'execute'>;
   readonly sessionTranscripts: Pick<GetProductSessionTranscripts, 'execute'>;
+  readonly workChat: WorkChatService;
   readonly teamDriver?: Pick<TeamDriver, 'decideCompletion'>;
   readonly teamExecutions?: Pick<
     TeamExecutionRepository,
@@ -135,6 +138,7 @@ export function installWorkHttpRoutes(
     chatWorkCard,
     executionDetail,
     sessionTranscripts,
+    workChat,
     teamDriver,
     teamExecutions,
   } = dependencies;
@@ -154,6 +158,7 @@ export function installWorkHttpRoutes(
     productProjection: projection,
     executionDetail,
     sessionTranscripts,
+    workChat,
   });
   registerWorkCardRoutes(app, {
     config,
@@ -254,6 +259,9 @@ export function createWorkModule(options: CreateWorkModuleOptions): WorkModule {
     new PostgresSessionTranscriptFactsQuery(options.database),
     new PostgresRunEventRepository(options.database),
   );
+  const workChat = new WorkChatService(
+    new PostgresWorkChatRepository(options.database),
+  );
 
   return {
     identity: workIdentity,
@@ -276,6 +284,7 @@ export function createWorkModule(options: CreateWorkModuleOptions): WorkModule {
         chatWorkCard,
         executionDetail,
         sessionTranscripts,
+        workChat,
         ...(extras?.teamDriver ? { teamDriver: extras.teamDriver } : {}),
         ...(extras?.teamExecutions
           ? { teamExecutions: extras.teamExecutions }

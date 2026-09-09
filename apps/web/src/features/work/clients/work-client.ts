@@ -7,6 +7,12 @@ import {
   GetWorkResponseSchema,
   WorkListResponseSchema,
 } from '@atomlink-ye/agent-server/product-contract';
+import {
+  PostWorkChatMessageResponseSchema,
+  RetryWorkChatMessageResponseSchema,
+  WorkChatMessagesResponseSchema,
+  type WorkChatMessagesResponse,
+} from '@atomlink-ye/agent-server/product-contract';
 
 import { apiTransport } from '../../../api/transport';
 import {
@@ -69,6 +75,59 @@ export class WorkClient {
     } catch (error) {
       return productMutationError(error);
     }
+  }
+
+  async chat(workId: string): Promise<WorkChatMessagesResponse> {
+    return parseProduct(
+      WorkChatMessagesResponseSchema,
+      await readProductJson(`/api/works/${encodeURIComponent(workId)}/chat`, {
+        method: 'GET',
+        cache: 'no-store',
+      }),
+    );
+  }
+
+  async postChat(
+    workId: string,
+    body: string,
+    clientRequestId: string = crypto.randomUUID(),
+  ): Promise<WorkChatMessagesResponse['messages'][number]> {
+    try {
+      const response = parseProduct(
+        PostWorkChatMessageResponseSchema,
+        await apiTransport.request(
+          `/api/works/${encodeURIComponent(workId)}/chat`,
+          {
+            method: 'POST',
+            cache: 'no-store',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ body, client_request_id: clientRequestId }),
+          },
+        ),
+      );
+      return response.message;
+    } catch (error) {
+      return productMutationError(error);
+    }
+  }
+
+  async retryChat(
+    workId: string,
+    messageId: string,
+  ): Promise<WorkChatMessagesResponse['messages'][number]> {
+    const response = parseProduct(
+      RetryWorkChatMessageResponseSchema,
+      await apiTransport.request(
+        `/api/works/${encodeURIComponent(workId)}/chat/${encodeURIComponent(messageId)}/retry`,
+        {
+          method: 'POST',
+          cache: 'no-store',
+          headers: { 'content-type': 'application/json' },
+          body: '{}',
+        },
+      ),
+    );
+    return response.message;
   }
 }
 

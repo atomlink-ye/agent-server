@@ -14,6 +14,7 @@ import {
   StartWorkRunResponseSchema,
   WorkDefinitionResponseSchema,
 } from '../product-work-commands.js';
+import { WorkChatMessagesResponseSchema } from '../work-chat.js';
 import {
   GetProductExecutionDetailRequestSchema,
   ProductExecutionDetailResponseSchema,
@@ -139,6 +140,20 @@ export const PRODUCT_ACCEPTED_SUBSET_READ_ENDPOINTS = [
     capabilities: ['work_identity', 'workspace_scope'],
   }),
   read({
+    id: 'get_work_chat',
+    method: 'GET',
+    path: '/api/v1/works/{work_id}/chat',
+    request_schema: 'GetWorkRequestSchema',
+    response_schema: 'WorkChatMessagesResponseSchema',
+    responseSchema: WorkChatMessagesResponseSchema,
+    success: [{ status: 200, variant: 'history' }],
+    errors: [
+      { status: 400, code: 'invalid_request' },
+      { status: 404, code: 'work_not_found' },
+    ],
+    capabilities: ['work_chat', 'shared_work_scope'],
+  }),
+  read({
     id: 'get_work_run',
     method: 'GET',
     path: '/api/v1/works/{work_id}/runs/{work_run_id}',
@@ -228,4 +243,5 @@ export const PRODUCT_ACCEPTED_SUBSET_READ_SCHEMAS = {
   ProductRunTraceResponseSchema,
   ProductExecutionDetailResponseSchema,
   ProductSessionTranscriptsResponseSchema,
+  WorkChatMessagesResponseSchema,
 } as const;

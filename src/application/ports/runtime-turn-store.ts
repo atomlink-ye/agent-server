@@ -37,6 +37,7 @@ export interface RuntimeTurnStore {
   succeed(input: {
     readonly id: RuntimeTurnId;
     readonly completedAt: string;
+    readonly outputText?: string;
   }): Promise<RuntimeTurn | false>;
 
   /** Atomically fails any non-terminal turn. */

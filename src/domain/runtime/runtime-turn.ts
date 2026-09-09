@@ -18,6 +18,11 @@ export type RuntimeTurnSource =
       readonly teamMemberRunId: string;
       readonly taskId: string;
       readonly runId: string;
+    }>
+  | Readonly<{
+      readonly kind: 'work_chat';
+      readonly workId: string;
+      readonly messageId: string;
     }>;
 
 export type RuntimeTurnStatus =
@@ -42,6 +47,7 @@ export interface RuntimeTurn {
   readonly status: RuntimeTurnStatus;
   readonly promptDigest: string | null;
   readonly failureCode: RuntimeFailureCode | null;
+  readonly outputText: string | null;
   readonly createdAt: string;
   readonly startedAt: string | null;
   readonly completedAt: string | null;

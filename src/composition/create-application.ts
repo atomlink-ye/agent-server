@@ -40,6 +40,8 @@ import { PostgresAgentHomeRepository } from '../infrastructure/postgres/postgres
 import { PostgresAgentHomeDefinitionSource } from '../infrastructure/postgres/postgres-agent-home-definition-source.js';
 import { AuthService } from '../application/auth/auth-service.js';
 import { PostgresAuthRepository } from '../infrastructure/postgres/postgres-auth-repository.js';
+import { PostgresWorkChatRepository } from '../infrastructure/postgres/postgres-work-chat-repository.js';
+import { WorkChatWorker } from '../application/work-chat/work-chat-worker.js';
 
 export interface SingleRunDebugControl {
   claimAndExecute(runId: string): Promise<{
@@ -262,10 +264,32 @@ export async function createApplication(
     runtimeSessions,
     ensureDesiredRuntimeSpec,
     executeRuntimeTurn: runtimeTurns,
+    runtimeTurns: runtimeTurnStore,
     oneShotCompletion,
     runtimeMcpServer,
     chatRuntime,
   } = runtimeOwner;
+  const workChatMessageWorker =
+    productWorkEnabled && workModule
+      ? new WorkChatWorker(
+          {
+            repository: new PostgresWorkChatRepository(pool),
+            workIdentity: workModule.identity,
+            definitions: resourceModule.workDefinitionResolution,
+            workers: resourceModule.workerResolutionApi,
+            desiredSpec: ensureDesiredRuntimeSpec,
+            turnExecutor: runtimeTurns,
+            runtimeTurns: runtimeTurnStore,
+          },
+          {
+            workerId: `${workerId}:work-chat-messages`,
+            leaseMs: leaseDurationMs,
+            ownerPrincipalType: 'service_account',
+            ownerPrincipalId: commonAccount.serviceAccountId,
+            config,
+          },
+        )
+      : undefined;
   const chatCapabilities =
     directChatPlane === 'absent'
       ? createChatExecutionConsumer({ directChatPlane })
@@ -361,6 +385,7 @@ export async function createApplication(
       ? { chatWorker: chatCapabilities.chatWorker }
       : {}),
     ...(workChatWorker ? { workChatWorker } : {}),
+    ...(workChatMessageWorker ? { workChatMessageWorker } : {}),
     runtime: { runtimeProvider, runtimeMcpServer },
     dispatcher,
     ...(whisperRepository ? { whispers: whisperRepository } : {}),

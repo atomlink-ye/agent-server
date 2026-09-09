@@ -11,6 +11,7 @@ import type { KernelCapabilities } from './create-kernel-capabilities.js';
 import type { MemoryModule } from './create-memory-capabilities.js';
 import type { ResourceModule } from './create-resource-capabilities.js';
 import type { WorkModule } from './create-work-capabilities.js';
+import type { WorkChatWorker } from '../application/work-chat/work-chat-worker.js';
 import type { WorkOrganizationModule } from './create-work-organization-capabilities.js';
 import type { ChannelComposition } from './create-channel-composition.js';
 import type { TeamCapabilities } from './create-team-capabilities.js';
@@ -37,6 +38,7 @@ export interface HostCompositionInput {
   readonly channels: Pick<ChannelComposition, 'workers'>;
   readonly chatWorker?: WorkerSet['chatWorker'];
   readonly workChatWorker?: WorkerSet['workChatWorker'];
+  readonly workChatMessageWorker?: WorkChatWorker;
   readonly runtime: Pick<RuntimeOwner, 'runtimeProvider' | 'runtimeMcpServer'>;
   readonly dispatcher: PostgresRunDispatcher;
   /** Human peek surface for agent-initiated whisper channels. */
@@ -98,6 +100,9 @@ export async function createHostComposition(input: HostCompositionInput) {
     ...input.channels.workers,
     ...(input.chatWorker ? { chatWorker: input.chatWorker } : {}),
     ...(input.workChatWorker ? { workChatWorker: input.workChatWorker } : {}),
+    ...(input.workChatMessageWorker
+      ? { workChatMessageWorker: input.workChatMessageWorker }
+      : {}),
   });
   const lifecycle = createApplicationLifecycle({
     dispatcher: input.dispatcher,

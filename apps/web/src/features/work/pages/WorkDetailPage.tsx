@@ -7,6 +7,7 @@ import { DefinitionPane } from '../components/panes/definition-pane';
 import { OverviewPane } from '../components/panes/overview-pane';
 import { RunsPane } from '../components/panes/runs-pane';
 import { TranscriptPane } from '../components/panes/transcript-pane';
+import { WorkChatPane } from '../components/panes/work-chat-pane';
 import { RunTrigger } from '../components/run-trigger';
 import { WorkDetailHeader } from '../components/work-header';
 import { WorkTabs } from '../components/work-tabs';
@@ -74,6 +75,8 @@ export function WorkDetailPage({
   const pane = detail
     ? (() => {
         switch (activeTab) {
+          case 'chat':
+            return <WorkChatPane workId={detail.work.id} />;
           case 'overview':
             return (
               <OverviewPane

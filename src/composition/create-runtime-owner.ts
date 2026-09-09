@@ -30,12 +30,14 @@ import type { RuntimeSessionStore } from '../application/ports/runtime-session-s
 import type { ExecuteRuntimeTurn as ExecuteRuntimeTurnUseCase } from '../application/runtime/execute-runtime-turn.js';
 import type { CancelRuntimeTurn as CancelRuntimeTurnUseCase } from '../application/runtime/cancel-runtime-turn.js';
 import type { EnsureDesiredRuntimeSpec } from '../application/ports/ensure-desired-runtime-spec.js';
+import type { RuntimeTurnStore } from '../application/ports/runtime-turn-store.js';
 
 export interface RuntimeOwner {
   readonly runtimeProvider: RuntimeExecutionProvider;
   readonly runtimeSessions: RuntimeSessionStore;
   readonly ensureDesiredRuntimeSpec: EnsureDesiredRuntimeSpec;
   readonly executeRuntimeTurn: Pick<ExecuteRuntimeTurnUseCase, 'execute'>;
+  readonly runtimeTurns: RuntimeTurnStore;
   readonly cancelRuntimeRun: Pick<CancelRuntimeRun, 'cancelRun'>;
   readonly chatRuntime: {
     readonly desiredSpec: EnsureDesiredRuntimeSpec;
@@ -147,6 +149,7 @@ export function createRuntimeOwner(input: {
     runtimeSessions,
     ensureDesiredRuntimeSpec,
     executeRuntimeTurn,
+    runtimeTurns: turns,
     cancelRuntimeRun,
     chatRuntime: {
       desiredSpec: ensureDesiredRuntimeSpec,

@@ -333,7 +333,7 @@ it('renders a result-first Work shell and fixture-backed Overview through Produc
       [...host.querySelectorAll<HTMLAnchorElement>('.work-tabs a')].map(
         (item) => item.textContent?.trim(),
       ),
-    ).toEqual(['Runs', 'Conversation', 'Files', 'Definition']);
+    ).toEqual(['Work Chat', 'Runs', 'Execution record', 'Files', 'Definition']);
     expect(host.textContent).toContain(
       'The result summary is still unavailable.',
     );

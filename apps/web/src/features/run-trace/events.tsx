@@ -51,7 +51,7 @@ export function Events({
                 <strong>#{entry.activity.sequence}</strong>
                 <span>{entry.actor?.name ?? 'Name not captured'}</span>
                 <span>
-                  {entry.workItem?.subject ?? 'Work Item not captured'}
+                  {entry.workItem?.subject ?? 'Team-level action'}
                 </span>
                 <span>MCP activity: {humanize(entry.activity.status)}</span>
                 <span>{entry.activity.toolName}</span>

@@ -68,3 +68,17 @@ it('renders captured assistant text under the captured actor name', () => {
     expandable: true,
   });
 });
+
+it('keeps the captured actor on a lifecycle row', () => {
+  expect(
+    buildEntryPresentation(
+      {
+        kind: 'lifecycle',
+        status: 'started',
+        sequence: 1,
+        created_at: '2026-09-09T02:11:34.000Z',
+      },
+      { actorName: 'fixer' },
+    ).label,
+  ).toBe('fixer · Run started');
+});

@@ -83,7 +83,7 @@ it('renders only recorded MCP activities with sequence and association facts', a
           ? trace.workItems.get(activity.workItemId)
           : undefined;
         if (item) expect(button.textContent).toContain(item.subject);
-        else expect(button.textContent).toContain('Work Item not captured');
+        else expect(button.textContent).toContain('Team-level action');
         expect(button.textContent).toContain(
           `MCP activity: ${expectedActivityStatus(activity.status)}`,
         );

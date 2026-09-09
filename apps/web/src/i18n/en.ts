@@ -634,6 +634,18 @@ export const en = {
   'work.bindCoworker': 'Make available to a Coworker',
   'work.bindingFailed':
     'This Definition could not be made available. Try again.',
+  'work.chooseInitiator': 'Choose an initiator',
+  'work.initiatorExplanation':
+    'Start this Work in the name of a Coworker. The Definition’s Worker or Team still executes it.',
+  'work.startAs': 'Start as {name}',
+  'work.definitionStartIntro':
+    'Review the Definition and answer any required inputs. Its Worker or Team executes the Work.',
+  'work.definitionExecutor':
+    'This Definition’s Worker or Team executes the Work.{initiator}',
+  'work.definitionInitiator': ' The selected Coworker is only the initiator.',
+  'work.definitionUnavailable': 'This Work Definition is no longer available.',
+  'work.definitionLoadFailed':
+    'This Work Definition could not be loaded. Try again.',
   'work.detailUnavailable.title': 'This Work is unavailable.',
   'work.detailUnavailable.eyebrow': 'Work unavailable',
   'work.couldNotLoad': "Couldn't load Work",

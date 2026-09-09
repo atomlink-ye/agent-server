@@ -251,6 +251,9 @@ function WorkCatalog({ works }: { readonly works: readonly WorkListItem[] }) {
     null,
   );
   const [bindingError, setBindingError] = useState<string | null>(null);
+  const [choosingInitiatorFor, setChoosingInitiatorFor] = useState<
+    string | null
+  >(null);
 
   useEffect(() => {
     let active = true;
@@ -299,10 +302,18 @@ function WorkCatalog({ works }: { readonly works: readonly WorkListItem[] }) {
     }
   }
 
-  const launchableAgent = (definition: WorkDefinitionCatalogEntry) =>
-    definition.availableTo.find(
-      (agent) => agent.definitionVersionId === definition.definitionVersionId,
-    );
+  const launchHref = (
+    definition: WorkDefinitionCatalogEntry,
+    initiator?: string,
+  ): string => {
+    const params = new URLSearchParams({
+      new: '1',
+      definition: definition.definitionId,
+      version: definition.definitionVersionId,
+    });
+    if (initiator) params.set('initiator', initiator);
+    return `/work?${params.toString()}`;
+  };
 
   if (catalog.length === 0) return null;
   return (
@@ -324,11 +335,14 @@ function WorkCatalog({ works }: { readonly works: readonly WorkListItem[] }) {
           const matchingWork = works.find(
             (work) => work.definition_id === definition.definitionId,
           );
-          const agent = launchableAgent(definition);
+          const initiators = definition.availableTo.filter(
+            (agent) =>
+              agent.definitionVersionId === definition.definitionVersionId,
+          );
           return (
             <li
               key={definition.definitionId}
-              className={`work-catalog-card ${agent ? 'work-catalog-card--bound' : 'work-catalog-card--unbound'}`}
+              className={`work-catalog-card ${initiators.length ? 'work-catalog-card--bound' : 'work-catalog-card--unbound'}`}
             >
               <div className="work-list-item">
                 <span className="work-list-mark" aria-hidden="true">
@@ -383,13 +397,42 @@ function WorkCatalog({ works }: { readonly works: readonly WorkListItem[] }) {
                     )}
                   </span>
                   <span className="work-catalog-card__actions">
-                    {agent ? (
+                    {initiators.length <= 1 ? (
                       <a
                         className="work-catalog-card__create"
-                        href={`/work?new=1&agent=${encodeURIComponent(agent.agentDefinitionId)}&capability=${encodeURIComponent(definition.definitionVersionId)}`}
+                        href={launchHref(
+                          definition,
+                          initiators[0]?.agentDefinitionId,
+                        )}
                       >
                         {t('work.create')}
                       </a>
+                    ) : (
+                      <button
+                        type="button"
+                        className="work-catalog-card__create"
+                        onClick={() =>
+                          setChoosingInitiatorFor(definition.definitionId)
+                        }
+                      >
+                        {t('work.chooseInitiator')}
+                      </button>
+                    )}
+                    {choosingInitiatorFor === definition.definitionId ? (
+                      <span className="work-catalog-card__initiator">
+                        <span>{t('work.initiatorExplanation')}</span>
+                        {initiators.map((agent) => (
+                          <a
+                            key={agent.agentDefinitionId}
+                            href={launchHref(
+                              definition,
+                              agent.agentDefinitionId,
+                            )}
+                          >
+                            {t('work.startAs', { name: agent.displayName })}
+                          </a>
+                        ))}
+                      </span>
                     ) : null}
                     {coworkers.length > 0 ? (
                       <select

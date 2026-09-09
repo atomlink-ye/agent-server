@@ -595,6 +595,17 @@ export const zhCN: Record<MessageKey, string> = {
   'work.latestRunStatus': '最近一次 Run',
   'work.bindCoworker': '向 Coworker 开放',
   'work.bindingFailed': '无法向该 Coworker 开放这个 Definition，请重试。',
+  'work.chooseInitiator': '选择发起者',
+  'work.initiatorExplanation':
+    '以某位 Coworker 的名义发起这个 Work。执行它的仍是 Definition 中的 Worker 或 Team。',
+  'work.startAs': '以 {name} 的名义发起',
+  'work.definitionStartIntro':
+    '检查 Definition 并填写必要输入。执行 Work 的是它的 Worker 或 Team。',
+  'work.definitionExecutor':
+    '执行 Work 的是这个 Definition 的 Worker 或 Team。{initiator}',
+  'work.definitionInitiator': '所选 Coworker 仅作为发起者。',
+  'work.definitionUnavailable': '这个 Work Definition 已不可用。',
+  'work.definitionLoadFailed': '无法加载这个 Work Definition，请重试。',
   'work.detailUnavailable.title': '这个 Work 不可用。',
   'work.detailUnavailable.eyebrow': 'Work 不可用',
   'work.couldNotLoad': '无法加载 Work',

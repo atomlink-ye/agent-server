@@ -362,7 +362,9 @@ it('renders bound and unbound catalog cards without clipping their controls', as
     expect(
       cards[0]!.querySelector('a.work-catalog-card__create'),
     ).not.toBeNull();
-    expect(cards[1]!.querySelector('a.work-catalog-card__create')).toBeNull();
+    expect(
+      cards[1]!.querySelector('a.work-catalog-card__create'),
+    ).not.toBeNull();
     expect(
       getComputedStyle(
         host.querySelector('.work-catalog .pane-section-heading')!,

@@ -11,6 +11,7 @@ import { MemoryRouter } from 'react-router-dom';
 
 import { WorkPane } from '@/features/work/WorkPane';
 import '../../../index.css';
+import './work-list.css';
 import { AppProviders } from '../../../app/providers';
 import { AppRouter } from '../../../app/router';
 import parallelRecording from '@/test-support/fixtures/product-recordings/parallel-success.json';
@@ -64,6 +65,97 @@ function jsonResponse(body: unknown): Response {
   } as Response;
 }
 
+function workPaneFetch(workResponse: WorkListResponse) {
+  return vi.fn(async (input: RequestInfo | URL) => {
+    const path = String(input);
+    if (path === '/api/works') return jsonResponse(workResponse);
+    // WorkPane reads the catalog and Coworker roster independently of the
+    // history list. Keep those reads explicit so a Work-list fixture cannot
+    // accidentally masquerade as a Definition response.
+    if (path === '/api/work-definitions') {
+      return jsonResponse({ items: [], next_cursor: null });
+    }
+    if (path === '/api/agents') {
+      return jsonResponse({ items: [], next_cursor: null });
+    }
+    if (path === '/api/auth/me') {
+      return jsonResponse({
+        user_id: 'browser-test-user',
+        username: 'browser-test',
+        display_name: 'Browser Test',
+      });
+    }
+    throw new Error(`unexpected browser request: ${path}`);
+  });
+}
+
+const catalogDefinitionId = uuid(901);
+const catalogVersionId = uuid(902);
+const unboundDefinitionId = uuid(903);
+const unboundVersionId = uuid(904);
+const catalogAgentId = uuid(905);
+
+function catalogVersion(
+  definitionId: string,
+  versionId: string,
+  name: string,
+  description: string,
+) {
+  return {
+    version: {
+      id: versionId,
+      definition_id: definitionId,
+      status: 'published',
+      fingerprint: `sha256:${'a'.repeat(64)}`,
+      source: {
+        apiVersion: 'agentserver.dev/v1alpha1',
+        kind: 'WorkDefinition',
+        metadata: { name, description },
+        spec: { kind: 'single_worker' },
+      },
+      source_yaml: `apiVersion: agentserver.dev/v1alpha1\nkind: WorkDefinition\nmetadata:\n  name: ${name}\n`,
+      resolved: { resource_manifest_fingerprint: `sha256:${'b'.repeat(64)}` },
+      created_at: '2026-08-16T10:00:00.000Z',
+      published_at: '2026-08-16T10:00:00.000Z',
+      links: {
+        self: `/api/v1/work-definition-versions/${versionId}`,
+        definition: `/api/v1/work-definitions/${definitionId}`,
+      },
+    },
+  };
+}
+
+function catalogPlanResponse(name: string): Response {
+  return jsonResponse({
+    valid: true,
+    fingerprint: `sha256:${'c'.repeat(64)}`,
+    metadata: { normalized_name: name },
+    resolved: {
+      kind: 'single_worker',
+      participants: [
+        {
+          name: 'Worker',
+          role: 'primary',
+          source: 'inline',
+          worker_version_id: null,
+          skills: [],
+          tools: [],
+        },
+      ],
+      environment: { source: 'inline', environment_version_id: null },
+      memory_version_ids: [],
+      required_runtime_capabilities: [],
+      platform_capabilities: [],
+      materialization: {
+        inline_workers: 1,
+        inline_environment: true,
+        internal_team: false,
+      },
+    },
+    diagnostics: [],
+  });
+}
+
 function renderPane() {
   return (
     <MemoryRouter initialEntries={['/work']}>
@@ -93,10 +185,7 @@ async function settleNetworkTurn() {
 }
 
 it('renders Product Work state and latest Run summary with one list read', async () => {
-  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-    expect(input).toBe('/api/works');
-    return jsonResponse(populatedWorkList);
-  });
+  const fetchMock = workPaneFetch(populatedWorkList);
   vi.stubGlobal('fetch', fetchMock);
 
   const host = document.createElement('div');
@@ -108,7 +197,9 @@ it('renders Product Work state and latest Run summary with one list read', async
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
 
-    const cards = [...host.querySelectorAll<HTMLLIElement>('.work-list li')];
+    const cards = [
+      ...host.querySelectorAll<HTMLLIElement>('[data-testid="work-list"] > li'),
+    ];
     expect(cards).toHaveLength(stateCases.length);
     for (const [index, [, stateLabel]] of stateCases.entries()) {
       const card = cards[index]!;
@@ -132,7 +223,163 @@ it('renders Product Work state and latest Run summary with one list read', async
     expect(host.textContent).not.toContain('TeamRun');
     expect(host.textContent).not.toContain('RuntimeSession');
     expect(host.textContent).not.toContain('participating Agents');
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls.map(([input]) => String(input))).toEqual(
+      expect.arrayContaining([
+        '/api/works',
+        '/api/work-definitions',
+        '/api/agents',
+      ]),
+    );
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
+it('renders bound and unbound catalog cards without clipping their controls', async () => {
+  const catalogItems = [
+    {
+      definitionId: catalogDefinitionId,
+      displayName: 'Bound research workflow',
+      currentPublishedVersionId: catalogVersionId,
+    },
+    {
+      definitionId: unboundDefinitionId,
+      displayName: 'Unbound planning workflow',
+      currentPublishedVersionId: unboundVersionId,
+    },
+  ];
+  const boundDescription =
+    'A long description that must wrap inside the catalog card instead of disappearing behind an overflow mask.';
+  const responses = new Map<string, unknown>([
+    ['/api/works', populatedWorkList],
+    ['/api/work-definitions', { items: catalogItems, next_cursor: null }],
+    [
+      `/api/work-definition-versions/${catalogVersionId}`,
+      catalogVersion(
+        catalogDefinitionId,
+        catalogVersionId,
+        'Bound research workflow',
+        boundDescription,
+      ),
+    ],
+    [
+      `/api/work-definition-versions/${unboundVersionId}`,
+      catalogVersion(
+        unboundDefinitionId,
+        unboundVersionId,
+        'Unbound planning workflow',
+        'Short description',
+      ),
+    ],
+    [
+      `/api/work-definitions/${catalogDefinitionId}/agents`,
+      {
+        definition_id: catalogDefinitionId,
+        definition_version_id: catalogVersionId,
+        agents: [
+          {
+            agent_definition_id: catalogAgentId,
+            definition_version_id: catalogVersionId,
+            display_name: 'Maya',
+            role_label: 'Researcher',
+          },
+        ],
+      },
+    ],
+    [
+      `/api/work-definitions/${unboundDefinitionId}/agents`,
+      {
+        definition_id: unboundDefinitionId,
+        definition_version_id: unboundVersionId,
+        agents: [],
+      },
+    ],
+    [
+      '/api/agents',
+      {
+        items: [
+          {
+            id: catalogAgentId,
+            display_name: 'Maya',
+            role_label: 'Researcher',
+            summary: 'Researches workflows.',
+            active_agent_version_id: uuid(906),
+            runtime_status: 'available',
+          },
+        ],
+        next_cursor: null,
+      },
+    ],
+  ]);
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const path = String(input);
+    if (path === '/api/work-definitions/plan')
+      return catalogPlanResponse('catalog-workflow');
+    const body = responses.get(path);
+    if (!body) throw new Error(`unexpected browser request: ${path}`);
+    return jsonResponse(body);
+  });
+  vi.stubGlobal('fetch', fetchMock);
+
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(renderPane());
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    });
+
+    const catalog = host.querySelector<HTMLElement>(
+      '[data-testid="work-definition-catalog"]',
+    );
+    expect(catalog).not.toBeNull();
+    const cards = [...catalog!.querySelectorAll<HTMLElement>(':scope > li')];
+    expect(cards).toHaveLength(2);
+    expect(cards[0]!.classList.contains('work-catalog-card--bound')).toBe(true);
+    expect(cards[1]!.classList.contains('work-catalog-card--unbound')).toBe(
+      true,
+    );
+
+    const description = cards[0]!.querySelector<HTMLElement>(
+      '.work-catalog-card__description',
+    );
+    expect(description?.textContent).toContain('must wrap inside');
+    expect(description?.getAttribute('title')).toBe(boundDescription);
+    expect(getComputedStyle(description!).overflow).toBe('visible');
+    expect(getComputedStyle(description!).whiteSpace).toBe('normal');
+
+    for (const card of cards) {
+      const cardRect = card.getBoundingClientRect();
+      const select = card.querySelector<HTMLSelectElement>('select');
+      expect(select).not.toBeNull();
+      expect(select!.getBoundingClientRect().right).toBeLessThanOrEqual(
+        cardRect.right + 1,
+      );
+    }
+    expect(
+      cards[0]!.querySelector('a.work-catalog-card__create'),
+    ).not.toBeNull();
+    expect(cards[1]!.querySelector('a.work-catalog-card__create')).toBeNull();
+    expect(
+      getComputedStyle(
+        host.querySelector('.work-catalog .pane-section-heading')!,
+      ).borderBottomWidth,
+    ).toBe('1px');
+    expect(fetchMock.mock.calls.map(([input]) => String(input))).toEqual(
+      expect.arrayContaining([
+        '/api/works',
+        '/api/work-definitions',
+        `/api/work-definition-versions/${catalogVersionId}`,
+        `/api/work-definition-versions/${unboundVersionId}`,
+        `/api/work-definitions/${catalogDefinitionId}/agents`,
+        `/api/work-definitions/${unboundDefinitionId}/agents`,
+        '/api/work-definitions/plan',
+        '/api/agents',
+      ]),
+    );
   } finally {
     await act(async () => root.unmount());
     host.remove();
@@ -146,10 +393,7 @@ it('scrolls the real Work list through its final Work item', async () => {
     id: uuid(index + 300),
     title: index === 47 ? 'Final real Work item' : `Long Work ${index}`,
   }));
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(async () => jsonResponse({ works, next_cursor: null })),
-  );
+  vi.stubGlobal('fetch', workPaneFetch({ works, next_cursor: null }));
   const host = document.createElement('div');
   host.style.height = '900px';
   document.body.append(host);
@@ -165,7 +409,7 @@ it('scrolls the real Work list through its final Work item', async () => {
       );
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
-    const list = host.querySelector<HTMLElement>('.work-list');
+    const list = host.querySelector<HTMLElement>('[data-testid="work-list"]');
     expect(list).not.toBeNull();
     expect(list!.scrollHeight).toBeGreaterThan(list!.clientHeight);
     list!.scrollTop = list!.scrollHeight;

@@ -62,6 +62,124 @@
   border-radius: var(--radius-sm);
   font-size: var(--text-xs);
 }
+
+.work-catalog {
+  min-width: 0;
+  margin-top: var(--space-3);
+  border-top: 1px solid var(--ink-200);
+  padding-top: var(--space-3);
+}
+
+.work-catalog .pane-section-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-width: 0;
+  margin-bottom: var(--space-2);
+  border-bottom: 1px solid var(--ink-200);
+  padding: 0 0 var(--space-2);
+}
+
+.work-catalog .pane-section-heading strong {
+  display: block;
+  margin-top: 3px;
+  color: var(--ink-900);
+  font-size: var(--text-sm);
+}
+
+.work-catalog-list {
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+}
+
+.work-catalog-card {
+  min-width: 0;
+}
+
+.work-catalog-card > .work-list-item {
+  border-color: var(--ink-100);
+  background: var(--cloud);
+}
+
+.work-catalog-card--bound > .work-list-item {
+  border-color: var(--sky-200);
+  background: linear-gradient(180deg, var(--sky-50), var(--cloud));
+}
+
+.work-catalog-card--unbound > .work-list-item {
+  border-style: dashed;
+  background: color-mix(in srgb, var(--cloud) 86%, var(--ink-100));
+}
+
+.work-catalog-card--unbound .work-list-mark {
+  background: var(--ink-100);
+  color: var(--ink-500);
+}
+
+.work-catalog-card__title {
+  min-width: 0;
+}
+
+.work-pane .work-catalog-card__meta {
+  align-items: stretch;
+  gap: 4px;
+}
+
+.work-pane .work-catalog-card__meta > span {
+  min-width: 0;
+  flex-shrink: 1;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+}
+
+.work-pane .work-catalog-card__description {
+  display: block;
+  color: var(--ink-500);
+  font-size: var(--text-xs);
+  font-weight: 500;
+}
+
+.work-catalog-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  margin-top: 2px;
+}
+
+.work-catalog-card__create {
+  max-width: 100%;
+  border: 1px solid var(--skype);
+  border-radius: var(--radius-sm);
+  background: var(--sky-50);
+  color: var(--skype-deep);
+  padding: 5px 8px;
+  font-size: var(--text-xs);
+  font-weight: 800;
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+
+.work-catalog-card__select {
+  min-width: 0;
+  max-width: 100%;
+  width: 100%;
+  border: 1px solid var(--ink-200);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+  color: var(--ink-700);
+  padding: 5px 7px;
+  font-size: var(--text-xs);
+}
+
+.work-catalog-card__create:hover {
+  background: var(--sky-100);
+}
+
 .work-list-card__state p {
   color: var(--ink-500);
   font-size: var(--text-xs);

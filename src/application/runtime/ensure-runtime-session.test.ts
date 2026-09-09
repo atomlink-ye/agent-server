@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   EnsureRuntimeSessionService,
+  forceWorkChatReplacement,
   planWhenBootstrapDigestIsIndeterminate,
 } from './ensure-runtime-session.js';
 import { EnsureDesiredRuntimeSpecService } from './ensure-desired-runtime-spec.js';
@@ -51,6 +52,24 @@ describe('planWhenBootstrapDigestIsIndeterminate', () => {
         canInspectBootstrapDigestComponents: true,
       }),
     ).toThrow('runtime_provider_bootstrap_digest_indeterminate');
+  });
+});
+
+describe('Work Chat native tool isolation', () => {
+  it('forces reuse to replacement only for Work Chat scopes', () => {
+    expect(
+      forceWorkChatReplacement({ scopeKind: 'work_chat', plan: reuse }),
+    ).toEqual({
+      kind: 'replace',
+      generationId,
+      reason: 'immutable_spec_changed',
+    });
+    expect(
+      forceWorkChatReplacement({ scopeKind: 'team_member', plan: reuse }),
+    ).toEqual(reuse);
+    expect(forceWorkChatReplacement({ scopeKind: 'run', plan: reuse })).toEqual(
+      reuse,
+    );
   });
 });
 

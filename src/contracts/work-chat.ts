@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { WorkRunSummarySchema } from './product-work-commands.js';
 
 export const WorkChatMessageSchema = z
   .object({
@@ -17,6 +18,29 @@ export const WorkChatMessagesResponseSchema = z
   .object({
     work_id: z.uuid(),
     messages: z.array(WorkChatMessageSchema).max(500),
+    preparation: z
+      .lazy(() => WorkPreparationResponseSchema)
+      .nullable()
+      .optional(),
+  })
+  .strict();
+
+export const WorkPreparationResponseSchema = z
+  .object({
+    id: z.uuid(),
+    work_id: z.uuid(),
+    revision: z.number().int().positive(),
+    status: z.enum(['collecting', 'ready', 'starting', 'started', 'abandoned']),
+    definition_version_id: z.uuid(),
+    schema_fingerprint: z.string().min(1),
+    candidate_input: z.record(z.string(), z.unknown()),
+    confirmed_fingerprint: z.string().nullable(),
+    start_intent: z.string().nullable(),
+    work_run_id: z.uuid().nullable(),
+    missing: z.array(z.string()),
+    ambiguities: z.array(z.string()),
+    created_at: z.string().datetime(),
+    updated_at: z.string().datetime(),
   })
   .strict();
 
@@ -38,6 +62,22 @@ export const RetryWorkChatMessageResponseSchema = z
   .object({ message: WorkChatMessageSchema })
   .strict();
 
+export const ConfirmWorkPreparationRequestSchema = z
+  .object({
+    preparation_id: z.uuid(),
+    expected_revision: z.number().int().positive(),
+    client_request_id: z.string().trim().min(1).max(200).optional(),
+  })
+  .strict();
+
+export const ConfirmWorkPreparationResponseSchema = z
+  .object({
+    preparation: WorkPreparationResponseSchema,
+    work_run: WorkRunSummarySchema.nullable(),
+    reused: z.boolean(),
+  })
+  .strict();
+
 export type WorkChatMessageResponse = z.infer<typeof WorkChatMessageSchema>;
 export type WorkChatMessagesResponse = z.infer<
   typeof WorkChatMessagesResponseSchema
@@ -47,4 +87,7 @@ export type PostWorkChatMessageRequest = z.infer<
 >;
 export type PostWorkChatMessageResponse = z.infer<
   typeof PostWorkChatMessageResponseSchema
+>;
+export type WorkPreparationResponse = z.infer<
+  typeof WorkPreparationResponseSchema
 >;

@@ -4,6 +4,15 @@ import type { RunUsage } from '../../domain/runs/run.js';
 import type { PaseoModelDescriptor } from './model-selector.js';
 import type { PaseoFinishStatus } from './status-mapper.js';
 
+export type PaseoProviderOptions = Record<string, PaseoJsonValue>;
+type PaseoJsonValue =
+  | null
+  | boolean
+  | number
+  | string
+  | PaseoJsonValue[]
+  | { [key: string]: PaseoJsonValue };
+
 export interface PaseoCreatedAgent {
   readonly id: string;
   readonly provider: string;
@@ -224,6 +233,7 @@ export interface PaseoClientPort {
     readonly labels?: Readonly<Record<string, string>>;
     readonly mcpServers?: readonly ExecutionMcpServerConfig[];
     readonly env?: Readonly<Record<string, string>>;
+    readonly providerOptions?: PaseoProviderOptions;
   }): Promise<PaseoCreatedAgent>;
   sendAgentMessage(agentId: string, text: string): Promise<void>;
   subscribeAgentStream?(

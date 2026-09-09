@@ -1,7 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useT } from '../../../../i18n';
 import { workClient } from '../../clients/work-client';
-import type { WorkChatMessagesResponse } from '@atomlink-ye/agent-server/product-contract';
+import { ProductMutationError } from '../../clients/errors';
+import type {
+  WorkChatMessagesResponse,
+  WorkPreparationResponse,
+} from '@atomlink-ye/agent-server/product-contract';
 
 export function WorkChatPane({ workId }: { readonly workId: string }) {
   const t = useT();
@@ -13,13 +17,20 @@ export function WorkChatPane({ workId }: { readonly workId: string }) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(false);
   const [pendingRequestId, setPendingRequestId] = useState<string | null>(null);
+  const [preparation, setPreparation] =
+    useState<WorkPreparationResponse | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [preparationError, setPreparationError] = useState<string | null>(null);
   useEffect(() => {
     let active = true;
     const refresh = () =>
       workClient
         .chat(workId)
         .then((response) => {
-          if (active) setMessages(response.messages);
+          if (active) {
+            setMessages(response.messages);
+            setPreparation(response.preparation ?? null);
+          }
         })
         .catch(() => {
           if (active) setError(true);
@@ -53,6 +64,31 @@ export function WorkChatPane({ workId }: { readonly workId: string }) {
       setBody(next);
     } finally {
       setSending(false);
+    }
+  }
+  async function confirmPreparation() {
+    if (!preparation || preparation.status !== 'ready' || confirming) return;
+    setConfirming(true);
+    setError(false);
+    try {
+      const confirmed = await workClient.confirmPreparation(
+        workId,
+        preparation.id,
+        preparation.revision,
+      );
+      setPreparation(confirmed);
+    } catch (error) {
+      if (
+        error instanceof ProductMutationError &&
+        (error.code === 'work_preparation_version_mismatch' ||
+          error.code === 'work_preparation_revision_mismatch')
+      ) {
+        setPreparationError(t('work.chat.versionMismatch'));
+      } else {
+        setError(true);
+      }
+    } finally {
+      setConfirming(false);
     }
   }
   return (
@@ -108,6 +144,51 @@ export function WorkChatPane({ workId }: { readonly workId: string }) {
           </article>
         ))}
       </div>
+      {preparation ? (
+        <aside className="work-preparation-card" aria-live="polite">
+          <p className="work-shell-kicker">{t('work.chat.preparationTitle')}</p>
+          <p>
+            {t('work.chat.preparationStatus')}: {preparation.status}
+          </p>
+          <p>
+            {t('work.chat.preparationVersion')}:{' '}
+            {preparation.definition_version_id}
+          </p>
+          <dl>
+            {Object.entries(preparation.candidate_input).map(([key, value]) => (
+              <div key={key}>
+                <dt>{key}</dt>
+                <dd>{String(value)}</dd>
+              </div>
+            ))}
+          </dl>
+          {preparation.missing.length ? (
+            <p>
+              {t('work.chat.missing')}: {preparation.missing.join(', ')}
+            </p>
+          ) : null}
+          {preparation.ambiguities.length ? (
+            <p>
+              {t('work.chat.ambiguities')}: {preparation.ambiguities.join(', ')}
+            </p>
+          ) : null}
+          {preparation.status === 'ready' ? (
+            <button
+              type="button"
+              onClick={() => void confirmPreparation()}
+              disabled={confirming}
+            >
+              {confirming
+                ? t('work.chat.starting')
+                : t('work.chat.confirmStart')}
+            </button>
+          ) : null}
+          {preparation.status === 'starting' ? (
+            <p>{t('work.chat.starting')}</p>
+          ) : null}
+          {preparationError ? <p role="alert">{preparationError}</p> : null}
+        </aside>
+      ) : null}
       <form
         className="work-chat-composer"
         onSubmit={(event) => {

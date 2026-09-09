@@ -32,6 +32,8 @@ export interface StartWorkRunRequest {
   readonly workId: string;
   readonly triggerKind: 'manual';
   readonly triggerRef?: string;
+  /** Optional preparation pin checked again at admission time. */
+  readonly expectedDefinitionVersionId?: string;
   readonly predecessorWorkRunId?: string;
   /** Product-authored Work Definitions may declare a bounded object input contract. */
   readonly input?: Readonly<Record<string, unknown>>;
@@ -100,6 +102,13 @@ export class StartWorkRun {
       accessContext: input.accessContext,
       workId: input.workId,
     });
+    if (
+      input.expectedDefinitionVersionId &&
+      resolved.definitionVersionId !== input.expectedDefinitionVersionId
+    )
+      throw new WorkDefinitionValidationError(
+        'The Work Definition changed before admission.',
+      );
     this.assertRuntimeCapabilities(resolved);
     const preparedInput = await this.prepareProductInput(
       resolved,
@@ -114,6 +123,9 @@ export class StartWorkRun {
       triggerKind: input.triggerKind,
       ...(input.triggerRef !== undefined
         ? { triggerRef: input.triggerRef }
+        : {}),
+      ...(input.expectedDefinitionVersionId !== undefined
+        ? { expectedDefinitionVersionId: input.expectedDefinitionVersionId }
         : {}),
       ...(input.predecessorWorkRunId !== undefined
         ? { predecessorWorkRunId: input.predecessorWorkRunId }

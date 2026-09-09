@@ -95,6 +95,36 @@
 .work-chat-composer button {
   justify-self: start;
 }
+
+.work-preparation-card {
+  display: grid;
+  gap: 0.55rem;
+  margin: 1rem 0;
+  padding: 1rem;
+  border: 1px solid var(--work-border, #d5dbe5);
+  border-radius: 0.75rem;
+  background: var(--work-surface-muted, #f7f9fc);
+}
+
+.work-preparation-card dl {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+}
+
+.work-preparation-card dl > div {
+  display: grid;
+  grid-template-columns: minmax(7rem, 0.35fr) minmax(0, 1fr);
+  gap: 0.75rem;
+}
+
+.work-preparation-card dt {
+  font-weight: 600;
+}
+.work-preparation-card dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
 .work-overview,
 .work-runs,
 .work-capability-unavailable,

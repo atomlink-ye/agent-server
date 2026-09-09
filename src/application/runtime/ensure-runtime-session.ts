@@ -35,6 +35,20 @@ export function planWhenBootstrapDigestIsIndeterminate(input: {
   return input.plan;
 }
 
+/** Work Chat always re-provisions so provider-native tools cannot survive reuse. */
+export function forceWorkChatReplacement(input: {
+  readonly scopeKind: string;
+  readonly plan: ReconciliationPlan;
+}): ReconciliationPlan {
+  if (input.scopeKind !== 'work_chat' || input.plan.kind !== 'reuse')
+    return input.plan;
+  return {
+    kind: 'replace',
+    generationId: input.plan.generationId,
+    reason: 'immutable_spec_changed',
+  };
+}
+
 export interface EnsureRuntimeSessionServiceOptions {
   readonly provider: RuntimeExecutionProvider;
   readonly sessions: RuntimeSessionStore;
@@ -102,7 +116,7 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
     });
     if (plan.kind === 'fail') throw new Error('runtime_provider_unavailable');
 
-    const effectivePlan = current
+    const reconciledPlan = current
       ? await this.planAfterInspection({
           current,
           applied,
@@ -110,6 +124,10 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
           desiredSystemPrompt,
         })
       : plan;
+    const effectivePlan = forceWorkChatReplacement({
+      scopeKind: session.scope.kind,
+      plan: reconciledPlan,
+    });
 
     if (effectivePlan.kind === 'reuse') {
       if (!current) throw new Error('runtime_provider_session_missing');
@@ -122,7 +140,14 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
         generation: current,
         session: await this.provider.open(
           buildProviderSessionBinding(current, applied),
-          this.providerSpec(applied, desiredSystemPrompt),
+          this.providerSpec(
+            applied,
+            desiredSystemPrompt,
+            undefined,
+            session.scope.kind === 'work_chat'
+              ? { nativeTools: 'disabled' }
+              : undefined,
+          ),
         ),
         resolution: 'reused',
       };
@@ -200,10 +225,17 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
       grantId = grant.grantId;
       const endpoint = await this.mcpEndpoint.current();
       created = await this.provider.create(
-        this.providerSpec(input.desired, input.desiredSystemPrompt, {
-          url: endpoint.url,
-          token: grant.token,
-        }),
+        this.providerSpec(
+          input.desired,
+          input.desiredSystemPrompt,
+          {
+            url: endpoint.url,
+            token: grant.token,
+          },
+          input.session.scope.kind === 'work_chat'
+            ? { nativeTools: 'disabled' }
+            : undefined,
+        ),
       );
       if (!created.providerWorkspaceId || !created.providerSessionId)
         throw new Error('runtime_provider_session_missing');
@@ -330,6 +362,7 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
     spec: Awaited<ReturnType<RuntimeSpecStore['getDesired']>>,
     desiredSystemPrompt: DesiredRuntimeSystemPrompt,
     grant?: { readonly url: string; readonly token: string },
+    policy?: { readonly nativeTools?: 'disabled' },
   ): ProviderRuntimeSpec {
     return {
       runtimeSessionId: spec.runtimeSessionId,
@@ -342,6 +375,7 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
       desiredRevision: spec.revision,
       bootstrapSpecDigest: spec.bootstrapDigest,
       endpointEpoch: spec.extensionSetDigest,
+      ...(policy?.nativeTools ? { nativeTools: policy.nativeTools } : {}),
       ...(grant
         ? {
             extensions: {

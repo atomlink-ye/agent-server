@@ -30,6 +30,8 @@ export interface ProviderRuntimeSpec {
   readonly desiredRevision?: RuntimeSpecRevision;
   readonly bootstrapSpecDigest?: string;
   readonly endpointEpoch?: string;
+  /** Provider-native tool policy. Work Chat must not expose deferred/native tools. */
+  readonly nativeTools?: 'disabled';
 }
 
 export type ProviderAppliedRuntimeSpec = Omit<

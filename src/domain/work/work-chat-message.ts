@@ -7,6 +7,8 @@ export interface WorkChatMessage {
   readonly tenantId: string;
   readonly workspaceId: string;
   readonly workId: string;
+  readonly preparationId?: string | null;
+  readonly workRunId?: string | null;
   readonly sequence: number;
   readonly kind: WorkChatMessageKind;
   readonly body: string;

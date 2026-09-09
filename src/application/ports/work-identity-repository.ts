@@ -27,6 +27,7 @@ export interface CreateOrLoadPendingWorkRunInput {
   readonly now?: string;
   readonly createdAt?: string;
   readonly updatedAt?: string;
+  readonly expectedDefinitionVersionId?: string;
 }
 
 export interface FindWorkRunByIdempotencyKeyInput {

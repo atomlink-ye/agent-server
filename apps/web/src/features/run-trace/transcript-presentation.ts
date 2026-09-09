@@ -15,7 +15,10 @@ export type EntryPresentation = {
 
 export function buildEntryPresentation(
   event: TranscriptEntry,
-  options: { readonly terminalRun?: boolean } = {},
+  options: {
+    readonly terminalRun?: boolean;
+    readonly actorName?: string | null;
+  } = {},
 ): EntryPresentation {
   if (event.kind === 'lifecycle')
     return {
@@ -34,6 +37,19 @@ export function buildEntryPresentation(
       detailKind: null,
       exitCode: null,
       expandable: false,
+    };
+  if (event.kind === 'assistant_text')
+    return {
+      icon: 'bot',
+      label: options.actorName?.trim() || 'Assistant response',
+      summary: textSummary(event.text),
+      origin: null,
+      platformToolName: null,
+      tone: 'normal',
+      detailText: event.text,
+      detailKind: null,
+      exitCode: null,
+      expandable: Boolean(event.text),
     };
   if (event.kind === 'reasoning_progress')
     return {
@@ -147,6 +163,14 @@ export function buildEntryPresentation(
     exitCode: null,
     expandable: false,
   };
+}
+
+function textSummary(text: string): string | null {
+  const normalized = text.trim().replace(/\s+/gu, ' ');
+  if (!normalized) return null;
+  return normalized.length > 180
+    ? `${normalized.slice(0, 177)}...`
+    : normalized;
 }
 
 function lifecycleLabel(status: string): string {

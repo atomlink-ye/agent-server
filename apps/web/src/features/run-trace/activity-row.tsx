@@ -5,12 +5,17 @@ export function ActivityRow({
   entry,
   nested = false,
   terminalRun = false,
+  actorName = null,
 }: {
   readonly entry: ProjectedTranscriptEntry;
   readonly nested?: boolean;
   readonly terminalRun?: boolean;
+  readonly actorName?: string | null;
 }) {
-  const presentation = buildEntryPresentation(entry.event, { terminalRun });
+  const presentation = buildEntryPresentation(entry.event, {
+    terminalRun,
+    actorName,
+  });
   const children = entry.children?.length ? (
     <div className="transcript__children">
       {entry.children.map((child) => (
@@ -19,6 +24,7 @@ export function ActivityRow({
           key={child.sourceOrdinals.join(':')}
           nested
           terminalRun={terminalRun}
+          actorName={actorName}
         />
       ))}
     </div>
@@ -48,6 +54,7 @@ export function ActivityRow({
       entry={entry}
       expandable={expandable}
       terminalRun={terminalRun}
+      actorName={actorName}
     />
   );
   const platformStatus =
@@ -93,12 +100,17 @@ function RowContent({
   entry,
   expandable,
   terminalRun,
+  actorName,
 }: {
   readonly entry: ProjectedTranscriptEntry;
   readonly expandable: boolean;
   readonly terminalRun: boolean;
+  readonly actorName: string | null;
 }) {
-  const presentation = buildEntryPresentation(entry.event, { terminalRun });
+  const presentation = buildEntryPresentation(entry.event, {
+    terminalRun,
+    actorName,
+  });
   const status = entry.event.kind === 'tool_status' ? entry.event.status : null;
   const timing = formatActivityTiming(entry);
   return (

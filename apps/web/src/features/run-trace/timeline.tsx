@@ -187,8 +187,7 @@ function TimelineActivityRow({
     >
       <time dateTime={entry.startedAt}>{formatTimestamp(entry.startedAt)}</time>
       <div className="run-trace__timeline-activity-copy">
-        {responder ? <small>{responder}</small> : null}
-        <ActivityRow entry={entry} />
+        <ActivityRow actorName={responder} entry={entry} />
         <small>Event {sequence}</small>
       </div>
     </li>
@@ -196,6 +195,9 @@ function TimelineActivityRow({
 }
 
 function responderName(trace: NormalizedTrace, runId: string): string | null {
+  // The trace only has an actor name when the Run's actor_id joins to the
+  // captured actor roster. A solo Work has no actor row, so null is the
+  // truthful fallback rather than a guessed Agent role.
   const run = trace.runs.find((candidate) => candidate.id === runId);
   if (!run?.actorId) return null;
   return trace.actors.get(run.actorId)?.name ?? null;

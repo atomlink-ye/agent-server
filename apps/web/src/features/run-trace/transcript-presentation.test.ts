@@ -42,7 +42,29 @@ it('uses a non-generic summary before a generic label', () => {
 it('falls back to the captured category when provider text is generic', () => {
   expect(
     buildEntryPresentation(
-      tool({ category: 'read', label: 'Read activity', summary: 'Read activity.' }),
+      tool({
+        category: 'read',
+        label: 'Read activity',
+        summary: 'Read activity.',
+      }),
     ),
   ).toMatchObject({ label: 'Read', summary: null });
+});
+
+it('renders captured assistant text under the captured actor name', () => {
+  const event: TranscriptEntry = {
+    kind: 'assistant_text',
+    text: 'The answer from the Worker.',
+    sequence: 4,
+    created_at: '2026-08-18T04:00:00.000Z',
+    ordinal: 4,
+  };
+  expect(
+    buildEntryPresentation(event, { actorName: 'Worker Agent' }),
+  ).toMatchObject({
+    label: 'Worker Agent',
+    summary: 'The answer from the Worker.',
+    detailText: 'The answer from the Worker.',
+    expandable: true,
+  });
 });

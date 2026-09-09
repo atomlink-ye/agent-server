@@ -96,8 +96,10 @@ export class PostgresRuntimeSpecStore implements RuntimeSpecStore {
       await database.query('BEGIN');
       const session = await database.query<{
         desired_spec_revision: number | string;
+        status: string;
       }>(
         `SELECT desired_spec_revision
+                ,status
            FROM runtime_sessions
           WHERE id=$1
           FOR UPDATE`,
@@ -105,6 +107,8 @@ export class PostgresRuntimeSpecStore implements RuntimeSpecStore {
       );
       const current = session.rows?.[0];
       if (!current) throw new Error('Runtime session does not exist.');
+      if (current.status === 'closed')
+        throw new Error('Runtime session is closed.');
       if (
         Number(current.desired_spec_revision) !== input.expectedDesiredRevision
       )
@@ -142,8 +146,8 @@ export class PostgresRuntimeSpecStore implements RuntimeSpecStore {
       );
       const updated = await database.query(
         `UPDATE runtime_sessions
-            SET desired_spec_revision=$2, updated_at=$3
-          WHERE id=$1 AND desired_spec_revision=$4`,
+          SET desired_spec_revision=$2, updated_at=$3
+          WHERE id=$1 AND desired_spec_revision=$4 AND status <> 'closed'`,
         [
           persisted.runtimeSessionId,
           persisted.revision,

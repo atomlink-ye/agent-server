@@ -77,7 +77,8 @@ export class PostgresRuntimeSessionStore implements RuntimeSessionStore {
          FROM runtime_sessions
         WHERE tenant_id=$1 AND workspace_id=$2 AND principal_type=$3
           AND principal_id=$4 AND scope_kind=$5 AND scope_id=$6
-          AND scope_epoch IS NOT DISTINCT FROM $7`,
+          AND scope_epoch IS NOT DISTINCT FROM $7
+          AND status <> 'closed'`,
       [
         owner.tenantId,
         owner.workspaceId,
@@ -138,7 +139,8 @@ export class PostgresRuntimeSessionStore implements RuntimeSessionStore {
              FROM runtime_sessions
             WHERE tenant_id=$1 AND workspace_id=$2 AND principal_type=$3
               AND principal_id=$4 AND scope_kind=$5 AND scope_id=$6
-              AND scope_epoch IS NOT DISTINCT FROM $7`,
+              AND scope_epoch IS NOT DISTINCT FROM $7
+              AND status <> 'closed'`,
           [
             input.owner.tenantId,
             input.owner.workspaceId,

@@ -316,36 +316,52 @@ function WorkCatalog({ works }: { readonly works: readonly WorkListItem[] }) {
         <span className="eyebrow">{t('work.catalog')}</span>
         <strong>{t('work.definitions')}</strong>
       </div>
-      <ul className="work-list" data-testid="work-definition-catalog">
+      <ul
+        className="work-list work-catalog-list"
+        data-testid="work-definition-catalog"
+      >
         {catalog.map((definition) => {
           const matchingWork = works.find(
             (work) => work.definition_id === definition.definitionId,
           );
           const agent = launchableAgent(definition);
           return (
-            <li key={definition.definitionId}>
+            <li
+              key={definition.definitionId}
+              className={`work-catalog-card ${agent ? 'work-catalog-card--bound' : 'work-catalog-card--unbound'}`}
+            >
               <div className="work-list-item">
                 <span className="work-list-mark" aria-hidden="true">
                   {definition.name.slice(0, 1).toUpperCase()}
                 </span>
                 <span className="work-list-copy">
-                  <strong>{definition.name}</strong>
-                  <span className="work-list-meta">
+                  <strong
+                    className="work-catalog-card__title"
+                    title={definition.name}
+                  >
+                    {definition.name}
+                  </strong>
+                  <span className="work-list-meta work-catalog-card__meta">
                     {definition.description ? (
-                      <span>{definition.description}</span>
+                      <span
+                        className="work-catalog-card__description"
+                        title={definition.description}
+                      >
+                        {definition.description}
+                      </span>
                     ) : null}
-                    <span>
+                    <span className="work-catalog-card__detail">
                       {definition.composition === 'collaboration'
                         ? t('work.teamComposition')
                         : t('work.singleComposition')}
                     </span>
-                    <span>
+                    <span className="work-catalog-card__detail">
                       {definition.availableTo.length
                         ? `${t('work.availableTo', { count: definition.availableTo.length })}: ${definition.availableTo.map((item) => item.displayName).join(', ')}`
                         : t('work.notAssigned')}
                     </span>
                     {definition.roster.length > 0 ? (
-                      <span>
+                      <span className="work-catalog-card__detail">
                         {t('work.roster')}:{' '}
                         {definition.roster
                           .map((person) => `${person.name} (${person.role})`)
@@ -353,7 +369,7 @@ function WorkCatalog({ works }: { readonly works: readonly WorkListItem[] }) {
                       </span>
                     ) : null}
                     {matchingWork?.latest_run_summary ? (
-                      <span>
+                      <span className="work-catalog-card__detail">
                         {t('work.latestRunStatus')}:{' '}
                         {
                           productStatePresentation(matchingWork.product_state)
@@ -361,33 +377,41 @@ function WorkCatalog({ works }: { readonly works: readonly WorkListItem[] }) {
                         }
                       </span>
                     ) : (
-                      <span>{t('work.noRuns')}</span>
+                      <span className="work-catalog-card__detail">
+                        {t('work.noRuns')}
+                      </span>
                     )}
                   </span>
-                  {agent ? (
-                    <a
-                      href={`/work?new=1&agent=${encodeURIComponent(agent.agentDefinitionId)}&capability=${encodeURIComponent(definition.definitionVersionId)}`}
-                    >
-                      {t('work.create')}
-                    </a>
-                  ) : null}
-                  {coworkers.length > 0 ? (
-                    <select
-                      aria-label={t('work.bindCoworker')}
-                      defaultValue=""
-                      disabled={bindingDefinitionId === definition.definitionId}
-                      onChange={(event) =>
-                        void bindDefinition(definition, event.target.value)
-                      }
-                    >
-                      <option value="">{t('work.bindCoworker')}</option>
-                      {coworkers.map((coworker) => (
-                        <option key={coworker.id} value={coworker.id}>
-                          {coworker.displayName}
-                        </option>
-                      ))}
-                    </select>
-                  ) : null}
+                  <span className="work-catalog-card__actions">
+                    {agent ? (
+                      <a
+                        className="work-catalog-card__create"
+                        href={`/work?new=1&agent=${encodeURIComponent(agent.agentDefinitionId)}&capability=${encodeURIComponent(definition.definitionVersionId)}`}
+                      >
+                        {t('work.create')}
+                      </a>
+                    ) : null}
+                    {coworkers.length > 0 ? (
+                      <select
+                        className="work-catalog-card__select"
+                        aria-label={t('work.bindCoworker')}
+                        defaultValue=""
+                        disabled={
+                          bindingDefinitionId === definition.definitionId
+                        }
+                        onChange={(event) =>
+                          void bindDefinition(definition, event.target.value)
+                        }
+                      >
+                        <option value="">{t('work.bindCoworker')}</option>
+                        {coworkers.map((coworker) => (
+                          <option key={coworker.id} value={coworker.id}>
+                            {coworker.displayName}
+                          </option>
+                        ))}
+                      </select>
+                    ) : null}
+                  </span>
                 </span>
               </div>
             </li>

@@ -200,12 +200,18 @@ export class PostgresRuntimeGenerationStore
       await database.query('BEGIN');
       const session = await database.query<{
         current_generation_id: string | null;
+        status: string;
       }>(
-        `SELECT current_generation_id FROM runtime_sessions WHERE id=$1 FOR UPDATE`,
+        `SELECT current_generation_id,status
+           FROM runtime_sessions
+          WHERE id=$1
+          FOR UPDATE`,
         [input.sessionId],
       );
       const current = session.rows?.[0];
       if (!current) throw new Error('Runtime session does not exist.');
+      if (current.status === 'closed')
+        throw new Error('Runtime session is closed.');
       if (current.current_generation_id !== input.previousGenerationId)
         throw new Error('Runtime session generation binding changed.');
       if (input.generation.id === input.previousGenerationId)
@@ -252,8 +258,8 @@ export class PostgresRuntimeGenerationStore
         throw new Error('Provisioning runtime generation could not activate.');
       const updated = await database.query(
         `UPDATE runtime_sessions
-            SET current_generation_id=$2, status='ready', updated_at=NOW()
-          WHERE id=$1`,
+          SET current_generation_id=$2, status='ready', updated_at=NOW()
+          WHERE id=$1 AND status <> 'closed'`,
         [input.sessionId, input.generation.id],
       );
       if (updated.rowCount === 0)

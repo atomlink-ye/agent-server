@@ -1,9 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   EnsureRuntimeSessionService,
   planWhenBootstrapDigestIsIndeterminate,
 } from './ensure-runtime-session.js';
+import { EnsureDesiredRuntimeSpecService } from './ensure-desired-runtime-spec.js';
 import { createDesiredRuntimeSystemPrompt } from '../../domain/runtime/desired-runtime-system-prompt.js';
 import { createRuntimeSessionSpec } from '../../domain/runtime/runtime-session-spec.js';
 import {
@@ -68,6 +69,74 @@ describe('EnsureRuntimeSessionService reuse path', () => {
     // every granted platform tool, so it must be started before the turn.
     expect(harness.endpointCalls).toBe(1);
     expect(harness.openedAfterEndpoint).toBe(true);
+  });
+});
+
+describe('closed chat runtime session recovery', () => {
+  it('creates a successor for a closed scope before a new turn reaches runtime readiness', async () => {
+    const closed = runtimeSessionForClosedScope(sessionId, 'closed');
+    const successorId =
+      '44444444-4444-4444-8444-444444444444' as RuntimeSessionId;
+    const successor = runtimeSessionForClosedScope(successorId, 'provisioning');
+    const desiredSystemPrompt =
+      createDesiredRuntimeSystemPrompt('stable prompt');
+    const resolve = vi.fn((input) =>
+      createRuntimeSessionSpec({
+        runtimeSessionId:
+          input.target.kind === 'initial'
+            ? successorId
+            : input.target.runtimeSessionId,
+        revision:
+          input.target.kind === 'initial'
+            ? runtimeSpecRevision(1)
+            : input.target.revision,
+        workspaceId: closed.owner.workspaceId,
+        agentVersionId: 'agent-version-1',
+        environmentVersionId: null,
+        resolvedSkills: [],
+        toolRefs: [],
+        provider: 'codex',
+        model: null,
+        cwd: '/runtime',
+        systemPromptDigest: desiredSystemPrompt.digest,
+        skillSetDigest: 'skills',
+        toolCatalogDigest: 'catalog',
+        extensionSetDigest: 'extensions',
+        contextEpoch: 1,
+        createdAt: '2026-09-09T00:00:00.000Z',
+      }),
+    );
+    const createWithInitialSpec = vi.fn(async () => successor);
+    const service = new EnsureDesiredRuntimeSpecService(
+      {
+        findByScope: vi.fn(async () => closed),
+        findById: vi.fn(async () => successor),
+        createWithInitialSpec,
+      } as never,
+      {
+        getDesired: vi.fn(async () => resolve({ target: { kind: 'initial' } })),
+      } as never,
+      { execute: resolve },
+    );
+
+    const result = await service.execute({
+      owner: closed.owner,
+      scope: closed.scope,
+      agentVersionId: 'agent-version-1',
+      environmentVersionId: null,
+      resolvedSkills: [],
+      toolRefs: [],
+      configuration: {
+        provider: 'codex',
+        model: null,
+        cwd: '/runtime',
+        contextEpoch: 1,
+        desiredSystemPrompt,
+      },
+    });
+
+    expect(createWithInitialSpec).toHaveBeenCalledOnce();
+    expect(result.session.id).toBe(successorId);
   });
 });
 
@@ -359,5 +428,27 @@ function reuseHarness() {
     get openedAfterEndpoint() {
       return openedAfterEndpoint;
     },
+  };
+}
+
+function runtimeSessionForClosedScope(
+  id: RuntimeSessionId,
+  status: 'closed' | 'provisioning',
+) {
+  return {
+    id,
+    owner: {
+      tenantId: 'tenant-1',
+      workspaceId: 'workspace-1',
+      principalType: 'service_account',
+      principalId: 'svc_1',
+    },
+    scope: { kind: 'agent_chat' as const, id: 'chat-runtime-1', epoch: 1 },
+    desiredSpecRevision: runtimeSpecRevision(1),
+    currentGenerationId: null,
+    status,
+    createdAt: '2026-09-09T00:00:00.000Z',
+    updatedAt: '2026-09-09T00:00:00.000Z',
+    closedAt: status === 'closed' ? '2026-09-09T00:00:00.000Z' : null,
   };
 }

@@ -18,7 +18,7 @@ export class EnsureDesiredRuntimeSpecService implements EnsureDesiredRuntimeSpec
     input: Parameters<EnsureDesiredRuntimeSpec['execute']>[0],
   ) {
     let session = await this.sessions.findByScope(input.owner, input.scope);
-    if (!session) {
+    if (!session || session.status === 'closed') {
       const initial = this.resolve(input, { kind: 'initial' });
       session = await this.sessions.createWithInitialSpec({
         owner: input.owner,
@@ -26,7 +26,6 @@ export class EnsureDesiredRuntimeSpecService implements EnsureDesiredRuntimeSpec
         spec: initial,
       });
     }
-    if (session.status === 'closed') throw new Error('runtime_session_closed');
 
     let persisted = await this.specs.getDesired(session);
     let desired = this.resolve(input, {

@@ -122,16 +122,22 @@
   min-width: 0;
 }
 
+/* Facts stack as rows. Laid out across, each fact competes with the
+ * description for the same narrow column and `overflow-wrap: anywhere`
+ * shreds short labels into one-letter-per-line columns ("Si ngl e Wo rke r"),
+ * which reads worse than the clipping this replaced. */
 .work-pane .work-catalog-card__meta {
-  align-items: stretch;
-  gap: 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
 }
 
 .work-pane .work-catalog-card__meta > span {
   min-width: 0;
-  flex-shrink: 1;
+  max-width: 100%;
   white-space: normal;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   line-height: 1.35;
 }
 

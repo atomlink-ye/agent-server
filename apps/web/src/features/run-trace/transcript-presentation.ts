@@ -15,8 +15,42 @@ export type EntryPresentation = {
 
 export function buildEntryPresentation(
   event: TranscriptEntry,
-  options: { readonly terminalRun?: boolean } = {},
+  options: {
+    readonly terminalRun?: boolean;
+    readonly actorName?: string | null;
+  } = {},
 ): EntryPresentation {
+  if (event.kind === 'lifecycle')
+    return {
+      icon: lifecycleIcon(event.status),
+      label: lifecycleLabel(event.status),
+      summary: null,
+      origin: null,
+      platformToolName: null,
+      tone:
+        event.status === 'failed' || event.status === 'cancelled'
+          ? 'failed'
+          : event.status === 'started' || event.status === 'running'
+            ? 'running'
+            : 'normal',
+      detailText: null,
+      detailKind: null,
+      exitCode: null,
+      expandable: false,
+    };
+  if (event.kind === 'assistant_text')
+    return {
+      icon: 'bot',
+      label: options.actorName?.trim() || 'Assistant response',
+      summary: textSummary(event.text),
+      origin: null,
+      platformToolName: null,
+      tone: 'normal',
+      detailText: event.text,
+      detailKind: null,
+      exitCode: null,
+      expandable: Boolean(event.text),
+    };
   if (event.kind === 'reasoning_progress')
     return {
       icon: 'brain',
@@ -129,6 +163,37 @@ export function buildEntryPresentation(
     exitCode: null,
     expandable: false,
   };
+}
+
+function textSummary(text: string): string | null {
+  const normalized = text.trim().replace(/\s+/gu, ' ');
+  if (!normalized) return null;
+  return normalized.length > 180
+    ? `${normalized.slice(0, 177)}...`
+    : normalized;
+}
+
+function lifecycleLabel(status: string): string {
+  switch (status) {
+    case 'started':
+      return 'Run started';
+    case 'succeeded':
+      return 'Run succeeded';
+    case 'failed':
+      return 'Run failed';
+    case 'cancelled':
+      return 'Run cancelled';
+    default:
+      return `Run ${humanize(status)}`;
+  }
+}
+
+function lifecycleIcon(status: string): string {
+  return status === 'failed' || status === 'cancelled'
+    ? 'error'
+    : status === 'started' || status === 'running'
+      ? 'play'
+      : 'check';
 }
 
 function toolActivityLabel(

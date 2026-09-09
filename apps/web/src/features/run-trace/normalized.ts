@@ -1,4 +1,7 @@
-import type { ProductRunTrace } from '@atomlink-ye/agent-server/product-contract';
+import type {
+  ProductExecutionTimelineEvent,
+  ProductRunTrace,
+} from '@atomlink-ye/agent-server/product-contract';
 
 type ProductTrace = Extract<
   ProductRunTrace,
@@ -117,6 +120,8 @@ export type TraceExecutionEvent = {
   readonly runId: string;
 };
 
+export type TraceTimelineEvent = ProductExecutionTimelineEvent;
+
 export type TraceCoverage = {
   readonly scope: string;
   readonly completeness: string;
@@ -135,6 +140,7 @@ export type NormalizedTrace = {
   readonly edges: readonly TraceEdge[];
   readonly runs: readonly TraceExecutionRun[];
   readonly events: readonly TraceExecutionEvent[];
+  readonly timelineEvents?: readonly TraceTimelineEvent[];
   readonly timeline: {
     readonly startedAt: number | null;
     readonly endedAt: number | null;
@@ -293,6 +299,7 @@ export function normalizeProductRunTrace(
       createdAt: event.created_at,
       runId: event.source_refs.run_id,
     })),
+    timelineEvents: (productTrace.timeline_events ?? []).map((event) => event),
     timeline: { startedAt, endedAt },
     coverage: {
       scope: productTrace.timeline_coverage.scope,

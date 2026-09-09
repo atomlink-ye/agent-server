@@ -5,6 +5,7 @@ import type {
   ExecutionRunFact,
 } from '../ports/execution-fact-query.js';
 import { ExecutionFactQueryError } from '../ports/execution-fact-query.js';
+import type { RunEventRepository } from '../ports/run-events.js';
 import type { WorkProjectionFactsSource } from './work-projection-facts-source.js';
 import {
   GetWorkResponseSchema,
@@ -24,6 +25,7 @@ import type {
   ExecutionEvent,
   McpActivity,
 } from '../../contracts/product-projection/edges.js';
+import type { ProductExecutionTimelineEvent } from '../../contracts/product-projection/execution-detail.js';
 import { SERVER_AUTHORIZED_TEAM_MCP_CATALOG } from '../../contracts/product-projection/edges.js';
 import type {
   ProductProjectionDurableFacts,
@@ -34,12 +36,15 @@ import type {
   ProductWorkRun,
 } from '../../contracts/product-projection/index.js';
 import { canonicalCollaborationMcpName } from '../../domain/collaboration/canonical-collaboration-tools.js';
+import { projectRunEvent } from './get-product-execution-detail.js';
 
 const SYNTHETIC_TRACE_TOOL_NAMES = new Set([
   'synthetic_stock_snapshot',
   'synthetic_event_batch',
   'synthetic_analog_summary',
 ]);
+const MAX_TIMELINE_EVENTS = 2_000;
+const TIMELINE_PAGE_SIZE = 100;
 
 export interface ProductProjectionOwnerScope {
   readonly tenantId: string;
@@ -61,6 +66,8 @@ export interface ProductProjectionOptions {
   readonly workIdentity: ProductWorkIdentityQuery;
   readonly workFacts: Pick<WorkProjectionFactsSource, 'getByRootTask'>;
   readonly executionFacts: ExecutionFactQuery;
+  /** Optional raw-event reader used only to produce safe timeline events. */
+  readonly runEvents?: Pick<RunEventRepository, 'list'>;
   readonly now?: () => Date;
 }
 
@@ -265,6 +272,9 @@ export function createProductProjection(
         ...facts.identity,
         runs: runs.map((run) => mapRun(run, loaded.workRun.rootTaskId)),
         events: mappedEvents,
+        timeline_events: options.runEvents
+          ? await projectTimelineEvents(options.runEvents, runs)
+          : [],
         edges: mappedEdges,
         mcp_activities: events
           .map((event) => mapMcpActivity(event, loaded.workRun.rootTaskId))
@@ -278,6 +288,44 @@ export function createProductProjection(
 
 function runtimeModels(runs: readonly ExecutionRunFact[]): string[] {
   return [...new Set(runs.flatMap((run) => (run.model ? [run.model] : [])))];
+}
+
+async function projectTimelineEvents(
+  runEvents: Pick<RunEventRepository, 'list'>,
+  runs: readonly ExecutionRunFact[],
+): Promise<readonly ProductExecutionTimelineEvent[]> {
+  const projected: ProductExecutionTimelineEvent[] = [];
+  for (const run of runs) {
+    let after = 0;
+    while (projected.length < MAX_TIMELINE_EVENTS) {
+      const page = await runEvents.list(
+        run.runId,
+        after,
+        Math.min(TIMELINE_PAGE_SIZE, MAX_TIMELINE_EVENTS - projected.length),
+      );
+      for (const event of page.events) {
+        projected.push({
+          ...projectRunEvent(event),
+          source_refs: { run_id: event.runId },
+        } as ProductExecutionTimelineEvent);
+        if (projected.length >= MAX_TIMELINE_EVENTS) break;
+      }
+      if (
+        projected.length >= MAX_TIMELINE_EVENTS ||
+        page.nextCursor === null ||
+        page.nextCursor <= after
+      )
+        break;
+      after = page.nextCursor;
+    }
+    if (projected.length >= MAX_TIMELINE_EVENTS) break;
+  }
+  return projected.sort(
+    (left, right) =>
+      left.created_at.localeCompare(right.created_at) ||
+      left.source_refs.run_id.localeCompare(right.source_refs.run_id) ||
+      left.sequence - right.sequence,
+  );
 }
 
 function singleAgentProjectionFacts(

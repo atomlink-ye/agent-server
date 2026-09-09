@@ -2,6 +2,9 @@ import type { ProductExecutionDetailEvent } from '@atomlink-ye/agent-server/prod
 
 export type TranscriptEntry = ProductExecutionDetailEvent & {
   readonly ordinal: number;
+  /** Present for cross-Run trace timelines; session transcripts omit it. */
+  readonly run_id?: string;
+  readonly source_refs?: { readonly run_id: string };
 };
 
 export type ProjectedTranscriptEntry = {
@@ -31,7 +34,7 @@ export function projectTranscript(
   entries: readonly TranscriptEntry[],
 ): readonly ProjectedTranscriptEntry[] {
   const rows: MutableRow[] = [];
-  const openReasoning: MutableRow[] = [];
+  const openReasoning = new Map<string, MutableRow[]>();
   const toolsByActivity = new Map<string, MutableRow>();
   let runSegment = 0;
   let previousSequence: number | null = null;
@@ -43,9 +46,11 @@ export function projectTranscript(
     if (previousSequence !== null && entry.sequence < previousSequence)
       runSegment += 1;
     previousSequence = entry.sequence;
+    const runKey = entryRunKey(entry, runSegment);
 
     if (entry.kind === 'reasoning_progress') {
-      const previousOpen = openReasoning.at(-1);
+      const reasoningStack = openReasoning.get(runKey) ?? [];
+      const previousOpen = reasoningStack.at(-1);
       if (
         entry.status === 'started' &&
         previousOpen &&
@@ -60,7 +65,7 @@ export function projectTranscript(
         continue;
       }
       if (entry.status === 'completed') {
-        const started = openReasoning.pop();
+        const started = reasoningStack.pop();
         if (started) {
           const startedEvent = started.event as ReasoningEntry;
           started.event = {
@@ -72,21 +77,24 @@ export function projectTranscript(
           continue;
         }
       }
-      const row = makeRow(entry, runSegment);
+      const row = makeRow(entry, runSegment, runKey);
       rows.push(row);
-      if (entry.status === 'started') openReasoning.push(row);
+      if (entry.status === 'started') {
+        reasoningStack.push(row);
+        openReasoning.set(runKey, reasoningStack);
+      }
       continue;
     }
 
     if (entry.kind === 'tool_status') {
-      const activityKey = scopedActivityKey(runSegment, entry.activity_id);
+      const activityKey = scopedActivityKey(runKey, entry.activity_id);
       const existing = toolsByActivity.get(activityKey);
       if (existing) {
         existing.event = mergeToolEvent(existing.event as ToolEntry, entry);
         existing.endedAt = entry.created_at;
         existing.sourceOrdinals.push(entry.ordinal);
       } else {
-        const row = makeRow(entry, runSegment);
+        const row = makeRow(entry, runSegment, runKey);
         rows.push(row);
         toolsByActivity.set(activityKey, row);
       }
@@ -106,7 +114,7 @@ export function projectTranscript(
       // assistant_text row as the tail of the prior run.
       if (
         previous?.event.kind === 'assistant_text' &&
-        previous.runSegment === runSegment
+        previous.runKey === runKey
       ) {
         previous.event = {
           ...entry,
@@ -114,12 +122,12 @@ export function projectTranscript(
         };
         previous.sourceOrdinals.push(entry.ordinal);
       } else {
-        rows.push(makeRow(entry, runSegment));
+        rows.push(makeRow(entry, runSegment, runKey));
       }
       continue;
     }
 
-    rows.push(makeRow(entry, runSegment));
+    rows.push(makeRow(entry, runSegment, runKey));
   }
 
   const mergedReasoning = mergeAdjacentReasoning(rows);
@@ -133,6 +141,7 @@ type MutableRow = {
   detailSourceOrdinals?: number[];
   sourceOrdinals: number[];
   runSegment: number;
+  runKey: string;
   children?: MutableRow[];
 };
 type ReasoningEntry = Extract<
@@ -141,18 +150,27 @@ type ReasoningEntry = Extract<
 >;
 type ToolEntry = Extract<TranscriptEntry, { readonly kind: 'tool_status' }>;
 
-function makeRow(event: TranscriptEntry, runSegment: number): MutableRow {
+function makeRow(
+  event: TranscriptEntry,
+  runSegment: number,
+  runKey: string,
+): MutableRow {
   return {
     event,
     startedAt: event.created_at,
     endedAt: event.created_at,
     sourceOrdinals: [event.ordinal],
     runSegment,
+    runKey,
   };
 }
 
-function scopedActivityKey(runSegment: number, activityId: string): string {
-  return `${runSegment}:${activityId}`;
+function entryRunKey(entry: TranscriptEntry, runSegment: number): string {
+  return entry.source_refs?.run_id ?? entry.run_id ?? String(runSegment);
+}
+
+function scopedActivityKey(run: string | number, activityId: string): string {
+  return `${run}:${activityId}`;
 }
 
 function mergeToolEvent(current: ToolEntry, next: ToolEntry): ToolEntry {
@@ -176,7 +194,11 @@ function mergeAdjacentReasoning(rows: readonly MutableRow[]): MutableRow[] {
   const merged: MutableRow[] = [];
   let previousVisibleReasoning: MutableRow | null = null;
   for (const row of rows) {
-    if (previousVisibleReasoning && row.event.kind === 'reasoning_progress') {
+    if (
+      previousVisibleReasoning &&
+      row.event.kind === 'reasoning_progress' &&
+      previousVisibleReasoning.runKey === row.runKey
+    ) {
       const previousEvent = previousVisibleReasoning.event as ReasoningEntry;
       const rowEvent = row.event as ReasoningEntry;
       previousVisibleReasoning.event = {
@@ -223,12 +245,7 @@ function nestChildren(
   const parents = new Map(
     rows.flatMap((row) =>
       row.event.kind === 'tool_status'
-        ? [
-            [
-              scopedActivityKey(row.runSegment, row.event.activity_id),
-              row,
-            ] as const,
-          ]
+        ? [[scopedActivityKey(row.runKey, row.event.activity_id), row] as const]
         : [],
     ),
   );
@@ -237,7 +254,7 @@ function nestChildren(
     // Handle child_timeline_item (original logic)
     if (row.event.kind === 'child_timeline_item') {
       const parent = parents.get(
-        scopedActivityKey(row.runSegment, row.event.parent_activity_id),
+        scopedActivityKey(row.runKey, row.event.parent_activity_id),
       );
       if (!parent) {
         visible.push(row);
@@ -255,7 +272,7 @@ function nestChildren(
       row.event.parent_activity_id !== null
     ) {
       const parent = parents.get(
-        scopedActivityKey(row.runSegment, row.event.parent_activity_id),
+        scopedActivityKey(row.runKey, row.event.parent_activity_id),
       );
       if (parent && parent !== row) {
         parent.detailSourceOrdinals ??= [...parent.sourceOrdinals];

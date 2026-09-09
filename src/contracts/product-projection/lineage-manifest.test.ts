@@ -120,8 +120,8 @@ describe('S8 product projection lineage', () => {
       vocabulary,
     );
     expect(result).toMatchObject({
-      schemaPaths: 376,
-      manifestKeys: 376,
+      schemaPaths: 506,
+      manifestKeys: 506,
       missing: [],
       extra: [],
       forbiddenPrefixHits: [],

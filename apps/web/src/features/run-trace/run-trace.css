@@ -172,6 +172,15 @@
   grid-template-columns: 150px 8px minmax(0, 1fr);
   padding: 8px 0;
 }
+.run-trace__activity-timeline > ol > .run-trace__timeline-activity-row {
+  grid-template-columns: 150px minmax(0, 1fr);
+}
+.run-trace__timeline-activity-copy {
+  align-items: baseline;
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
 .run-trace__event-group {
   border-top: 1px solid var(--trace-soft-line);
 }

@@ -221,6 +221,117 @@ it('keeps the first and final captured timestamps while merging one activity', (
   });
 });
 
+it('merges an activity only within its source Run', () => {
+  const event = (
+    runId: string,
+    status: 'running' | 'completed',
+    sequence: number,
+    created_at: string,
+  ): TranscriptEntry => ({
+    kind: 'tool_status',
+    activity_id: 'same-provider-id',
+    category: 'shell',
+    status,
+    label: 'Other activity: pwd',
+    summary: 'Other activity.',
+    provider: null,
+    tool_name: null,
+    detail_kind: null,
+    detail_text: null,
+    exit_code: null,
+    parent_activity_id: null,
+    sequence,
+    created_at,
+    ordinal: sequence,
+    source_refs: { run_id: runId },
+  });
+  const output = projectTranscript([
+    event('00000000-0000-4000-8000-000000000001', 'running', 1, timestamp),
+    event(
+      '00000000-0000-4000-8000-000000000001',
+      'completed',
+      2,
+      '2026-08-18T04:00:01.000Z',
+    ),
+    event(
+      '00000000-0000-4000-8000-000000000002',
+      'completed',
+      1,
+      '2026-08-18T04:00:02.000Z',
+    ),
+  ]);
+  expect(output).toHaveLength(2);
+  expect(output[0]?.sourceOrdinals).toEqual([1, 2]);
+  expect(output[1]?.sourceOrdinals).toEqual([1]);
+});
+
+it('keeps interleaved assistant and reasoning entries isolated by source Run', () => {
+  const runEntry = (
+    ordinal: number,
+    runId: string,
+    event: ProductExecutionDetailEvent,
+  ): TranscriptEntry => ({
+    ...event,
+    ordinal,
+    source_refs: { run_id: runId },
+  });
+  const runA = '00000000-0000-4000-8000-000000000011';
+  const runB = '00000000-0000-4000-8000-000000000012';
+  const output = projectTranscript([
+    runEntry(1, runA, {
+      kind: 'reasoning_progress',
+      status: 'started',
+      text: null,
+      sequence: 1,
+      created_at: timestamp,
+    }),
+    runEntry(2, runB, {
+      kind: 'reasoning_progress',
+      status: 'started',
+      text: null,
+      sequence: 1,
+      created_at: timestamp,
+    }),
+    runEntry(3, runA, {
+      kind: 'reasoning_progress',
+      status: 'completed',
+      text: 'Reasoning A',
+      sequence: 2,
+      created_at: '2026-08-18T04:00:01.000Z',
+    }),
+    runEntry(4, runB, {
+      kind: 'reasoning_progress',
+      status: 'completed',
+      text: 'Reasoning B',
+      sequence: 2,
+      created_at: '2026-08-18T04:00:01.000Z',
+    }),
+    runEntry(5, runA, {
+      kind: 'assistant_text',
+      text: 'Answer A',
+      sequence: 3,
+      created_at: '2026-08-18T04:00:02.000Z',
+    }),
+    runEntry(6, runB, {
+      kind: 'assistant_text',
+      text: 'Answer B',
+      sequence: 3,
+      created_at: '2026-08-18T04:00:02.000Z',
+    }),
+  ]);
+  const reasoning = output.filter(
+    (row) => row.event.kind === 'reasoning_progress',
+  );
+  const answers = output.filter((row) => row.event.kind === 'assistant_text');
+  expect(reasoning).toHaveLength(2);
+  expect(reasoning.map((row) => row.sourceOrdinals)).toEqual([
+    [1, 3],
+    [2, 4],
+  ]);
+  expect(answers).toHaveLength(2);
+  expect(answers.map((row) => row.sourceOrdinals)).toEqual([[5], [6]]);
+});
+
 it('merges independent incremental assistant_text chunks into one row', () => {
   const input = [
     at(1, {

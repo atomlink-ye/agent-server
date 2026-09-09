@@ -113,6 +113,64 @@ const EVENT_FIELDS = [
   'type',
 ] as const;
 
+const TIMELINE_EVENT_FIELDS = {
+  assistant_text: ['created_at', 'kind', 'sequence', 'text'],
+  child_timeline_item: [
+    'activity_id',
+    'created_at',
+    'detail_kind',
+    'detail_text',
+    'exit_code',
+    'item_kind',
+    'kind',
+    'label',
+    'parent_activity_id',
+    'provider',
+    'sequence',
+    'status',
+    'summary',
+  ],
+  lifecycle: ['created_at', 'kind', 'raw_type', 'sequence', 'status'],
+  permission: [
+    'activity_id',
+    'category',
+    'created_at',
+    'decision',
+    'kind',
+    'sequence',
+    'status',
+    'summary',
+  ],
+  reasoning_progress: ['created_at', 'kind', 'sequence', 'status', 'text'],
+  tool_status: [
+    'activity_id',
+    'category',
+    'created_at',
+    'detail_kind',
+    'detail_text',
+    'exit_code',
+    'kind',
+    'label',
+    'parent_activity_id',
+    'provider',
+    'sequence',
+    'status',
+    'summary',
+    'tool_name',
+  ],
+  usage: [
+    'cached_input_tokens',
+    'context_window_max_tokens',
+    'context_window_used_tokens',
+    'created_at',
+    'input_tokens',
+    'kind',
+    'output_tokens',
+    'sequence',
+    'total_cost_usd',
+  ],
+} as const;
+
 const MCP_TOOL_FIELDS = [
   'activity_id',
   'category',
@@ -206,6 +264,10 @@ const tracePaths = (includeIdentity: boolean): string[] => [
   ...withSourceRefs('runs[]'),
   ...EVENT_FIELDS.map((field) => `events[].${field}`),
   ...withSourceRefs('events[]', ['root_task_id', 'task_id', 'run_id']),
+  ...Object.entries(TIMELINE_EVENT_FIELDS).flatMap(([kind, fields]) => [
+    ...fields.map((field) => `timeline_events[]{kind=${kind}}.${field}`),
+    `timeline_events[]{kind=${kind}}.source_refs.run_id`,
+  ]),
   ...Object.entries(EDGE_FIELDS).flatMap(([kind, fields]) => [
     ...fields.map((field) => `edges[]{kind=${kind}}.${field}`),
     ...withSourceRefs(
@@ -256,6 +318,7 @@ const sourceTableForPath = (path: string): string => {
   if (path.startsWith('messages[].')) return 'team_messages';
   if (path.startsWith('runs[].')) return 'runs';
   if (path.startsWith('events[].')) return 'run_events';
+  if (path.startsWith('timeline_events[]')) return 'run_events';
   if (path.startsWith('mcp_activities[]')) return 'run_events';
   const edgeKind = path.match(/edges\[\]\{kind=([^}]+)\}/u)?.[1];
   if (edgeKind === 'declared_dependency') return 'team_work_item_dependencies';
@@ -322,6 +385,8 @@ const sourceRefTarget = (path: string): [string, string] | null => {
         ? ['runs', 'id']
         : null;
   }
+  if (entity.startsWith('timeline_events[]'))
+    return key === 'run_id' ? ['runs', 'id'] : null;
   if (entity.startsWith('mcp_activities[]')) {
     return key === 'root_task_id'
       ? ['tasks', 'root_task_id']
@@ -462,6 +527,10 @@ const directColumnName = (path: string): string | null => {
     EVENT_FIELDS.includes(field as (typeof EVENT_FIELDS)[number])
   )
     return field;
+  if (path.startsWith('timeline_events[]{kind=')) {
+    const field = path.slice(path.lastIndexOf('}.') + 2);
+    if (field === 'sequence' || field === 'created_at') return field;
+  }
   if (path.startsWith('mcp_activities[].')) {
     if (path.endsWith('.category')) return 'category';
     if (path.endsWith('.kind')) return 'kind';
@@ -623,6 +692,23 @@ const derivation = (
       ]);
     if (relativePath.endsWith('.sequence'))
       return column('run_events', 'sequence');
+  }
+  if (relativePath.startsWith('timeline_events[]{kind=')) {
+    if (relativePath.endsWith('.kind'))
+      return rule('timeline_event_kind_v1', 'json_extract(payload.kind)', [
+        'run_events.payload',
+      ]);
+    if (
+      relativePath.endsWith('.sequence') ||
+      relativePath.endsWith('.created_at')
+    )
+      return column(
+        'run_events',
+        relativePath.endsWith('.sequence') ? 'sequence' : 'created_at',
+      );
+    return rule('timeline_event_payload_field_v1', 'json_extract(payload)', [
+      'run_events.payload',
+    ]);
   }
   if (relativePath.startsWith('timeline_coverage.')) {
     const field = relativePath.slice('timeline_coverage.'.length);

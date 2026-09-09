@@ -16,6 +16,12 @@ import {
 } from './selectors';
 import type { NormalizedTrace, TraceExecutionEvent } from './normalized';
 import { formatTimestamp, humanize } from './selectors';
+import { ActivityRow } from './activity-row';
+import {
+  projectTranscript,
+  type ProjectedTranscriptEntry,
+  type TranscriptEntry,
+} from './transcript-projection';
 
 export function Timeline({
   model,
@@ -34,7 +40,7 @@ export function Timeline({
 }) {
   return (
     <div className="run-trace__timeline" data-testid="trace-timeline">
-      <ActivityTimeline events={trace.events} />
+      <ActivityTimeline trace={trace} />
       <p className="run-trace__supporting-label">Execution lanes</p>
       <TimeAxis range={model.range} />
       <div className="run-trace__lanes">
@@ -103,32 +109,51 @@ export function Timeline({
   );
 }
 
-function ActivityTimeline({
-  events,
-}: {
-  readonly events: readonly TraceExecutionEvent[];
-}) {
-  const chronological = [...events].sort(
+function ActivityTimeline({ trace }: { readonly trace: NormalizedTrace }) {
+  const chronological = [...trace.events].sort(
     (left, right) =>
       left.createdAt.localeCompare(right.createdAt) ||
+      left.runId.localeCompare(right.runId) ||
       left.sequence - right.sequence,
   );
+  const transcriptEntries = (trace.timelineEvents ?? []).map(
+    (event, ordinal): TranscriptEntry => ({
+      ...event,
+      ordinal: ordinal + 1,
+      run_id: event.source_refs.run_id,
+    }),
+  );
+  const projected = projectTranscript(transcriptEntries);
   return (
     <section className="run-trace__activity-timeline" aria-label="Run activity">
       <header>
         <div>
           <strong>Activity</strong>
-          <p>All captured events, in recorded order.</p>
+          <p>Captured activity, with each tool shown once per Run.</p>
         </div>
-        <span>{chronological.length} events</span>
+        <span>{projected.length || chronological.length} activities</span>
       </header>
-      {chronological.length ? (
+      {projected.length ? (
+        <ol>
+          {projected.map((entry) => (
+            <TimelineActivityRow
+              entry={entry}
+              key={entry.sourceOrdinals.join(':')}
+              trace={trace}
+            />
+          ))}
+        </ol>
+      ) : chronological.length ? (
         <ol>
           {groupActivityEvents(chronological).map((entry) =>
             entry.kind === 'output-group' ? (
-              <OutputEventGroup group={entry} key={entry.key} />
+              <OutputEventGroup group={entry} trace={trace} key={entry.key} />
             ) : (
-              <ActivityEventRow event={entry.event} key={entry.key} />
+              <ActivityEventRow
+                event={entry.event}
+                trace={trace}
+                key={entry.key}
+              />
             ),
           )}
         </ol>
@@ -139,6 +164,41 @@ function ActivityTimeline({
       )}
     </section>
   );
+}
+
+function TimelineActivityRow({
+  entry,
+  trace,
+}: {
+  readonly entry: ProjectedTranscriptEntry;
+  readonly trace: NormalizedTrace;
+}) {
+  const runId = entry.event.source_refs?.run_id ?? null;
+  const sequence = entry.event.sequence;
+  const responder = runId ? responderName(trace, runId) : null;
+  return (
+    <li
+      className="run-trace__event-row run-trace__timeline-activity-row"
+      data-event-sequence={sequence}
+      data-run-id={runId ?? undefined}
+      title={
+        runId ? `Source Run ${runId} · Event ${sequence}` : `Event ${sequence}`
+      }
+    >
+      <time dateTime={entry.startedAt}>{formatTimestamp(entry.startedAt)}</time>
+      <div className="run-trace__timeline-activity-copy">
+        {responder ? <small>{responder}</small> : null}
+        <ActivityRow entry={entry} />
+        <small>Event {sequence}</small>
+      </div>
+    </li>
+  );
+}
+
+function responderName(trace: NormalizedTrace, runId: string): string | null {
+  const run = trace.runs.find((candidate) => candidate.id === runId);
+  if (!run?.actorId) return null;
+  return trace.actors.get(run.actorId)?.name ?? null;
 }
 
 type ActivityEntry =
@@ -191,14 +251,17 @@ function groupActivityEvents(
 
 function OutputEventGroup({
   group,
+  trace,
 }: {
   readonly group: Extract<ActivityEntry, { readonly kind: 'output-group' }>;
+  readonly trace: NormalizedTrace;
 }) {
   const [first] = group.events;
   if (!first) return null;
   // A lone update should stay as compact as every other activity event. The
   // disclosure earns its extra affordance only once it hides repeated rows.
-  if (group.events.length === 1) return <ActivityEventRow event={first} />;
+  if (group.events.length === 1)
+    return <ActivityEventRow event={first} trace={trace} />;
   return (
     <li className="run-trace__event-group" data-run-id={first.runId}>
       <details>
@@ -212,7 +275,9 @@ function OutputEventGroup({
               ▸
             </span>
             <span>
-              <strong>Agent responded</strong>
+              <strong>
+                {responderName(trace, first.runId) ?? 'Agent responded'}
+              </strong>
               <small>
                 {group.events.length} updates · {observedDuration(group.events)}
               </small>
@@ -221,7 +286,11 @@ function OutputEventGroup({
         </summary>
         <ol aria-label="Output updates">
           {group.events.map((event) => (
-            <ActivityEventRow event={event} key={activityEventKey(event)} />
+            <ActivityEventRow
+              event={event}
+              key={activityEventKey(event)}
+              trace={trace}
+            />
           ))}
         </ol>
       </details>
@@ -229,7 +298,13 @@ function OutputEventGroup({
   );
 }
 
-function ActivityEventRow({ event }: { readonly event: TraceExecutionEvent }) {
+function ActivityEventRow({
+  event,
+  trace,
+}: {
+  readonly event: TraceExecutionEvent;
+  readonly trace: NormalizedTrace;
+}) {
   return (
     <li
       className="run-trace__event-row"
@@ -242,7 +317,11 @@ function ActivityEventRow({ event }: { readonly event: TraceExecutionEvent }) {
         className={`run-trace__event-dot run-trace__event-dot--${eventTone(event.type)}`}
       />
       <div>
-        <strong>{eventLabel(event.type)}</strong>
+        <strong>
+          {event.type.toLocaleLowerCase() === 'output'
+            ? (responderName(trace, event.runId) ?? eventLabel(event.type))
+            : eventLabel(event.type)}
+        </strong>
         <small title={`Source Run ${event.runId}`}>
           Event {event.sequence}
         </small>

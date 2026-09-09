@@ -128,6 +128,38 @@ export const ProductExecutionDetailEventSchema = z.discriminatedUnion('kind', [
   ProductExecutionUsageEventSchema,
 ]);
 
+/**
+ * Safe payload-derived event data carried by a Run Trace. The source Run is
+ * kept beside the projected event so the browser never has to infer identity
+ * from sequence resets when several Runs are displayed together.
+ */
+export const ProductExecutionTimelineEventSchema = z.discriminatedUnion(
+  'kind',
+  [
+    ProductExecutionLifecycleEventSchema.extend({
+      source_refs: z.object({ run_id: z.uuid() }).strict(),
+    }).strict(),
+    ProductExecutionAssistantTextEventSchema.extend({
+      source_refs: z.object({ run_id: z.uuid() }).strict(),
+    }).strict(),
+    ProductExecutionReasoningEventSchema.extend({
+      source_refs: z.object({ run_id: z.uuid() }).strict(),
+    }).strict(),
+    ProductExecutionToolEventSchema.extend({
+      source_refs: z.object({ run_id: z.uuid() }).strict(),
+    }).strict(),
+    ProductExecutionChildActivityEventSchema.extend({
+      source_refs: z.object({ run_id: z.uuid() }).strict(),
+    }).strict(),
+    ProductExecutionPermissionEventSchema.extend({
+      source_refs: z.object({ run_id: z.uuid() }).strict(),
+    }).strict(),
+    ProductExecutionUsageEventSchema.extend({
+      source_refs: z.object({ run_id: z.uuid() }).strict(),
+    }).strict(),
+  ],
+);
+
 export const ProductExecutionDetailResponseSchema = z
   .object({
     work_id: z.uuid(),
@@ -146,6 +178,9 @@ export type GetProductExecutionDetailRequest = z.infer<
 >;
 export type ProductExecutionDetailEvent = z.infer<
   typeof ProductExecutionDetailEventSchema
+>;
+export type ProductExecutionTimelineEvent = z.infer<
+  typeof ProductExecutionTimelineEventSchema
 >;
 export type ProductExecutionDetailResponse = z.infer<
   typeof ProductExecutionDetailResponseSchema

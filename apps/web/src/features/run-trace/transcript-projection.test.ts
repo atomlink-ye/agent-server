@@ -221,6 +221,50 @@ it('keeps the first and final captured timestamps while merging one activity', (
   });
 });
 
+it('merges an activity only within its source Run', () => {
+  const event = (
+    runId: string,
+    status: 'running' | 'completed',
+    sequence: number,
+    created_at: string,
+  ): TranscriptEntry => ({
+    kind: 'tool_status',
+    activity_id: 'same-provider-id',
+    category: 'shell',
+    status,
+    label: 'Other activity: pwd',
+    summary: 'Other activity.',
+    provider: null,
+    tool_name: null,
+    detail_kind: null,
+    detail_text: null,
+    exit_code: null,
+    parent_activity_id: null,
+    sequence,
+    created_at,
+    ordinal: sequence,
+    source_refs: { run_id: runId },
+  });
+  const output = projectTranscript([
+    event('00000000-0000-4000-8000-000000000001', 'running', 1, timestamp),
+    event(
+      '00000000-0000-4000-8000-000000000001',
+      'completed',
+      2,
+      '2026-08-18T04:00:01.000Z',
+    ),
+    event(
+      '00000000-0000-4000-8000-000000000002',
+      'completed',
+      1,
+      '2026-08-18T04:00:02.000Z',
+    ),
+  ]);
+  expect(output).toHaveLength(2);
+  expect(output[0]?.sourceOrdinals).toEqual([1, 2]);
+  expect(output[1]?.sourceOrdinals).toEqual([1]);
+});
+
 it('merges independent incremental assistant_text chunks into one row', () => {
   const input = [
     at(1, {

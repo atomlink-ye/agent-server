@@ -201,6 +201,8 @@ function ActivityIcon({ icon }: { readonly icon: string }) {
     pencil: '✎',
     search: '⌕',
     bot: '♙',
+    play: '▶',
+    check: '✓',
     lock: '⌑',
     error: '!',
     wrench: '·',

@@ -17,6 +17,24 @@ export function buildEntryPresentation(
   event: TranscriptEntry,
   options: { readonly terminalRun?: boolean } = {},
 ): EntryPresentation {
+  if (event.kind === 'lifecycle')
+    return {
+      icon: lifecycleIcon(event.status),
+      label: lifecycleLabel(event.status),
+      summary: null,
+      origin: null,
+      platformToolName: null,
+      tone:
+        event.status === 'failed' || event.status === 'cancelled'
+          ? 'failed'
+          : event.status === 'started' || event.status === 'running'
+            ? 'running'
+            : 'normal',
+      detailText: null,
+      detailKind: null,
+      exitCode: null,
+      expandable: false,
+    };
   if (event.kind === 'reasoning_progress')
     return {
       icon: 'brain',
@@ -129,6 +147,29 @@ export function buildEntryPresentation(
     exitCode: null,
     expandable: false,
   };
+}
+
+function lifecycleLabel(status: string): string {
+  switch (status) {
+    case 'started':
+      return 'Run started';
+    case 'succeeded':
+      return 'Run succeeded';
+    case 'failed':
+      return 'Run failed';
+    case 'cancelled':
+      return 'Run cancelled';
+    default:
+      return `Run ${humanize(status)}`;
+  }
+}
+
+function lifecycleIcon(status: string): string {
+  return status === 'failed' || status === 'cancelled'
+    ? 'error'
+    : status === 'started' || status === 'running'
+      ? 'play'
+      : 'check';
 }
 
 function toolActivityLabel(

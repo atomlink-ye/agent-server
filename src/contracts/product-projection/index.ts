@@ -23,6 +23,7 @@ import {
   TimelineCoverageSchema,
 } from './edges.js';
 import { ProductStateSchema } from './product-state.js';
+import { ProductExecutionTimelineEventSchema } from './execution-detail.js';
 
 export { ProductStateSchema } from './product-state.js';
 export type { ProductState } from './product-state.js';
@@ -85,6 +86,11 @@ export const ProductRunTraceSuccessSchema = ProductWorkRunBaseSchema.extend({
   projection_status: z.literal('internally_anchored'),
   runs: z.array(ExecutionRunSchema),
   events: ExecutionEventsSchema,
+  /** Optional for compatibility with older trace producers. */
+  timeline_events: z
+    .array(ProductExecutionTimelineEventSchema)
+    .max(2_000)
+    .optional(),
   edges: ProductTraceEdgesSchema,
   mcp_activities: McpActivitiesSchema,
   timeline_coverage: TimelineCoverageSchema,
@@ -97,6 +103,10 @@ export const ProductRunTraceNullSchema = z
     projection_status: z.literal('not_found'),
     runs: z.array(ExecutionRunSchema),
     events: ExecutionEventsSchema,
+    timeline_events: z
+      .array(ProductExecutionTimelineEventSchema)
+      .max(2_000)
+      .optional(),
     edges: ProductTraceEdgesSchema,
     mcp_activities: McpActivitiesSchema,
     timeline_coverage: TimelineCoverageSchema,

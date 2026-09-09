@@ -121,6 +121,33 @@ describe('ProductProjection single-Agent Work', () => {
             : []),
         ],
       },
+      runEvents: {
+        list: async () => ({
+          events: [
+            {
+              id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+              runId,
+              sequence: 1,
+              type: 'output' as const,
+              payload: {
+                kind: 'tool_status',
+                activity_id: 'activity-1',
+                category: 'read',
+                status: 'completed',
+                label: 'Read source',
+                summary: 'Read finished',
+                provider: 'opencode',
+                tool_name: 'safe_tool',
+                detail_kind: 'read',
+                detail_text: 'bounded result',
+                exit_code: 0,
+              },
+              createdAt: '2026-08-16T00:00:02.000Z',
+            },
+          ],
+          nextCursor: null,
+        }),
+      },
     });
 
     const detail = await projection.getWorkRun({
@@ -157,6 +184,14 @@ describe('ProductProjection single-Agent Work', () => {
       run_id: runId,
     });
     expect(trace.events).toHaveLength(1);
+    expect(trace.timeline_events).toEqual([
+      expect.objectContaining({
+        kind: 'tool_status',
+        source_refs: { run_id: runId },
+        activity_id: 'activity-1',
+        detail_text: 'bounded result',
+      }),
+    ]);
     expect(trace.edges).toEqual([]);
     expect(trace.mcp_activities).toEqual([]);
 

@@ -2,6 +2,9 @@ import type { ProductExecutionDetailEvent } from '@atomlink-ye/agent-server/prod
 
 export type TranscriptEntry = ProductExecutionDetailEvent & {
   readonly ordinal: number;
+  /** Present for cross-Run trace timelines; session transcripts omit it. */
+  readonly run_id?: string;
+  readonly source_refs?: { readonly run_id: string };
 };
 
 export type ProjectedTranscriptEntry = {
@@ -79,7 +82,10 @@ export function projectTranscript(
     }
 
     if (entry.kind === 'tool_status') {
-      const activityKey = scopedActivityKey(runSegment, entry.activity_id);
+      const activityKey = scopedActivityKey(
+        entry.source_refs?.run_id ?? entry.run_id ?? runSegment,
+        entry.activity_id,
+      );
       const existing = toolsByActivity.get(activityKey);
       if (existing) {
         existing.event = mergeToolEvent(existing.event as ToolEntry, entry);
@@ -151,8 +157,8 @@ function makeRow(event: TranscriptEntry, runSegment: number): MutableRow {
   };
 }
 
-function scopedActivityKey(runSegment: number, activityId: string): string {
-  return `${runSegment}:${activityId}`;
+function scopedActivityKey(run: string | number, activityId: string): string {
+  return `${run}:${activityId}`;
 }
 
 function mergeToolEvent(current: ToolEntry, next: ToolEntry): ToolEntry {
@@ -225,7 +231,12 @@ function nestChildren(
       row.event.kind === 'tool_status'
         ? [
             [
-              scopedActivityKey(row.runSegment, row.event.activity_id),
+              scopedActivityKey(
+                row.event.source_refs?.run_id ??
+                  row.event.run_id ??
+                  row.runSegment,
+                row.event.activity_id,
+              ),
               row,
             ] as const,
           ]
@@ -237,7 +248,10 @@ function nestChildren(
     // Handle child_timeline_item (original logic)
     if (row.event.kind === 'child_timeline_item') {
       const parent = parents.get(
-        scopedActivityKey(row.runSegment, row.event.parent_activity_id),
+        scopedActivityKey(
+          row.event.source_refs?.run_id ?? row.event.run_id ?? row.runSegment,
+          row.event.parent_activity_id,
+        ),
       );
       if (!parent) {
         visible.push(row);
@@ -255,7 +269,10 @@ function nestChildren(
       row.event.parent_activity_id !== null
     ) {
       const parent = parents.get(
-        scopedActivityKey(row.runSegment, row.event.parent_activity_id),
+        scopedActivityKey(
+          row.event.source_refs?.run_id ?? row.event.run_id ?? row.runSegment,
+          row.event.parent_activity_id,
+        ),
       );
       if (parent && parent !== row) {
         parent.detailSourceOrdinals ??= [...parent.sourceOrdinals];

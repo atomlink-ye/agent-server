@@ -227,6 +227,7 @@ export function createWorkModule(options: CreateWorkModuleOptions): WorkModule {
     workIdentity: workIdentityQuery,
     workFacts,
     executionFacts: options.executionFacts,
+    runEvents: new PostgresRunEventRepository(options.database),
   });
   const execution = new WorkExecutionService(
     workIdentity,

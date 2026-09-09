@@ -489,11 +489,14 @@ export function AgentsPage() {
                     ) : (
                       <div className="agents-empty-capabilities">
                         <p>{t('agents.noCapabilities')}</p>
+                        <button type="button" onClick={() => navigate('/work')}>
+                          {t('agents.browseWorkCatalog')}
+                        </button>
                         <button
                           type="button"
                           onClick={() => setAuthoring('capability')}
                         >
-                          {t('agents.teachCapability')}
+                          {t('agents.createWorkDefinition')}
                         </button>
                       </div>
                     )}

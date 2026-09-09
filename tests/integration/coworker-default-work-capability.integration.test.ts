@@ -30,7 +30,7 @@ afterEach(async () => {
 });
 
 describe('a Coworker hired by a person', () => {
-  it('is hired with a Work Definition it owns, and can run', async () => {
+  it('starts with an empty Work catalog so Work is selected explicitly', async () => {
     const { app, resources } = await workspace();
 
     const created = CreateCoworkerResponseSchema.parse(
@@ -43,9 +43,8 @@ describe('a Coworker hired by a person', () => {
       ).json(),
     );
 
-    // `list_agent_workflows` reads exactly this, in exactly this scope: a
-    // Coworker chat turn runs under the Agent's owner, not the person who
-    // hired it. A binding filed anywhere else would leave the tool empty.
+    // Hiring a Coworker no longer manufactures an Agent-persona Definition.
+    // Work is selected explicitly from the shared Definition catalog.
     const bindings = await resources.workDefinitionSources
       .listAgentWorkBindings!({
       tenantId,
@@ -54,32 +53,7 @@ describe('a Coworker hired by a person', () => {
       principalId: serviceAccountId,
       agentDefinitionId: created.agent_id,
     });
-    expect(bindings).toHaveLength(1);
-    expect(bindings[0]!.definition.name).toBe('iris-assignment');
-    expect(bindings[0]!.version.status).toBe('published');
-
-    // Not a pointer at somebody else's fixture: the Definition is compiled
-    // from what this person typed, and the Coworker's own role reaches the
-    // Worker that would execute the Work.
-    const version = await resources.productWorkDefinitions.getVersion({
-      versionId: bindings[0]!.version.id,
-      accessContext: accessContext(),
-    });
-    expect(JSON.stringify(version.authorSource)).toContain(draft.role);
-
-    // The bound version is a startable Work Definition, not merely a stored
-    // document: it carries the resolved manifest `product_work_create` and
-    // `product_work_run_start` need.
-    expect(version.resolvedFingerprint).toEqual(expect.any(String));
-
-    // `product_work_run_start` starts a WorkRun with no input payload, so an
-    // input contract that required a field would reject the Coworker's own
-    // two-step Work path every time.
-    const contract = await resources.productWorkDefinitions.getInputContract({
-      versionId: bindings[0]!.version.id,
-      accessContext: accessContext(),
-    });
-    expect(contract?.schema.required ?? []).toEqual([]);
+    expect(bindings).toEqual([]);
   });
 
   it('leaves no binding behind where the Product Work surface is absent', async () => {

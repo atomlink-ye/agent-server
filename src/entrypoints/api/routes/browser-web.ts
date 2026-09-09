@@ -41,6 +41,11 @@ import {
 } from '../../../contracts/whisper.js';
 import { SkillListResponseSchema } from '../../../contracts/skills.js';
 import {
+  WorkDefinitionAgentAvailabilityResponseSchema,
+  WorkDefinitionAgentBindingRequestSchema,
+  WorkDefinitionAgentBindingResponseSchema,
+} from '../../../contracts/agents.js';
+import {
   RuntimeCapabilitiesResponseSchema,
   WorkAdmissionCapabilitySchema,
 } from '../../../contracts/runtime-capabilities.js';
@@ -403,6 +408,40 @@ export function registerBrowserWebRoutes(
       },
     ),
   );
+  app.get('/api/work-definitions/:definitionId/agents', async (c) => {
+    const definitionId = c.req.param('definitionId');
+    if (!isUuid(definitionId)) return invalidProductRequest();
+    return readProductJson(
+      c,
+      config,
+      logger,
+      `/api/v1/work-definitions/${encodeURIComponent(definitionId)}/agents`,
+      WorkDefinitionAgentAvailabilityResponseSchema,
+    );
+  });
+  app.put('/api/work-definitions/:definitionId/agents/:agentId', async (c) => {
+    const definitionId = c.req.param('definitionId');
+    const agentId = c.req.param('agentId');
+    if (!isUuid(definitionId) || !isUuid(agentId))
+      return invalidProductRequest();
+    const parsed = WorkDefinitionAgentBindingRequestSchema.safeParse(
+      await c.req.json().catch(() => ({})),
+    );
+    if (!parsed.success) return invalidProductRequest();
+    return forwardDecoded(
+      c,
+      config,
+      logger,
+      `/api/v1/work-definitions/${encodeURIComponent(definitionId)}/agents/${encodeURIComponent(agentId)}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify(parsed.data),
+        headers: { 'content-type': 'application/json' },
+      },
+      WorkDefinitionAgentBindingResponseSchema,
+      ErrorResponseSchema,
+    );
+  });
   app.post('/api/work-definitions/validate', async (c) =>
     writeWorkDefinition(
       config,
@@ -489,6 +528,7 @@ async function writeProductJson(
   schema: ZodType<unknown>,
   options: {
     readonly idempotencyKey?: string;
+    readonly method?: 'POST' | 'PUT';
     readonly errorSchema?: ZodType<unknown>;
   } = {},
 ): Promise<Response> {
@@ -498,7 +538,7 @@ async function writeProductJson(
     logger,
     path,
     {
-      method: 'POST',
+      method: options.method ?? 'POST',
       body: JSON.stringify(body),
       headers: {
         'content-type': 'application/json',

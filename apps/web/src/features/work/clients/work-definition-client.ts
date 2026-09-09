@@ -1,4 +1,5 @@
 import type { ProductWorkDefinitionVersionResponse } from '@atomlink-ye/agent-server/product-contract';
+import { stringify } from 'yaml';
 import {
   GetProductWorkDefinitionVersionResponseSchema,
   UpdateWorkDefinitionVersionResponseSchema,
@@ -46,6 +47,21 @@ export interface DefinitionPlan {
 export interface DefinitionApply {
   readonly definitionId: string;
   readonly versionId: string;
+}
+
+export interface WorkDefinitionCatalogEntry {
+  readonly definitionId: string;
+  readonly definitionVersionId: string;
+  readonly name: string;
+  readonly description: string | null;
+  readonly composition: 'single_worker' | 'collaboration';
+  readonly roster: readonly { readonly name: string; readonly role: string }[];
+  readonly availableTo: readonly {
+    readonly agentDefinitionId: string;
+    readonly definitionVersionId: string;
+    readonly displayName: string;
+    readonly roleLabel: string | null;
+  }[];
 }
 
 export class WorkDefinitionClient {
@@ -128,6 +144,98 @@ export class WorkDefinitionClient {
       .version;
   }
 
+  async listCatalog(): Promise<readonly WorkDefinitionCatalogEntry[]> {
+    const root = record(
+      await apiTransport.request('/api/work-definitions', {
+        method: 'GET',
+        cache: 'no-store',
+      }),
+    );
+    const items = Array.isArray(root?.items) ? root.items : [];
+    const entries = await Promise.all(
+      items.map(async (item): Promise<WorkDefinitionCatalogEntry | null> => {
+        const selector = record(item);
+        const definitionId = text(selector?.definitionId);
+        const versionId = text(selector?.currentPublishedVersionId);
+        const [version, availability] = await Promise.all([
+          this.getVersion(versionId),
+          this.getAvailability(definitionId),
+        ]);
+        if (!version) return null;
+        const source = record(version.source);
+        const metadata = record(source?.metadata);
+        const spec = record(source?.spec);
+        let roster: WorkDefinitionCatalogEntry['roster'] = [];
+        try {
+          const plan = await this.plan(
+            stringify(version.source, { lineWidth: 0 }),
+          );
+          roster = plan.resolved.participants.map((participant) => ({
+            name: participant.name,
+            role: participant.role,
+          }));
+        } catch {
+          // A legacy source can remain visible in the catalog while its
+          // optional planning projection is unavailable. Never invent a
+          // roster for it.
+        }
+        return {
+          definitionId,
+          definitionVersionId: versionId,
+          name: text(metadata?.name) || text(selector?.displayName),
+          description: nullableText(metadata?.description),
+          composition:
+            spec?.kind === 'collaboration' ? 'collaboration' : 'single_worker',
+          roster,
+          availableTo: availability,
+        };
+      }),
+    );
+    return entries.filter(
+      (entry): entry is WorkDefinitionCatalogEntry => entry !== null,
+    );
+  }
+
+  async getAvailability(
+    definitionId: string,
+  ): Promise<WorkDefinitionCatalogEntry['availableTo']> {
+    const root = record(
+      await apiTransport.request(
+        `/api/work-definitions/${encodeURIComponent(definitionId)}/agents`,
+        { method: 'GET', cache: 'no-store' },
+      ),
+    );
+    if (!Array.isArray(root?.agents)) return [];
+    return root.agents.map((value) => {
+      const agent = record(value);
+      return {
+        agentDefinitionId: text(agent?.agent_definition_id),
+        definitionVersionId: text(agent?.definition_version_id),
+        displayName: text(agent?.display_name),
+        roleLabel: nullableText(agent?.role_label),
+      };
+    });
+  }
+
+  async bindAgent(
+    definitionId: string,
+    agentDefinitionId: string,
+    definitionVersionId: string,
+  ): Promise<void> {
+    const response = await apiTransport.request(
+      `/api/work-definitions/${encodeURIComponent(definitionId)}/agents/${encodeURIComponent(agentDefinitionId)}`,
+      {
+        method: 'PUT',
+        cache: 'no-store',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ definition_version_id: definitionVersionId }),
+      },
+    );
+    const body = record(response);
+    if (!body || body.associated !== true)
+      throw new Error('The Work Definition could not be made available.');
+  }
+
   async pinVersion(workId: string, definitionVersionId: string): Promise<void> {
     parseProduct(
       UpdateWorkDefinitionVersionResponseSchema,
@@ -145,3 +253,17 @@ export class WorkDefinitionClient {
 }
 
 export const workDefinitionClient = new WorkDefinitionClient();
+
+function record(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+function text(value: unknown): string {
+  return typeof value === 'string' ? value : '';
+}
+function nullableText(value: unknown): string | null {
+  return value === null || value === undefined || value === ''
+    ? null
+    : text(value);
+}

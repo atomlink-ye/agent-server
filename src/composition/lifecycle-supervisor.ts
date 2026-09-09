@@ -4,6 +4,7 @@ import type { ChatDeliveryWorker } from '../entrypoints/chat/worker.js';
 import type { LarkIngressWorker } from '../entrypoints/lark/worker.js';
 import type { LarkOutboxWorker } from '../entrypoints/lark/outbox-worker.js';
 import type { WorkChatWakeWorker } from '../entrypoints/work-chat/worker.js';
+import type { WorkChatWorker } from '../application/work-chat/work-chat-worker.js';
 import type { createLarkWebsocketReceiver } from '../adapters/lark/lark-websocket-receiver.js';
 
 export interface LifecycleResources {
@@ -12,6 +13,7 @@ export interface LifecycleResources {
   readonly larkOutboxWorker?: Pick<LarkOutboxWorker, 'stop'>;
   readonly chatWorker?: Pick<ChatDeliveryWorker, 'stop'>;
   readonly workChatWorker?: Pick<WorkChatWakeWorker, 'stop'>;
+  readonly workChatMessageWorker?: Pick<WorkChatWorker, 'stop'>;
   readonly larkReceiver?: Pick<
     ReturnType<typeof createLarkWebsocketReceiver>,
     'stop'
@@ -37,6 +39,7 @@ export type StartableLifecycleResources = LifecycleResources & {
   readonly larkOutboxWorker?: Pick<LarkOutboxWorker, 'start' | 'stop'>;
   readonly chatWorker?: Pick<ChatDeliveryWorker, 'start' | 'stop'>;
   readonly workChatWorker?: Pick<WorkChatWakeWorker, 'start' | 'stop'>;
+  readonly workChatMessageWorker?: Pick<WorkChatWorker, 'start' | 'stop'>;
   readonly larkReceiver?: Pick<
     ReturnType<typeof createLarkWebsocketReceiver>,
     'start' | 'stop'
@@ -91,6 +94,13 @@ export async function closeServiceResources(
       : undefined,
     failures,
   );
+  await cleanup(
+    'work chat message worker',
+    resources.workChatMessageWorker
+      ? () => resources.workChatMessageWorker!.stop()
+      : undefined,
+    failures,
+  );
   await cleanup('dispatcher', () => resources.dispatcher.stop(), failures);
   await cleanup(
     'runtime provider',
@@ -126,6 +136,7 @@ export async function startServiceResources(
     resources.larkOutboxWorker?.start();
     resources.chatWorker?.start();
     resources.workChatWorker?.start();
+    resources.workChatMessageWorker?.start();
   } catch (error: unknown) {
     const startupFailure =
       error instanceof Error && error.name === 'ServiceLifecycleError'

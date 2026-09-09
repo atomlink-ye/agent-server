@@ -294,7 +294,8 @@ function mapScope(row: RuntimeSessionRow): RuntimeScope {
     row.scope_kind === 'team_member' ||
     row.scope_kind === 'product_session' ||
     row.scope_kind === 'task' ||
-    row.scope_kind === 'run'
+    row.scope_kind === 'run' ||
+    row.scope_kind === 'work_chat'
   )
     return Object.freeze({ kind: row.scope_kind, id: row.scope_id });
   throw new Error(`Unknown runtime session scope kind: ${row.scope_kind}`);

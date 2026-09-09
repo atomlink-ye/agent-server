@@ -26,6 +26,12 @@ import {
   WorkRunListResponseSchema,
 } from '../../../contracts/product-accepted-subset/index.js';
 import {
+  PostWorkChatMessageRequestSchema,
+  PostWorkChatMessageResponseSchema,
+  RetryWorkChatMessageResponseSchema,
+  WorkChatMessagesResponseSchema,
+} from '../../../contracts/work-chat.js';
+import {
   ChatWorkCardSchema,
   ConversationListResponseSchema,
   ConversationMessagesResponseSchema,
@@ -267,6 +273,46 @@ export function registerBrowserWebRoutes(
       logger,
       `/api/v1/works/${encodeURIComponent(workId)}/chat-card`,
       ChatWorkCardSchema,
+    );
+  });
+  app.get('/api/works/:workId/chat', async (c) => {
+    const workId = c.req.param('workId');
+    if (!isUuid(workId)) return invalidProductRequest();
+    return readProductJson(
+      c,
+      config,
+      logger,
+      `/api/v1/works/${encodeURIComponent(workId)}/chat`,
+      WorkChatMessagesResponseSchema,
+    );
+  });
+  app.post('/api/works/:workId/chat', async (c) => {
+    const workId = c.req.param('workId');
+    if (!isUuid(workId)) return invalidProductRequest();
+    const parsed = PostWorkChatMessageRequestSchema.safeParse(
+      await c.req.json().catch(() => undefined),
+    );
+    if (!parsed.success) return invalidProductRequest();
+    return writeProductJson(
+      c,
+      config,
+      logger,
+      `/api/v1/works/${encodeURIComponent(workId)}/chat`,
+      parsed.data,
+      PostWorkChatMessageResponseSchema,
+    );
+  });
+  app.post('/api/works/:workId/chat/:messageId/retry', async (c) => {
+    const workId = c.req.param('workId');
+    const messageId = c.req.param('messageId');
+    if (!isUuid(workId) || !isUuid(messageId)) return invalidProductRequest();
+    return writeProductJson(
+      c,
+      config,
+      logger,
+      `/api/v1/works/${encodeURIComponent(workId)}/chat/${encodeURIComponent(messageId)}/retry`,
+      {},
+      RetryWorkChatMessageResponseSchema,
     );
   });
   app.get('/api/works/:workId/definition', async (c) => {

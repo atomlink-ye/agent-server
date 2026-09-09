@@ -101,6 +101,7 @@ function mapActiveTurn(row: ActiveTurnRow): RuntimeTurn {
     status: row.status,
     promptDigest: row.prompt_digest,
     failureCode: row.failure_code,
+    outputText: null,
     createdAt: iso(row.created_at),
     startedAt: row.started_at === null ? null : iso(row.started_at),
     completedAt: row.completed_at === null ? null : iso(row.completed_at),

@@ -43,13 +43,14 @@ interface RuntimeTurnRow extends Record<string, unknown> {
   readonly status: RuntimeTurnStatus;
   readonly prompt_digest: string | null;
   readonly failure_code: RuntimeFailureCode | null;
+  readonly output_text: string | null;
   readonly created_at: string | Date;
   readonly started_at: string | Date | null;
   readonly completed_at: string | Date | null;
 }
 
 const TURN_COLUMNS = `id,runtime_session_id,generation_id,source_kind,source_id,
-  source_context,status,prompt_digest,failure_code,created_at,started_at,completed_at`;
+  source_context,status,prompt_digest,failure_code,output_text,created_at,started_at,completed_at`;
 
 export class PostgresRuntimeTurnStore implements RuntimeTurnStore {
   public constructor(private readonly database: Database) {}
@@ -231,12 +232,13 @@ export class PostgresRuntimeTurnStore implements RuntimeTurnStore {
   public succeed(input: {
     readonly id: RuntimeTurnId;
     readonly completedAt: string;
+    readonly outputText?: string;
   }): Promise<RuntimeTurn | false> {
     return this.transition(
       input.id,
       ['running'],
-      `status='succeeded',completed_at=$2`,
-      [input.completedAt],
+      `status='succeeded',completed_at=$2,output_text=$3`,
+      [input.completedAt, input.outputText ?? null],
     );
   }
 
@@ -320,9 +322,12 @@ function encodeSource(source: RuntimeTurnSource): {
       context: { triggerMessageId: source.triggerMessageId },
     };
   return {
-    kind: 'team_member',
-    id: source.teamMemberRunId,
-    context: { taskId: source.taskId, runId: source.runId },
+    kind: source.kind === 'team_member' ? 'team_member' : 'work_chat',
+    id: source.kind === 'team_member' ? source.teamMemberRunId : source.workId,
+    context:
+      source.kind === 'team_member'
+        ? { taskId: source.taskId, runId: source.runId }
+        : { messageId: source.messageId },
   };
 }
 
@@ -335,6 +340,7 @@ function mapTurn(row: RuntimeTurnRow): RuntimeTurn {
     status: row.status,
     promptDigest: row.prompt_digest,
     failureCode: row.failure_code,
+    outputText: row.output_text ?? null,
     createdAt: iso(row.created_at),
     startedAt: row.started_at === null ? null : iso(row.started_at),
     completedAt: row.completed_at === null ? null : iso(row.completed_at),
@@ -379,6 +385,16 @@ function decodeSource(row: RuntimeTurnRow): RuntimeTurnSource {
       taskId,
       runId,
     };
+  }
+  if (row.source_kind === 'work_chat') {
+    const messageId = context.messageId;
+    if (
+      !messageId ||
+      Object.keys(context).length !== 1 ||
+      !Object.prototype.hasOwnProperty.call(context, 'messageId')
+    )
+      throw new Error('Runtime Work Chat turn source is invalid.');
+    return { kind: 'work_chat', workId: row.source_id, messageId };
   }
   throw new Error('Runtime turn source kind is invalid.');
 }

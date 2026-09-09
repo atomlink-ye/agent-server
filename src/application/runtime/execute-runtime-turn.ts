@@ -202,6 +202,7 @@ export class ExecuteRuntimeTurn {
     const succeeded = await this.turns.succeed({
       id,
       completedAt: this.now().toISOString(),
+      outputText: result.output.text,
     });
     if (!succeeded) {
       const current = await this.turns.findById(id);

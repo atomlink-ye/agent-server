@@ -7,12 +7,13 @@ import { workTabPath } from '../../../app/routes';
 import { getLocale, t, type Locale } from '../../../i18n';
 
 export type WorkTab =
-  'overview' | 'runs' | 'transcript' | 'artifacts' | 'definition';
+  'overview' | 'chat' | 'runs' | 'transcript' | 'artifacts' | 'definition';
 
 export const WORK_TABS: readonly {
   readonly id: WorkTab;
   readonly label: string;
 }[] = [
+  { id: 'chat', label: t('work.tab.chat') },
   { id: 'runs', label: t('work.tab.runs') },
   { id: 'transcript', label: t('work.tab.transcript') },
   { id: 'artifacts', label: t('work.tab.artifacts') },

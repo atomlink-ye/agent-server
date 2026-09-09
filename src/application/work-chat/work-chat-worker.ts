@@ -1,0 +1,255 @@
+import { randomUUID, createHash } from 'node:crypto';
+import type { ExecuteRuntimeTurn } from '../runtime/execute-runtime-turn.js';
+import type { EnsureDesiredRuntimeSpec } from '../ports/ensure-desired-runtime-spec.js';
+import type {
+  WorkChatRepository,
+  WorkChatClaim,
+  WorkChatOwner,
+} from '../ports/work-chat-repository.js';
+import type { WorkIdentityApi } from '../work/work-identity-api.js';
+import type { WorkDefinitionResolutionPort } from '../ports/work-definition-resolution.js';
+import type { WorkerResolutionApi } from '../ports/worker-registry.js';
+import type { AppConfig } from '../../shared/config.js';
+import { createDesiredRuntimeSystemPrompt } from '../../domain/runtime/desired-runtime-system-prompt.js';
+import type { RuntimeTurnId } from '../../domain/runtime/runtime-session.js';
+import type {
+  StepWorker,
+  WorkerStepResult,
+} from '../../shared/workers/step-worker.js';
+import type { AccessContext } from '../../domain/access-context.js';
+import type { RuntimeTurnStore } from '../ports/runtime-turn-store.js';
+
+export interface WorkChatWorkerOptions {
+  readonly workerId: string;
+  readonly leaseMs: number;
+  readonly pollIntervalMs?: number;
+  readonly ownerPrincipalType: AccessContext['principalType'];
+  readonly ownerPrincipalId: string;
+  readonly config: Pick<AppConfig, 'paseo'>;
+  readonly now?: () => Date;
+}
+
+export interface WorkChatWorkerDependencies {
+  readonly repository: WorkChatRepository;
+  readonly workIdentity: Pick<WorkIdentityApi, 'findWorkById'>;
+  readonly definitions: WorkDefinitionResolutionPort;
+  readonly workers: WorkerResolutionApi;
+  readonly desiredSpec: Pick<EnsureDesiredRuntimeSpec, 'execute'>;
+  readonly turnExecutor: Pick<ExecuteRuntimeTurn, 'execute'>;
+  readonly runtimeTurns: Pick<RuntimeTurnStore, 'findById'>;
+}
+
+/** Serially drains Work Chat messages and invokes the Definition-resolved lead. */
+export class WorkChatWorker implements StepWorker {
+  #running = false;
+  #stopping = false;
+  #loop: Promise<void> | null = null;
+  #timer: ReturnType<typeof setTimeout> | null = null;
+  #wake: (() => void) | null = null;
+  readonly #options: Required<
+    Pick<
+      WorkChatWorkerOptions,
+      | 'workerId'
+      | 'leaseMs'
+      | 'ownerPrincipalType'
+      | 'ownerPrincipalId'
+      | 'config'
+    >
+  > & { pollIntervalMs: number; now: () => Date };
+
+  public constructor(
+    private readonly dependencies: WorkChatWorkerDependencies,
+    options: WorkChatWorkerOptions,
+  ) {
+    this.#options = {
+      ...options,
+      pollIntervalMs: options.pollIntervalMs ?? 250,
+      now: options.now ?? (() => new Date()),
+    };
+  }
+  public start(): void {
+    if (this.#running) return;
+    this.#running = true;
+    this.#stopping = false;
+    this.#loop = this.loop().catch(() => undefined);
+  }
+  public async stop(): Promise<void> {
+    this.#stopping = true;
+    this.#running = false;
+    if (this.#timer) clearTimeout(this.#timer);
+    this.#timer = null;
+    this.#wake?.();
+    this.#wake = null;
+    await this.#loop;
+    this.#loop = null;
+  }
+  public async step(): Promise<WorkerStepResult> {
+    const claim = await this.dependencies.repository.claimNext({
+      workerId: this.#options.workerId,
+      leaseMs: this.#options.leaseMs,
+      now: this.#options.now().toISOString(),
+    });
+    if (!claim) return { kind: 'idle' };
+    try {
+      await this.reply(claim);
+    } catch (error) {
+      const recovered = await this.recoverCompletedTurn(claim).catch(
+        () => false,
+      );
+      if (recovered) return { kind: 'processed', value: claim };
+      await this.dependencies.repository
+        .fail({
+          id: claim.id,
+          workerId: this.#options.workerId,
+          leaseFence: claim.leaseFence,
+          failureCode: safeFailureCode(error),
+          updatedAt: this.#options.now().toISOString(),
+        })
+        .catch(() => undefined);
+    }
+    return { kind: 'processed', value: claim };
+  }
+  private async recoverCompletedTurn(claim: WorkChatClaim): Promise<boolean> {
+    const turn = await this.dependencies.runtimeTurns.findById(
+      workChatTurnId(claim.workId, claim.id),
+    );
+    if (turn?.status !== 'succeeded' || turn.outputText === null) return false;
+    const now = this.#options.now().toISOString();
+    const completed = await this.dependencies.repository.complete({
+      id: claim.id,
+      workerId: this.#options.workerId,
+      leaseFence: claim.leaseFence,
+      reply: {
+        id: cryptoRandomUuid(),
+        body: turn.outputText.trim() || 'I could not produce a reply.',
+        sourceRuntimeTurnId: turn.id,
+        createdAt: now,
+      },
+      updatedAt: now,
+    });
+    return Boolean(completed);
+  }
+  async #delay(): Promise<void> {
+    await new Promise<void>((resolve) => {
+      this.#wake = resolve;
+      this.#timer = setTimeout(resolve, this.#options.pollIntervalMs);
+    });
+    this.#wake = null;
+    this.#timer = null;
+  }
+  async loop(): Promise<void> {
+    while (!this.#stopping) {
+      await this.step();
+      if (!this.#stopping) await this.#delay();
+    }
+  }
+  private async reply(claim: WorkChatClaim): Promise<void> {
+    const owner: WorkChatOwner = {
+      tenantId: claim.tenantId,
+      workspaceId: claim.workspaceId,
+      principalType: this.#options.ownerPrincipalType,
+      principalId: this.#options.ownerPrincipalId,
+    };
+    const work = await this.dependencies.workIdentity.findWorkById(
+      claim.workId,
+      owner,
+    );
+    if (!work) throw new Error('work_not_found');
+    const accessContext: AccessContext = {
+      tenantId: owner.tenantId,
+      workspaceId: owner.workspaceId,
+      principalType: this.#options.ownerPrincipalType,
+      principalId: owner.principalId,
+      policySnapshotVersion: 'work-chat',
+    };
+    const definition = await this.dependencies.definitions.resolve({
+      definitionId: work.definitionId,
+      definitionVersionId: work.currentDefinitionVersionId,
+      accessContext,
+    });
+    const participant = definition.participants.find(
+      (item) => item.role === 'primary' || item.role === 'lead',
+    );
+    if (!participant) throw new Error('work_chat_lead_unavailable');
+    const worker = await this.dependencies.workers.resolvePublished(
+      participant.workerVersionId,
+      owner,
+      { resolveExtensions: true },
+    );
+    if (!worker) throw new Error('work_chat_lead_unavailable');
+    const messages = await this.dependencies.repository.list({
+      owner,
+      workId: claim.workId,
+      limit: 80,
+    });
+    const transcript = messages
+      .map(
+        (message) =>
+          `${message.sequence} ${message.kind === 'lead' ? 'Lead' : 'User'}: ${message.body}`,
+      )
+      .join('\n');
+    const systemPrompt = createDesiredRuntimeSystemPrompt(
+      [
+        worker.instructions,
+        'You are the temporary Lead for one shared Work Chat.',
+        'Reply to the latest User message using the shared transcript below.',
+        'Answer in plain text. Do not use tools, start a WorkRun, or claim that execution changed.',
+        `Shared Work Chat transcript:\n${transcript}`,
+      ].join('\n\n'),
+    );
+    const ensured = await this.dependencies.desiredSpec.execute({
+      owner,
+      scope: { kind: 'work_chat', id: claim.workId },
+      subject: { kind: 'worker', workerVersionId: participant.workerVersionId },
+      environmentVersionId: null,
+      resolvedSkills: [],
+      toolRefs: [],
+      configuration: {
+        provider: this.#options.config.paseo.provider,
+        model: this.#options.config.paseo.model ?? null,
+        cwd: this.#options.config.paseo.agentCwd,
+        contextEpoch: 0,
+        desiredSystemPrompt: systemPrompt,
+      },
+    });
+    const turnId = workChatTurnId(claim.workId, claim.id);
+    const output = await this.dependencies.turnExecutor.execute({
+      runtimeSessionId: ensured.session.id,
+      source: { kind: 'work_chat', workId: claim.workId, messageId: claim.id },
+      turnId,
+      prompt: claim.body,
+      recoveryPrompt: claim.body,
+      desiredSystemPrompt: systemPrompt,
+    });
+    await this.dependencies.repository.complete({
+      id: claim.id,
+      workerId: this.#options.workerId,
+      leaseFence: claim.leaseFence,
+      reply: {
+        id: cryptoRandomUuid(),
+        body: output.text.trim() || 'I could not produce a reply.',
+        sourceRuntimeTurnId: turnId,
+        createdAt: this.#options.now().toISOString(),
+      },
+      updatedAt: this.#options.now().toISOString(),
+    });
+  }
+}
+
+function cryptoRandomUuid(): string {
+  return randomUUID();
+}
+function safeFailureCode(error: unknown): string {
+  return error instanceof Error && /^[a-z0-9_:-]{1,80}$/u.test(error.message)
+    ? error.message
+    : 'work_chat_reply_failed';
+}
+export function workChatTurnId(
+  workId: string,
+  messageId: string,
+): RuntimeTurnId {
+  const hex = createHash('sha256')
+    .update(`work-chat:${workId}:${messageId}`)
+    .digest('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-5${hex.slice(13, 16)}-${((Number.parseInt(hex.slice(16, 18), 16) & 0x3f) | 0x80).toString(16).padStart(2, '0')}${hex.slice(18, 20)}-${hex.slice(20, 32)}` as RuntimeTurnId;
+}

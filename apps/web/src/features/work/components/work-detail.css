@@ -44,6 +44,57 @@
   position: absolute;
   right: 0;
 }
+.work-chat-pane {
+  margin-top: var(--space-7);
+  max-width: 760px;
+}
+.work-chat-history {
+  display: grid;
+  gap: var(--space-3);
+  margin: var(--space-5) 0;
+}
+.work-chat-message {
+  border: 1px solid var(--ink-100);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  background: var(--cloud);
+}
+.work-chat-message--lead {
+  background: var(--sky-50);
+}
+.work-chat-message strong {
+  color: var(--ink-900);
+  font-size: var(--text-sm);
+}
+.work-chat-message p {
+  white-space: pre-wrap;
+  color: var(--ink-700);
+  line-height: 1.55;
+  margin: var(--space-2) 0 0;
+}
+.work-chat-message small {
+  color: var(--ink-500);
+  display: block;
+  margin-top: var(--space-2);
+}
+.work-chat-composer {
+  display: grid;
+  gap: var(--space-2);
+}
+.work-chat-composer label {
+  font-size: var(--text-sm);
+  font-weight: 650;
+}
+.work-chat-composer textarea {
+  border: 1px solid var(--ink-200);
+  border-radius: var(--radius-md);
+  font: inherit;
+  padding: var(--space-3);
+  resize: vertical;
+}
+.work-chat-composer button {
+  justify-self: start;
+}
 .work-overview,
 .work-runs,
 .work-capability-unavailable,

@@ -138,12 +138,14 @@ export function WorkDetailPage({
             run={detail.run}
             latestRunId={latestRunId}
             originConversationId={originConversationId}
-          />
-          <RunTrigger
-            workId={detail.work.id}
-            originConversationId={originConversationId}
-            definitionVersion={detail.currentDefinitionVersion}
-            runState={detail.run?.work_run.product_state}
+            actions={
+              <RunTrigger
+                workId={detail.work.id}
+                originConversationId={originConversationId}
+                definitionVersion={detail.currentDefinitionVersion}
+                runState={detail.run?.work_run.product_state}
+              />
+            }
           />
           <WorkTabs
             activeTab={activeTab}

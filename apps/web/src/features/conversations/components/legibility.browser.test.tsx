@@ -1,6 +1,6 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 
 import { ChatComposer } from './ChatComposer';
 
@@ -31,6 +31,45 @@ it('does not expose an attachment control without an attachment action', async (
   try {
     expect(host.querySelector('.composer-tool')).toBeNull();
     expect(host.querySelector('[role="tooltip"]')).toBeNull();
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+  }
+});
+
+it('keeps an IME composition Enter from submitting the draft', async () => {
+  const onSend = vi.fn();
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  await act(async () => {
+    root.render(
+      <ChatComposer
+        draft="composing"
+        sending={false}
+        disabled={false}
+        sendError={null}
+        canRetry={false}
+        onDraftChange={() => {}}
+        onSend={onSend}
+        onRetry={() => {}}
+      />,
+    );
+  });
+  try {
+    const field = host.querySelector('textarea')!;
+    field.focus();
+    await act(async () => {
+      field.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          bubbles: true,
+          key: 'Enter',
+          isComposing: true,
+        }),
+      );
+    });
+    expect(document.activeElement).toBe(field);
+    expect(onSend).not.toHaveBeenCalled();
   } finally {
     await act(async () => root.unmount());
     host.remove();

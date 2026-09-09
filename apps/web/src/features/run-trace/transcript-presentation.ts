@@ -23,7 +23,10 @@ export function buildEntryPresentation(
   if (event.kind === 'lifecycle')
     return {
       icon: lifecycleIcon(event.status),
-      label: lifecycleLabel(event.status),
+      // A Team trace is an interleaved record of several provider-local Runs.
+      // Their lifecycle sequences all begin at one, so retaining the captured
+      // actor is necessary to distinguish simultaneous "Run started" rows.
+      label: lifecycleLabel(event.status, options.actorName),
       summary: null,
       origin: null,
       platformToolName: null,
@@ -173,18 +176,19 @@ function textSummary(text: string): string | null {
     : normalized;
 }
 
-function lifecycleLabel(status: string): string {
+function lifecycleLabel(status: string, actorName?: string | null): string {
+  const prefix = actorName?.trim() ? `${actorName.trim()} · ` : '';
   switch (status) {
     case 'started':
-      return 'Run started';
+      return `${prefix}Run started`;
     case 'succeeded':
-      return 'Run succeeded';
+      return `${prefix}Run succeeded`;
     case 'failed':
-      return 'Run failed';
+      return `${prefix}Run failed`;
     case 'cancelled':
-      return 'Run cancelled';
+      return `${prefix}Run cancelled`;
     default:
-      return `Run ${humanize(status)}`;
+      return `${prefix}Run ${humanize(status)}`;
   }
 }
 

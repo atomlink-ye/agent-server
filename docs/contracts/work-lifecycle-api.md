@@ -544,3 +544,43 @@ Error bodies use the common safe envelope and include a request ID:
 
 Raw YAML, prompts, bearer tokens, credentials, local paths, provider wire
 objects, and database errors are not public response fields.
+
+## Preparation and Run conversations
+
+`GET` and `POST /api/v1/works/{workId}/chat` address only preparation
+messages (`work_run_id IS NULL`). The existing preparation confirmation route
+starts a Run from the collected input. Preparation history is retained in its
+own bucket; it is not reassigned to a Run. Once a Run exists, new preparation
+messages return `409 work_run_required`, and failed preparation messages cannot
+be retried. Already accepted preparation requests remain replayable and their
+history remains readable.
+
+`GET` and `POST /api/v1/works/{workId}/runs/{runId}/chat` address one Run's
+conversation. Both families support `POST .../chat/{messageId}/retry`.
+The authenticated owner and Work/Run relationship are checked before any Run
+chat operation. Retry can affect only a failed user message in the selected
+conversation. Browser clients use the matching `/api/works/...` facade.
+
+POST accepts the same strict `{body, client_request_id}` request for both
+families; scope comes from the URL, never from the body. Responses expose
+nullable `work_run_id` on messages and the chat list envelope. Preparation
+metadata is returned only for preparation reads. Client request keys retain
+the existing Work-wide uniqueness: a key reused in another conversation or
+with different text returns `409 idempotency_conflict`, without returning the
+other conversation's message. Use a fresh key for each new message.
+
+Run chat resolves the actual root Task's Worker version for single-worker
+execution, or the persisted TeamRun's sole lead TeamMemberRun for team
+execution. An unbound Run, unavailable executor, or unsupported legacy Agent
+executor fails with `work_run_executor_unavailable`; it does not silently
+substitute the Work's current Definition participant.
+
+The current Run counterpart uses that executor's instructions in a separate
+read-only runtime session with scope `{kind: work_run_chat, id: runId}`.
+Preparation keeps `{kind: work_chat, id: workId}`. These keys are distinct
+under the active-session uniqueness constraint. Run replies receive current
+Task/technical Run or Team status and only that Run's chat transcript; they do
+not update WorkPreparation. They do not resume the execution session, send
+TeamMessages, steer execution, or read execution transcripts/results/artifacts.
+Live executor-session interaction remains unimplemented. A chat reply must not
+be treated as evidence that execution changed.

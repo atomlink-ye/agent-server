@@ -275,6 +275,8 @@ export async function createApplication(
           {
             repository: new PostgresWorkChatRepository(pool),
             workIdentity: workModule.identity,
+            tasks: taskRepository,
+            teams: collaborativeTeamExecutions,
             definitions: resourceModule.workDefinitionResolution,
             workers: resourceModule.workerResolutionApi,
             desiredSpec: ensureDesiredRuntimeSpec,

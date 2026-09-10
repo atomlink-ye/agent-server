@@ -109,7 +109,8 @@ it('auto-scrolls on arrival only while the reader is near the bottom', async () 
     history.scrollHeight - history.clientHeight - history.scrollTop;
   expect(atBottom()).toBeLessThanOrEqual(2);
 
-  chat.mockResolvedValueOnce(response([...initial, message(33, 'lead')]));
+  // The server retains new messages across every subsequent poll.
+  chat.mockResolvedValue(response([...initial, message(33, 'lead')]));
   await act(async () => new Promise((resolve) => setTimeout(resolve, 1_050)));
   expect(history.textContent).toContain('Conversation message 33');
   expect(atBottom()).toBeLessThanOrEqual(2);
@@ -117,10 +118,15 @@ it('auto-scrolls on arrival only while the reader is near the bottom', async () 
   history.scrollTop = 0;
   history.dispatchEvent(new Event('scroll'));
   const readerPosition = history.scrollTop;
-  chat.mockResolvedValueOnce(
+  chat.mockResolvedValue(
     response([...initial, message(33, 'lead'), message(34, 'user')]),
   );
   await act(async () => new Promise((resolve) => setTimeout(resolve, 1_050)));
+  expect(history.textContent).toContain('Conversation message 34');
+  expect(history.scrollTop).toBe(readerPosition);
+  expect(history.scrollHeight - history.clientHeight).toBeGreaterThan(80);
+  // A further poll must preserve both the arrived message and reader position.
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 1100)));
   expect(history.textContent).toContain('Conversation message 34');
   expect(history.scrollTop).toBe(readerPosition);
 });
@@ -139,4 +145,50 @@ it('captures the empty and short conversational states', async () => {
   await page.screenshot({
     path: '../../../../../__screenshots__/ux-review/short-conversation.png',
   });
+});
+
+it('shows a single loading action and plain startup guidance', async () => {
+  const { host } = await renderChat([]);
+  vi.mocked(workClient.chat).mockResolvedValue({
+    ...response([]),
+    preparation: {
+      id: workId,
+      work_id: workId,
+      revision: 1,
+      status: 'starting',
+      definition_version_id: workId,
+      schema_fingerprint: 'test',
+      candidate_input: {},
+      confirmed_fingerprint: 'test',
+      start_intent: 'test',
+      work_run_id: null,
+      missing: [],
+      ambiguities: [],
+      created_at: '2026-09-10T00:00:00.000Z',
+      updated_at: '2026-09-10T00:00:00.000Z',
+    },
+  });
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 1100)));
+  const status = host.querySelector('[role="status"]');
+  expect(status?.textContent).toContain('Preparing your Run');
+  const button = host.querySelector<HTMLButtonElement>(
+    '.work-preparation-card button',
+  );
+  expect(button?.disabled).toBe(true);
+  expect(button?.getAttribute('aria-busy')).toBe('true');
+  expect(host.textContent).not.toContain('Status: starting');
+});
+
+it('loads the selected Run conversation instead of preparation', async () => {
+  const { host } = await renderChat([]);
+  const runId = '00000000-0000-4000-8000-000000000200';
+  await act(async () => {
+    root!.render(<WorkChatPane workId={workId} workRunId={runId} />);
+  });
+  expect(workClient.chat).toHaveBeenLastCalledWith(workId, runId);
+  expect(host.textContent).toContain('Run’s Lead');
+  expect(host.textContent).toContain(
+    'cannot access execution history or change the Run',
+  );
+  expect(host.textContent).not.toContain('Definition lead');
 });

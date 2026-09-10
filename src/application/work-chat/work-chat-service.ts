@@ -19,6 +19,7 @@ export class WorkChatService {
   public async post(input: {
     readonly owner: WorkChatOwner;
     readonly workId: string;
+    readonly workRunId?: string | undefined;
     readonly body: string;
     readonly clientRequestId: string;
     readonly now?: string;
@@ -31,6 +32,7 @@ export class WorkChatService {
     return this.repository.enqueue({
       owner: input.owner,
       workId: input.workId,
+      workRunId: input.workRunId,
       id: randomUUID(),
       body,
       clientRequestId: input.clientRequestId,
@@ -41,6 +43,7 @@ export class WorkChatService {
   public retry(input: {
     readonly owner: WorkChatOwner;
     readonly workId: string;
+    readonly workRunId?: string | undefined;
     readonly messageId: string;
     readonly now?: string;
   }) {
@@ -48,6 +51,7 @@ export class WorkChatService {
       id: input.messageId,
       owner: input.owner,
       workId: input.workId,
+      workRunId: input.workRunId,
       updatedAt: input.now ?? new Date().toISOString(),
     });
   }

@@ -16,11 +16,13 @@ export interface WorkChatRepository {
   list(input: {
     readonly owner: WorkChatOwner;
     readonly workId: string;
+    readonly workRunId?: string | undefined;
     readonly limit?: number;
   }): Promise<readonly WorkChatMessage[]>;
   enqueue(input: {
     readonly owner: WorkChatOwner;
     readonly workId: string;
+    readonly workRunId?: string | undefined;
     readonly id: string;
     readonly body: string;
     readonly clientRequestId: string;
@@ -57,6 +59,21 @@ export interface WorkChatRepository {
     readonly id: string;
     readonly owner: WorkChatOwner;
     readonly workId: string;
+    readonly workRunId?: string | undefined;
     readonly updatedAt: string;
   }): Promise<WorkChatMessage | false>;
+}
+
+export class WorkChatRequestConflictError extends Error {
+  public constructor() {
+    super('The client request key belongs to another conversation or message.');
+    this.name = 'WorkChatRequestConflictError';
+  }
+}
+
+export class WorkChatRunRequiredError extends Error {
+  public constructor() {
+    super('This Work has Runs. Select a Run to continue the conversation.');
+    this.name = 'WorkChatRunRequiredError';
+  }
 }

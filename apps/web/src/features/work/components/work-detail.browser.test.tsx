@@ -196,6 +196,16 @@ function mockProductReads(
       `/api/works/${work.work.id}/chat`,
       {
         work_id: work.work.id,
+        work_run_id: null,
+        messages: [],
+        preparation: null,
+      },
+    ],
+    [
+      `/api/works/${work.work.id}/runs/${runId}/chat`,
+      {
+        work_id: work.work.id,
+        work_run_id: runId,
         messages: input.chatMessages ?? [],
         preparation: null,
       },
@@ -341,7 +351,7 @@ it('scrolls the real Work detail transcript to its final entry in the AppShell r
 });
 
 it('keeps the Work Chat composer visible when the main Work viewport reaches the latest message', async () => {
-  mockProductReads({ chatMessages: longChatMessages });
+  const fetchMock = mockProductReads({ chatMessages: longChatMessages });
   const host = document.createElement('div');
   host.style.height = '900px';
   document.body.append(host);
@@ -370,6 +380,11 @@ it('keeps the Work Chat composer visible when the main Work viewport reaches the
     expect(shell).not.toBeNull();
     expect(composer).not.toBeNull();
     expect(content!.textContent).toContain('Final visible Work Chat message');
+    const requestedPaths = fetchMock.mock.calls.map(([path]) => path);
+    expect(requestedPaths).toContain(
+      `/api/works/${work.work.id}/runs/${selectedRun.id}/chat`,
+    );
+    expect(requestedPaths).not.toContain(`/api/works/${work.work.id}/chat`);
     content!.scrollTop = content!.scrollHeight;
     const contentRect = content!.getBoundingClientRect();
     const shellRect = shell!.getBoundingClientRect();

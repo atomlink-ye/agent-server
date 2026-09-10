@@ -4,6 +4,7 @@ import { WorkRunSummarySchema } from './product-work-commands.js';
 export const WorkChatMessageSchema = z
   .object({
     id: z.uuid(),
+    work_run_id: z.uuid().nullable().optional(),
     sequence: z.number().int().positive(),
     role: z.enum(['user', 'lead', 'system']),
     body: z.string().min(1).max(16_384),
@@ -17,6 +18,7 @@ export const WorkChatMessageSchema = z
 export const WorkChatMessagesResponseSchema = z
   .object({
     work_id: z.uuid(),
+    work_run_id: z.uuid().nullable().optional(),
     messages: z.array(WorkChatMessageSchema).max(500),
     preparation: z
       .lazy(() => WorkPreparationResponseSchema)
@@ -44,6 +46,7 @@ export const WorkPreparationResponseSchema = z
   })
   .strict();
 
+// The URL selects preparation or Run scope; body fields cannot override it.
 export const PostWorkChatMessageRequestSchema = z
   .object({
     body: z.string().trim().min(1).max(16_384),

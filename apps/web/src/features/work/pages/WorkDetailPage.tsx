@@ -76,7 +76,7 @@ export function WorkDetailPage({
     ? (() => {
         switch (activeTab) {
           case 'chat':
-            return <WorkChatPane workId={detail.work.id} />;
+            return <WorkChatPane workId={detail.work.id} workRunId={runId} />;
           case 'overview':
             return (
               <OverviewPane

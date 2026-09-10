@@ -23,6 +23,7 @@ export default defineConfig({
       'src/features/conversations/ConversationsPage.browser.test.tsx',
       'src/features/work/components/work-list.browser.test.tsx',
       'src/features/work/components/work-detail.browser.test.tsx',
+      'src/features/work/components/panes/work-chat-pane.browser.test.tsx',
       'src/features/work/components/definition-authoring.browser.test.tsx',
       'src/features/work/components/new-work.browser.test.tsx',
       'src/features/run-trace/run-trace.browser.test.tsx',

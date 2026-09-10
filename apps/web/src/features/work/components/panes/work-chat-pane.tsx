@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useT } from '../../../../i18n';
 import { IChat } from '../../../../components/icons';
 import { ChatComposer } from '../../../conversations/components/ChatComposer';
@@ -24,6 +24,11 @@ export function WorkChatPane({ workId }: { readonly workId: string }) {
     useState<WorkPreparationResponse | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [preparationError, setPreparationError] = useState<string | null>(null);
+  const historyRef = useRef<HTMLDivElement>(null);
+  const stickToBottomRef = useRef(true);
+  const messagesRef = useRef(messages);
+  const preparationRef = useRef(preparation);
+  const loadingRef = useRef(true);
   useEffect(() => {
     let active = true;
     const refresh = () =>
@@ -31,15 +36,25 @@ export function WorkChatPane({ workId }: { readonly workId: string }) {
         .chat(workId)
         .then((response) => {
           if (active) {
-            setMessages(response.messages);
-            setPreparation(response.preparation ?? null);
+            if (!sameMessages(messagesRef.current, response.messages)) {
+              messagesRef.current = response.messages;
+              setMessages(response.messages);
+            }
+            const nextPreparation = response.preparation ?? null;
+            if (!samePreparation(preparationRef.current, nextPreparation)) {
+              preparationRef.current = nextPreparation;
+              setPreparation(nextPreparation);
+            }
           }
         })
         .catch(() => {
           if (active) setError(true);
         })
         .finally(() => {
-          if (active) setLoading(false);
+          if (active && loadingRef.current) {
+            loadingRef.current = false;
+            setLoading(false);
+          }
         });
     void refresh();
     const timer = window.setInterval(() => {
@@ -50,6 +65,19 @@ export function WorkChatPane({ workId }: { readonly workId: string }) {
       window.clearInterval(timer);
     };
   }, [workId]);
+  useLayoutEffect(() => {
+    const history = historyRef.current;
+    if (!history || !stickToBottomRef.current) return;
+    history.scrollTop = history.scrollHeight;
+  }, [messages, preparation, loading, error]);
+
+  function rememberScrollPosition() {
+    const history = historyRef.current;
+    if (!history) return;
+    const distanceFromBottom =
+      history.scrollHeight - history.clientHeight - history.scrollTop;
+    stickToBottomRef.current = distanceFromBottom <= 80;
+  }
   async function send() {
     const next = body.trim();
     if (!next || sending) return;
@@ -60,7 +88,11 @@ export function WorkChatPane({ workId }: { readonly workId: string }) {
     setPendingRequestId(requestId);
     try {
       const message = await workClient.postChat(workId, next, requestId);
-      setMessages((current) => [...current, message]);
+      setMessages((current) => {
+        const updated = [...current, message];
+        messagesRef.current = updated;
+        return updated;
+      });
       setPendingRequestId(null);
     } catch {
       setError(true);
@@ -79,6 +111,7 @@ export function WorkChatPane({ workId }: { readonly workId: string }) {
         preparation.id,
         preparation.revision,
       );
+      preparationRef.current = confirmed;
       setPreparation(confirmed);
     } catch (error) {
       if (
@@ -97,18 +130,23 @@ export function WorkChatPane({ workId }: { readonly workId: string }) {
   return (
     <section className="work-chat-pane" aria-label={t('work.tab.chat')}>
       <p className="work-shell-kicker">{t('work.chat.shared')}</p>
-      {loading ? <p aria-live="polite">{t('work.detail.loading')}</p> : null}
-      {error ? <p role="alert">{t('work.chat.loadError')}</p> : null}
-      {!loading && !messages.length ? (
-        <div className="work-chat-empty-state">
-          <div className="work-chat-empty-state__icon" aria-hidden="true">
-            <IChat />
+      <div
+        className="work-chat-history scroll-region"
+        aria-live="polite"
+        ref={historyRef}
+        onScroll={rememberScrollPosition}
+      >
+        {loading ? <p>{t('work.detail.loading')}</p> : null}
+        {error ? <p role="alert">{t('work.chat.loadError')}</p> : null}
+        {!loading && !messages.length ? (
+          <div className="work-chat-empty-state">
+            <div className="work-chat-empty-state__icon" aria-hidden="true">
+              <IChat />
+            </div>
+            <h2>{t('work.chat.emptyTitle')}</h2>
+            <p>{t('work.chat.emptyBody')}</p>
           </div>
-          <h2>{t('work.chat.emptyTitle')}</h2>
-          <p>{t('work.chat.emptyBody')}</p>
-        </div>
-      ) : null}
-      <div className="work-chat-history" aria-live="polite">
+        ) : null}
         {messages.map((message) => (
           <div
             className={`work-chat-message work-chat-message--${message.role}`}
@@ -129,10 +167,10 @@ export function WorkChatPane({ workId }: { readonly workId: string }) {
             >
               <span className="work-chat-message__author">
                 {message.role === 'lead'
-                  ? 'Lead'
+                  ? t('work.chat.role.lead')
                   : message.role === 'system'
-                    ? 'System'
-                    : 'User'}
+                    ? t('work.chat.role.system')
+                    : t('work.chat.role.user')}
               </span>
               {message.role === 'user' ? (
                 <p>{message.body}</p>
@@ -167,52 +205,57 @@ export function WorkChatPane({ workId }: { readonly workId: string }) {
             </article>
           </div>
         ))}
+        {preparation ? (
+          <aside className="work-preparation-card" aria-live="polite">
+            <p className="work-shell-kicker">
+              {t('work.chat.preparationTitle')}
+            </p>
+            <p>
+              {t('work.chat.preparationStatus')}: {preparation.status}
+            </p>
+            <p>
+              {t('work.chat.preparationVersion')}:{' '}
+              {preparation.definition_version_id}
+            </p>
+            <dl>
+              {Object.entries(preparation.candidate_input).map(
+                ([key, value]) => (
+                  <div key={key}>
+                    <dt>{key}</dt>
+                    <dd>{String(value)}</dd>
+                  </div>
+                ),
+              )}
+            </dl>
+            {preparation.missing.length ? (
+              <p>
+                {t('work.chat.missing')}: {preparation.missing.join(', ')}
+              </p>
+            ) : null}
+            {preparation.ambiguities.length ? (
+              <p>
+                {t('work.chat.ambiguities')}:{' '}
+                {preparation.ambiguities.join(', ')}
+              </p>
+            ) : null}
+            {preparation.status === 'ready' ? (
+              <button
+                type="button"
+                onClick={() => void confirmPreparation()}
+                disabled={confirming}
+              >
+                {confirming
+                  ? t('work.chat.starting')
+                  : t('work.chat.confirmStart')}
+              </button>
+            ) : null}
+            {preparation.status === 'starting' ? (
+              <p>{t('work.chat.starting')}</p>
+            ) : null}
+            {preparationError ? <p role="alert">{preparationError}</p> : null}
+          </aside>
+        ) : null}
       </div>
-      {preparation ? (
-        <aside className="work-preparation-card" aria-live="polite">
-          <p className="work-shell-kicker">{t('work.chat.preparationTitle')}</p>
-          <p>
-            {t('work.chat.preparationStatus')}: {preparation.status}
-          </p>
-          <p>
-            {t('work.chat.preparationVersion')}:{' '}
-            {preparation.definition_version_id}
-          </p>
-          <dl>
-            {Object.entries(preparation.candidate_input).map(([key, value]) => (
-              <div key={key}>
-                <dt>{key}</dt>
-                <dd>{String(value)}</dd>
-              </div>
-            ))}
-          </dl>
-          {preparation.missing.length ? (
-            <p>
-              {t('work.chat.missing')}: {preparation.missing.join(', ')}
-            </p>
-          ) : null}
-          {preparation.ambiguities.length ? (
-            <p>
-              {t('work.chat.ambiguities')}: {preparation.ambiguities.join(', ')}
-            </p>
-          ) : null}
-          {preparation.status === 'ready' ? (
-            <button
-              type="button"
-              onClick={() => void confirmPreparation()}
-              disabled={confirming}
-            >
-              {confirming
-                ? t('work.chat.starting')
-                : t('work.chat.confirmStart')}
-            </button>
-          ) : null}
-          {preparation.status === 'starting' ? (
-            <p>{t('work.chat.starting')}</p>
-          ) : null}
-          {preparationError ? <p role="alert">{preparationError}</p> : null}
-        </aside>
-      ) : null}
       <div className="work-chat-composer">
         <ChatComposer
           draft={body}
@@ -231,5 +274,34 @@ export function WorkChatPane({ workId }: { readonly workId: string }) {
         />
       </div>
     </section>
+  );
+}
+
+function sameMessages(
+  current: WorkChatMessagesResponse['messages'],
+  next: WorkChatMessagesResponse['messages'],
+) {
+  return (
+    current.length === next.length &&
+    current.every((message, index) => {
+      const candidate = next[index];
+      return (
+        candidate !== undefined &&
+        message.id === candidate.id &&
+        message.status === candidate.status &&
+        message.body === candidate.body
+      );
+    })
+  );
+}
+
+function samePreparation(
+  current: WorkPreparationResponse | null,
+  next: WorkPreparationResponse | null,
+) {
+  return (
+    current?.id === next?.id &&
+    current?.revision === next?.revision &&
+    current?.status === next?.status
   );
 }

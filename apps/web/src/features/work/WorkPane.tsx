@@ -105,81 +105,83 @@ export function WorkPane({
         </div>
       </div>
 
-      {/* The list element only exists once there is a list. A non-ready state
+      <div className="work-pane-scroll scroll-region">
+        {/* The list element only exists once there is a list. A non-ready state
           is a sibling placeholder, not an empty <ul> holding a status row, so
           "is the list present?" stays an honest question for both tests and
           assistive technology. */}
-      {works.length === 0 && status === 'loading' ? (
-        <p
-          className="pane-placeholder"
-          data-testid="work-list-loading"
-          role="status"
-          aria-live="polite"
-        >
-          {t('work.loadingList')}
-        </p>
-      ) : null}
-      {works.length === 0 && status === 'unavailable' ? (
-        <div
-          className="pane-placeholder"
-          data-testid="work-list-unavailable"
-          role="status"
-        >
-          <p className="eyebrow">{t('work.detailUnavailable.eyebrow')}</p>
-          {/* feature_unavailable means this workspace does not compose the
+        {works.length === 0 && status === 'loading' ? (
+          <p
+            className="pane-placeholder"
+            data-testid="work-list-loading"
+            role="status"
+            aria-live="polite"
+          >
+            {t('work.loadingList')}
+          </p>
+        ) : null}
+        {works.length === 0 && status === 'unavailable' ? (
+          <div
+            className="pane-placeholder"
+            data-testid="work-list-unavailable"
+            role="status"
+          >
+            <p className="eyebrow">{t('work.detailUnavailable.eyebrow')}</p>
+            {/* feature_unavailable means this workspace does not compose the
               Product Work surface at all. Offering Retry would be a false
               promise, so this state has no Retry control. */}
-          <p>{t('work.unavailable.body')}</p>
-        </div>
-      ) : null}
-      {works.length === 0 && status === 'error' ? (
-        <div
-          className="pane-placeholder"
-          data-testid="work-list-error"
-          role="alert"
-        >
-          <p className="eyebrow">{t('work.connectionInterrupted')}</p>
-          {/* A failed read must not be mistaken for a statement about any
+            <p>{t('work.unavailable.body')}</p>
+          </div>
+        ) : null}
+        {works.length === 0 && status === 'error' ? (
+          <div
+            className="pane-placeholder"
+            data-testid="work-list-error"
+            role="alert"
+          >
+            <p className="eyebrow">{t('work.connectionInterrupted')}</p>
+            {/* A failed read must not be mistaken for a statement about any
               Work's own state, and must not leak the upstream error string
               (which can be control-plane prose). The backend owns product
               state; an empty pane here means "we could not ask", not
               "nothing needs you". */}
-          <p>{t('work.connectionProblem')}</p>
-          <button type="button" onClick={refresh}>
-            {t('work.retry')}
-          </button>
-        </div>
-      ) : null}
-      {works.length === 0 && status === 'ready' ? (
-        <div
-          className="pane-placeholder"
-          data-testid="work-list-empty"
-          role="status"
-        >
-          <p>{t('work.empty')}</p>
-          <button type="button" onClick={onCreateNew}>
-            {t('work.new')}
-          </button>
-        </div>
-      ) : null}
-      {status === 'ready' ? <WorkCatalog works={works} /> : null}
-      {works.length > 0 ? (
-        <ul
-          className="work-list scroll-region"
-          aria-label={t('work.items')}
-          data-testid="work-list"
-        >
-          {works.map((work) => (
-            <WorkListRow
-              key={work.id}
-              work={work}
-              selected={selectedWorkId === work.id}
-              originConversationId={originConversationId}
-              stateOverride={selectedLatestRunState}
-            />
-          ))}
-        </ul>
-      ) : null}
+            <p>{t('work.connectionProblem')}</p>
+            <button type="button" onClick={refresh}>
+              {t('work.retry')}
+            </button>
+          </div>
+        ) : null}
+        {works.length === 0 && status === 'ready' ? (
+          <div
+            className="pane-placeholder"
+            data-testid="work-list-empty"
+            role="status"
+          >
+            <p>{t('work.empty')}</p>
+            <button type="button" onClick={onCreateNew}>
+              {t('work.new')}
+            </button>
+          </div>
+        ) : null}
+        {works.length > 0 ? (
+          <ul
+            className="work-list"
+            aria-label={t('work.items')}
+            data-testid="work-list"
+          >
+            {works.map((work) => (
+              <WorkListRow
+                key={work.id}
+                work={work}
+                selected={selectedWorkId === work.id}
+                originConversationId={originConversationId}
+                stateOverride={selectedLatestRunState}
+              />
+            ))}
+          </ul>
+        ) : null}
+        {status === 'ready' ? <WorkCatalog works={works} /> : null}
+      </div>
     </aside>
   );
 }

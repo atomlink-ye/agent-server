@@ -433,17 +433,132 @@ it('scrolls the real Work list through its final Work item', async () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
     const list = host.querySelector<HTMLElement>('[data-testid="work-list"]');
+    const scroller = host.querySelector<HTMLElement>('.work-pane-scroll');
     expect(list).not.toBeNull();
-    expect(list!.scrollHeight).toBeGreaterThan(list!.clientHeight);
-    list!.scrollTop = list!.scrollHeight;
-    expect(list!.scrollTop).toBeGreaterThan(0);
+    expect(scroller).not.toBeNull();
+    expect(scroller!.scrollHeight).toBeGreaterThan(scroller!.clientHeight);
+    scroller!.scrollTop = scroller!.scrollHeight;
+    expect(scroller!.scrollTop).toBeGreaterThan(0);
     const finalItem = [...list!.querySelectorAll('li')].at(-1)!;
     expect(finalItem.getBoundingClientRect().bottom).toBeLessThanOrEqual(
-      list!.getBoundingClientRect().bottom + 1,
+      scroller!.getBoundingClientRect().bottom + 1,
     );
     await page.screenshot({
       path: '../../../../../../.local/work-list-scroll-desktop.png',
     });
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
+it('scrolls the Work list and catalog together while its heading stays fixed', async () => {
+  const works = Array.from({ length: 25 }, (_, index) => ({
+    ...populatedWorkList.works[0]!,
+    id: uuid(index + 500),
+    title:
+      index === 24 ? 'Final combined-scroll Work item' : `Work ${index + 1}`,
+  }));
+  const definitions = Array.from({ length: 8 }, (_, index) => ({
+    definitionId: uuid(index + 600),
+    displayName:
+      index === 7
+        ? 'final-reachable-catalog-definition'
+        : `catalog-definition-${index + 1}`,
+    currentPublishedVersionId: uuid(index + 700),
+  }));
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const path = String(input);
+    if (path === '/api/works')
+      return jsonResponse({ works, next_cursor: null });
+    if (path === '/api/work-definitions') {
+      return jsonResponse({ items: definitions, next_cursor: null });
+    }
+    if (path === '/api/work-definitions/plan') {
+      return catalogPlanResponse('combined-scroll-workflow');
+    }
+    if (path === '/api/agents') {
+      return jsonResponse({ items: [], next_cursor: null });
+    }
+    const version = definitions.find(
+      (item) =>
+        path ===
+        `/api/work-definition-versions/${item.currentPublishedVersionId}`,
+    );
+    if (version) {
+      return jsonResponse(
+        catalogVersion(
+          version.definitionId,
+          version.currentPublishedVersionId,
+          version.displayName,
+          'A catalog definition included to exercise real sidebar overflow.',
+        ),
+      );
+    }
+    const agents = definitions.find(
+      (item) => path === `/api/work-definitions/${item.definitionId}/agents`,
+    );
+    if (agents) {
+      return jsonResponse({
+        definition_id: agents.definitionId,
+        definition_version_id: agents.currentPublishedVersionId,
+        agents: [],
+      });
+    }
+    throw new Error(`unexpected browser request: ${path}`);
+  });
+  vi.stubGlobal('fetch', fetchMock);
+
+  const host = document.createElement('div');
+  host.className = 'app-shell';
+  host.style.height = '900px';
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(
+        <MemoryRouter initialEntries={['/work']}>
+          <div aria-hidden="true" />
+          <WorkPane onCreateNew={() => undefined} />
+          <main />
+        </MemoryRouter>,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    });
+
+    const pane = host.querySelector<HTMLElement>('.work-pane')!;
+    const heading = pane.querySelector<HTMLElement>(':scope > .pane-heading')!;
+    const scroller = pane.querySelector<HTMLElement>(
+      ':scope > .work-pane-scroll',
+    );
+    const list = pane.querySelector<HTMLElement>('[data-testid="work-list"]')!;
+    const catalog = pane.querySelector<HTMLElement>(
+      '[data-testid="work-definition-catalog"]',
+    )!;
+    expect(catalog).not.toBeNull();
+    expect(scroller).not.toBeNull();
+    expect(scroller!.scrollHeight).toBeGreaterThan(scroller!.clientHeight);
+    expect(list.scrollHeight).toBe(list.clientHeight);
+    expect(pane.scrollHeight).toBe(pane.clientHeight);
+
+    const headingTop = heading.getBoundingClientRect().top;
+    scroller!.scrollTop = scroller!.scrollHeight;
+    expect(scroller!.scrollTop).toBeGreaterThan(0);
+    expect(heading.getBoundingClientRect().top).toBe(headingTop);
+
+    const finalWork = [...list.querySelectorAll('li')].at(-1)!;
+    const finalCatalog = [...catalog.querySelectorAll(':scope > li')].at(-1)!;
+    expect(finalWork.textContent).toContain('Final combined-scroll Work item');
+    expect(finalCatalog.textContent).toContain(
+      'final-reachable-catalog-definition',
+    );
+    expect(finalCatalog.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+      scroller!.getBoundingClientRect().bottom + 1,
+    );
+    expect(document.documentElement.scrollHeight).toBe(
+      document.documentElement.clientHeight,
+    );
   } finally {
     await act(async () => root.unmount());
     host.remove();

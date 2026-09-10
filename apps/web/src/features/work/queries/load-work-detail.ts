@@ -9,6 +9,7 @@ import {
   type AnchoredRun,
   workRunClient,
 } from '../clients/work-run-client';
+import { loadWorkRuns } from './load-work-runs';
 import { workClient } from '../clients/work-client';
 import { workDefinitionClient } from '../clients/work-definition-client';
 import { ProductReadError } from '../clients/errors';
@@ -37,6 +38,7 @@ export async function loadWorkDetail(
   selectedRunId: string | undefined,
   preferCurrentDefinition: boolean,
   includeTrace = true,
+  includeRun = true,
 ): Promise<WorkDetailData> {
   let work: WorkResponse;
   try {
@@ -51,8 +53,7 @@ export async function loadWorkDetail(
     }
     throw error;
   }
-  const runsResponse = await workRunClient.list(workId);
-  const runs = runsResponse.work_runs;
+  const runs = await loadWorkRuns(workId);
   const selectedSummary = selectedRunId
     ? runs.find((run) => run.id === selectedRunId)
     : runs[0];
@@ -70,7 +71,7 @@ export async function loadWorkDetail(
     selectedDefinitionVersionId === work.definition_version_id
       ? definitionPromise
       : workDefinitionClient.getVersion(work.definition_version_id);
-  if (!selectedSummary) {
+  if (!selectedSummary || !includeRun) {
     const currentDefinitionVersion = await currentDefinitionPromise;
     return {
       work,

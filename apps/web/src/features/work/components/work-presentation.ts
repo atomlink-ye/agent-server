@@ -7,22 +7,32 @@ import { workTabPath } from '../../../app/routes';
 import { getLocale, t, type Locale } from '../../../i18n';
 
 export type WorkTab =
-  'overview' | 'chat' | 'runs' | 'transcript' | 'artifacts' | 'definition';
+  | 'overview'
+  | 'chat'
+  | 'runs'
+  | 'transcript'
+  | 'artifacts'
+  | 'definition'
+  | 'result';
 
-export const WORK_TABS: readonly {
-  readonly id: WorkTab;
-  readonly label: string;
-}[] = [
-  { id: 'overview', label: t('work.tab.overview') },
-  { id: 'chat', label: t('work.tab.chat') },
-  { id: 'runs', label: t('work.tab.runs') },
-  { id: 'transcript', label: t('work.tab.transcript') },
-  { id: 'artifacts', label: t('work.tab.artifacts') },
-  { id: 'definition', label: t('work.tab.definition') },
-];
+export const WORK_TABS = [
+  'overview',
+  'runs',
+  'definition',
+  'artifacts',
+] as const;
+export const RUN_TABS = ['chat', 'transcript', 'result'] as const;
 
-export function normalizeWorkTab(value: string | undefined): WorkTab {
-  return value === 'overview' || WORK_TABS.some((tab) => tab.id === value)
+export function normalizeWorkTab(
+  value: string | undefined,
+  runView = false,
+): WorkTab {
+  if (runView) {
+    if (value === 'definition') return 'definition';
+    if (value === 'overview' || value === 'result') return 'result';
+    return value === 'transcript' ? 'transcript' : 'chat';
+  }
+  return value === 'chat' || WORK_TABS.some((tab) => tab === value)
     ? (value as WorkTab)
     : 'overview';
 }
@@ -33,7 +43,15 @@ export function workTabHref(
   runId?: string,
   originConversationId?: string | null,
 ) {
-  return workTabPath(workId, tab, runId ?? null, originConversationId ?? null);
+  const runTab =
+    RUN_TABS.some((id) => id === tab) ||
+    ((tab === 'overview' || tab === 'definition') && runId);
+  return workTabPath(
+    workId,
+    tab,
+    runTab ? (runId ?? null) : null,
+    originConversationId ?? null,
+  );
 }
 
 /**

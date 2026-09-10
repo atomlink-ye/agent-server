@@ -538,3 +538,40 @@
   color: var(--coral-deep);
   font-size: var(--text-sm);
 }
+
+.work-tabs {
+  gap: var(--space-5);
+  padding-top: var(--space-2);
+}
+.work-tabs a {
+  padding-bottom: var(--space-2);
+  white-space: nowrap;
+}
+.work-shell > .work-overview,
+.work-shell > .work-runs,
+.work-shell > .work-detail-state,
+.work-record {
+  margin-top: var(--space-3);
+}
+.work-runs > .work-run-list {
+  margin-top: 0;
+}
+.work-run-list > li {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+.work-record h2 {
+  margin: 0;
+  font-size: var(--text-title);
+}
+.work-record dl {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--space-3);
+}
+.work-record dt {
+  color: var(--ink-500);
+}
+.work-record dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}

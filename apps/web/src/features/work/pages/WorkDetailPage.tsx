@@ -11,7 +11,11 @@ import { WorkChatPane } from '../components/panes/work-chat-pane';
 import { RunTrigger } from '../components/run-trigger';
 import { WorkDetailHeader } from '../components/work-header';
 import { WorkTabs } from '../components/work-tabs';
-import { normalizeWorkTab } from '../components/work-presentation';
+import {
+  formatTimestamp,
+  workTabHref,
+  normalizeWorkTab,
+} from '../components/work-presentation';
 import { workRootPath } from '../../../app/routes';
 import { useWorkDetail } from '../queries/use-work-detail';
 import { WorkDetailRootNotFoundError } from '../queries/load-work-detail';
@@ -43,17 +47,28 @@ export function WorkDetailPage({
   ) => void;
 }) {
   const t = useT();
-  const activeTab = normalizeWorkTab(tab);
-  const preferCurrentDefinition = activeTab === 'definition' && !selectedRunId;
+  const requestedRunView =
+    Boolean(selectedRunId) && !['runs', 'artifacts'].includes(tab ?? '');
+  const requestedTab = normalizeWorkTab(tab, requestedRunView);
+  const includeRun = requestedRunView || tab === 'chat';
+  const preferCurrentDefinition = !includeRun;
   const query = useWorkDetail({
     workId,
     selectedRunId,
     preferCurrentDefinition,
-    includeTrace: activeTab !== 'definition',
+    includeTrace: requestedTab !== 'definition',
+    includeRun,
   });
   const detail = query.detail;
   const runId = detail?.run?.work_run.id;
   const latestRunId = detail?.runs[0]?.id;
+  const runView =
+    requestedRunView || (tab === 'chat' && Boolean(detail?.runs.length));
+  const activeTab = normalizeWorkTab(tab, runView);
+  const runOrdinal =
+    detail && runId
+      ? detail.runs.length - detail.runs.findIndex((run) => run.id === runId)
+      : undefined;
   useEffect(() => {
     const selectedRun = detail?.run?.work_run;
     onSelectedLatestRunState?.(
@@ -76,13 +91,37 @@ export function WorkDetailPage({
     ? (() => {
         switch (activeTab) {
           case 'chat':
-            return <WorkChatPane workId={detail.work.id} workRunId={runId} />;
+            return runView ? (
+              <WorkChatPane workId={detail.work.id} workRunId={runId} />
+            ) : (
+              <WorkChatPane workId={detail.work.id} />
+            );
           case 'overview':
             return (
-              <OverviewPane
+              <WorkRecord
                 data={detail}
                 originConversationId={originConversationId}
               />
+            );
+          case 'result':
+            return (
+              <>
+                <a
+                  className="work-run-definition-link"
+                  href={workTabHref(
+                    detail.work.id,
+                    'definition',
+                    runId,
+                    originConversationId,
+                  )}
+                >
+                  {t('work.definitionUsed')}
+                </a>
+                <OverviewPane
+                  data={detail}
+                  originConversationId={originConversationId}
+                />
+              </>
             );
           case 'runs':
             return (
@@ -115,7 +154,7 @@ export function WorkDetailPage({
 
   return (
     <div
-      className="work-shell"
+      className={`work-shell${runView ? ' work-shell--run' : ''}`}
       data-active-tab={activeTab}
       data-testid="work-detail-shell"
     >
@@ -139,22 +178,23 @@ export function WorkDetailPage({
         <>
           <WorkDetailHeader
             work={detail.work}
-            run={detail.run}
-            latestRunId={latestRunId}
+            run={runView ? detail.run : null}
+            runOrdinal={runOrdinal}
             originConversationId={originConversationId}
             actions={
-              <RunTrigger
-                workId={detail.work.id}
-                originConversationId={originConversationId}
-                definitionVersion={detail.currentDefinitionVersion}
-                runState={detail.run?.work_run.product_state}
-              />
+              runView ? undefined : (
+                <RunTrigger
+                  workId={detail.work.id}
+                  originConversationId={originConversationId}
+                  definitionVersion={detail.currentDefinitionVersion}
+                />
+              )
             }
           />
           <WorkTabs
             activeTab={activeTab}
-            definitionRunId={undefined}
-            runId={runId}
+            preparation={detail.runs.length === 0}
+            runId={runView ? runId : undefined}
             workId={detail.work.id}
             originConversationId={originConversationId}
           />
@@ -200,6 +240,58 @@ function WorkDetailError({
           {t('work.retryLoading')}
         </button>
       </div>
+    </section>
+  );
+}
+
+function WorkRecord({
+  data,
+  originConversationId,
+}: {
+  readonly data: NonNullable<ReturnType<typeof useWorkDetail>['detail']>;
+  readonly originConversationId?: string | null;
+}) {
+  const t = useT();
+  return (
+    <section className="work-record" data-testid="work-record">
+      <h2>{t('work.record.summary')}</h2>
+      <dl>
+        <dt>{t('work.record.definition')}</dt>
+        <dd>
+          <a
+            href={workTabHref(
+              data.work.id,
+              'definition',
+              undefined,
+              originConversationId,
+            )}
+          >
+            {data.work.definition_version_id}
+          </a>
+        </dd>
+        <dt>{t('work.tab.runs')}</dt>
+        <dd>
+          <a
+            href={workTabHref(
+              data.work.id,
+              'runs',
+              undefined,
+              originConversationId,
+            )}
+          >
+            {t(
+              data.runs.length === 1
+                ? 'work.record.oneRun'
+                : 'work.record.runCount',
+              { count: data.runs.length },
+            )}
+          </a>
+        </dd>
+        <dt>{t('work.record.created')}</dt>
+        <dd>{formatTimestamp(data.work.created_at)}</dd>
+        <dt>{t('work.record.updated')}</dt>
+        <dd>{formatTimestamp(data.work.updated_at)}</dd>
+      </dl>
     </section>
   );
 }

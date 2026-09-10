@@ -341,7 +341,10 @@ it('scrolls the real Work detail transcript to its final entry in the AppShell r
 });
 
 it('keeps the Work Chat composer visible when the main Work viewport reaches the latest message', async () => {
-  mockProductReads({ chatMessages: longChatMessages });
+  mockProductReads({
+    chatMessages: longChatMessages,
+    runList: { work_runs: [], next_cursor: null },
+  });
   const host = document.createElement('div');
   host.style.height = '900px';
   document.body.append(host);
@@ -349,11 +352,7 @@ it('keeps the Work Chat composer visible when the main Work viewport reaches the
   try {
     await act(async () => {
       root.render(
-        <MemoryRouter
-          initialEntries={[
-            `/work/${work.work.id}?tab=chat&run=${selectedRun.id}`,
-          ]}
-        >
+        <MemoryRouter initialEntries={[`/work/${work.work.id}?tab=chat`]}>
           <AppProviders commands={shellCommands()}>
             <AppRouter />
           </AppProviders>
@@ -398,13 +397,17 @@ async function renderDetail(
   document.body.append(host);
   const root = createRoot(host);
   await act(async () => {
-    root.render(<WorkDetailPage {...props} />);
+    root.render(
+      <MemoryRouter>
+        <WorkDetailPage {...props} />
+      </MemoryRouter>,
+    );
     await new Promise((resolve) => setTimeout(resolve, 25));
   });
   return { host, root };
 }
 
-it('renders a result-first Work shell and fixture-backed Overview through Product reads only', async () => {
+it('renders a Work record with Work-only tabs through Product reads only', async () => {
   const fetchMock = mockProductReads();
   const { host, root } = await renderDetail();
   try {
@@ -413,37 +416,23 @@ it('renders a result-first Work shell and fixture-backed Overview through Produc
       [...host.querySelectorAll<HTMLAnchorElement>('.work-tabs a')].map(
         (item) => item.textContent?.trim(),
       ),
-    ).toEqual([
-      'Overview',
-      'Work Chat',
-      'Runs',
-      'Execution record',
-      'Files',
-      'Definition',
-    ]);
-    expect(host.textContent).toContain(
-      'The result summary is still unavailable.',
-    );
+    ).toEqual(['Summary', 'Runs', 'Definition', 'Files']);
     await page.screenshot({
       path: '../../../../__screenshots__/ux-review/work-overview.png',
     });
     expect(
       host.querySelector('.work-tabs a[aria-current="page"]')?.textContent,
-    ).toBe('Overview');
-    expect(host.textContent).toContain('Key steps');
-    expect(host.textContent).toContain('Everything captured during this Run');
+    ).toBe('Summary');
+    expect(host.textContent).not.toContain(
+      'Everything captured during this Run',
+    );
     expect(host.textContent).toContain('Start Run');
-    expect(host.textContent).not.toContain('Run unavailable');
-    for (const excluded of trace.timeline_coverage.excluded_execution)
-      expect(host.textContent?.toLowerCase()).toContain(
-        excluded.replaceAll('_', ' '),
-      );
-
+    expect(host.querySelector('[data-testid=work-record]')).not.toBeNull();
     const paths = fetchMock.mock.calls.map(([path]) => path as string);
     expect(paths).toContain(`/api/works/${work.work.id}`);
     expect(paths).toContain(`/api/works/${work.work.id}/runs`);
     expect(paths).toContain(
-      `/api/work-definition-versions/${selectedRun.definition_version_id}`,
+      `/api/work-definition-versions/${work.work.definition_version_id}`,
     );
     expect(paths.some((path) => path.endsWith('/definition'))).toBe(false);
     expect(paths.some((path) => path.includes('/team-runs'))).toBe(false);
@@ -470,18 +459,12 @@ it('renders the exact Product DefinitionVersion used by the selected Run', async
     expect(host.textContent).toContain('Lead');
     expect(host.textContent).toContain('Researcher');
     expect(host.textContent).toContain(selectedRun.definition_version_id);
-    // Definition tab link should not contain run= parameter (goes to current editable version)
-    const definitionLink = host.querySelector<HTMLAnchorElement>(
-      '.work-tabs a[href*="tab=definition"]',
+    expect(host.querySelector('.work-run-header')?.textContent).toContain(
+      'RUN #1',
     );
-    expect(definitionLink?.getAttribute('href')).not.toContain(`run=`);
-    // Other tabs should contain run= parameter (stay on the selected Run)
-    const conversationLink = host.querySelector<HTMLAnchorElement>(
-      '.work-tabs a[href*="tab=transcript"]',
-    );
-    expect(conversationLink?.getAttribute('href')).toContain(
-      `run=${selectedRun.id}`,
-    );
+    expect(
+      [...host.querySelectorAll('.work-tabs a')].map((a) => a.textContent),
+    ).toEqual(['Conversation', 'Trace', 'Result']);
   } finally {
     await act(async () => root.unmount());
     host.remove();
@@ -549,7 +532,9 @@ it('does not invent a runnable Work when its current DefinitionVersion is missin
   const { host, root } = await renderDetail();
   try {
     expect(host.textContent).toContain(work.work.title);
-    expect(host.textContent).toContain('Everything captured during this Run');
+    expect(host.textContent).not.toContain(
+      'Everything captured during this Run',
+    );
     expect(host.textContent).toContain(
       'The current Work Definition version could not be loaded, so runnability cannot be determined.',
     );
@@ -565,5 +550,151 @@ it('does not invent a runnable Work when its current DefinitionVersion is missin
   } finally {
     await act(async () => root.unmount());
     host.remove();
+  }
+});
+
+it('keeps Run tabs and an ordinal breadcrumb separate from the Work tabs', async () => {
+  mockProductReads();
+  const { host, root } = await renderDetail({
+    workId: work.work.id,
+    tab: 'chat',
+    selectedRunId: selectedRun.id,
+  });
+  try {
+    expect(
+      [...host.querySelectorAll('.work-tabs a')].map((a) => a.textContent),
+    ).toEqual(['Conversation', 'Trace', 'Result']);
+    expect(host.querySelector('.work-run-header')?.textContent).toContain(
+      'RUN #1',
+    );
+    expect(host.querySelector('.work-run-header a')?.getAttribute('href')).toBe(
+      `/work/${work.work.id}`,
+    );
+    expect(
+      host
+        .querySelector('[data-run-conversation]')
+        ?.getAttribute('data-run-conversation'),
+    ).toBe(selectedRun.id);
+    expect(host.querySelector('.work-chat-pane')).toBeNull();
+    expect(
+      getComputedStyle(host.querySelector('.work-shell')!).borderLeftWidth,
+    ).not.toBe('0px');
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
+it('lists Runs newest first with ordinal identities and opens their conversation', async () => {
+  const older = {
+    ...selectedRun,
+    id: '00000000-0000-4000-8000-000000000791',
+    created_at: '2020-01-01T00:00:00.000Z',
+  };
+  mockProductReads({
+    runList: { work_runs: [older, selectedRun], next_cursor: null },
+  });
+  const { host, root } = await renderDetail({
+    workId: work.work.id,
+    tab: 'runs',
+    selectedRunId: selectedRun.id,
+  });
+  try {
+    const rows = [...host.querySelectorAll('.work-run-list > li')];
+    expect(rows.map((row) => row.querySelector('strong')?.textContent)).toEqual(
+      ['Run #2', 'Run #1'],
+    );
+    expect(rows[0]?.querySelector('a')?.getAttribute('href')).toContain(
+      `tab=chat&run=${selectedRun.id}`,
+    );
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
+it('offers Start Run in an empty Runs index', async () => {
+  mockProductReads({ runList: { work_runs: [], next_cursor: null } });
+  const { host, root } = await renderDetail({
+    workId: work.work.id,
+    tab: 'runs',
+  });
+  try {
+    expect(
+      host.querySelector('.work-detail-state .work-run-trigger button')
+        ?.textContent,
+    ).toBe('Start Run');
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
+it('places the first Runs content row within 160px of the right pane top', async () => {
+  mockProductReads();
+  const { host, root } = await renderDetail({
+    workId: work.work.id,
+    tab: 'runs',
+  });
+  try {
+    const row = host.querySelector('.work-run-list > li')!;
+    const offset =
+      row.getBoundingClientRect().top - host.getBoundingClientRect().top;
+    console.info(
+      `Runs first content row y-offset: ${offset}px (Chromium 1440x900)`,
+    );
+    expect(offset).toBeLessThanOrEqual(160);
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
+it('keeps the existing result, journey and trace in the selected Run Result view', async () => {
+  mockProductReads();
+  const { host, root } = await renderDetail({
+    workId: work.work.id,
+    tab: 'result',
+    selectedRunId: selectedRun.id,
+  });
+  try {
+    expect(
+      host.querySelector('.work-tabs a[aria-current="page"]')?.textContent,
+    ).toBe('Result');
+    expect(host.textContent).toContain(
+      'The result summary is still unavailable.',
+    );
+    expect(host.textContent).toContain('Key steps');
+    expect(host.textContent).toContain('Everything captured during this Run');
+    for (const excluded of trace.timeline_coverage.excluded_execution)
+      expect(host.textContent?.toLowerCase()).toContain(
+        excluded.replaceAll('_', ' '),
+      );
+    expect(host.querySelector('[data-testid=work-record]')).toBeNull();
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
+it('can read a Work record even when a child Run projection is unavailable', async () => {
+  const fetchMock = mockProductReads({
+    runBody: { projection_status: 'not_captured' },
+  });
+  const { host, root } = await renderDetail();
+  try {
+    expect(host.querySelector('[data-testid=work-record]')).not.toBeNull();
+    expect(fetchMock.mock.calls.map(([path]) => path)).not.toContain(
+      `/api/works/${work.work.id}/runs/${selectedRun.id}`,
+    );
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
   }
 });

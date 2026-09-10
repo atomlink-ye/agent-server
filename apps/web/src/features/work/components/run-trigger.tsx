@@ -58,7 +58,7 @@ export function RunTrigger({
     try {
       const runId = (await workRunClient.start(workId)).work_run.id;
       window.location.assign(
-        workTabHref(workId, 'overview', runId, originConversationId),
+        workTabHref(workId, 'chat', runId, originConversationId),
       );
     } catch (reason) {
       // A permanent failure (e.g. the Work requires a runtime capability
@@ -129,7 +129,9 @@ export function RunTrigger({
       ) : null}
       {blockedByCapability && friendlyCapability ? (
         <section className="work-run-unavailable" role="status">
-          <p className="work-run-unavailable__eyebrow">{t('work.run.unavailable')}</p>
+          <p className="work-run-unavailable__eyebrow">
+            {t('work.run.unavailable')}
+          </p>
           <h2>{t('work.run.unavailableTitle')}</h2>
           <p id={reasonId}>
             {t('work.run.requires', { capability: friendlyCapability })}

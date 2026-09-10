@@ -61,6 +61,29 @@ The Work tab preserves the useful Work product capabilities that existed before 
 - Work Definition view/edit;
 - bounded Artifact state until the Product API exposes the full Artifact surface.
 
+Work and Run use different presentation levels within `/work/:workId`.
+Without a selected Run, the compact Work header shows the title, Active/Archived
+record state, and Start Run. Its tabs contain a Work summary, Runs, the current
+Definition, and the bounded Files placeholder. The summary is a record of the
+Work's Definition, dates, and run count; it does not render execution results.
+The directory uses the same record state and a run count, with
+`.work-pane-scroll` owning scrolling for both the Work list and catalog.
+
+Selecting `?run=:runId` opens a visually distinct Run surface with a breadcrumb
+back to the Work and a chronological Run ordinal. Conversation, Trace, and
+Result belong to that Run. The existing result/journey Overview renderer is
+Run content, not the Work summary. Historical Definition deep links retain the
+exact pinned version. Preparation chat is available only before a Work has any
+Runs; the Run conversation surface requires the Run-scoped chat integration.
+The Work directory and create surfaces offer no Coworker binding controls.
+
+The current list contract has no aggregate Run count. The Work index reads all
+pages of the existing Runs endpoint to produce exact counts and chronological
+ordinals; failed reads do not become zero counts. Run row states come from the
+existing Run detail projection, since Run summaries do not contain state.
+These reads add per-Work/per-Run requests and are an MVE limitation for large
+histories, not a new server-side aggregation contract.
+
 The Cumora-derived `Rail` and desktop shell are the only visible layout owners. Tasks, Boards, Work, Agents, Files, and Conversations are feature content rendered inside that shell.
 
 ## Browser API boundary

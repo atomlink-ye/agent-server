@@ -1,6 +1,8 @@
-import type { ProductWorkDefinitionVersionResponse } from '@atomlink-ye/agent-server/product-contract';
-
+import { useEffect, useState } from 'react';
+import type { WorkRunSummary } from '@atomlink-ye/agent-server/product-contract';
 import type { WorkDetailData } from '../../queries/load-work-detail';
+import { workRunClient, type AnchoredRun } from '../../clients/work-run-client';
+import { RunTrigger } from '../run-trigger';
 import {
   formatTimestamp,
   productStatePresentation,
@@ -19,89 +21,89 @@ export function RunsPane({
   if (data.runs.length === 0)
     return (
       <section className="work-detail-state">
-        <p className="work-shell-kicker">{t('work.tab.runs')}</p>
         <h2>{t('work.runs.emptyTitle')}</h2>
+        <RunTrigger
+          workId={data.work.id}
+          definitionVersion={data.currentDefinitionVersion}
+          originConversationId={originConversationId}
+        />
       </section>
     );
-
   return (
-    <section className="work-runs" aria-labelledby="work-runs-heading">
-      <div className="work-section-heading">
-        <p className="work-shell-kicker">{t('work.tab.runs')}</p>
-        <h2 id="work-runs-heading">{t('work.runs.historyTitle')}</h2>
-        <p>{t('work.runs.historyBody')}</p>
-      </div>
+    <section className="work-runs" aria-label={t('work.tab.runs')}>
       <ol className="work-run-list">
-        {data.runs.map((run, index) => {
-          const selected = data.run?.work_run.id === run.id;
-          const exactDefinition =
-            data.definitionVersion?.id === run.definition_version_id
-              ? definitionName(data.definitionVersion)
-              : null;
-          return (
-            <li data-selected={selected ? 'true' : undefined} key={run.id}>
-              <div className="work-run-list__identity">
-                <strong>{index === 0 ? t('work.latestRun') : t('work.historicalRun')}</strong>
-                <time dateTime={run.created_at}>
-                  {formatTimestamp(run.created_at)}
-                </time>
-              </div>
-              <div className="work-run-list__definition">
-                <span>{t('work.tab.definition')}</span>
-                {exactDefinition ? (
-                  <strong>{exactDefinition}</strong>
-                ) : (
-                  <code>{run.definition_version_id}</code>
-                )}
-              </div>
-              {selected && data.run ? (
-                <span
-                  className={`work-state-pill work-state-pill--${data.run.work_run.product_state}`}
-                >
-                  {
-                    productStatePresentation(data.run.work_run.product_state)
-                      .label
-                  }
-                </span>
-              ) : (
-                <span className="work-run-list__quiet">
-                  {t('work.outcomeLoads')}
-                </span>
+        {data.runs.map((run, index) => (
+          <li key={run.id}>
+            <div className="work-run-list__identity">
+              <strong>
+                {t('work.run.number', { number: data.runs.length - index })}
+              </strong>
+              <time dateTime={run.created_at}>
+                {formatTimestamp(run.created_at)}
+              </time>
+            </div>
+            <RunState
+              run={run}
+              selected={data.run?.work_run.id === run.id ? data.run : null}
+            />
+            <a
+              href={workTabHref(
+                data.work.id,
+                'chat',
+                run.id,
+                originConversationId,
               )}
-              <a
-                href={workTabHref(
-                  data.work.id,
-                  'overview',
-                  run.id,
-                  originConversationId,
-                )}
-              >
-                {selected ? t('work.viewOverview') : t('work.openRun')}
-              </a>
-              <a
-                href={workTabHref(
-                  data.work.id,
-                  'definition',
-                  run.id,
-                  originConversationId,
-                )}
-              >
-                {t('work.definitionUsed')}
-              </a>
-            </li>
-          );
-        })}
+            >
+              {t('work.run.open')}
+            </a>
+          </li>
+        ))}
       </ol>
     </section>
   );
 }
 
-function definitionName(
-  version: ProductWorkDefinitionVersionResponse,
-): string | null {
-  const metadata = version.source.metadata;
-  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata))
-    return null;
-  const name = (metadata as Record<string, unknown>).name;
-  return typeof name === 'string' && name.length > 0 ? name : null;
+function RunState({
+  run,
+  selected,
+}: {
+  readonly run: WorkRunSummary;
+  readonly selected: AnchoredRun | null;
+}) {
+  const t = useT();
+  const [state, setState] = useState<
+    AnchoredRun['work_run']['product_state'] | null
+  >(null);
+  useEffect(() => {
+    if (selected) return;
+    let active = true;
+    setState(null);
+    void workRunClient.get(run.work_id, run.id).then(
+      (detail) => {
+        if (active)
+          setState(
+            'projection_status' in detail &&
+              detail.projection_status === 'internally_anchored'
+              ? detail.work_run.product_state
+              : 'not_captured',
+          );
+      },
+      () => {
+        if (active) setState('not_captured');
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [run.id, run.work_id, run.updated_at, selected]);
+  const current = selected?.work_run.product_state ?? state;
+  return (
+    <span
+      className={`work-state-pill${current ? ` work-state-pill--${current}` : ''}`}
+    >
+      {current
+        ? productStatePresentation(current).label
+        : t('work.run.stateLoading')}
+    </span>
+  );
 }

@@ -300,3 +300,63 @@
     padding: var(--space-5);
   }
 }
+
+/* Work is a compact record header; a selected Run has its own surface. */
+.work-shell {
+  padding-top: var(--space-3);
+}
+.work-detail-header {
+  display: flex;
+  gap: var(--space-3);
+  padding-bottom: var(--space-2);
+  min-height: 36px;
+}
+.work-detail-header .work-shell-kicker {
+  margin: 0;
+}
+.work-detail-header h1 {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-title);
+  letter-spacing: -0.02em;
+}
+.work-detail-header .work-state-pill,
+.work-detail-header .work-shell-kicker {
+  flex-shrink: 0;
+}
+.work-detail-header__actions {
+  margin-left: auto;
+}
+.work-shell--run {
+  box-sizing: border-box;
+  padding: var(--space-3) var(--space-4) var(--space-6);
+  border: 1px solid var(--ink-200);
+  border-left: 3px solid var(--sky-ink);
+  border-radius: var(--radius-md);
+  background: var(--paper);
+}
+.work-run-header > a {
+  color: var(--sky-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  max-width: 50%;
+}
+.work-run-header h1 {
+  flex: 0 0 auto;
+}
+@media (max-width: 700px) {
+  .work-detail-header {
+    gap: var(--space-2);
+  }
+  .work-detail-header__actions {
+    width: auto;
+  }
+  .work-detail-header__actions .work-run-trigger > button {
+    min-width: auto;
+  }
+}

@@ -16,7 +16,10 @@ import './work-list.css';
 import { AppProviders } from '../../../app/providers';
 import { AppRouter } from '../../../app/router';
 import parallelRecording from '@/test-support/fixtures/product-recordings/parallel-success.json';
-import { projectWorkList } from '@/test-support/product-recording-test-helpers';
+import {
+  projectWorkList,
+  projectWorkRunList,
+} from '@/test-support/product-recording-test-helpers';
 
 (
   globalThis as typeof globalThis & {
@@ -70,6 +73,21 @@ function workPaneFetch(workResponse: WorkListResponse) {
   return vi.fn(async (input: RequestInfo | URL) => {
     const path = String(input);
     if (path === '/api/works') return jsonResponse(workResponse);
+    const selected = workResponse.works.find(
+      (work) => path === `/api/works/${work.id}/runs`,
+    );
+    if (selected) {
+      const seed = projectWorkRunList(parallelRecording, baseWork.id)
+        .work_runs[0]!;
+      return jsonResponse({
+        work_runs: [1, 2, 3].map((n) => ({
+          ...seed,
+          id: uuid(n + 200),
+          work_id: selected.id,
+        })),
+        next_cursor: null,
+      });
+    }
     // WorkPane reads the catalog and Coworker roster independently of the
     // history list. Keep those reads explicit so a Work-list fixture cannot
     // accidentally masquerade as a Definition response.
@@ -185,7 +203,7 @@ async function settleNetworkTurn() {
   });
 }
 
-it('renders Product Work state and latest Run summary with one list read', async () => {
+it('renders Work state and run counts without latest Run summaries', async () => {
   const fetchMock = workPaneFetch(populatedWorkList);
   vi.stubGlobal('fetch', fetchMock);
 
@@ -202,20 +220,16 @@ it('renders Product Work state and latest Run summary with one list read', async
       ...host.querySelectorAll<HTMLLIElement>('[data-testid="work-list"] > li'),
     ];
     expect(cards).toHaveLength(stateCases.length);
-    for (const [index, [, stateLabel]] of stateCases.entries()) {
+    for (const [index] of stateCases.entries()) {
       const card = cards[index]!;
-      expect(card.textContent).toContain(stateLabel);
+      expect(card.textContent).toContain('Active');
+      expect(card.textContent).toContain('3 runs');
       // The list row is a navigation index, not a place to read a Run's
       // result: it shows state and a compact timestamp, not result text.
       expect(card.textContent).not.toContain(
         `Latest recorded result ${index + 1}`,
       );
-      expect(card.querySelector('time')?.textContent).toMatch(/^Run /);
-      expect(
-        card
-          .querySelector('[data-product-state]')
-          ?.getAttribute('data-product-state'),
-      ).toBe(stateCases[index]![0]);
+      expect(card.querySelector('time')).toBeNull();
       expect(card.querySelector('a')?.getAttribute('href')).toBe(
         `/work/${populatedWorkList.works[index]!.id}`,
       );
@@ -225,11 +239,7 @@ it('renders Product Work state and latest Run summary with one list read', async
     expect(host.textContent).not.toContain('RuntimeSession');
     expect(host.textContent).not.toContain('participating Agents');
     expect(fetchMock.mock.calls.map(([input]) => String(input))).toEqual(
-      expect.arrayContaining([
-        '/api/works',
-        '/api/work-definitions',
-        '/api/agents',
-      ]),
+      expect.arrayContaining(['/api/works', '/api/work-definitions']),
     );
   } finally {
     await act(async () => root.unmount());
@@ -238,7 +248,7 @@ it('renders Product Work state and latest Run summary with one list read', async
   }
 });
 
-it('starts any catalog Definition directly and keeps Coworker visibility in a secondary menu', async () => {
+it('starts catalog Definitions without Coworker binding or initiator controls', async () => {
   const catalogItems = [
     {
       definitionId: catalogDefinitionId,
@@ -360,11 +370,6 @@ it('starts any catalog Definition directly and keeps Coworker visibility in a se
     expect(catalog).not.toBeNull();
     const cards = [...catalog!.querySelectorAll<HTMLElement>(':scope > li')];
     expect(cards).toHaveLength(2);
-    expect(cards[0]!.classList.contains('work-catalog-card--bound')).toBe(true);
-    expect(cards[1]!.classList.contains('work-catalog-card--unbound')).toBe(
-      true,
-    );
-
     const description = cards[0]!.querySelector<HTMLElement>(
       '.work-catalog-card__description',
     );
@@ -374,32 +379,9 @@ it('starts any catalog Definition directly and keeps Coworker visibility in a se
     expect(getComputedStyle(description!).whiteSpace).toBe('normal');
 
     for (const card of cards) {
-      const cardRect = card.getBoundingClientRect();
-      const bindMenu = card.querySelector<HTMLElement>('details');
-      expect(bindMenu).not.toBeNull();
-      expect(bindMenu!.getBoundingClientRect().right).toBeLessThanOrEqual(
-        cardRect.right + 1,
-      );
-      expect(
-        card.querySelector('.work-catalog-card__actions details'),
-      ).toBeNull();
+      expect(card.querySelector('details')).toBeNull();
+      expect(card.textContent).not.toContain('Maya');
     }
-    await page.screenshot({
-      path: '../../../../__screenshots__/ux-review/work-directory.png',
-    });
-    const menu = cards[0]!.querySelector<HTMLDetailsElement>('details')!;
-    const summary = menu.querySelector('summary')!;
-    expect(summary.tabIndex).toBe(0);
-    await act(async () => summary.click());
-    expect(menu.open).toBe(true);
-    const coworkerButton = menu.querySelector<HTMLButtonElement>('button')!;
-    expect(coworkerButton.textContent).toContain('intentionally long');
-    expect(getComputedStyle(coworkerButton).overflowWrap).toBe('break-word');
-    await act(async () => coworkerButton.click());
-    expect(menu.open).toBe(false);
-    expect(fetchMock.mock.calls.map(([input]) => String(input))).toContain(
-      `/api/work-definitions/${catalogDefinitionId}/agents/${catalogAgentId}`,
-    );
     expect(
       cards[0]!.querySelector('a.work-catalog-card__create'),
     ).not.toBeNull();
@@ -429,7 +411,6 @@ it('starts any catalog Definition directly and keeps Coworker visibility in a se
         `/api/work-definitions/${catalogDefinitionId}/agents`,
         `/api/work-definitions/${unboundDefinitionId}/agents`,
         '/api/work-definitions/plan',
-        '/api/agents',
       ]),
     );
     await act(async () => {

@@ -204,7 +204,9 @@ it('selects a published Definition and coworker by display-safe labels while pro
       (button) => button.textContent === 'Create Work',
     );
     if (!promote) throw new Error('Expected a Create Work button.');
-    await page.screenshot({ path: '../../../__screenshots__/ux-review/task-promotion.png' });
+    await page.screenshot({
+      path: '../../../__screenshots__/ux-review/task-promotion.png',
+    });
     await act(async () => {
       promote.click();
       await settle();

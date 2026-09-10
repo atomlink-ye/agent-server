@@ -154,6 +154,7 @@ function mockProductReads(
     readonly currentDefinitionMissing?: boolean;
     readonly sessionTranscripts?: ProductSessionTranscriptsResponse;
     readonly chatMessages?: readonly unknown[];
+    readonly preparationMessages?: readonly unknown[];
   } = {},
 ) {
   const runList = input.runList ?? runs;
@@ -197,7 +198,9 @@ function mockProductReads(
       {
         work_id: work.work.id,
         work_run_id: null,
-        messages: [],
+        // The preparation bucket serves the fixture messages too, so
+        // Work-level preparation-chat assertions keep real content.
+        messages: input.preparationMessages ?? input.chatMessages ?? [],
         preparation: null,
       },
     ],
@@ -351,10 +354,7 @@ it('scrolls the real Work detail transcript to its final entry in the AppShell r
 });
 
 it('keeps the Work Chat composer visible when the main Work viewport reaches the latest message', async () => {
-  const fetchMock = mockProductReads({
-    chatMessages: longChatMessages,
-    runList: { work_runs: [], next_cursor: null },
-  });
+  const fetchMock = mockProductReads({ chatMessages: longChatMessages });
   const host = document.createElement('div');
   host.style.height = '900px';
   document.body.append(host);
@@ -362,7 +362,11 @@ it('keeps the Work Chat composer visible when the main Work viewport reaches the
   try {
     await act(async () => {
       root.render(
-        <MemoryRouter initialEntries={[`/work/${work.work.id}?tab=chat`]}>
+        <MemoryRouter
+          initialEntries={[
+            `/work/${work.work.id}?tab=chat&run=${selectedRun.id}`,
+          ]}
+        >
           <AppProviders commands={shellCommands()}>
             <AppRouter />
           </AppProviders>
@@ -585,12 +589,9 @@ it('keeps Run tabs and an ordinal breadcrumb separate from the Work tabs', async
     expect(host.querySelector('.work-run-header a')?.getAttribute('href')).toBe(
       `/work/${work.work.id}`,
     );
-    expect(
-      host
-        .querySelector('[data-run-conversation]')
-        ?.getAttribute('data-run-conversation'),
-    ).toBe(selectedRun.id);
-    expect(host.querySelector('.work-chat-pane')).toBeNull();
+    // Integration: the Run view now hosts the real Run-scoped chat pane
+    // (lane ia-a) in place of lane ia-b's pending placeholder.
+    expect(host.querySelector('.work-chat-pane')).not.toBeNull();
     expect(
       getComputedStyle(host.querySelector('.work-shell')!).borderLeftWidth,
     ).not.toBe('0px');

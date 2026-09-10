@@ -698,6 +698,9 @@ export const en = {
   'work.transcript.emptyBody':
     'Start a Run to follow the activity and messages it produces.',
   'work.chat.shared': 'Shared Work history · everyone is User',
+  'work.chat.role.lead': 'Lead',
+  'work.chat.role.system': 'System',
+  'work.chat.role.user': 'You',
   'work.chat.emptyTitle': 'Start a shared Work Chat.',
   'work.chat.emptyBody':
     'Ask the Definition lead a question or clarify the Work.',

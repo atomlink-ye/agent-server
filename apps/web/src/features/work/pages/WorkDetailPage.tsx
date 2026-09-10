@@ -114,7 +114,11 @@ export function WorkDetailPage({
     : null;
 
   return (
-    <div className="work-shell" data-testid="work-detail-shell">
+    <div
+      className="work-shell"
+      data-active-tab={activeTab}
+      data-testid="work-detail-shell"
+    >
       {query.status === 'loading' ? (
         <p className="work-detail-loading" aria-live="polite">
           {t('work.detail.loading')}

@@ -627,22 +627,19 @@ export const en = {
   'work.definitions': 'Reusable Definitions',
   'work.teamComposition': 'Team composition',
   'work.singleComposition': 'Single Worker',
-  'work.availableTo': 'Available to {count} Coworkers',
-  'work.notAssigned': 'Not assigned yet',
+  'work.availableTo': '{count} Coworkers can see and operate this Definition',
+  'work.notAssigned': 'No Coworkers can see or operate this Definition yet',
   'work.roster': 'Roster',
   'work.latestRunStatus': 'Latest Run',
-  'work.bindCoworker': 'Make available to a Coworker',
+  'work.moreActions': 'More Definition actions',
+  'work.bindCoworker':
+    'Manage which Coworkers can see and operate this Definition',
   'work.bindingFailed':
     'This Definition could not be made available. Try again.',
-  'work.chooseInitiator': 'Choose an initiator',
-  'work.initiatorExplanation':
-    'Start this Work in the name of a Coworker. The Definition’s Worker or Team still executes it.',
-  'work.startAs': 'Start as {name}',
   'work.definitionStartIntro':
     'Review the Definition and answer any required inputs. Its Worker or Team executes the Work.',
   'work.definitionExecutor':
-    'This Definition’s Worker or Team executes the Work.{initiator}',
-  'work.definitionInitiator': ' The selected Coworker is only the initiator.',
+    'This Definition’s Worker or Team executes the Work.',
   'work.definitionUnavailable': 'This Work Definition is no longer available.',
   'work.definitionLoadFailed':
     'This Work Definition could not be loaded. Try again.',

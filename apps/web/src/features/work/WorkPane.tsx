@@ -251,9 +251,6 @@ function WorkCatalog({ works }: { readonly works: readonly WorkListItem[] }) {
     null,
   );
   const [bindingError, setBindingError] = useState<string | null>(null);
-  const [choosingInitiatorFor, setChoosingInitiatorFor] = useState<
-    string | null
-  >(null);
   const [openBindMenuFor, setOpenBindMenuFor] = useState<string | null>(null);
 
   useEffect(() => {
@@ -304,16 +301,12 @@ function WorkCatalog({ works }: { readonly works: readonly WorkListItem[] }) {
     }
   }
 
-  const launchHref = (
-    definition: WorkDefinitionCatalogEntry,
-    initiator?: string,
-  ): string => {
+  const launchHref = (definition: WorkDefinitionCatalogEntry): string => {
     const params = new URLSearchParams({
       new: '1',
       definition: definition.definitionId,
       version: definition.definitionVersionId,
     });
-    if (initiator) params.set('initiator', initiator);
     return `/work?${params.toString()}`;
   };
 
@@ -337,14 +330,14 @@ function WorkCatalog({ works }: { readonly works: readonly WorkListItem[] }) {
           const matchingWork = works.find(
             (work) => work.definition_id === definition.definitionId,
           );
-          const initiators = definition.availableTo.filter(
+          const visibleToCurrentVersion = definition.availableTo.filter(
             (agent) =>
               agent.definitionVersionId === definition.definitionVersionId,
           );
           return (
             <li
               key={definition.definitionId}
-              className={`work-catalog-card ${initiators.length ? 'work-catalog-card--bound' : 'work-catalog-card--unbound'}`}
+              className={`work-catalog-card ${visibleToCurrentVersion.length ? 'work-catalog-card--bound' : 'work-catalog-card--unbound'}`}
             >
               <div className="work-list-item">
                 <span className="work-list-mark" aria-hidden="true">
@@ -399,75 +392,45 @@ function WorkCatalog({ works }: { readonly works: readonly WorkListItem[] }) {
                     )}
                   </span>
                   <span className="work-catalog-card__actions">
-                    {initiators.length <= 1 ? (
-                      <a
-                        className="work-catalog-card__create"
-                        href={launchHref(
-                          definition,
-                          initiators[0]?.agentDefinitionId,
-                        )}
-                      >
-                        {t('work.create')}
-                      </a>
-                    ) : (
-                      <button
-                        type="button"
-                        className="work-catalog-card__create"
-                        onClick={() =>
-                          setChoosingInitiatorFor(definition.definitionId)
-                        }
-                      >
-                        {t('work.chooseInitiator')}
-                      </button>
-                    )}
-                    {choosingInitiatorFor === definition.definitionId ? (
-                      <span className="work-catalog-card__initiator">
-                        <span>{t('work.initiatorExplanation')}</span>
-                        {initiators.map((agent) => (
-                          <a
-                            key={agent.agentDefinitionId}
-                            href={launchHref(
-                              definition,
-                              agent.agentDefinitionId,
-                            )}
-                          >
-                            {t('work.startAs', { name: agent.displayName })}
-                          </a>
-                        ))}
-                      </span>
-                    ) : null}
-                    {coworkers.length > 0 ? (
-                      <details
-                        className="work-catalog-card__bind-menu"
-                        open={openBindMenuFor === definition.definitionId}
-                        onToggle={(event) =>
-                          setOpenBindMenuFor(
-                            event.currentTarget.open
-                              ? definition.definitionId
-                              : null,
-                          )
-                        }
-                      >
-                        <summary>{t('work.bindCoworker')}</summary>
-                        <div role="group" aria-label={t('work.bindCoworker')}>
-                          {coworkers.map((coworker) => (
-                            <button
-                              key={coworker.id}
-                              type="button"
-                              disabled={
-                                bindingDefinitionId === definition.definitionId
-                              }
-                              onClick={() =>
-                                void bindDefinition(definition, coworker.id)
-                              }
-                            >
-                              {coworker.displayName}
-                            </button>
-                          ))}
-                        </div>
-                      </details>
-                    ) : null}
+                    <a
+                      className="work-catalog-card__create"
+                      href={launchHref(definition)}
+                    >
+                      {t('work.create')}
+                    </a>
                   </span>
+                  {coworkers.length > 0 ? (
+                    <details
+                      className="work-catalog-card__visibility-menu"
+                      open={openBindMenuFor === definition.definitionId}
+                      onToggle={(event) =>
+                        setOpenBindMenuFor(
+                          event.currentTarget.open
+                            ? definition.definitionId
+                            : null,
+                        )
+                      }
+                    >
+                      <summary aria-label={t('work.moreActions')}>•••</summary>
+                      <div role="group" aria-label={t('work.bindCoworker')}>
+                        <span>{t('work.bindCoworker')}</span>
+                        {coworkers.map((coworker) => (
+                          <button
+                            key={coworker.id}
+                            type="button"
+                            disabled={
+                              bindingDefinitionId === definition.definitionId
+                            }
+                            onClick={() =>
+                              void bindDefinition(definition, coworker.id)
+                            }
+                          >
+                            {coworker.displayName}
+                          </button>
+                        ))}
+                      </div>
+                    </details>
+                  ) : null}
                 </span>
               </div>
             </li>

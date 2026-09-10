@@ -237,7 +237,7 @@ it('renders Product Work state and latest Run summary with one list read', async
   }
 });
 
-it('renders bound and unbound catalog cards without clipping their controls', async () => {
+it('starts any catalog Definition directly and keeps Coworker visibility in a secondary menu', async () => {
   const catalogItems = [
     {
       definitionId: catalogDefinitionId,
@@ -285,6 +285,12 @@ it('renders bound and unbound catalog cards without clipping their controls', as
             display_name:
               'Maya with an intentionally long coworker name for wrapping coverage',
             role_label: 'Researcher',
+          },
+          {
+            agent_definition_id: uuid(907),
+            definition_version_id: catalogVersionId,
+            display_name: 'Theo',
+            role_label: 'Editor',
           },
         ],
       },
@@ -366,6 +372,9 @@ it('renders bound and unbound catalog cards without clipping their controls', as
       expect(bindMenu!.getBoundingClientRect().right).toBeLessThanOrEqual(
         cardRect.right + 1,
       );
+      expect(
+        card.querySelector('.work-catalog-card__actions details'),
+      ).toBeNull();
     }
     const menu = cards[0]!.querySelector<HTMLDetailsElement>('details')!;
     const summary = menu.querySelector('summary')!;
@@ -383,6 +392,15 @@ it('renders bound and unbound catalog cards without clipping their controls', as
     expect(
       cards[0]!.querySelector('a.work-catalog-card__create'),
     ).not.toBeNull();
+    expect(
+      cards[0]!
+        .querySelector('a.work-catalog-card__create')
+        ?.getAttribute('href'),
+    ).toBe(
+      `/work?new=1&definition=${catalogDefinitionId}&version=${catalogVersionId}`,
+    );
+    expect(cards[0]!.textContent).not.toContain('Choose an initiator');
+    expect(cards[0]!.textContent).not.toContain('Start as');
     expect(
       cards[1]!.querySelector('a.work-catalog-card__create'),
     ).not.toBeNull();

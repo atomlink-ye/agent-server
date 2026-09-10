@@ -35,7 +35,6 @@ export function NewWork({
   initialCapabilityVersionId = null,
   initialDefinitionId = null,
   initialDefinitionVersionId = null,
-  initialInitiatorId = null,
   onWorkCreated,
 }: {
   readonly originConversationId?: string | null;
@@ -43,7 +42,6 @@ export function NewWork({
   readonly initialCapabilityVersionId?: string | null;
   readonly initialDefinitionId?: string | null;
   readonly initialDefinitionVersionId?: string | null;
-  readonly initialInitiatorId?: string | null;
   readonly onWorkCreated?: () => void;
 }) {
   const t = useT();
@@ -77,7 +75,6 @@ export function NewWork({
 
   useEffect(() => {
     if (definitionFirst) {
-      setAgentId(initialInitiatorId ?? '');
       setState('idle');
       return;
     }
@@ -120,7 +117,6 @@ export function NewWork({
     definitionFirst,
     initialAgentId,
     initialCapabilityVersionId,
-    initialInitiatorId,
     rosterAttempt,
   ]);
 
@@ -418,13 +414,7 @@ export function NewWork({
               <div className="new-work-form__capability-summary">
                 <strong>{humanize(capability.name)}</strong>
                 <p>{capability.description ?? 'Formal Work capability'}</p>
-                {definitionFirst ? (
-                  <p>
-                    {t('work.definitionExecutor', {
-                      initiator: agentId ? t('work.definitionInitiator') : '',
-                    })}
-                  </p>
-                ) : null}
+                {definitionFirst ? <p>{t('work.definitionExecutor')}</p> : null}
               </div>
               <div className="new-work-form__field">
                 <label htmlFor="work-title">Work Title</label>

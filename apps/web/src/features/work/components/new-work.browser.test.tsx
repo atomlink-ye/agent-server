@@ -205,3 +205,102 @@ it('blocks an unselected required boolean, then starts Run in the same turn afte
     vi.unstubAllGlobals();
   }
 });
+
+it('creates and starts Work from a Definition without exposing an initiator choice', async () => {
+  const definitionId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+  const versionId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+  const requests: Array<{ input: string; init?: RequestInit }> = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      requests.push({ input: path, init });
+      if (path === `/api/work-definition-versions/${versionId}`)
+        return response({
+          version: {
+            id: versionId,
+            definition_id: definitionId,
+            status: 'published',
+            fingerprint: `sha256:${'a'.repeat(64)}`,
+            source: {
+              apiVersion: 'agentserver.dev/v1alpha1',
+              kind: 'WorkDefinition',
+              metadata: {
+                name: 'competitor-research',
+                description: 'Research competitors.',
+              },
+              spec: {
+                kind: 'single_worker',
+                worker: { inline: { name: 'researcher' } },
+                input: {
+                  schema: { type: 'object', additionalProperties: false },
+                },
+              },
+            },
+            source_yaml: 'kind: WorkDefinition',
+            resolved: {
+              resource_manifest_fingerprint: `sha256:${'b'.repeat(64)}`,
+            },
+            created_at: '2026-08-26T00:00:00.000Z',
+            published_at: '2026-08-26T00:00:00.000Z',
+            links: { self: 'version', definition: 'definition' },
+          },
+        });
+      if (path === '/api/works')
+        return response(
+          {
+            work: {
+              id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+              tenant_id: 'tenant',
+              workspace_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+              definition_id: definitionId,
+              definition_version_id: versionId,
+              title: 'Competitor Research',
+              origin: 'created',
+              archived_at: null,
+              created_at: '2026-08-26T00:00:00.000Z',
+              updated_at: '2026-08-26T00:00:00.000Z',
+            },
+          },
+          201,
+        );
+      if (path.endsWith('/runs'))
+        return response(
+          { error: { code: 'observed_start', message: 'observed' } },
+          500,
+        );
+      throw new Error(`unexpected request: ${path}`);
+    }),
+  );
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(
+        <NewWork
+          initialDefinitionId={definitionId}
+          initialDefinitionVersionId={versionId}
+        />,
+      );
+    });
+    await settle();
+    expect(host.querySelector('#work-coworker')).toBeNull();
+    expect(host.textContent).not.toContain('initiator');
+    expect(host.textContent).not.toContain('发起者');
+    await act(async () => {
+      host
+        .querySelector<HTMLButtonElement>('[data-testid="new-work-submit"]')!
+        .click();
+      await settle();
+    });
+    expect(requests.slice(-2).map(({ input }) => input)).toEqual([
+      '/api/works',
+      '/api/works/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/runs',
+    ]);
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+  }
+});

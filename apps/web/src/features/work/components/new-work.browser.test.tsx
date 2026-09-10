@@ -1,6 +1,12 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';
+import { page } from 'vitest/browser';
+import { setLocale } from '../../../i18n';
+import { workDefinitionClient } from '../clients/work-definition-client';
+import '../../../index.css';
+import './work-detail.css';
+import '../work-page.css';
 
 import { NewWork } from './new-work';
 
@@ -10,40 +16,36 @@ import { NewWork } from './new-work';
   }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-const agent = {
-  id: 'agent-a',
-  display_name: 'Maya',
-  role_label: 'Research Analyst',
-  summary: 'Researches competitors.',
-  active_agent_version_id: 'version-a',
-  runtime_status: 'available',
-};
-
-function profile(capabilityVersionId = 'capability-a') {
+const definitionId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+const versionId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+function definitionVersion() {
   return {
-    agent,
-    capabilities: {
-      model_policy_ref: 'free-only',
-      proposal_limit: 0,
-      tools: [],
-      skills: [],
-    },
-    work_catalog: [
-      {
-        definition_id: 'definition-a',
-        definition_version_id: capabilityVersionId,
+    id: versionId,
+    definition_id: definitionId,
+    status: 'published',
+    fingerprint: `sha256:${'a'.repeat(64)}`,
+    source: {
+      apiVersion: 'agentserver.dev/v1alpha1',
+      kind: 'WorkDefinition',
+      metadata: {
         name: 'competitor-research',
         description: 'Research competitors.',
+      },
+      spec: {
+        kind: 'single_worker',
         input_schema: {
           type: 'object',
-          properties: {
-            include_private: { type: 'boolean' },
-          },
+          properties: { include_private: { type: 'boolean' } },
           required: ['include_private'],
           additional_properties: false,
         },
       },
-    ],
+    },
+    source_yaml: 'kind: WorkDefinition',
+    resolved: { resource_manifest_fingerprint: `sha256:${'b'.repeat(64)}` },
+    created_at: '2026-08-26T00:00:00.000Z',
+    published_at: '2026-08-26T00:00:00.000Z',
+    links: { self: 'version', definition: 'definition' },
   };
 }
 
@@ -61,38 +63,24 @@ async function settle(): Promise<void> {
   });
 }
 
-it('does not silently replace an unavailable deep-link Coworker or Capability', async () => {
-  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-    if (String(input) === '/api/agents')
-      return response({ items: [agent], next_cursor: null });
-    if (String(input) === '/api/agents/missing/profile')
-      return response(
-        { error: { code: 'agent_not_found', message: 'missing' } },
-        404,
-      );
-    throw new Error(`unexpected request: ${String(input)}`);
-  });
+it('does not silently replace an unavailable Definition in a legacy profile link', async () => {
+  const fetchMock = vi.fn(async () =>
+    response({ error: { code: 'not_found', message: 'missing' } }, 404),
+  );
   vi.stubGlobal('fetch', fetchMock);
   const host = document.createElement('div');
   document.body.append(host);
   const root = createRoot(host);
   try {
     await act(async () => {
-      root.render(
-        <NewWork
-          initialAgentId="missing"
-          initialCapabilityVersionId="capability-missing"
-        />,
-      );
+      root.render(<NewWork initialCapabilityVersionId="capability-missing" />);
     });
     await settle();
-    expect(host.querySelector<HTMLSelectElement>('#work-coworker')?.value).toBe(
-      '',
+    expect(host.querySelector('#work-coworker')).toBeNull();
+    expect(host.textContent).toContain(
+      'This Work Definition is no longer available',
     );
-    expect(host.textContent).toContain('That Coworker is no longer available');
-    expect(
-      fetchMock.mock.calls.some(([input]) => String(input) === '/api/works'),
-    ).toBe(false);
+    expect(fetchMock.mock.calls).toHaveLength(1);
   } finally {
     await act(async () => root.unmount());
     host.remove();
@@ -105,10 +93,8 @@ it('blocks an unselected required boolean, then starts Run in the same turn afte
   const fetchMock = vi.fn(
     async (input: RequestInfo | URL, init?: RequestInit) => {
       requests.push({ input: String(input), init });
-      if (String(input) === '/api/agents')
-        return response({ items: [agent], next_cursor: null });
-      if (String(input) === '/api/agents/agent-a/profile')
-        return response(profile());
+      if (String(input) === `/api/work-definition-versions/${versionId}`)
+        return response({ version: definitionVersion() });
       if (String(input) === '/api/works')
         return response(
           {
@@ -143,12 +129,7 @@ it('blocks an unselected required boolean, then starts Run in the same turn afte
   const root = createRoot(host);
   try {
     await act(async () => {
-      root.render(
-        <NewWork
-          initialAgentId="agent-a"
-          initialCapabilityVersionId="capability-a"
-        />,
-      );
+      root.render(<NewWork initialCapabilityVersionId={versionId} />);
     });
     await settle();
     const submit = host.querySelector<HTMLButtonElement>(
@@ -187,7 +168,7 @@ it('blocks an unselected required boolean, then starts Run in the same turn afte
     );
     expect(createRequest).toBeDefined();
     expect(JSON.parse(String(createRequest?.init?.body))).toMatchObject({
-      definition_version_id: 'capability-a',
+      definition_version_id: versionId,
     });
     const runRequest = requests.find((request) =>
       request.input.endsWith(
@@ -199,6 +180,23 @@ it('blocks an unselected required boolean, then starts Run in the same turn afte
       trigger_kind: 'manual',
       input: { include_private: false },
     });
+    await page.screenshot({
+      path: '../../../../__screenshots__/ux-review/run-start-failure.png',
+    });
+    expect(submit!.disabled).toBe(true);
+    const retry = [...host.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Retry Run',
+    )!;
+    await act(async () => {
+      retry.click();
+      await settle();
+    });
+    expect(
+      requests.filter((request) => request.input === '/api/works'),
+    ).toHaveLength(1);
+    expect(
+      requests.filter((request) => request.input.endsWith('/runs')),
+    ).toHaveLength(2);
   } finally {
     await act(async () => root.unmount());
     host.remove();
@@ -285,6 +283,9 @@ it('creates and starts Work from a Definition without exposing an initiator choi
       );
     });
     await settle();
+    await page.screenshot({
+      path: '../../../../__screenshots__/ux-review/catalog-start.png',
+    });
     expect(host.querySelector('#work-coworker')).toBeNull();
     expect(host.textContent).not.toContain('initiator');
     expect(host.textContent).not.toContain('发起者');
@@ -302,5 +303,106 @@ it('creates and starts Work from a Definition without exposing an initiator choi
     await act(async () => root.unmount());
     host.remove();
     vi.unstubAllGlobals();
+  }
+});
+
+it('offers Definitions at the generic start entry without requiring a Coworker', async () => {
+  const catalog = vi
+    .spyOn(workDefinitionClient, 'listCatalog')
+    .mockResolvedValue([
+      {
+        definitionId,
+        definitionVersionId: versionId,
+        name: 'competitor-research',
+        description: 'Research competitors.',
+        composition: 'single_worker',
+        roster: [],
+        availableTo: [],
+      },
+    ]);
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input) => {
+      if (String(input) === `/api/work-definition-versions/${versionId}`)
+        return response({ version: definitionVersion() });
+      return response({ items: [], next_cursor: null });
+    }),
+  );
+  const host = document.createElement('div');
+  host.style.cssText = 'width: 900px; margin: 60px auto';
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(<NewWork />);
+    });
+    await settle();
+    await page.screenshot({
+      path: '../../../../__screenshots__/ux-review/generic-start.png',
+    });
+    expect(host.querySelector('#work-coworker')).toBeNull();
+    expect(host.querySelector('#work-definition-choice')).not.toBeNull();
+    expect(host.textContent).toContain('Competitor Research');
+    expect(host.textContent).not.toContain('Create a Coworker');
+    await act(async () => {
+      const select = host.querySelector<HTMLSelectElement>(
+        '#work-definition-choice',
+      )!;
+      select.value = versionId;
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      await settle();
+    });
+    expect(host.querySelector('#work-input-include_private')).not.toBeNull();
+    await page.screenshot({
+      path: '../../../../__screenshots__/ux-review/generic-inputs.png',
+    });
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    catalog.mockRestore();
+    vi.unstubAllGlobals();
+  }
+});
+
+it('distinguishes a failed Definition read from an empty catalog and retries it', async () => {
+  const catalog = vi
+    .spyOn(workDefinitionClient, 'listCatalog')
+    .mockRejectedValueOnce(new Error('offline'))
+    .mockResolvedValue([]);
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(<NewWork />);
+    });
+    await settle();
+    expect(host.querySelector('[role="alert"]')).not.toBeNull();
+    expect(host.textContent).not.toContain('No published Definitions');
+    await act(async () => {
+      [...host.querySelectorAll('button')]
+        .find((button) => button.textContent === 'Try again')!
+        .click();
+      await settle();
+    });
+    expect(catalog).toHaveBeenCalledTimes(2);
+    expect(host.textContent).toContain(
+      'No published Definitions are available',
+    );
+    expect(host.querySelector('#work-coworker')).toBeNull();
+    await act(async () => {
+      setLocale('zh-CN');
+      await settle();
+    });
+    expect(host.textContent).toContain('选择一个 Definition');
+    expect(host.textContent).not.toContain('Choose a Definition');
+    await page.screenshot({
+      path: '../../../../__screenshots__/ux-review/empty-catalog-zh.png',
+    });
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    catalog.mockRestore();
+    setLocale('en');
   }
 });

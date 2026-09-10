@@ -13,6 +13,7 @@ export const WORK_TABS: readonly {
   readonly id: WorkTab;
   readonly label: string;
 }[] = [
+  { id: 'overview', label: t('work.tab.overview') },
   { id: 'chat', label: t('work.tab.chat') },
   { id: 'runs', label: t('work.tab.runs') },
   { id: 'transcript', label: t('work.tab.transcript') },

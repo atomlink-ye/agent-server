@@ -9,6 +9,7 @@ import type {
 } from '@atomlink-ye/agent-server/product-contract';
 import { MemoryRouter } from 'react-router-dom';
 
+import { WorkPage } from '../WorkPage';
 import { WorkPane } from '@/features/work/WorkPane';
 import '../../../index.css';
 import './work-list.css';
@@ -338,11 +339,18 @@ it('starts any catalog Definition directly and keeps Coworker visibility in a se
   vi.stubGlobal('fetch', fetchMock);
 
   const host = document.createElement('div');
+  host.className = 'app-shell';
+  host.style.height = '900px';
   document.body.append(host);
   const root = createRoot(host);
   try {
     await act(async () => {
-      root.render(renderPane());
+      root.render(
+        <MemoryRouter initialEntries={['/work']}>
+          <div />
+          <WorkPage />
+        </MemoryRouter>,
+      );
       await new Promise((resolve) => setTimeout(resolve, 25));
     });
 
@@ -376,6 +384,9 @@ it('starts any catalog Definition directly and keeps Coworker visibility in a se
         card.querySelector('.work-catalog-card__actions details'),
       ).toBeNull();
     }
+    await page.screenshot({
+      path: '../../../../__screenshots__/ux-review/work-directory.png',
+    });
     const menu = cards[0]!.querySelector<HTMLDetailsElement>('details')!;
     const summary = menu.querySelector('summary')!;
     expect(summary.tabIndex).toBe(0);
@@ -421,6 +432,38 @@ it('starts any catalog Definition directly and keeps Coworker visibility in a se
         '/api/agents',
       ]),
     );
+    await act(async () => {
+      host
+        .querySelector<HTMLButtonElement>('[data-testid="new-work-cta"]')!
+        .click();
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    });
+    expect(host.querySelector('#work-definition-choice')).not.toBeNull();
+    expect(host.querySelector('#work-coworker')).toBeNull();
+    await page.screenshot({
+      path: '../../../../__screenshots__/ux-review/heading-plus.png',
+    });
+    await act(async () => {
+      root.render(
+        <MemoryRouter
+          key="catalog-entry"
+          initialEntries={[
+            `/work?new=1&definition=${unboundDefinitionId}&version=${unboundVersionId}`,
+          ]}
+        >
+          <div />
+          <WorkPage />
+        </MemoryRouter>,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    });
+    expect(host.querySelector('#work-coworker')).toBeNull();
+    expect(host.querySelector<HTMLInputElement>('#work-title')?.value).toBe(
+      'Unbound Planning Workflow',
+    );
+    await page.screenshot({
+      path: '../../../../__screenshots__/ux-review/catalog-entry.png',
+    });
   } finally {
     await act(async () => root.unmount());
     host.remove();
@@ -642,3 +685,49 @@ it('distinguishes loading, empty, and real network error without fabricating Wor
     vi.unstubAllGlobals();
   }
 });
+
+it.each([
+  ['recent Work landing', '.work-landing__intro button', populatedWorkList],
+  ['empty Work landing', '.work-main-empty--first button', emptyWorkList],
+  [
+    'empty Work directory',
+    '[data-testid="work-list-empty"] button',
+    emptyWorkList,
+  ],
+] as const)(
+  'opens the Definition picker from the %s',
+  async (_, selector, works) => {
+    vi.stubGlobal('fetch', workPaneFetch(works));
+    const host = document.createElement('div');
+    host.className = 'app-shell';
+    host.style.height = '900px';
+    document.body.append(host);
+    const root = createRoot(host);
+    try {
+      await act(async () => {
+        root.render(
+          <MemoryRouter initialEntries={['/work']}>
+            <div />
+            <WorkPage />
+          </MemoryRouter>,
+        );
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      });
+      const entry = host.querySelector<HTMLButtonElement>(selector)!;
+      expect(entry).not.toBeNull();
+      await act(async () => {
+        entry.click();
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      });
+      expect(host.querySelector('#work-definition-choice')).not.toBeNull();
+      expect(host.querySelector('#work-coworker')).toBeNull();
+      expect(host.textContent).toContain(
+        'No published Definitions are available',
+      );
+    } finally {
+      await act(async () => root.unmount());
+      host.remove();
+      vi.unstubAllGlobals();
+    }
+  },
+);

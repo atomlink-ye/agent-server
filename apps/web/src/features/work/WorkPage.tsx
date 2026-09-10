@@ -44,7 +44,6 @@ export function WorkPage({
     const query = new URLSearchParams(location.search);
     return {
       requested: query.get('new') === '1',
-      agentId: query.get('agent'),
       capabilityVersionId: query.get('capability'),
       definitionId: query.get('definition'),
       definitionVersionId: query.get('version'),
@@ -151,7 +150,6 @@ export function WorkPage({
           {!invalidWorkId && !workUnavailable && showNewWork ? (
             <NewWork
               originConversationId={returnConversationId}
-              initialAgentId={authoringRequest.agentId}
               initialCapabilityVersionId={authoringRequest.capabilityVersionId}
               initialDefinitionId={authoringRequest.definitionId}
               initialDefinitionVersionId={authoringRequest.definitionVersionId}

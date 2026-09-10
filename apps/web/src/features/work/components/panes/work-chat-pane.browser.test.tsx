@@ -85,7 +85,7 @@ it('keeps one overflowing history between a pinned heading and composer', async 
   expect(history.scrollTop).toBeGreaterThan(0);
 
   await page.screenshot({
-    path: '../../../../../__screenshots__/work-chat/long-conversation.png',
+    path: '../../../../../__screenshots__/ux-review/long-conversation.png',
   });
 });
 
@@ -128,7 +128,7 @@ it('auto-scrolls on arrival only while the reader is near the bottom', async () 
 it('captures the empty and short conversational states', async () => {
   const { host } = await renderChat([]);
   await page.screenshot({
-    path: '../../../../../__screenshots__/work-chat/empty-state.png',
+    path: '../../../../../__screenshots__/ux-review/empty-state.png',
   });
 
   vi.mocked(workClient.chat).mockResolvedValue(
@@ -137,6 +137,6 @@ it('captures the empty and short conversational states', async () => {
   await act(async () => new Promise((resolve) => setTimeout(resolve, 1_050)));
   expect(host.querySelectorAll('.work-chat-message')).toHaveLength(3);
   await page.screenshot({
-    path: '../../../../../__screenshots__/work-chat/short-conversation.png',
+    path: '../../../../../__screenshots__/ux-review/short-conversation.png',
   });
 });

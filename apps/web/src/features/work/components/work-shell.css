@@ -4,6 +4,16 @@
   padding: var(--space-8) 0 72px;
 }
 
+.work-shell[data-active-tab='chat'] {
+  box-sizing: border-box;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .work-shell-kicker {
   margin: 0 0 var(--space-2);
   color: var(--sky-ink);

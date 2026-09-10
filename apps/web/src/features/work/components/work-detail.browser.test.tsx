@@ -331,7 +331,7 @@ it('scrolls the real Work detail transcript to its final entry in the AppShell r
       `/api/works/${work.work.id}/runs/${selectedRun.id}/session-transcripts`,
     );
     await page.screenshot({
-      path: '../../../../../../.local/work-detail-transcript-scroll-desktop.png',
+      path: '../../../../__screenshots__/ux-review/work-detail-transcript-scroll-desktop.png',
     });
   } finally {
     await act(async () => root.unmount());
@@ -380,7 +380,7 @@ it('keeps the Work Chat composer visible when the main Work viewport reaches the
     expect(composerRect.top).toBeGreaterThanOrEqual(contentRect.top);
     expect(composerRect.bottom).toBeLessThanOrEqual(contentRect.bottom);
     await page.screenshot({
-      path: '../../../../../../.local/work-chat-composer-bottom-desktop.png',
+      path: '../../../../__screenshots__/ux-review/work-chat-composer-bottom-desktop.png',
     });
   } finally {
     await act(async () => root.unmount());
@@ -413,10 +413,23 @@ it('renders a result-first Work shell and fixture-backed Overview through Produc
       [...host.querySelectorAll<HTMLAnchorElement>('.work-tabs a')].map(
         (item) => item.textContent?.trim(),
       ),
-    ).toEqual(['Work Chat', 'Runs', 'Execution record', 'Files', 'Definition']);
+    ).toEqual([
+      'Overview',
+      'Work Chat',
+      'Runs',
+      'Execution record',
+      'Files',
+      'Definition',
+    ]);
     expect(host.textContent).toContain(
       'The result summary is still unavailable.',
     );
+    await page.screenshot({
+      path: '../../../../__screenshots__/ux-review/work-overview.png',
+    });
+    expect(
+      host.querySelector('.work-tabs a[aria-current="page"]')?.textContent,
+    ).toBe('Overview');
     expect(host.textContent).toContain('Key steps');
     expect(host.textContent).toContain('Everything captured during this Run');
     expect(host.textContent).toContain('Start Run');

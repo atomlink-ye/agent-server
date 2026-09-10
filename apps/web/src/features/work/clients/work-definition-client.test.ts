@@ -156,7 +156,7 @@ describe('Work Definition apply client mapping', () => {
 });
 
 describe('Work Definition catalog client', () => {
-  it('keeps a published unbound Definition visible in the catalog', async () => {
+  it('keeps a published Definition visible and preserves Coworker visibility data', async () => {
     const source = {
       apiVersion: 'agentserver.dev/v1alpha1',
       kind: 'WorkDefinition',
@@ -196,7 +196,14 @@ describe('Work Definition catalog client', () => {
         return {
           definition_id: definitionId,
           definition_version_id: versionId,
-          agents: [],
+          agents: [
+            {
+              agent_definition_id: '33333333-3333-4333-8333-333333333333',
+              definition_version_id: versionId,
+              display_name: 'Maya',
+              role_label: 'Researcher',
+            },
+          ],
         };
       if (path === '/api/work-definitions/plan')
         return {
@@ -231,7 +238,14 @@ describe('Work Definition catalog client', () => {
       definitionVersionId: versionId,
       name: 'Shared Research',
       description: 'Reusable brief.',
-      availableTo: [],
+      availableTo: [
+        {
+          agentDefinitionId: '33333333-3333-4333-8333-333333333333',
+          definitionVersionId: versionId,
+          displayName: 'Maya',
+          roleLabel: 'Researcher',
+        },
+      ],
     });
   });
 });

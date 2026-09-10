@@ -9,6 +9,7 @@ import type {
 } from '@atomlink-ye/agent-server/product-contract';
 import { MemoryRouter } from 'react-router-dom';
 
+import { WorkPage } from '../WorkPage';
 import { WorkPane } from '@/features/work/WorkPane';
 import '../../../index.css';
 import './work-list.css';
@@ -237,7 +238,7 @@ it('renders Product Work state and latest Run summary with one list read', async
   }
 });
 
-it('renders bound and unbound catalog cards without clipping their controls', async () => {
+it('starts any catalog Definition directly and keeps Coworker visibility in a secondary menu', async () => {
   const catalogItems = [
     {
       definitionId: catalogDefinitionId,
@@ -286,6 +287,12 @@ it('renders bound and unbound catalog cards without clipping their controls', as
               'Maya with an intentionally long coworker name for wrapping coverage',
             role_label: 'Researcher',
           },
+          {
+            agent_definition_id: uuid(907),
+            definition_version_id: catalogVersionId,
+            display_name: 'Theo',
+            role_label: 'Editor',
+          },
         ],
       },
     ],
@@ -332,11 +339,18 @@ it('renders bound and unbound catalog cards without clipping their controls', as
   vi.stubGlobal('fetch', fetchMock);
 
   const host = document.createElement('div');
+  host.className = 'app-shell';
+  host.style.height = '900px';
   document.body.append(host);
   const root = createRoot(host);
   try {
     await act(async () => {
-      root.render(renderPane());
+      root.render(
+        <MemoryRouter initialEntries={['/work']}>
+          <div />
+          <WorkPage />
+        </MemoryRouter>,
+      );
       await new Promise((resolve) => setTimeout(resolve, 25));
     });
 
@@ -366,7 +380,13 @@ it('renders bound and unbound catalog cards without clipping their controls', as
       expect(bindMenu!.getBoundingClientRect().right).toBeLessThanOrEqual(
         cardRect.right + 1,
       );
+      expect(
+        card.querySelector('.work-catalog-card__actions details'),
+      ).toBeNull();
     }
+    await page.screenshot({
+      path: '../../../../__screenshots__/ux-review/work-directory.png',
+    });
     const menu = cards[0]!.querySelector<HTMLDetailsElement>('details')!;
     const summary = menu.querySelector('summary')!;
     expect(summary.tabIndex).toBe(0);
@@ -383,6 +403,15 @@ it('renders bound and unbound catalog cards without clipping their controls', as
     expect(
       cards[0]!.querySelector('a.work-catalog-card__create'),
     ).not.toBeNull();
+    expect(
+      cards[0]!
+        .querySelector('a.work-catalog-card__create')
+        ?.getAttribute('href'),
+    ).toBe(
+      `/work?new=1&definition=${catalogDefinitionId}&version=${catalogVersionId}`,
+    );
+    expect(cards[0]!.textContent).not.toContain('Choose an initiator');
+    expect(cards[0]!.textContent).not.toContain('Start as');
     expect(
       cards[1]!.querySelector('a.work-catalog-card__create'),
     ).not.toBeNull();
@@ -403,6 +432,38 @@ it('renders bound and unbound catalog cards without clipping their controls', as
         '/api/agents',
       ]),
     );
+    await act(async () => {
+      host
+        .querySelector<HTMLButtonElement>('[data-testid="new-work-cta"]')!
+        .click();
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    });
+    expect(host.querySelector('#work-definition-choice')).not.toBeNull();
+    expect(host.querySelector('#work-coworker')).toBeNull();
+    await page.screenshot({
+      path: '../../../../__screenshots__/ux-review/heading-plus.png',
+    });
+    await act(async () => {
+      root.render(
+        <MemoryRouter
+          key="catalog-entry"
+          initialEntries={[
+            `/work?new=1&definition=${unboundDefinitionId}&version=${unboundVersionId}`,
+          ]}
+        >
+          <div />
+          <WorkPage />
+        </MemoryRouter>,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    });
+    expect(host.querySelector('#work-coworker')).toBeNull();
+    expect(host.querySelector<HTMLInputElement>('#work-title')?.value).toBe(
+      'Unbound Planning Workflow',
+    );
+    await page.screenshot({
+      path: '../../../../__screenshots__/ux-review/catalog-entry.png',
+    });
   } finally {
     await act(async () => root.unmount());
     host.remove();
@@ -433,17 +494,132 @@ it('scrolls the real Work list through its final Work item', async () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
     const list = host.querySelector<HTMLElement>('[data-testid="work-list"]');
+    const scroller = host.querySelector<HTMLElement>('.work-pane-scroll');
     expect(list).not.toBeNull();
-    expect(list!.scrollHeight).toBeGreaterThan(list!.clientHeight);
-    list!.scrollTop = list!.scrollHeight;
-    expect(list!.scrollTop).toBeGreaterThan(0);
+    expect(scroller).not.toBeNull();
+    expect(scroller!.scrollHeight).toBeGreaterThan(scroller!.clientHeight);
+    scroller!.scrollTop = scroller!.scrollHeight;
+    expect(scroller!.scrollTop).toBeGreaterThan(0);
     const finalItem = [...list!.querySelectorAll('li')].at(-1)!;
     expect(finalItem.getBoundingClientRect().bottom).toBeLessThanOrEqual(
-      list!.getBoundingClientRect().bottom + 1,
+      scroller!.getBoundingClientRect().bottom + 1,
     );
     await page.screenshot({
       path: '../../../../../../.local/work-list-scroll-desktop.png',
     });
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
+it('scrolls the Work list and catalog together while its heading stays fixed', async () => {
+  const works = Array.from({ length: 25 }, (_, index) => ({
+    ...populatedWorkList.works[0]!,
+    id: uuid(index + 500),
+    title:
+      index === 24 ? 'Final combined-scroll Work item' : `Work ${index + 1}`,
+  }));
+  const definitions = Array.from({ length: 8 }, (_, index) => ({
+    definitionId: uuid(index + 600),
+    displayName:
+      index === 7
+        ? 'final-reachable-catalog-definition'
+        : `catalog-definition-${index + 1}`,
+    currentPublishedVersionId: uuid(index + 700),
+  }));
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const path = String(input);
+    if (path === '/api/works')
+      return jsonResponse({ works, next_cursor: null });
+    if (path === '/api/work-definitions') {
+      return jsonResponse({ items: definitions, next_cursor: null });
+    }
+    if (path === '/api/work-definitions/plan') {
+      return catalogPlanResponse('combined-scroll-workflow');
+    }
+    if (path === '/api/agents') {
+      return jsonResponse({ items: [], next_cursor: null });
+    }
+    const version = definitions.find(
+      (item) =>
+        path ===
+        `/api/work-definition-versions/${item.currentPublishedVersionId}`,
+    );
+    if (version) {
+      return jsonResponse(
+        catalogVersion(
+          version.definitionId,
+          version.currentPublishedVersionId,
+          version.displayName,
+          'A catalog definition included to exercise real sidebar overflow.',
+        ),
+      );
+    }
+    const agents = definitions.find(
+      (item) => path === `/api/work-definitions/${item.definitionId}/agents`,
+    );
+    if (agents) {
+      return jsonResponse({
+        definition_id: agents.definitionId,
+        definition_version_id: agents.currentPublishedVersionId,
+        agents: [],
+      });
+    }
+    throw new Error(`unexpected browser request: ${path}`);
+  });
+  vi.stubGlobal('fetch', fetchMock);
+
+  const host = document.createElement('div');
+  host.className = 'app-shell';
+  host.style.height = '900px';
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(
+        <MemoryRouter initialEntries={['/work']}>
+          <div aria-hidden="true" />
+          <WorkPane onCreateNew={() => undefined} />
+          <main />
+        </MemoryRouter>,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    });
+
+    const pane = host.querySelector<HTMLElement>('.work-pane')!;
+    const heading = pane.querySelector<HTMLElement>(':scope > .pane-heading')!;
+    const scroller = pane.querySelector<HTMLElement>(
+      ':scope > .work-pane-scroll',
+    );
+    const list = pane.querySelector<HTMLElement>('[data-testid="work-list"]')!;
+    const catalog = pane.querySelector<HTMLElement>(
+      '[data-testid="work-definition-catalog"]',
+    )!;
+    expect(catalog).not.toBeNull();
+    expect(scroller).not.toBeNull();
+    expect(scroller!.scrollHeight).toBeGreaterThan(scroller!.clientHeight);
+    expect(list.scrollHeight).toBe(list.clientHeight);
+    expect(pane.scrollHeight).toBe(pane.clientHeight);
+
+    const headingTop = heading.getBoundingClientRect().top;
+    scroller!.scrollTop = scroller!.scrollHeight;
+    expect(scroller!.scrollTop).toBeGreaterThan(0);
+    expect(heading.getBoundingClientRect().top).toBe(headingTop);
+
+    const finalWork = [...list.querySelectorAll('li')].at(-1)!;
+    const finalCatalog = [...catalog.querySelectorAll(':scope > li')].at(-1)!;
+    expect(finalWork.textContent).toContain('Final combined-scroll Work item');
+    expect(finalCatalog.textContent).toContain(
+      'final-reachable-catalog-definition',
+    );
+    expect(finalCatalog.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+      scroller!.getBoundingClientRect().bottom + 1,
+    );
+    expect(document.documentElement.scrollHeight).toBe(
+      document.documentElement.clientHeight,
+    );
   } finally {
     await act(async () => root.unmount());
     host.remove();
@@ -509,3 +685,49 @@ it('distinguishes loading, empty, and real network error without fabricating Wor
     vi.unstubAllGlobals();
   }
 });
+
+it.each([
+  ['recent Work landing', '.work-landing__intro button', populatedWorkList],
+  ['empty Work landing', '.work-main-empty--first button', emptyWorkList],
+  [
+    'empty Work directory',
+    '[data-testid="work-list-empty"] button',
+    emptyWorkList,
+  ],
+] as const)(
+  'opens the Definition picker from the %s',
+  async (_, selector, works) => {
+    vi.stubGlobal('fetch', workPaneFetch(works));
+    const host = document.createElement('div');
+    host.className = 'app-shell';
+    host.style.height = '900px';
+    document.body.append(host);
+    const root = createRoot(host);
+    try {
+      await act(async () => {
+        root.render(
+          <MemoryRouter initialEntries={['/work']}>
+            <div />
+            <WorkPage />
+          </MemoryRouter>,
+        );
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      });
+      const entry = host.querySelector<HTMLButtonElement>(selector)!;
+      expect(entry).not.toBeNull();
+      await act(async () => {
+        entry.click();
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      });
+      expect(host.querySelector('#work-definition-choice')).not.toBeNull();
+      expect(host.querySelector('#work-coworker')).toBeNull();
+      expect(host.textContent).toContain(
+        'No published Definitions are available',
+      );
+    } finally {
+      await act(async () => root.unmount());
+      host.remove();
+      vi.unstubAllGlobals();
+    }
+  },
+);

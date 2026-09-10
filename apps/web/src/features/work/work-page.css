@@ -14,6 +14,10 @@
   padding: 0;
 }
 
+.work-main-content:has(.work-shell[data-active-tab='chat']) {
+  overflow: hidden;
+}
+
 .work-main-content .work-shell-breadcrumb {
   margin-top: 0;
 }

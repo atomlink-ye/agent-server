@@ -1,3 +1,4 @@
+import { t as translateCurrent, type Translate } from '../../../i18n';
 import { apiTransport, ApiTransportError } from '../../../api/transport';
 import { isFeatureUnavailable } from '../../../api/feature-availability';
 
@@ -89,9 +90,11 @@ export function isPermanentRunFailure(error: unknown): boolean {
  * detail. Anything else keeps the existing bounded, generic message so an
  * unbounded upstream string never reaches the browser.
  */
-export function workRunFailureMessage(error: unknown): string {
-  if (isFeatureUnavailable(error))
-    return "This workspace doesn't currently offer Work execution. This Run can't start here.";
+export function workRunFailureMessage(
+  error: unknown,
+  t: Translate = translateCurrent,
+): string {
+  if (isFeatureUnavailable(error)) return t('work.runFailure.unavailable');
   if (
     error instanceof ProductMutationError &&
     error.code === 'unsupported_runtime_capability'
@@ -104,10 +107,10 @@ export function workRunFailureMessage(error: unknown): string {
     error instanceof ProductMutationError &&
     error.code === 'input_validation_failed'
   )
-    return 'This Run’s input does not match what the Work Definition asks for. Start the Work again with input that satisfies its fields.';
+    return t('work.runFailure.input');
   if (error instanceof ProductMutationError && error.code === 'work_not_found')
-    return 'This Work no longer exists, so there is nothing to run.';
-  return 'We couldn’t start this Run. Check that Work is ready, then try again.';
+    return t('work.runFailure.missing');
+  return t('work.runFailure.retry');
 }
 
 export function parseProduct<T>(

@@ -1,3 +1,4 @@
+import { useT } from '../../../i18n';
 import { WORK_TABS, workTabHref, type WorkTab } from './work-presentation';
 
 export function WorkTabs({
@@ -13,8 +14,9 @@ export function WorkTabs({
   readonly workId: string;
   readonly originConversationId?: string | null;
 }) {
+  const t = useT();
   return (
-    <nav className="work-tabs" aria-label="Work detail sections">
+    <nav className="work-tabs" aria-label={t('work.detailSections')}>
       {WORK_TABS.map((tab) => {
         const targetRunId = tab.id === 'definition' ? definitionRunId : runId;
         return (
@@ -28,7 +30,7 @@ export function WorkTabs({
             )}
             key={tab.id}
           >
-            {tab.label}
+            {t(`work.tab.${tab.id}`)}
           </a>
         );
       })}

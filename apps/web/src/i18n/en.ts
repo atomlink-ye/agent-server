@@ -627,22 +627,19 @@ export const en = {
   'work.definitions': 'Reusable Definitions',
   'work.teamComposition': 'Team composition',
   'work.singleComposition': 'Single Worker',
-  'work.availableTo': 'Available to {count} Coworkers',
-  'work.notAssigned': 'Not assigned yet',
+  'work.availableTo': '{count} Coworkers can see and operate this Definition',
+  'work.notAssigned': 'No Coworkers can see or operate this Definition yet',
   'work.roster': 'Roster',
   'work.latestRunStatus': 'Latest Run',
-  'work.bindCoworker': 'Make available to a Coworker',
+  'work.moreActions': 'More Definition actions',
+  'work.bindCoworker':
+    'Manage which Coworkers can see and operate this Definition',
   'work.bindingFailed':
     'This Definition could not be made available. Try again.',
-  'work.chooseInitiator': 'Choose an initiator',
-  'work.initiatorExplanation':
-    'Start this Work in the name of a Coworker. The Definition’s Worker or Team still executes it.',
-  'work.startAs': 'Start as {name}',
   'work.definitionStartIntro':
     'Review the Definition and answer any required inputs. Its Worker or Team executes the Work.',
   'work.definitionExecutor':
-    'This Definition’s Worker or Team executes the Work.{initiator}',
-  'work.definitionInitiator': ' The selected Coworker is only the initiator.',
+    'This Definition’s Worker or Team executes the Work.',
   'work.definitionUnavailable': 'This Work Definition is no longer available.',
   'work.definitionLoadFailed':
     'This Work Definition could not be loaded. Try again.',
@@ -661,6 +658,8 @@ export const en = {
   'work.notCapturedHint':
     'This Run’s status was not captured. Review its recorded activity.',
   'work.activeHint': 'Follow the result and progress of this active Run here.',
+  'work.tab.overview': 'Overview',
+  'work.detailSections': 'Work detail sections',
   'work.tab.runs': 'Runs',
   'work.tab.chat': 'Work Chat',
   'work.tab.transcript': 'Execution record',
@@ -697,7 +696,69 @@ export const en = {
   'work.transcript.emptyTitle': 'No conversation to show yet.',
   'work.transcript.emptyBody':
     'Start a Run to follow the activity and messages it produces.',
+  'work.runFailure.unavailable':
+    "This workspace doesn't currently offer Work execution. This Run can't start here.",
+  'work.runFailure.input':
+    'This Run’s input does not match what the Work Definition asks for. Start the Work again with input that satisfies its fields.',
+  'work.runFailure.missing':
+    'This Work no longer exists, so there is nothing to run.',
+  'work.runFailure.retry':
+    'We couldn’t start this Run. Check that Work is ready, then try again.',
+  'work.start.chooseIntro':
+    'Choose a Definition, then give this Work a title and complete its inputs.',
+  'work.start.chooseDefinition': 'Choose a Definition…',
+  'work.start.noDefinitions':
+    'No published Definitions are available. Publish a Definition before starting Work; advanced authoring is below.',
+  'work.start.heading': 'Start formal Work',
+  'work.start.new': 'New Work',
+  'work.start.fallbackDescription': 'Formal Work Definition',
+  'work.start.workTitle': 'Work Title',
+  'work.start.creatingRecord': 'Creating the Work record…',
+  'work.start.unavailable':
+    "Work was not created. This workspace doesn't currently offer Work execution.",
+  'work.start.createdStarting': 'Work created. Starting the first Run…',
+  'work.start.creating': 'Creating Work…',
+  'work.start.starting': 'Starting Run…',
+  'work.start.start': 'Start Work',
+  'work.start.openCreated': 'Open the created Work',
+  'work.start.retryRun': 'Retry Run',
+  'work.start.retry': 'Try again',
+  'work.start.retryCreate': 'Retry Work creation',
+  'work.start.advanced': 'Advanced · author raw WorkDefinition source',
+  'work.start.noInput': 'This Definition needs no input.',
+  'work.start.inputs': 'Inputs',
+  'work.start.choose': 'Choose…',
+  'work.start.yes': 'Yes',
+  'work.start.no': 'No',
+  'work.start.noFingerprint': 'Definition did not produce a fingerprint.',
+  'work.start.valid': 'Definition is valid and its resource plan resolved.',
+  'work.start.fixDiagnostics':
+    'Fix the reported Definition diagnostics before applying.',
+  'work.start.validationFailed': 'The Definition could not be validated.',
+  'work.start.applyFailed': 'The Definition was not applied.',
+  'work.start.advancedIntro':
+    'Developer escape hatch. This still uses the exact canonical validate → plan → apply pipeline.',
+  'work.start.source': 'Definition YAML / JSON',
+  'work.start.creatingAdvanced': 'Creating…',
+  'work.start.apply': 'Apply Definition & create Work',
+  'work.start.participants': 'Resolved {count} Worker participant(s).',
+  'work.start.createFailed': 'Work was not created. {reason}',
+  'work.start.runFailed':
+    'The Work was created, but its Run did not start. {reason}',
+  'work.start.requiredTitle': 'Add a title for this Work.',
+  'work.start.required': 'Complete the required input: {label}.',
+  'work.start.minLength': '{label} must be at least {count} characters.',
+  'work.start.maxLength': '{label} must be at most {count} characters.',
+  'work.start.choices': '{label} must use one of the available choices.',
+  'work.start.boolean': '{label} must be Yes or No.',
+  'work.start.number': '{label} must be a number.',
+  'work.start.integer': '{label} must be a whole number.',
+  'work.start.minimum': '{label} must be at least {count}.',
+  'work.start.maximum': '{label} must be at most {count}.',
   'work.chat.shared': 'Shared Work history · everyone is User',
+  'work.chat.role.lead': 'Lead',
+  'work.chat.role.system': 'System',
+  'work.chat.role.user': 'You',
   'work.chat.emptyTitle': 'Start a shared Work Chat.',
   'work.chat.emptyBody':
     'Ask the Definition lead a question or clarify the Work.',

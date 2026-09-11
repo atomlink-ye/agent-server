@@ -118,11 +118,122 @@ these labels. The wrapper selects the right exact version and names its scope,
 but that does not make the inner copy correct. No claim of an entirely clean pane
 audit is made.
 
-In progress. Logs stay under ignored `.local/work-detail-r2/`. No green result is
-claimed until the corresponding command completes.
+Raw logs remain under ignored `.local/work-detail-r2/`; they are not committed.
 
 The first semantic verification run had one real assertion failure: the existing
 Output-empty test still expected “The result summary is still unavailable.” The
 new pane correctly says “Captured assistant text is unavailable.” The assertion
 was updated to the new data claim, not weakened. Geometry and the new preparation
 navigation scenario passed in that run (25 passed, 1 failed). This was not a timeout.
+
+## Final verification
+
+`pnpm test:web apps/web/src/features/work/components/work-detail.browser.test.tsx`
+completed with exit 0 after correcting the stale empty-output expectation:
+
+```text
+ Test Files  1 passed (1)
+      Tests  26 passed (26)
+   Start at  23:26:07
+   Duration  124.11s (transform 0ms, setup 0ms, import 40.43s, tests 45.56s, environment 0ms)
+```
+
+`pnpm test:web apps/web/src/features/work/components/panes/work-chat-pane.browser.test.tsx`
+completed with exit 0:
+
+```text
+ Test Files  1 passed (1)
+      Tests  5 passed (5)
+   Start at  23:28:56
+   Duration  82.40s (transform 0ms, setup 0ms, import 15.19s, tests 24.49s, environment 0ms)
+```
+
+The send button is icon-only: the test pins its accessible name “Send to assistant”,
+not nonexistent button text. Conversation scroll tests remain green.
+
+| Check             | Clean base                                                                                | Concurrent host run                                                                        | Isolated file run                                       |
+| ----------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------- |
+| Work detail       | Round-1 HEAD e8807e3b: 25 passed; no fresh fa344fcc run in round 2                        | First semantic run: 25 passed, 1 stale-copy assertion failed; 108.56s total / 43.31s tests | Corrected file: 26 passed; 124.11s total / 45.56s tests |
+| Conversation pane | Manager's fa344fcc full-suite baseline reports no failure in this file; no fresh base run | No broad-suite run in round 2                                                              | 5 passed; 82.40s total / 24.49s tests                   |
+
+All round-2 browser commands selected a single file, while unrelated lanes could
+still consume host CPU. “Isolated” describes file selection, not exclusive use of
+the machine. There were no round-2 timeout failures to classify as regressions.
+The initial red geometry assertions and stale copy assertion are reported above.
+The full web suite was not rerun in round 2; the manager's three fa344fcc baseline
+reds were not fixed or counted as regressions.
+
+`pnpm test:web apps/web/src/features/work/pages/WorkDetailPage.test.tsx apps/web/src/features/work/components/run-outcome.test.ts apps/web/src/i18n/i18n.test.ts`
+completed with exit 0:
+
+```text
+ Test Files  3 passed (3)
+      Tests  9 passed (9)
+   Start at  23:31:13
+   Duration  54.38s (transform 26.92s, setup 0ms, import 53.44s, tests 1.31s, environment 1ms)
+```
+
+This gives 40 passing focused tests on the final implementation (31 browser,
+9 node).
+
+`pnpm web:check:types` completed with exit 0. Verbatim output:
+
+```text
+$ pnpm --filter @atomlink-ye/agent-server-web check:types
+$ tsc -p tsconfig.app.json --noEmit
+```
+
+`pnpm lint` completed with exit 1. Formatting reported 16 files: 15 tracked files
+are byte-identical to `fa344fcc`, independently checked by the reused explorer;
+`BRIEF.md` is an untracked dispatch input. No edited lane file was flagged. These
+formatting changes are outside this lane and were not applied. The command's
+verbatim output is:
+
+```text
+$ node --import tsx scripts/quality/run-lint.ts
+> pnpm format:check
+$ prettier --check .
+Checking formatting...
+[warn] .shoot.mjs
+[warn] apps/web/src/features/agents/authoring.ts
+[warn] apps/web/src/features/agents/AuthoringPanels.tsx
+[warn] apps/web/src/features/observe/ObservePane.browser.test.tsx
+[warn] apps/web/src/features/run-trace/events.tsx
+[warn] apps/web/src/features/run-trace/inspector.tsx
+[warn] apps/web/src/features/run-trace/run-trace-view.tsx
+[warn] apps/web/src/features/work-organization/BoardCardPeek.tsx
+[warn] BRIEF.md
+[warn] docs/architecture/computer-placement-gap.md
+[warn] docs/contracts/work-organization-api.md
+[warn] docs/decisions/0013-task-ordering-in-the-description.md
+[warn] REPORT-workui.md
+[warn] src/adapters/paseo/paseo-turn-runner.test.ts
+[warn] src/infrastructure/postgres/postgres-work-organization-repository.ts
+[warn] tooling/dev/setup-providers.ts
+[warn] Code style issues found in 16 files. Run Prettier with --write to fix.
+[ELIFECYCLE] Command failed with exit code 1.
+> pnpm typecheck
+$ tsc -p tsconfig.json --noEmit && pnpm web:check:types
+$ pnpm --filter @atomlink-ye/agent-server-web check:types
+$ tsc -p tsconfig.app.json --noEmit
+[ELIFECYCLE] Command failed with exit code 1.
+```
+
+The scoped implementation and 40 focused tests are green; repository-wide lint is
+red. This is not a full-suite green claim. The shared Definition viewer copy
+blocker remains as described above.
+
+## Delivery boundary
+
+Only `wui3/ia-a-r2` has been pushed for round 2. The frozen `wui3/ia-a` branch was
+not updated. No PR, merge, or rebase was performed. No temporary application server
+was started; browser test processes are owned by the test runner.
+
+Two executor delegation attempts were rejected with `unknown agent_type 'executor'`.
+The Deputy subsequently clarified that this older session exposes only the built-in
+explorer. One explorer thread was successfully started with `fork_turns=none` and
+no model/effort override, then reused for read-only lint-log and base-file comparison.
+Its comparison confirmed all 15 tracked formatting-warning files are byte-identical
+to `fa344fcc`; `BRIEF.md` is an untracked dispatch input. Implementation, report edits,
+and acceptance remained with the root agent. No further unavailable-role attempts
+or reads of removed host skills were made after that correction.

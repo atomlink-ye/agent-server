@@ -196,5 +196,7 @@ it('loads the selected Run conversation instead of preparation', async () => {
   expect(host.querySelector('.work-chat-pane')?.textContent).not.toContain(
     'Lead',
   );
-  expect(host.textContent).toContain('Send to assistant');
+  expect(host.querySelector('.send-button')?.getAttribute('aria-label')).toBe(
+    'Send to assistant',
+  );
 });

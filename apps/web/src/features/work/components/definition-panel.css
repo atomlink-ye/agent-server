@@ -53,7 +53,7 @@
 .work-definition__preview > p {
   color: var(--ink-500);
   font-size: var(--text-eyebrow);
-  line-height: 1.45;
+  line-height: var(--leading-ui);
   margin: var(--space-1) 0 0;
 }
 .work-definition__editor-heading > span {
@@ -69,7 +69,7 @@
   color: var(--ink-100);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: var(--text-xs);
-  line-height: 1.55;
+  line-height: var(--leading-body);
   margin-top: var(--space-3);
   min-height: 430px;
   padding: var(--space-4);
@@ -111,7 +111,7 @@
   border-left: 2px solid var(--ink-300);
   color: var(--ink-700);
   font-size: var(--text-eyebrow);
-  line-height: 1.45;
+  line-height: var(--leading-ui);
   margin: var(--space-3) 0 0;
   padding: var(--space-1) 0 var(--space-1) var(--space-2);
 }

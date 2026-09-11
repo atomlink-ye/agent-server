@@ -233,6 +233,27 @@ the browser on a first visit (anything `zh*` resolves to `zh-CN`). It is not an 
 preference: one language pushed onto every browser someone signs in from is the wrong default
 for a person reading English at work and Chinese at home.
 
+### Typography and reading density
+
+All CSS font sizes in `apps/web/src` use the `--text-*` scale in `index.css`.
+Compact labels, metadata, and small hints share a 12px floor; body and emphasized
+text use 13px and 14px, with 16px, 20px, and 24px heading steps. The same floor
+applies in both locales because user-authored titles and messages can mix scripts.
+The eyebrow, xs, and sm names retain semantic roles but resolve to the same size.
+Use weight and color for their hierarchy rather than shrinking metadata.
+
+Leading also uses tokens: `--leading-tight` (1.35) for short headings,
+`--leading-ui` (1.5) for controls, `--leading-body` (1.6) for prose, and
+`--leading-code` (1.65) for source/transcript reading. Symbol alignment tokens
+are reserved for existing icon controls. Explicitly size `<small>` hints rather
+than relying on the browser's relative-size default.
+
+The Work directory balances its two text lines with 4px vertical row padding
+and a 2px internal gap; `.work-pane-scroll` remains the scroll owner. The
+Chromium typography test pins rendered roles and fully visible rows at
+1440×900 in English and Simplified Chinese. The node typography test rejects
+raw CSS font sizes (including shorthand) and local line-height literals.
+
 ### Migrating a surface
 
 1. Add the English strings to `en.ts` under a namespaced key (`conversations.list.empty`).

@@ -65,6 +65,7 @@
   min-width: 0;
 }
 .agents-list-copy small {
+  font-size: var(--text-xs);
   color: var(--ink-500);
 }
 .agents-avatar,
@@ -81,7 +82,7 @@
 .agents-avatar {
   width: 34px;
   height: 34px;
-  font-size: 14px;
+  font-size: var(--text-lg);
 }
 .agents-profile-avatar {
   width: 52px;
@@ -105,7 +106,7 @@
 .agents-profile-header p {
   margin: 4px 0 0;
   color: var(--ink-500);
-  font-size: 13px;
+  font-size: var(--text-md);
 }
 .agents-profile-meta {
   display: flex;
@@ -116,8 +117,8 @@
 .agents-profile-bio {
   max-width: 68ch;
   color: var(--ink-700);
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: var(--text-md);
+  line-height: var(--leading-body);
   /* Three lines is the budget the identity block gets: enough for a real
      summary, short enough that Capabilities stay on the first screen. */
   display: -webkit-box;
@@ -130,7 +131,7 @@
   border-radius: 999px;
   background: var(--ink-100);
   color: var(--ink-700);
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 .agents-profile-actions {
   display: flex;
@@ -151,7 +152,7 @@
   border-radius: 999px;
   background: var(--ink-100);
   color: var(--ink-700);
-  font-size: 11px;
+  font-size: var(--text-xs);
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -209,7 +210,7 @@
 .agents-empty-note,
 .agents-form-hint {
   color: var(--ink-500);
-  font-size: 13px;
+  font-size: var(--text-md);
 }
 .agents-card-grid,
 .agents-capability-grid {
@@ -269,7 +270,7 @@
   border-radius: 999px;
   background: var(--ink-100);
   color: var(--ink-700);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 650;
 }
 .agents-activity-kind--work {
@@ -285,7 +286,7 @@
 .agents-activity-copy strong {
   overflow: hidden;
   color: var(--ink-900);
-  font-size: 13px;
+  font-size: var(--text-md);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -295,8 +296,8 @@
   -webkit-line-clamp: 2;
   overflow: hidden;
   color: var(--ink-500);
-  font-size: 12px;
-  line-height: 1.45;
+  font-size: var(--text-sm);
+  line-height: var(--leading-ui);
 }
 .agents-activity-meta {
   display: flex;
@@ -304,7 +305,7 @@
   align-items: center;
   gap: 6px;
   color: var(--ink-500);
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 .agents-activity-state {
   padding: 2px 8px;
@@ -329,15 +330,15 @@
 .agents-activity-note {
   margin: 0;
   color: var(--ink-500);
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
 }
 .agents-activity-error {
   display: flex;
   align-items: center;
   gap: 8px;
   color: var(--coral-deep);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 .agents-activity-error p {
   margin: 0;
@@ -345,7 +346,7 @@
 }
 .agents-activity-error button {
   color: var(--skype-deep);
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 650;
 }
 .agents-home-files {
@@ -359,8 +360,8 @@
   max-width: 760px;
   margin: -4px 0 0;
   color: var(--ink-500);
-  font-size: 13px;
-  line-height: 1.55;
+  font-size: var(--text-md);
+  line-height: var(--leading-body);
 }
 .agents-home-files-grid {
   display: grid;
@@ -383,13 +384,13 @@
   margin: 0;
 }
 .agents-home-file-scope h3 {
-  font-size: 14px;
+  font-size: var(--text-lg);
 }
 .agents-home-file-scope > div > p,
 .agents-home-file-scope > p {
   color: var(--ink-500);
-  font-size: 12px;
-  line-height: 1.45;
+  font-size: var(--text-sm);
+  line-height: var(--leading-ui);
 }
 .agents-home-file-scope ul {
   display: grid;
@@ -401,7 +402,7 @@
 .agents-home-file-scope li {
   min-width: 0;
   color: var(--skype-deep);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 .agents-home-file-scope li a {
   display: block;
@@ -418,7 +419,7 @@
   align-items: center;
   gap: 8px;
   color: var(--coral-deep);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 .agents-home-files-error p {
   color: inherit !important;
@@ -426,7 +427,7 @@
 .agents-home-files-error button,
 .agents-home-files-link {
   color: var(--skype-deep);
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 650;
 }
 .agents-home-files-link {
@@ -441,7 +442,7 @@
 }
 .agents-capability-meta {
   color: var(--ink-500);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 .agents-empty-capabilities {
   padding: 18px;
@@ -461,19 +462,19 @@
   padding: 3px 7px;
   border-radius: 999px;
   background: var(--ink-100);
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 .agents-mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12px;
-  line-height: 1.55;
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
   word-break: break-word;
 }
 .agents-error,
 .agents-status {
   padding: 10px 12px;
   border-radius: 8px;
-  font-size: 13px;
+  font-size: var(--text-md);
 }
 .agents-error {
   background: var(--coral-soft);
@@ -507,10 +508,11 @@
   flex-direction: column;
   gap: 6px;
   color: var(--ink-900);
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 600;
 }
 .agents-field small {
+  font-size: var(--text-xs);
   color: var(--ink-500);
   font-weight: 400;
 }
@@ -556,6 +558,7 @@
   background: var(--paper);
 }
 .agents-choice-row small {
+  font-size: var(--text-xs);
   color: var(--ink-500);
 }
 .agents-authoring-section {
@@ -597,7 +600,7 @@
   align-items: center;
   gap: 5px;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 .agents-inline-check input {
   width: auto;
@@ -610,7 +613,7 @@
 .agents-skill-grant {
   margin-left: 6px;
   opacity: 0.7;
-  font-size: 0.85em;
+  font-size: var(--text-xs);
 }
 .agents-plan-preview {
   display: grid;
@@ -628,13 +631,13 @@
 .agents-plan-preview p {
   display: block;
   margin: 4px 0 0;
-  font-size: 12px;
+  font-size: var(--text-sm);
   word-break: break-word;
 }
 .agents-runtime-requirements {
   margin: 4px 0 0;
   padding-left: 16px;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 .agents-runtime-requirements li {
   margin-top: 2px;
@@ -646,7 +649,7 @@
 .agents-advanced summary {
   cursor: pointer;
   color: var(--ink-700);
-  font-size: 13px;
+  font-size: var(--text-md);
 }
 .agents-source-preview {
   max-height: 360px;
@@ -656,7 +659,7 @@
   border-radius: 8px;
   background: var(--paper);
   font:
-    12px/1.5 ui-monospace,
+    var(--text-sm)/var(--leading-code) ui-monospace,
     SFMono-Regular,
     Menlo,
     monospace;
@@ -699,7 +702,7 @@
   font-size: var(--text-display);
   font-weight: 700;
   letter-spacing: -0.04em;
-  line-height: 1.25;
+  line-height: var(--leading-tight);
 }
 .agents-roster-copy h1 em {
   color: var(--skype-deep);
@@ -710,7 +713,7 @@
   margin: 8px 0 0;
   color: var(--ink-500);
   font-size: var(--text-lg);
-  line-height: 1.5;
+  line-height: var(--leading-body);
 }
 /* Manrope ships no italic face and the shell turns synthesis off globally, so
    the roster's spoken-voice text opts synthesis back in for itself. */
@@ -832,7 +835,7 @@
   color: var(--ink-700);
   font-size: var(--text-md);
   font-style: italic;
-  line-height: 1.55;
+  line-height: var(--leading-body);
   /* Three lines keeps every card in a row the same height. */
   display: -webkit-box;
   -webkit-box-orient: vertical;
@@ -879,7 +882,7 @@
   color: var(--ink-500);
   font-size: var(--text-md);
   font-style: italic;
-  line-height: 1.45;
+  line-height: var(--leading-ui);
 }
 .agents-roster-add-mark {
   display: grid;

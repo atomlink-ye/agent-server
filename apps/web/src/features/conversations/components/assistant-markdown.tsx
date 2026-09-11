@@ -2,6 +2,7 @@ import type { ComponentProps } from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeSanitize from 'rehype-sanitize';
 import remarkGfm from 'remark-gfm';
+import './assistant-markdown.css';
 
 type AssistantMarkdownProps = { readonly text: string };
 

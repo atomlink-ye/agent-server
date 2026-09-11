@@ -1,3 +1,4 @@
+import { surfaceMetrics } from '@/test-support/surface-metrics';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
@@ -172,4 +173,25 @@ it('renders one Work Card for a Work every follow-up message references', async 
   // The card is outside the message/action group, not a section inside the bubble.
   expect(firstMessage?.querySelector('.work-card')).toBeNull();
   expect(host.textContent).toContain('Here is the report.');
+});
+
+it('keeps dispatch cards on the shared surface spacing in both locales', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 503, json: async () => ({ error: { code: 'feature_unavailable' } }) })));
+  try {
+    const host = await render([message({
+      body: 'Review the draft and share the result.',
+      authorType: 'principal',
+      dispatch: {
+        kind: 'work_item_dispatch',
+        workItemId: '33333333-3333-4333-8333-333333333333',
+        reason: 'assignment',
+        actorLabel: 'Alex',
+        recipientLabel: 'Researcher',
+        taskTitle: 'Review the quarterly report',
+      },
+    })]);
+    await surfaceMetrics(host, 'dispatch', ['.dispatch-card', '.dispatch-card__event', '.dispatch-card__status', '.dispatch-card__details', '.chat-transcript']);
+  } finally {
+    vi.unstubAllGlobals();
+  }
 });

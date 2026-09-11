@@ -1,3 +1,4 @@
+import { surfaceMetrics } from '@/test-support/surface-metrics';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -100,6 +101,7 @@ it('lists a whisper channel and peeks its messages without offering a compose bo
     await Promise.resolve();
   });
 
+    await surfaceMetrics(host, "whispers", [".title-bar", "header.whisper-observer-badge", ".whisper-message", ".whispers-list button", ".whisper-message-log"]);
   expect(host.textContent).toContain('agent-a ↔ agent-b');
   expect(host.textContent).toContain('Need to align privately.');
   expect(host.textContent).toContain('Observer mode');

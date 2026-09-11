@@ -1,3 +1,4 @@
+import { surfaceMetrics } from '@/test-support/surface-metrics';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
@@ -72,6 +73,7 @@ it('scrolls real Tasks list and detail content to their final entries on desktop
     await act(settle);
     await act(settle);
 
+    await surfaceMetrics(host, "tasks", [".title-bar", ".work-org-detail-header", ".work-org-card", ".work-org-list-item", ".work-org-content", ".work-org-detail-grid"]);
     const list = host.querySelector<HTMLElement>('.work-org-list');
     expect(list).not.toBeNull();
     expect(host.textContent).toContain('Final real Task');

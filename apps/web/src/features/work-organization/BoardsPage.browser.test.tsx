@@ -1,3 +1,4 @@
+import { surfaceMetrics } from '@/test-support/surface-metrics';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter, Route, Routes, useParams } from 'react-router-dom';
@@ -119,6 +120,7 @@ it('scrolls real Board list, content, and canvas to their final entries on deskt
     await act(settle);
     await act(settle);
 
+    await surfaceMetrics(host, "boards", [".title-bar", ".work-board-toolbar", ".work-board-card", ".work-org-list-item", ".work-org-content", ".work-board-canvas"]);
     const list = host.querySelector<HTMLElement>('.work-org-list');
     expect(list).not.toBeNull();
     expect(host.textContent).toContain('Final real Board');

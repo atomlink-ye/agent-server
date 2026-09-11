@@ -585,14 +585,17 @@ export const en = {
   'work.invalidLink.back': 'Back to Work',
   'work.invalidLink.eyebrow': 'Work link',
   'work.invalidLink.body': 'Check the link, or return to Work.',
-  "work.latestRunState": "Run: {state}",
-  "work.backToConversations": "Back to Conversations",
-  "work.permission.title": "You cannot open this Work here",
-  "work.permission.body": "Check that you are using the right account, or ask the workspace owner for access.",
-  "work.detail.startingBody": "The Run is not ready to display yet. We will check again automatically. You can return to Work while you wait.",
-  "work.browseRuns": "Browse Runs",
-  "work.refreshTranscript": "Refresh transcript",
-  "work.staleList": "These are the last loaded Works. Retry to see current activity.",
+  'work.latestRunState': 'Run: {state}',
+  'work.backToConversations': 'Back to Conversations',
+  'work.permission.title': 'You cannot open this Work here',
+  'work.permission.body':
+    'Check that you are using the right account, or ask the workspace owner for access.',
+  'work.detail.startingBody':
+    'The Run is not ready to display yet. We will check again automatically. You can return to Work while you wait.',
+  'work.browseRuns': 'Browse Runs',
+  'work.refreshTranscript': 'Refresh transcript',
+  'work.staleList':
+    'These are the last loaded Works. Retry to see current activity.',
   'work.unavailable.title': "Work isn't set up here",
   'work.unavailable.body':
     "This workspace doesn't have Work execution enabled.",

@@ -418,5 +418,11 @@
   min-height: 340px;
   padding: 32px;
 }
-.work-main-empty > a { display: inline-block; margin-top: 12px; color: var(--sky-ink); }
-.work-landing__recent .work-scannable-title { min-width: 0; }
+.work-main-empty > a {
+  display: inline-block;
+  margin-top: 12px;
+  color: var(--sky-ink);
+}
+.work-landing__recent .work-scannable-title {
+  min-width: 0;
+}

@@ -37,7 +37,9 @@ export function TranscriptPane({
     >
       <div className="work-status-actions">
         <a href={workTabHref(data.work.id, 'runs')}>{t('work.browseRuns')}</a>
-        <button type="button" onClick={() => setRefresh(value => value + 1)}>{t('work.refreshTranscript')}</button>
+        <button type="button" onClick={() => setRefresh((value) => value + 1)}>
+          {t('work.refreshTranscript')}
+        </button>
       </div>
       <SessionTranscripts
         key={refresh}

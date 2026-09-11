@@ -10,7 +10,10 @@ import {
   type WorkDefinitionCatalogEntry,
 } from './clients/work-definition-client';
 import { useT } from '../../i18n';
-import { formatWorkListTime, productStatePresentation } from './components/work-presentation';
+import {
+  formatWorkListTime,
+  productStatePresentation,
+} from './components/work-presentation';
 import { WorkTitle } from './components/work-title';
 
 export interface WorkPaneProps {
@@ -60,7 +63,9 @@ export function WorkPane({
   }, [works, onWorksChange]);
 
   const controlsDisabled = status === 'unavailable' || status === 'denied';
-  const orderedWorks = [...works].sort((a, b) => activityTime(b).localeCompare(activityTime(a))); 
+  const orderedWorks = [...works].sort((a, b) =>
+    activityTime(b).localeCompare(activityTime(a)),
+  );
 
   return (
     <aside className="sidebar work-pane" aria-label={t('work.navigation')}>
@@ -133,8 +138,13 @@ export function WorkPane({
           </div>
         ) : null}
         {status === 'denied' ? (
-          <div className="pane-placeholder" data-testid="work-list-denied" role="status">
-            <p>{t('work.permission.title')}</p><p>{t('work.permission.body')}</p>
+          <div
+            className="pane-placeholder"
+            data-testid="work-list-denied"
+            role="status"
+          >
+            <p>{t('work.permission.title')}</p>
+            <p>{t('work.permission.body')}</p>
             <Link to="/conversations">{t('work.backToConversations')}</Link>
           </div>
         ) : null}
@@ -150,7 +160,9 @@ export function WorkPane({
               (which can be control-plane prose). The backend owns product
               state; an empty pane here means "we could not ask", not
               "nothing needs you". */}
-            <p>{t(works.length ? 'work.staleList' : 'work.connectionProblem')}</p>
+            <p>
+              {t(works.length ? 'work.staleList' : 'work.connectionProblem')}
+            </p>
             <button type="button" onClick={refresh}>
               {t('work.retry')}
             </button>
@@ -178,7 +190,12 @@ export function WorkPane({
               <WorkListRow
                 key={work.id}
                 work={work}
-                latestState={selectedLatestRunState?.workId === work.id && selectedLatestRunState.runId === work.latest_run_summary?.id ? selectedLatestRunState.state : work.product_state}
+                latestState={
+                  selectedLatestRunState?.workId === work.id &&
+                  selectedLatestRunState.runId === work.latest_run_summary?.id
+                    ? selectedLatestRunState.state
+                    : work.product_state
+                }
                 selected={selectedWorkId === work.id}
                 originConversationId={originConversationId}
               />
@@ -222,9 +239,16 @@ function WorkListRow({
     };
   }, [work.id, work.updated_at, work.latest_run_summary?.id]);
   const state = work.latest_run_summary ? latestState : 'not_started';
-  const count = runCount === null
-    ? t(countFailed ? 'work.record.countUnavailable' : 'work.record.countLoading')
-    : t(runCount === 1 ? 'work.record.oneRun' : 'work.record.runCount', { count: runCount });
+  const count =
+    runCount === null
+      ? t(
+          countFailed
+            ? 'work.record.countUnavailable'
+            : 'work.record.countLoading',
+        )
+      : t(runCount === 1 ? 'work.record.oneRun' : 'work.record.runCount', {
+          count: runCount,
+        });
   const timestamp = activityTime(work);
   return (
     <li>
@@ -236,16 +260,41 @@ function WorkListRow({
         aria-label={`${work.title}. ${t(work.archived_at ? 'work.record.archived' : 'work.record.active')}. ${count}. ${t('work.latestRunState', { state: productStatePresentation(state).label })}`}
       >
         <span className="work-list-mark" aria-hidden="true">
-          {state === 'problem' ? '!' : state === 'needs_you' ? '?' : state === 'running' ? '↻' : state === 'complete' ? '✓' : '·'}
+          {state === 'problem'
+            ? '!'
+            : state === 'needs_you'
+              ? '?'
+              : state === 'running'
+                ? '↻'
+                : state === 'complete'
+                  ? '✓'
+                  : '·'}
         </span>
         <span className="work-list-copy">
           <span className="work-directory-heading">
             <WorkTitle title={work.title} />
-            <span className="work-list-count" title={count}>{count}</span>
+            <span className="work-list-count" title={count}>
+              {count}
+            </span>
           </span>
           <span className="work-list-meta">
-            <span>{work.archived_at ? t('work.record.archived') : work.latest_run_summary ? t('work.latestRunState', { state: productStatePresentation(state).label }) : t('work.noRuns')}</span>
-            <time dateTime={timestamp} title={t('work.updatedAt', { time: formatWorkListTime(timestamp) })}>{formatWorkListTime(timestamp)}</time>
+            <span>
+              {work.archived_at
+                ? t('work.record.archived')
+                : work.latest_run_summary
+                  ? t('work.latestRunState', {
+                      state: productStatePresentation(state).label,
+                    })
+                  : t('work.noRuns')}
+            </span>
+            <time
+              dateTime={timestamp}
+              title={t('work.updatedAt', {
+                time: formatWorkListTime(timestamp),
+              })}
+            >
+              {formatWorkListTime(timestamp)}
+            </time>
           </span>
         </span>
       </Link>

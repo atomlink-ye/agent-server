@@ -34,12 +34,16 @@ export function WorkCard({ workRef, onOpen }: WorkCardProps) {
   return (
     <aside
       className="work-card"
-      data-state={state.status === 'ready' ? state.card.productState : state.status}
+      data-state={
+        state.status === 'ready' ? state.card.productState : state.status
+      }
       aria-label={t('workCard.label')}
       aria-live="off"
     >
       {state.status === 'loading' ? (
-        <p className="work-card-main work-loading-feedback">{t('workCard.loading')}</p>
+        <p className="work-card-main work-loading-feedback">
+          {t('workCard.loading')}
+        </p>
       ) : null}
       {state.status === 'error' ? (
         // Not role="alert": a refresh that failed is transient, and an
@@ -75,9 +79,20 @@ function WorkCardContent({ card }: { readonly card: WorkChatCard }) {
     <div className="work-card-main">
       <div className="work-card-heading">
         <span className="eyebrow">{t('workCard.eyebrow')}</span>
-        <span className={`work-status ${statusClass}`}><span aria-hidden="true">{card.productState === 'problem' ? '! ' : card.productState === 'needs_you' ? '? ' : ''}</span>{status}</span>
+        <span className={`work-status ${statusClass}`}>
+          <span aria-hidden="true">
+            {card.productState === 'problem'
+              ? '! '
+              : card.productState === 'needs_you'
+                ? '? '
+                : ''}
+          </span>
+          {status}
+        </span>
       </div>
-      <h3><WorkTitle title={card.title} /></h3>
+      <h3>
+        <WorkTitle title={card.title} />
+      </h3>
       <p className="work-card-result">{resultText(t, card)}</p>
     </div>
   );

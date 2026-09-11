@@ -95,7 +95,8 @@ export function WorkPage({
     navigate(`/tasks/${encodeURIComponent(returnWorkItemId)}`);
   };
 
-  const workUnavailable = workListStatus === 'unavailable' || workListStatus === 'denied';
+  const workUnavailable =
+    workListStatus === 'unavailable' || workListStatus === 'denied';
   const workListFailed = workListStatus === 'error';
   const invalidWorkId =
     selectedWorkId !== null && !isValidDetailId('work', selectedWorkId);
@@ -190,8 +191,20 @@ export function WorkPage({
               <span className="work-main-icon" aria-hidden="true">
                 ✓
               </span>
-              <h1>{t(workListStatus === 'denied' ? 'work.permission.title' : 'work.unavailable.title')}</h1>
-              <p>{t(workListStatus === 'denied' ? 'work.permission.body' : 'work.unavailable.body')}</p>
+              <h1>
+                {t(
+                  workListStatus === 'denied'
+                    ? 'work.permission.title'
+                    : 'work.unavailable.title',
+                )}
+              </h1>
+              <p>
+                {t(
+                  workListStatus === 'denied'
+                    ? 'work.permission.body'
+                    : 'work.unavailable.body',
+                )}
+              </p>
               <Link to="/conversations">{t('work.backToConversations')}</Link>
             </div>
           ) : isEmpty && workListFailed ? (
@@ -233,7 +246,10 @@ function WorkLanding({
   const t = useT();
   if (status === 'loading' && works.length === 0)
     return (
-      <div className="work-main-empty work-main-empty--loading work-loading-feedback" role="status">
+      <div
+        className="work-main-empty work-main-empty--loading work-loading-feedback"
+        role="status"
+      >
         <span className="work-main-icon" aria-hidden="true">
           …
         </span>

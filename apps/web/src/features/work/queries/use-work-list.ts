@@ -27,7 +27,10 @@ export function useWorkList(): WorkListQuery {
         setStatus('ready');
       })
       .catch((reason: unknown) => {
-        if (reason instanceof ProductReadError && (reason.status === 401 || reason.status === 403)) {
+        if (
+          reason instanceof ProductReadError &&
+          (reason.status === 401 || reason.status === 403)
+        ) {
           setWorks([]);
           setStatus('denied');
           return;

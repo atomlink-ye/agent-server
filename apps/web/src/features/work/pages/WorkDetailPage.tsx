@@ -140,7 +140,12 @@ export function WorkDetailPage({
               />
             );
           case 'artifacts':
-            return <ArtifactsPane workId={workId} originConversationId={originConversationId} />;
+            return (
+              <ArtifactsPane
+                workId={workId}
+                originConversationId={originConversationId}
+              />
+            );
           case 'definition':
             return (
               <DefinitionPane
@@ -162,17 +167,24 @@ export function WorkDetailPage({
       data-testid="work-detail-shell"
     >
       {query.status === 'loading' ? (
-        <section className="work-detail-feedback work-loading-feedback" role="status">
+        <section
+          className="work-detail-feedback work-loading-feedback"
+          role="status"
+        >
           <h2>{t('work.detail.loading')}</h2>
           <p>{t('work.loading.body')}</p>
-          <Link to={workRootPath(originConversationId ?? null)}>{t('work.invalidLink.back')}</Link>
+          <Link to={workRootPath(originConversationId ?? null)}>
+            {t('work.invalidLink.back')}
+          </Link>
         </section>
       ) : null}
       {query.status === 'starting' ? (
         <section className="work-detail-feedback" role="status">
           <h2>{t('work.detail.starting')}</h2>
           <p>{t('work.detail.startingBody')}</p>
-          <Link to={workRootPath(originConversationId ?? null)}>{t('work.invalidLink.back')}</Link>
+          <Link to={workRootPath(originConversationId ?? null)}>
+            {t('work.invalidLink.back')}
+          </Link>
         </section>
       ) : null}
       {query.status === 'error' ? (
@@ -221,14 +233,31 @@ function WorkDetailError({
 }) {
   const t = useT();
   const unavailable = isFeatureUnavailable(error);
-  const denied = error instanceof ProductReadError && (error.status === 401 || error.status === 403);
-  if (unavailable || denied) return (
-    <section className="work-detail-feedback" role="status">
-      <h2>{t(unavailable ? 'work.unavailable.title' : 'work.permission.title')}</h2>
-      <p>{t(unavailable ? 'work.unavailable.body' : 'work.permission.body')}</p>
-      <Link to={unavailable ? '/conversations' : workRootPath(originConversationId ?? null)}>{t(unavailable ? 'work.backToConversations' : 'work.invalidLink.back')}</Link>
-    </section>
-  );
+  const denied =
+    error instanceof ProductReadError &&
+    (error.status === 401 || error.status === 403);
+  if (unavailable || denied)
+    return (
+      <section className="work-detail-feedback" role="status">
+        <h2>
+          {t(unavailable ? 'work.unavailable.title' : 'work.permission.title')}
+        </h2>
+        <p>
+          {t(unavailable ? 'work.unavailable.body' : 'work.permission.body')}
+        </p>
+        <Link
+          to={
+            unavailable
+              ? '/conversations'
+              : workRootPath(originConversationId ?? null)
+          }
+        >
+          {t(
+            unavailable ? 'work.backToConversations' : 'work.invalidLink.back',
+          )}
+        </Link>
+      </section>
+    );
   const rootWorkMissing = error instanceof WorkDetailRootNotFoundError;
   if (rootWorkMissing) {
     return (
@@ -244,7 +273,10 @@ function WorkDetailError({
   }
 
   return (
-    <section className="work-detail-feedback work-list-state--error" role="alert">
+    <section
+      className="work-detail-feedback work-list-state--error"
+      role="alert"
+    >
       <p className="work-list-state__eyebrow">{t('work.couldNotLoad')}</p>
       <h2>{t('work.couldNotLoad.title')}</h2>
       <p>{t('work.couldNotLoad.body')}</p>

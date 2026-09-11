@@ -60,8 +60,12 @@ export function useWorkDetail({
         if (!active) return;
         const featureUnavailable = isFeatureUnavailable(error);
         const projectionUnavailable =
-          !featureUnavailable && error instanceof ProductReadError && error.status === 503;
-        const denied = error instanceof ProductReadError && (error.status === 401 || error.status === 403);
+          !featureUnavailable &&
+          error instanceof ProductReadError &&
+          error.status === 503;
+        const denied =
+          error instanceof ProductReadError &&
+          (error.status === 401 || error.status === 403);
         if (featureUnavailable || denied) {
           setDetail(null);
           setError(error);

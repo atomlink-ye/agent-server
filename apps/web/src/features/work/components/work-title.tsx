@@ -6,7 +6,11 @@ export function WorkTitle({ title }: { readonly title: string }) {
   return (
     <strong className="work-scannable-title" title={title} aria-label={title}>
       <span>{split ? title.slice(0, -8) : title}</span>
-      {split ? <span className="work-scannable-title__suffix" aria-hidden="true">{title.slice(-8)}</span> : null}
+      {split ? (
+        <span className="work-scannable-title__suffix" aria-hidden="true">
+          {title.slice(-8)}
+        </span>
+      ) : null}
     </strong>
   );
 }

@@ -2,6 +2,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
+import { setLocale } from '../../../i18n';
 
 import type {
   WorkListItem,
@@ -221,15 +222,22 @@ it('renders Work state and run counts without latest Run summaries', async () =>
     ];
     expect(cards).toHaveLength(stateCases.length);
     for (const [index] of stateCases.entries()) {
-      const card = cards[index]!;
-      expect(card.textContent).toContain('Active');
+      const card = cards.find(
+        (card) =>
+          card.querySelector('a')?.getAttribute('href') ===
+          `/work/${populatedWorkList.works[index]!.id}`,
+      )!;
+      expect(card.querySelector('a')?.getAttribute('aria-label')).toContain(
+        'Active',
+      );
+      expect(card.textContent).toContain(`Run: ${stateCases[index]![1]}`);
       expect(card.textContent).toContain('3 runs');
       // The list row is a navigation index, not a place to read a Run's
       // result: it shows state and a compact timestamp, not result text.
       expect(card.textContent).not.toContain(
         `Latest recorded result ${index + 1}`,
       );
-      expect(card.querySelector('time')).toBeNull();
+      expect(card.querySelector('time')).not.toBeNull();
       expect(card.querySelector('a')?.getAttribute('href')).toBe(
         `/work/${populatedWorkList.works[index]!.id}`,
       );
@@ -709,6 +717,243 @@ it.each([
       await act(async () => root.unmount());
       host.remove();
       vi.unstubAllGlobals();
+    }
+  },
+);
+
+it.each(['en', 'zh-CN'] as const)(
+  'measures %s directory density and long titles at 1440',
+  async (locale) => {
+    setLocale(locale);
+    await page.viewport(1440, 900);
+    const works = Array.from({ length: 30 }, (_, index) => ({
+      ...populatedWorkList.works[index % 5]!,
+      id: uuid(index + 1000),
+      title:
+        index === 1
+          ? 'A'.repeat(199) + 'B'
+          : index === 2
+            ? '中'.repeat(199) + '文'
+            : `Work ${index + 1}`,
+    }));
+    vi.stubGlobal('fetch', workPaneFetch({ works, next_cursor: null }));
+    const host = document.createElement('div');
+    host.className = 'app-shell';
+    document.body.append(host);
+    const root = createRoot(host);
+    try {
+      await act(async () => {
+        root.render(
+          <MemoryRouter>
+            <div />
+            <WorkPane onCreateNew={() => undefined} />
+            <main />
+          </MemoryRouter>,
+        );
+      });
+      const scroller = host.querySelector<HTMLElement>('.work-pane-scroll')!;
+      const rows = [
+        ...host.querySelectorAll<HTMLElement>('[data-testid="work-list"] > li'),
+      ];
+      const rect = scroller.getBoundingClientRect();
+      expect({
+        scrollerHeight: rect.height,
+        scrollerTop: rect.top,
+        firstTop: rows[0]!.getBoundingClientRect().top,
+        firstHeight: rows[0]!.getBoundingClientRect().height,
+        fifteenthBottom: rows[14]!.getBoundingClientRect().bottom,
+        scrollerBottom: rect.bottom,
+      }).toEqual({
+        scrollerHeight: 794,
+        scrollerTop: 90,
+        firstTop: 94,
+        firstHeight: 48,
+        fifteenthBottom: 884,
+        scrollerBottom: 884,
+      });
+      expect(
+        rows.filter((row) => row.getBoundingClientRect().bottom <= rect.bottom),
+      ).toHaveLength(15);
+      expect(rect.height).toBe(794);
+      expect(rect.top).toBe(90);
+      for (const row of rows) {
+        expect(row.getBoundingClientRect().height).toBe(48);
+        expect(row.getBoundingClientRect().width).toBe(292);
+        expect(row.scrollWidth).toBe(row.clientWidth);
+      }
+      const longRows = rows.filter(
+        (row) =>
+          row.querySelector('strong')?.getAttribute('title')?.length === 200,
+      );
+      expect(longRows).toHaveLength(2);
+      for (const row of longRows) {
+        const title = row.querySelector('strong')!;
+        expect(title.getBoundingClientRect().height).toBe(18);
+        expect(getComputedStyle(title).fontSize).toBe('13px');
+        expect(title.getAttribute('title')).toHaveLength(200);
+        const suffix = title.querySelector('.work-scannable-title__suffix')!;
+        expect(suffix.getBoundingClientRect().right).toBeLessThanOrEqual(
+          title.getBoundingClientRect().right,
+        );
+        expect(suffix.textContent).toBe(title.getAttribute('title')!.slice(-8));
+      }
+      expect(innerWidth).toBe(1440);
+      expect(scroller.scrollHeight).toBeGreaterThan(scroller.clientHeight);
+    } finally {
+      await act(async () => root.unmount());
+      host.remove();
+      vi.unstubAllGlobals();
+      setLocale('en');
+    }
+  },
+);
+
+it('shows a stale-data warning after a failed refresh and recovers on retry', async () => {
+  const fetchMock = workPaneFetch(populatedWorkList);
+  vi.stubGlobal('fetch', fetchMock);
+  const host = document.createElement('div');
+  host.className = 'app-shell';
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <div />
+          <WorkPane onCreateNew={() => undefined} />
+          <main />
+        </MemoryRouter>,
+      );
+    });
+    const original = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (input) => {
+      if (String(input) === '/api/works')
+        throw new TypeError('private network failure');
+      return original(input);
+    });
+    await act(async () => {
+      host
+        .querySelector<HTMLButtonElement>('button[aria-label="Refresh Work"]')!
+        .click();
+    });
+    const warning = host.querySelector('[data-testid="work-list-error"]')!;
+    expect(warning.textContent).toContain('last loaded Works');
+    expect(
+      host.querySelectorAll('[data-testid="work-list"] > li'),
+    ).toHaveLength(5);
+    expect(host.textContent).not.toContain('private network failure');
+    fetchMock.mockImplementation(original);
+    await act(async () => {
+      warning.querySelector<HTMLButtonElement>('button')!.click();
+    });
+    expect(host.querySelector('[data-testid="work-list-error"]')).toBeNull();
+    expect(
+      host.querySelectorAll('[data-testid="work-list"] > li'),
+    ).toHaveLength(5);
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
+it('orders by Work or latest Run activity and distinguishes attention without reading titles', async () => {
+  const works = populatedWorkList.works.slice(0, 3).map((work, index) => ({
+    ...work,
+    product_state:
+      index === 0
+        ? ('problem' as const)
+        : index === 1
+          ? ('needs_you' as const)
+          : ('running' as const),
+    updated_at:
+      index === 1 ? '2026-09-05T00:00:00.000Z' : '2026-09-01T00:00:00.000Z',
+    latest_run_summary: {
+      ...work.latest_run_summary!,
+      updated_at: `2026-09-0${index === 2 ? 4 : 3}T00:00:00.000Z`,
+    },
+  }));
+  vi.stubGlobal('fetch', workPaneFetch({ works, next_cursor: null }));
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(renderPane());
+    });
+    const links = [
+      ...host.querySelectorAll<HTMLAnchorElement>(
+        '[data-testid="work-list"] a',
+      ),
+    ];
+    expect(links.map((link) => link.getAttribute('href'))).toEqual(
+      [works[1], works[2], works[0]].map((work) => `/work/${work!.id}`),
+    );
+    const problem = host.querySelector<HTMLElement>(
+      '[data-run-state="problem"] .work-list-mark',
+    )!;
+    const waiting = host.querySelector<HTMLElement>(
+      '[data-run-state="needs_you"] .work-list-mark',
+    )!;
+    expect(problem.textContent).toBe('!');
+    expect(waiting.textContent).toBe('?');
+    expect(getComputedStyle(problem).backgroundColor).not.toBe(
+      getComputedStyle(waiting).backgroundColor,
+    );
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
+it.each(['en', 'zh-CN'] as const)(
+  'keeps distinguishing suffixes visible in %s recent Work names',
+  async (locale) => {
+    await page.viewport(1440, 900);
+    setLocale(locale);
+    const works = populatedWorkList.works.slice(0, 2).map((work, index) => ({
+      ...work,
+      title: index === 0 ? 'A'.repeat(199) + 'B' : '中'.repeat(199) + '文',
+    }));
+    vi.stubGlobal('fetch', workPaneFetch({ works, next_cursor: null }));
+    const host = document.createElement('div');
+    host.className = 'app-shell';
+    document.body.append(host);
+    const root = createRoot(host);
+    try {
+      await act(async () => {
+        root.render(
+          <MemoryRouter>
+            <div />
+            <WorkPage />
+          </MemoryRouter>,
+        );
+      });
+      const names = [
+        ...host.querySelectorAll<HTMLElement>('.work-landing__recent strong'),
+      ];
+      expect(names).toHaveLength(2);
+      for (const [index, name] of names.entries()) {
+        expect(name.getBoundingClientRect().height).toBe(21);
+        expect(name.getBoundingClientRect().width).toBe(
+          locale === 'zh-CN' ? 527.859375 : index === 0 ? 530 : 542.59375,
+        );
+        expect(name.getAttribute('title')).toHaveLength(200);
+        const suffix = name.querySelector<HTMLElement>(
+          '.work-scannable-title__suffix',
+        )!;
+        expect(suffix.textContent).toBe(name.getAttribute('title')!.slice(-8));
+        expect(suffix.getBoundingClientRect().right).toBeLessThanOrEqual(
+          name.getBoundingClientRect().right,
+        );
+        expect(suffix.getBoundingClientRect().width).toBeGreaterThan(0);
+      }
+    } finally {
+      await act(async () => root.unmount());
+      host.remove();
+      vi.unstubAllGlobals();
+      setLocale('en');
     }
   },
 );

@@ -1,0 +1,47 @@
+/* Shared names keep their suffix visible; the complete name remains available on hover. */
+.work-scannable-title {
+  display: flex;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.work-scannable-title > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.work-scannable-title__suffix {
+  flex: none;
+}
+.work-card {
+  min-height: 124px;
+  border-left-width: 3px;
+}
+.work-card[data-state='problem'] {
+  border-left-color: var(--coral);
+}
+.work-card[data-state='needs_you'] {
+  border-left-color: var(--gold);
+}
+.work-card h3 {
+  line-height: var(--leading-ui);
+}
+.work-card-result {
+  line-height: var(--leading-ui);
+}
+/* Reserve geometry immediately, but do not flash feedback for fast reads. */
+.work-transcript-panel > .execution-transcript {
+  min-height: 102px;
+}
+.work-loading-feedback,
+.work-transcript-panel > .execution-transcript {
+  animation: work-feedback-reveal 0s 150ms both;
+}
+@keyframes work-feedback-reveal {
+  from {
+    visibility: hidden;
+  }
+  to {
+    visibility: visible;
+  }
+}

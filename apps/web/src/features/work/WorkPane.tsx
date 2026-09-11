@@ -10,6 +10,11 @@ import {
   type WorkDefinitionCatalogEntry,
 } from './clients/work-definition-client';
 import { useT } from '../../i18n';
+import {
+  formatWorkListTime,
+  productStatePresentation,
+} from './components/work-presentation';
+import { WorkTitle } from './components/work-title';
 
 export interface WorkPaneProps {
   readonly onCreateNew: () => void;
@@ -32,6 +37,7 @@ export function WorkPane({
   onStatusChange,
   onRefreshReady,
   onWorksChange,
+  selectedLatestRunState,
 }: WorkPaneProps) {
   const t = useT();
   const { status, works, refresh } = useWorkList();
@@ -56,7 +62,10 @@ export function WorkPane({
     onWorksChange?.(works);
   }, [works, onWorksChange]);
 
-  const controlsDisabled = status === 'unavailable' || status === 'error';
+  const controlsDisabled = status === 'unavailable' || status === 'denied';
+  const orderedWorks = [...works].sort((a, b) =>
+    activityTime(b).localeCompare(activityTime(a)),
+  );
 
   return (
     <aside className="sidebar work-pane" aria-label={t('work.navigation')}>
@@ -106,7 +115,7 @@ export function WorkPane({
           assistive technology. */}
         {works.length === 0 && status === 'loading' ? (
           <p
-            className="pane-placeholder"
+            className="pane-placeholder work-loading-feedback"
             data-testid="work-list-loading"
             role="status"
             aria-live="polite"
@@ -114,7 +123,7 @@ export function WorkPane({
             {t('work.loadingList')}
           </p>
         ) : null}
-        {works.length === 0 && status === 'unavailable' ? (
+        {status === 'unavailable' ? (
           <div
             className="pane-placeholder"
             data-testid="work-list-unavailable"
@@ -125,9 +134,21 @@ export function WorkPane({
               Product Work surface at all. Offering Retry would be a false
               promise, so this state has no Retry control. */}
             <p>{t('work.unavailable.body')}</p>
+            <Link to="/conversations">{t('work.backToConversations')}</Link>
           </div>
         ) : null}
-        {works.length === 0 && status === 'error' ? (
+        {status === 'denied' ? (
+          <div
+            className="pane-placeholder"
+            data-testid="work-list-denied"
+            role="status"
+          >
+            <p>{t('work.permission.title')}</p>
+            <p>{t('work.permission.body')}</p>
+            <Link to="/conversations">{t('work.backToConversations')}</Link>
+          </div>
+        ) : null}
+        {status === 'error' ? (
           <div
             className="pane-placeholder"
             data-testid="work-list-error"
@@ -139,7 +160,9 @@ export function WorkPane({
               (which can be control-plane prose). The backend owns product
               state; an empty pane here means "we could not ask", not
               "nothing needs you". */}
-            <p>{t('work.connectionProblem')}</p>
+            <p>
+              {t(works.length ? 'work.staleList' : 'work.connectionProblem')}
+            </p>
             <button type="button" onClick={refresh}>
               {t('work.retry')}
             </button>
@@ -157,16 +180,22 @@ export function WorkPane({
             </button>
           </div>
         ) : null}
-        {works.length > 0 ? (
+        {works.length > 0 && status !== 'unavailable' ? (
           <ul
             className="work-list"
             aria-label={t('work.items')}
             data-testid="work-list"
           >
-            {works.map((work) => (
+            {orderedWorks.map((work) => (
               <WorkListRow
                 key={work.id}
                 work={work}
+                latestState={
+                  selectedLatestRunState?.workId === work.id &&
+                  selectedLatestRunState.runId === work.latest_run_summary?.id
+                    ? selectedLatestRunState.state
+                    : work.product_state
+                }
                 selected={selectedWorkId === work.id}
                 originConversationId={originConversationId}
               />
@@ -183,9 +212,11 @@ function WorkListRow({
   work,
   selected,
   originConversationId,
+  latestState,
 }: {
   readonly work: WorkListItem;
   readonly selected: boolean;
+  readonly latestState: WorkListItem['product_state'];
   readonly originConversationId: string | null;
 }) {
   const t = useT();
@@ -207,45 +238,73 @@ function WorkListRow({
       active = false;
     };
   }, [work.id, work.updated_at, work.latest_run_summary?.id]);
+  const state = work.latest_run_summary ? latestState : 'not_started';
+  const count =
+    runCount === null
+      ? t(
+          countFailed
+            ? 'work.record.countUnavailable'
+            : 'work.record.countLoading',
+        )
+      : t(runCount === 1 ? 'work.record.oneRun' : 'work.record.runCount', {
+          count: runCount,
+        });
+  const timestamp = activityTime(work);
   return (
     <li>
       <Link
         aria-current={selected ? 'page' : undefined}
-        className="work-list-item"
+        className="work-list-item work-directory-row"
+        data-run-state={state}
         to={workPath(work.id, originConversationId)}
+        aria-label={`${work.title}. ${t(work.archived_at ? 'work.record.archived' : 'work.record.active')}. ${count}. ${t('work.latestRunState', { state: productStatePresentation(state).label })}`}
       >
         <span className="work-list-mark" aria-hidden="true">
-          {work.title.slice(0, 1).toUpperCase()}
+          {state === 'problem'
+            ? '!'
+            : state === 'needs_you'
+              ? '?'
+              : state === 'running'
+                ? '↻'
+                : state === 'complete'
+                  ? '✓'
+                  : '·'}
         </span>
         <span className="work-list-copy">
-          <strong>{work.title}</strong>
+          <span className="work-directory-heading">
+            <WorkTitle title={work.title} />
+            <span className="work-list-count" title={count}>
+              {count}
+            </span>
+          </span>
           <span className="work-list-meta">
             <span>
-              {t(
-                work.archived_at
-                  ? 'work.record.archived'
-                  : 'work.record.active',
-              )}
+              {work.archived_at
+                ? t('work.record.archived')
+                : work.latest_run_summary
+                  ? t('work.latestRunState', {
+                      state: productStatePresentation(state).label,
+                    })
+                  : t('work.noRuns')}
             </span>
-            <span>
-              {runCount === null
-                ? t(
-                    countFailed
-                      ? 'work.record.countUnavailable'
-                      : 'work.record.countLoading',
-                  )
-                : t(
-                    runCount === 1
-                      ? 'work.record.oneRun'
-                      : 'work.record.runCount',
-                    { count: runCount },
-                  )}
-            </span>
+            <time
+              dateTime={timestamp}
+              title={t('work.updatedAt', {
+                time: formatWorkListTime(timestamp),
+              })}
+            >
+              {formatWorkListTime(timestamp)}
+            </time>
           </span>
         </span>
       </Link>
     </li>
   );
+}
+
+function activityTime(work: WorkListItem): string {
+  const runTime = work.latest_run_summary?.updated_at;
+  return runTime && runTime > work.updated_at ? runTime : work.updated_at;
 }
 
 export default WorkPane;

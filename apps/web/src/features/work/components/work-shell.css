@@ -360,3 +360,30 @@
     min-width: auto;
   }
 }
+
+.work-shell:not([data-active-tab='chat']) {
+  min-height: 400px;
+}
+.work-shell[data-load-state]:not([data-load-state='available']) {
+  min-height: 400px;
+}
+.work-detail-feedback {
+  box-sizing: border-box;
+  min-height: 240px;
+  padding: 24px;
+  border: 1px solid var(--ink-100);
+  border-radius: var(--radius-md);
+  background: var(--cloud);
+}
+.work-detail-feedback h2 {
+  margin: 0;
+  font-size: var(--text-title);
+}
+.work-detail-feedback p {
+  max-width: 560px;
+  line-height: var(--leading-body);
+  color: var(--ink-500);
+}
+.work-detail-feedback a {
+  color: var(--sky-ink);
+}

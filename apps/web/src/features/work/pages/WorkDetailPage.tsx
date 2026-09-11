@@ -21,6 +21,8 @@ import { useWorkDetail } from '../queries/use-work-detail';
 import { WorkDetailRootNotFoundError } from '../queries/load-work-detail';
 import { NotFoundContent } from '../../../app/router/NotFoundPage';
 import { useT } from '../../../i18n';
+import { isFeatureUnavailable } from '../../../api/feature-availability';
+import { ProductReadError } from '../clients/errors';
 import '../components/work-shell.css';
 import '../components/work-list.css';
 import '../components/work-detail.css';
@@ -125,7 +127,12 @@ export function WorkDetailPage({
               />
             );
           case 'artifacts':
-            return <ArtifactsPane />;
+            return (
+              <ArtifactsPane
+                workId={workId}
+                originConversationId={originConversationId}
+              />
+            );
           case 'definition':
             return (
               <DefinitionPane
@@ -142,18 +149,30 @@ export function WorkDetailPage({
   return (
     <div
       className={`work-shell${runView ? ' work-shell--run' : ''}`}
+      data-load-state={query.status}
       data-active-tab={activeTab}
       data-testid="work-detail-shell"
     >
       {query.status === 'loading' ? (
-        <p className="work-detail-loading" aria-live="polite">
-          {t('work.detail.loading')}
-        </p>
+        <section
+          className="work-detail-feedback work-loading-feedback"
+          role="status"
+        >
+          <h2>{t('work.detail.loading')}</h2>
+          <p>{t('work.loading.body')}</p>
+          <a href={workRootPath(originConversationId ?? null)}>
+            {t('work.invalidLink.back')}
+          </a>
+        </section>
       ) : null}
       {query.status === 'starting' ? (
-        <p className="work-detail-loading" aria-live="polite">
-          {t('work.detail.starting')}
-        </p>
+        <section className="work-detail-feedback" role="status">
+          <h2>{t('work.detail.starting')}</h2>
+          <p>{t('work.detail.startingBody')}</p>
+          <a href={workRootPath(originConversationId ?? null)}>
+            {t('work.invalidLink.back')}
+          </a>
+        </section>
       ) : null}
       {query.status === 'error' ? (
         <WorkDetailError
@@ -201,6 +220,32 @@ function WorkDetailError({
   readonly originConversationId?: string | null;
 }) {
   const t = useT();
+  const unavailable = isFeatureUnavailable(error);
+  const denied =
+    error instanceof ProductReadError &&
+    (error.status === 401 || error.status === 403);
+  if (unavailable || denied)
+    return (
+      <section className="work-detail-feedback" role="status">
+        <h2>
+          {t(unavailable ? 'work.unavailable.title' : 'work.permission.title')}
+        </h2>
+        <p>
+          {t(unavailable ? 'work.unavailable.body' : 'work.permission.body')}
+        </p>
+        <a
+          href={
+            unavailable
+              ? '/conversations'
+              : workRootPath(originConversationId ?? null)
+          }
+        >
+          {t(
+            unavailable ? 'work.backToConversations' : 'work.invalidLink.back',
+          )}
+        </a>
+      </section>
+    );
   const rootWorkMissing = error instanceof WorkDetailRootNotFoundError;
   if (rootWorkMissing) {
     return (
@@ -216,7 +261,10 @@ function WorkDetailError({
   }
 
   return (
-    <section className="work-list-state work-list-state--error" role="alert">
+    <section
+      className="work-detail-feedback work-list-state--error"
+      role="alert"
+    >
       <p className="work-list-state__eyebrow">{t('work.couldNotLoad')}</p>
       <h2>{t('work.couldNotLoad.title')}</h2>
       <p>{t('work.couldNotLoad.body')}</p>

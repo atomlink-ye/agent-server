@@ -293,3 +293,17 @@ existing Product/Conversation/WorkItem contract
 ```
 
 rather than adding framework-specific server logic inside the frontend package.
+
+## Work directory activity and feedback
+
+The Work directory orders records by the latest Work or latest Run update. Each
+navigation label retains Work record state; the visible row shows a Run count,
+latest Run state, and recorded activity time. Failed and waiting Runs have distinct
+marks, and long names preserve their suffix as well as their beginning. The pane
+remains the scroll owner.
+
+A failed directory refresh identifies retained rows as previously loaded data and
+offers Retry. A disabled Work feature is distinct from transient detail readiness;
+permission failures offer account/access guidance. Loading feedback reserves space
+and waits 150 ms before becoming visible. Empty artifact and transcript surfaces
+link to Runs, while recorded transcripts also offer an explicit refresh action.

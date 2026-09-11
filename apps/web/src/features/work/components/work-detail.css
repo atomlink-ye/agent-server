@@ -2,7 +2,7 @@
 .work-detail-header__summary {
   color: var(--ink-500);
   font-size: var(--text-sm);
-  line-height: 1.5;
+  line-height: var(--leading-body);
   margin: var(--space-3) 0 0;
   max-width: 620px;
 }
@@ -12,7 +12,7 @@
   margin: var(--space-2) 0 0;
   color: var(--ink-500);
   font-size: var(--text-sm);
-  line-height: 1.5;
+  line-height: var(--leading-body);
 }
 .work-tabs {
   border-bottom: 1px solid var(--ink-200);
@@ -132,6 +132,7 @@
   text-transform: uppercase;
 }
 .work-chat-message small {
+  font-size: var(--text-xs);
   color: var(--ink-500);
   display: block;
   margin-top: var(--space-2);
@@ -172,7 +173,7 @@
 .work-chat-empty-state p {
   margin: var(--space-2) 0 0;
   color: var(--ink-500);
-  line-height: 1.55;
+  line-height: var(--leading-body);
 }
 
 .work-preparation-card {
@@ -245,7 +246,7 @@
   padding-top: var(--space-3);
   color: var(--ink-700);
   font-size: var(--text-sm);
-  line-height: 1.6;
+  line-height: var(--leading-body);
 }
 .work-overview__outcome .assistant-markdown > :first-child {
   margin-top: 0;
@@ -286,7 +287,7 @@
 .work-detail-state > p:last-child {
   color: var(--ink-500);
   font-size: var(--text-sm);
-  line-height: 1.55;
+  line-height: var(--leading-body);
   margin: var(--space-3) 0 0;
 }
 .work-live-note {
@@ -348,7 +349,7 @@
 }
 .work-journey__steps ul p {
   color: var(--ink-700);
-  line-height: 1.55;
+  line-height: var(--leading-body);
   margin: var(--space-1) 0 0;
   white-space: pre-wrap;
 }
@@ -491,7 +492,7 @@
 }
 .work-role-card strong {
   font-size: var(--text-xs);
-  line-height: 1.35;
+  line-height: var(--leading-tight);
 }
 .work-role-card span {
   color: var(--ink-500);

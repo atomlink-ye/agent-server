@@ -67,7 +67,7 @@
   font-size: var(--text-display);
   font-weight: 700;
   letter-spacing: -0.035em;
-  line-height: 1.2;
+  line-height: var(--leading-tight);
 }
 
 @media (max-width: 700px) {
@@ -94,7 +94,7 @@
   margin: var(--space-3) 0 0;
   color: var(--ink-500);
   font-size: var(--text-lg);
-  line-height: 1.5;
+  line-height: var(--leading-body);
 }
 
 .work-list-region {
@@ -138,7 +138,7 @@
   font-size: var(--text-display);
   font-weight: 650;
   letter-spacing: -0.03em;
-  line-height: 1.18;
+  line-height: var(--leading-tight);
 }
 
 .work-list-state > p:not(.work-list-state__eyebrow) {
@@ -146,7 +146,7 @@
   margin: var(--space-3) 0 0;
   color: var(--ink-500);
   font-size: var(--text-lg);
-  line-height: 1.55;
+  line-height: var(--leading-body);
 }
 
 .work-list-skeleton {
@@ -247,7 +247,7 @@
   font-size: var(--text-title);
   font-weight: 650;
   letter-spacing: -0.015em;
-  line-height: 1.25;
+  line-height: var(--leading-tight);
   text-decoration-color: var(--ink-200);
   text-decoration-thickness: 1px;
   text-underline-offset: 4px;
@@ -263,7 +263,7 @@
   margin: var(--space-2) 0 0;
   color: var(--ink-500);
   font-size: var(--text-md);
-  line-height: 1.45;
+  line-height: var(--leading-ui);
 }
 
 .work-list-card__unavailable {

@@ -2,7 +2,7 @@
 .work-list-header__coverage {
   color: var(--ink-500);
   font-size: var(--text-sm);
-  line-height: 1.5;
+  line-height: var(--leading-body);
   margin: var(--space-3) 0 0;
   max-width: 620px;
 }
@@ -39,15 +39,15 @@
   grid-template-columns: 30px minmax(0, 1fr);
   align-items: start;
   gap: var(--space-2);
-  padding: 10px var(--space-2);
+  padding: var(--space-1) var(--space-2);
 }
 
 .work-pane .work-list-copy {
-  gap: 3px;
+  gap: 2px;
 }
 
 .work-pane .work-list-copy strong {
-  font-size: var(--text-sm);
+  font-size: var(--text-md);
 }
 
 .work-pane .work-list-meta {
@@ -160,7 +160,7 @@
   max-width: 100%;
   white-space: normal;
   overflow-wrap: break-word;
-  line-height: 1.35;
+  line-height: var(--leading-tight);
 }
 
 .work-pane .work-catalog-card__description {
@@ -227,7 +227,7 @@
 .work-catalog-card__visibility-menu [role='group'] > span {
   color: var(--ink-500);
   font-size: var(--text-xs);
-  line-height: 1.35;
+  line-height: var(--leading-tight);
 }
 
 .work-catalog-card__visibility-menu button {
@@ -252,7 +252,7 @@
 .work-list-card__state p {
   color: var(--ink-500);
   font-size: var(--text-xs);
-  line-height: 1.45;
+  line-height: var(--leading-ui);
   margin: var(--space-2) 0 0;
 }
 .work-state-pill {

@@ -8,7 +8,7 @@
   --trace-blue: var(--sky-ink);
   color: var(--trace-ink);
   display: grid;
-  font-size: 12px;
+  font-size: var(--text-sm);
   margin-top: 24px;
 }
 
@@ -32,12 +32,12 @@
 }
 .run-trace__eyebrow {
   color: var(--trace-muted);
-  font-size: 10px;
+  font-size: var(--text-eyebrow);
   font-weight: 650;
   margin: 0 0 2px;
 }
 .run-trace__header h2 {
-  font-size: 15px;
+  font-size: var(--text-heading);
   letter-spacing: -0.02em;
   margin: 0;
 }
@@ -45,7 +45,7 @@
 .run-trace__live {
   border: 1px solid var(--trace-line);
   border-radius: 999px;
-  font-size: 10px;
+  font-size: var(--text-eyebrow);
   padding: 4px 10px;
 }
 .run-trace__historical {
@@ -60,7 +60,7 @@
 .run-trace__subhead {
   border-top: 1px solid var(--trace-soft-line);
   color: var(--trace-muted);
-  font-size: 10px;
+  font-size: var(--text-eyebrow);
   margin: 0;
   padding: 7px 18px;
 }
@@ -75,7 +75,7 @@
 }
 .run-trace__record-section summary {
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 650;
   padding: 12px 18px;
 }
@@ -147,13 +147,13 @@
   padding: 2px 0 11px;
 }
 .run-trace__activity-timeline header strong {
-  font-size: 13px;
+  font-size: var(--text-md);
 }
 .run-trace__activity-timeline header p,
 .run-trace__activity-timeline header span,
 .run-trace__empty-activity {
   color: var(--trace-muted);
-  font-size: 10px;
+  font-size: var(--text-eyebrow);
   margin: 3px 0 0;
 }
 .run-trace__activity-timeline > ol,
@@ -212,12 +212,12 @@
   gap: 2px;
 }
 .run-trace__event-group summary strong {
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 650;
 }
 .run-trace__event-group-chevron {
   color: var(--sky-ink);
-  font-size: 11px;
+  font-size: var(--text-xs);
   transition: transform var(--transition-base);
 }
 .run-trace__event-group details[open] .run-trace__event-group-chevron {
@@ -225,7 +225,7 @@
 }
 .run-trace__event-group summary small {
   color: var(--trace-muted);
-  font-size: 10px;
+  font-size: var(--text-eyebrow);
   font-weight: 450;
 }
 .run-trace__event-group details > ol {
@@ -234,7 +234,7 @@
 .run-trace__activity-timeline time,
 .run-trace__activity-timeline small {
   color: var(--trace-muted);
-  font-size: 10px;
+  font-size: var(--text-eyebrow);
 }
 .run-trace__activity-timeline li > div {
   align-items: baseline;
@@ -242,7 +242,7 @@
   gap: 8px;
 }
 .run-trace__activity-timeline li > div strong {
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 650;
 }
 .run-trace__event-dot {
@@ -265,7 +265,7 @@
 }
 .run-trace__supporting-label {
   color: var(--trace-muted);
-  font-size: 10px;
+  font-size: var(--text-eyebrow);
   font-weight: 650;
   margin: 0 0 8px;
   text-transform: uppercase;
@@ -275,7 +275,7 @@
   color: var(--trace-muted);
   display: flex;
   font-family: ui-monospace, monospace;
-  font-size: 10px;
+  font-size: var(--text-eyebrow);
   justify-content: space-between;
   margin-left: 286px;
   padding: 0 3px 8px;
@@ -295,7 +295,7 @@
   border-right: 1px solid var(--trace-line);
   display: flex;
   flex-direction: column;
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 650;
   gap: 4px;
   overflow-wrap: anywhere;
@@ -304,7 +304,7 @@
 }
 .run-trace__lane-name small {
   color: var(--trace-muted);
-  font-size: 9px;
+  font-size: var(--text-eyebrow);
   font-weight: 450;
 }
 .run-trace__lane-name::before {
@@ -353,7 +353,7 @@
   color: var(--trace-muted);
   display: flex;
   flex-direction: column;
-  font-size: 9px;
+  font-size: var(--text-eyebrow);
   gap: 3px;
   overflow-wrap: anywhere;
   padding: 12px 8px 12px 12px;
@@ -421,7 +421,7 @@
   box-shadow: inset 0 -2px 0 var(--grass-deep);
 }
 .run-trace__attempt-label {
-  font-size: 10px;
+  font-size: var(--text-eyebrow);
   font-weight: 500;
   white-space: nowrap;
 }
@@ -432,7 +432,7 @@
   color: var(--trace-muted);
   cursor: pointer;
   font: inherit;
-  font-size: 10px;
+  font-size: var(--text-eyebrow);
   margin: 9px 6px;
   padding: 4px 6px;
 }
@@ -452,12 +452,12 @@
   padding: 2px 4px 12px;
 }
 .run-trace__map-heading strong {
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 .run-trace__map-heading p,
 .run-trace__map-heading span {
   color: var(--trace-muted);
-  font-size: 10px;
+  font-size: var(--text-eyebrow);
   margin: 4px 0 0;
 }
 .run-trace__map-board {
@@ -499,18 +499,18 @@
 .run-trace__map-node small,
 .run-trace__map-node > span:not(.run-trace__map-node-agent) {
   color: var(--trace-muted);
-  font-size: 9px;
+  font-size: var(--text-eyebrow);
 }
 .run-trace__map-node strong {
-  font-size: 11px;
-  line-height: 1.35;
+  font-size: var(--text-xs);
+  line-height: var(--leading-tight);
 }
 .run-trace__map-relations {
   border-top: 1px solid var(--trace-line);
   padding: 14px 4px 0;
 }
 .run-trace__map-relations h4 {
-  font-size: 10px;
+  font-size: var(--text-eyebrow);
   margin: 0 0 8px;
 }
 .run-trace__map-relation {
@@ -523,11 +523,11 @@
 }
 .run-trace__map-relation span {
   color: var(--trace-muted);
-  font-size: 9px;
+  font-size: var(--text-eyebrow);
   text-transform: uppercase;
 }
 .run-trace__map-relation p {
-  font-size: 10px;
+  font-size: var(--text-eyebrow);
   margin: 0;
 }
 
@@ -537,7 +537,7 @@
 .run-trace__events-caption {
   border-bottom: 1px solid var(--trace-line);
   color: var(--trace-muted);
-  font-size: 10px;
+  font-size: var(--text-eyebrow);
   margin: 0;
   padding: 11px 4px;
 }
@@ -549,12 +549,12 @@
   padding: 10px 4px;
 }
 .run-trace__events-toolbar strong {
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 650;
 }
 .run-trace__events-toolbar span {
   color: var(--trace-muted);
-  font-size: 10px;
+  font-size: var(--text-eyebrow);
 }
 .run-trace__events-scroll {
   display: grid;
@@ -579,10 +579,10 @@
 }
 .run-trace__event strong {
   font-family: ui-monospace, monospace;
-  font-size: 10px;
+  font-size: var(--text-eyebrow);
 }
 .run-trace__event span {
-  font-size: 10px;
+  font-size: var(--text-eyebrow);
   overflow-wrap: anywhere;
 }
 
@@ -592,7 +592,7 @@
   padding: 18px 16px;
 }
 .run-trace__inspector h3 {
-  font-size: 12px;
+  font-size: var(--text-sm);
   margin: 0 0 12px;
 }
 .run-trace__selected-execution {
@@ -600,14 +600,14 @@
   padding: 0 0 12px;
 }
 .run-trace__selected-execution h4 {
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 650;
   letter-spacing: -0.01em;
   margin: 0;
 }
 .run-trace__selected-execution p {
   color: var(--trace-muted);
-  font-size: 10px;
+  font-size: var(--text-eyebrow);
   margin: 4px 0 0;
 }
 .run-trace__inspector-tabs {
@@ -616,7 +616,7 @@
   padding: 9px 0 3px;
 }
 .run-trace__inspector-tabs button {
-  font-size: 9px;
+  font-size: var(--text-eyebrow);
   padding: 4px 7px;
 }
 .run-trace__inspector-group {
@@ -625,7 +625,7 @@
 }
 .run-trace__inspector-group h4 {
   color: var(--trace-muted);
-  font-size: 10px;
+  font-size: var(--text-eyebrow);
   font-weight: 650;
   letter-spacing: 0.01em;
   margin: 0 0 7px;
@@ -642,18 +642,18 @@
 }
 .run-trace__inspector dt {
   color: var(--trace-muted);
-  font-size: 10px;
+  font-size: var(--text-eyebrow);
 }
 .run-trace__inspector dd {
-  font-size: 10px;
+  font-size: var(--text-eyebrow);
   margin: 0;
   overflow-wrap: anywhere;
 }
 .run-trace__unavailable,
 .run-trace__detail-disclosure {
   color: var(--trace-muted);
-  font-size: 10px;
-  line-height: 1.45;
+  font-size: var(--text-eyebrow);
+  line-height: var(--leading-ui);
 }
 .run-trace__detail-disclosure {
   background: var(--trace-wash);
@@ -676,19 +676,19 @@
 .run-trace__transcript header {
   display: flex;
   gap: 5px;
-  font-size: 10px;
+  font-size: var(--text-eyebrow);
 }
 .run-trace__transcript header span,
 .run-trace__transcript time {
   color: var(--trace-muted);
 }
 .run-trace__transcript p {
-  font-size: 10px;
-  line-height: 1.45;
+  font-size: var(--text-eyebrow);
+  line-height: var(--leading-ui);
   margin: 6px 0;
 }
 .run-trace__transcript time {
-  font-size: 9px;
+  font-size: var(--text-eyebrow);
 }
 .run-trace__transcript-result {
   border-left: 3px solid var(--grass-deep) !important;
@@ -706,7 +706,7 @@
 .run-trace__activity-detail article div span,
 .run-trace__activity-detail article p {
   color: var(--trace-muted);
-  font-size: 9px;
+  font-size: var(--text-eyebrow);
 }
 .run-trace__activity-detail article p {
   grid-column: 1 / -1;
@@ -714,7 +714,7 @@
 }
 .run-trace__activity-status {
   border-radius: 999px;
-  font-size: 9px;
+  font-size: var(--text-eyebrow);
   padding: 2px 6px;
 }
 .run-trace__activity-status--completed {
@@ -734,7 +734,7 @@
   border-bottom: 1px solid var(--trace-line);
   border-radius: 0 0 8px 8px;
   color: var(--trace-muted);
-  font-size: 10px;
+  font-size: var(--text-eyebrow);
   padding: 0;
 }
 .run-trace__coverage summary {
@@ -749,7 +749,7 @@
 }
 .run-trace__longest-attempt {
   color: var(--trace-muted);
-  font-size: 9px;
+  font-size: var(--text-eyebrow);
   margin: 8px 0 0;
 }
 
@@ -766,7 +766,7 @@
 /* P0: Event attempt-not-captured disclosure */
 .run-trace__event-uncaptured {
   color: var(--gold-deep);
-  font-size: 9px;
+  font-size: var(--text-eyebrow);
   font-style: italic;
 }
 
@@ -783,14 +783,14 @@
 .run-trace__timeline-messages-name {
   align-items: baseline;
   display: flex;
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 650;
   gap: 5px;
   padding: 2px 8px;
 }
 .run-trace__timeline-messages-name small {
   color: var(--trace-muted);
-  font-size: 9px;
+  font-size: var(--text-eyebrow);
   font-weight: 450;
 }
 .run-trace__timeline-message-track {
@@ -833,7 +833,7 @@
   background: var(--trace-ink);
   border-radius: 4px;
   color: var(--cloud);
-  font-size: 9px;
+  font-size: var(--text-eyebrow);
   left: 50%;
   padding: 3px 6px;
   top: 100%;

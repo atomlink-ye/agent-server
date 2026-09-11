@@ -2,10 +2,11 @@ import { useCallback, useEffect, useState } from 'react';
 import type { WorkListItem } from '@atomlink-ye/agent-server/product-contract';
 
 import { isFeatureUnavailable } from '../../../api/feature-availability';
+import { ProductReadError } from '../clients/errors';
 import { workClient } from '../clients/work-client';
 
 export type WorkListQuery = {
-  readonly status: 'loading' | 'ready' | 'unavailable' | 'error';
+  readonly status: 'loading' | 'ready' | 'unavailable' | 'denied' | 'error';
   readonly works: readonly WorkListItem[];
   readonly error: string | null;
   readonly refresh: () => void;
@@ -26,7 +27,13 @@ export function useWorkList(): WorkListQuery {
         setStatus('ready');
       })
       .catch((reason: unknown) => {
+        if (reason instanceof ProductReadError && (reason.status === 401 || reason.status === 403)) {
+          setWorks([]);
+          setStatus('denied');
+          return;
+        }
         if (isFeatureUnavailable(reason)) {
+          setWorks([]);
           setStatus('unavailable');
           return;
         }

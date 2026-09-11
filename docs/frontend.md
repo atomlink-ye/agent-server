@@ -66,7 +66,10 @@ Without a selected Run, the compact Work header shows the title, Active/Archived
 record state, and Start Run. Its tabs contain a Work summary, Runs, the current
 Definition, and the bounded Files placeholder. The summary is a record of the
 Work's Definition, dates, and run count; it does not render execution results.
-The directory uses the same record state and a run count, with
+The directory keeps record state in each navigation label and shows the Run count,
+latest Run state, and latest recorded activity time. Failed and waiting Runs use
+distinct marks; long names preserve their suffix as well as their beginning.
+Rows are ordered by the latest Work or Run update, with
 `.work-pane-scroll` owning scrolling for both the Work list and catalog.
 
 Selecting `?run=:runId` opens a visually distinct Run surface with a breadcrumb

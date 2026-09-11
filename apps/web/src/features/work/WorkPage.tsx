@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import type { WorkListItem } from '@atomlink-ye/agent-server/product-contract';
 
 import { NewWork } from './components/new-work';
@@ -18,6 +18,7 @@ import { NotFoundContent } from '../../app/router/NotFoundPage';
 import { TitleBar } from '../../app/shell/TitleBar';
 import { useT } from '../../i18n';
 import WorkPane from './WorkPane';
+import { WorkTitle } from './components/work-title';
 import './work-page.css';
 
 export interface WorkPageProps {
@@ -94,7 +95,7 @@ export function WorkPage({
     navigate(`/tasks/${encodeURIComponent(returnWorkItemId)}`);
   };
 
-  const workUnavailable = workListStatus === 'unavailable';
+  const workUnavailable = workListStatus === 'unavailable' || workListStatus === 'denied';
   const workListFailed = workListStatus === 'error';
   const invalidWorkId =
     selectedWorkId !== null && !isValidDetailId('work', selectedWorkId);
@@ -189,8 +190,9 @@ export function WorkPage({
               <span className="work-main-icon" aria-hidden="true">
                 ✓
               </span>
-              <h1>{t('work.unavailable.title')}</h1>
-              <p>{t('work.unavailable.body')}</p>
+              <h1>{t(workListStatus === 'denied' ? 'work.permission.title' : 'work.unavailable.title')}</h1>
+              <p>{t(workListStatus === 'denied' ? 'work.permission.body' : 'work.unavailable.body')}</p>
+              <Link to="/conversations">{t('work.backToConversations')}</Link>
             </div>
           ) : isEmpty && workListFailed ? (
             <div className="work-main-empty" data-testid="work-page-error">
@@ -229,9 +231,9 @@ function WorkLanding({
   readonly onCreate: () => void;
 }) {
   const t = useT();
-  if (status === 'loading')
+  if (status === 'loading' && works.length === 0)
     return (
-      <div className="work-main-empty work-main-empty--loading" role="status">
+      <div className="work-main-empty work-main-empty--loading work-loading-feedback" role="status">
         <span className="work-main-icon" aria-hidden="true">
           …
         </span>
@@ -349,7 +351,7 @@ function RecentWorkRow({
         ) : (
           <span className="work-landing__no-run">{t('work.noRuns')}</span>
         )}
-        <strong>{work.title}</strong>
+        <WorkTitle title={work.title} />
         <span className="work-landing__summary">{summary}</span>
         <time dateTime={timestamp}>
           {latestRun

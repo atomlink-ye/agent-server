@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { SessionTranscripts } from '@/features/run-trace/session-transcripts';
 import type { WorkDetailData } from '../../queries/load-work-detail';
+import { workTabHref } from '../work-presentation';
 import { useT } from '../../../../i18n';
 
 export function TranscriptPane({
@@ -10,12 +12,14 @@ export function TranscriptPane({
   readonly selectedSessionIndex?: number;
 }) {
   const t = useT();
+  const [refresh, setRefresh] = useState(0);
   if (!data.run || !data.trace)
     return (
       <section className="work-detail-state" data-testid="work-no-runs">
         <p className="work-shell-kicker">{t('work.transcript')}</p>
         <h2>{t('work.transcript.emptyTitle')}</h2>
         <p>{t('work.transcript.emptyBody')}</p>
+        <a href={workTabHref(data.work.id, 'runs')}>{t('work.browseRuns')}</a>
       </section>
     );
   const live = data.run.work_run.product_state === 'running';
@@ -31,7 +35,12 @@ export function TranscriptPane({
       className="work-transcript-panel run-trace"
       data-testid="work-transcript-panel"
     >
+      <div className="work-status-actions">
+        <a href={workTabHref(data.work.id, 'runs')}>{t('work.browseRuns')}</a>
+        <button type="button" onClick={() => setRefresh(value => value + 1)}>{t('work.refreshTranscript')}</button>
+      </div>
       <SessionTranscripts
+        key={refresh}
         live={live}
         trace={data.trace}
         initialSelectedIndex={selectedSessionIndex}

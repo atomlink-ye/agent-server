@@ -222,14 +222,15 @@ it('renders Work state and run counts without latest Run summaries', async () =>
     expect(cards).toHaveLength(stateCases.length);
     for (const [index] of stateCases.entries()) {
       const card = cards[index]!;
-      expect(card.textContent).toContain('Active');
+      expect(card.querySelector('a')?.getAttribute('aria-label')).toContain('Active');
+      expect(card.textContent).toContain(`Run: ${stateCases[index]![1]}`);
       expect(card.textContent).toContain('3 runs');
       // The list row is a navigation index, not a place to read a Run's
       // result: it shows state and a compact timestamp, not result text.
       expect(card.textContent).not.toContain(
         `Latest recorded result ${index + 1}`,
       );
-      expect(card.querySelector('time')).toBeNull();
+      expect(card.querySelector('time')).not.toBeNull();
       expect(card.querySelector('a')?.getAttribute('href')).toBe(
         `/work/${populatedWorkList.works[index]!.id}`,
       );
@@ -712,3 +713,67 @@ it.each([
     }
   },
 );
+
+
+it('measures directory density and long titles at 1440', async () => {
+  await page.viewport(1440, 900);
+  const works = Array.from({ length: 30 }, (_, index) => ({
+    ...populatedWorkList.works[index % 5]!, id: uuid(index + 1000),
+    title: index === 1 ? 'A'.repeat(199) + 'B' : index === 2 ? '中'.repeat(199) + '文' : `Work ${index + 1}`,
+  }));
+  vi.stubGlobal('fetch', workPaneFetch({ works, next_cursor: null }));
+  const host = document.createElement('div');
+  host.className = 'app-shell';
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(<MemoryRouter><div /><WorkPane onCreateNew={() => undefined} /><main /></MemoryRouter>);
+    });
+    const scroller = host.querySelector<HTMLElement>('.work-pane-scroll')!;
+    const rows = [...host.querySelectorAll<HTMLElement>('[data-testid="work-list"] > li')];
+    const rect = scroller.getBoundingClientRect();
+    expect(rows.filter(row => row.getBoundingClientRect().bottom <= rect.bottom)).toHaveLength(15);
+    expect(rect.height).toBe(794);
+    expect(rect.top).toBe(90);
+    for (const row of rows) {
+      expect(row.getBoundingClientRect().height).toBe(48);
+      expect(row.scrollWidth).toBe(row.clientWidth);
+    }
+    for (const row of rows.slice(1, 3)) {
+      const title = row.querySelector('strong')!;
+      expect(title.getBoundingClientRect().height).toBe(18);
+      expect(title.getAttribute('title')).toHaveLength(200);
+      const suffix = title.querySelector('.work-scannable-title__suffix')!;
+      expect(suffix.getBoundingClientRect().right).toBeLessThanOrEqual(title.getBoundingClientRect().right);
+      expect(suffix.textContent).toBe(title.getAttribute('title')!.slice(-8));
+    }
+    expect(innerWidth).toBe(1440);
+    expect(scroller.scrollHeight).toBeGreaterThan(scroller.clientHeight);
+  } finally {
+    await act(async () => root.unmount()); host.remove(); vi.unstubAllGlobals();
+  }
+});
+
+it('shows a stale-data warning after a failed refresh and recovers on retry', async () => {
+  const fetchMock = workPaneFetch(populatedWorkList);
+  vi.stubGlobal('fetch', fetchMock);
+  const host=document.createElement('div');host.className='app-shell';document.body.append(host);const root=createRoot(host);
+  try {
+    await act(async () => {root.render(<MemoryRouter><div/><WorkPane onCreateNew={() => undefined}/><main/></MemoryRouter>);});
+    const original = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async input => {
+      if(String(input)==='/api/works') throw new TypeError('private network failure');
+      return original(input);
+    });
+    await act(async () => {host.querySelector<HTMLButtonElement>('button[aria-label="Refresh Work"]')!.click();});
+    const warning = host.querySelector('[data-testid="work-list-error"]')!;
+    expect(warning.textContent).toContain('last loaded Works');
+    expect(host.querySelectorAll('[data-testid="work-list"] > li')).toHaveLength(5);
+    expect(host.textContent).not.toContain('private network failure');
+    fetchMock.mockImplementation(original);
+    await act(async () => {warning.querySelector<HTMLButtonElement>('button')!.click();});
+    expect(host.querySelector('[data-testid="work-list-error"]')).toBeNull();
+    expect(host.querySelectorAll('[data-testid="work-list"] > li')).toHaveLength(5);
+  } finally {await act(async () => root.unmount());host.remove();vi.unstubAllGlobals();}
+});

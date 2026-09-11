@@ -1,6 +1,6 @@
 # Work directory and recovery feedback
 
-Lane `wui3/lane-d`, based on `fa344fcc`. No PR, merge, or rebase. Implementation is pushed incrementally; final verification is recorded below.
+Lane `wui3/lane-d`, based on `fa344fcc`. No PR, merge, or rebase. Implementation and evidence are committed and pushed incrementally; final verification is recorded below.
 
 ## User-visible changes
 
@@ -59,29 +59,29 @@ The directory's original 200-character title boxes were 236 × 17 px and did not
 
 “Pass” means the named browser fixture rendered the localized text and asserted the stated action/layout; it does not claim a live service was exercised. The final targeted run status is recorded below.
 
-| Surface / state                             | en   | zh-CN                                            | Recovery and geometry checked                                                                |
-| ------------------------------------------- | ---- | ------------------------------------------------ | -------------------------------------------------------------------------------------------- |
-| Directory/main loading                      | Pass | Pass                                             | Reserves 220/340 px; main visibility hidden at animation time 100 ms, visible at 150 ms      |
-| Directory/main empty                        | Pass | Pass                                             | Create Work entry remains; 220/340 px                                                        |
-| Directory/main initial error                | Pass | Pass                                             | Retry invokes refresh; 220/340 px                                                            |
-| Directory failed refresh with existing rows | Pass | Localized copy present; interaction tested in en | Stale warning, retained rows, successful Retry clears warning                                |
-| Directory/main unavailable                  | Pass | Pass                                             | Explains workspace availability; Conversations link; no futile Retry/create                  |
-| Directory/main permission denied            | Pass | Pass                                             | Access guidance and Conversations link; 220/340 px                                           |
-| Detail loading                              | Pass | Pass                                             | Loading explanation and Back to Work; 400 px shell                                           |
-| Detail transient 503 / starting             | Pass | Pass                                             | Starting explanation, Back to Work; hook proves polling; 400 px shell                        |
-| Detail disabled Work feature                | Pass | Pass                                             | Availability explanation, Conversations link; hook proves no polling; 400 px shell           |
-| Detail permission error                     | Pass | Pass                                             | Access guidance and Back to Work; hook proves no polling; 400 px shell                       |
-| Detail generic error                        | Pass | Pass                                             | Safe explanation, Retry/return controls; 400 px shell                                        |
-| WorkDetailRootNotFoundError                 | Pass | Pass                                             | Not-found explanation and Back to Work; 400 px shell                                         |
-| Invalid Work ID                             | Pass | Pass                                             | Existing invalid-link message and valid /work return inside viewport                         |
-| Empty Runs                                  | Pass | Pass                                             | Enabled Start Run; 140 px panel                                                              |
-| Empty artifacts                             | Pass | Pass                                             | Browse Runs; 184 px panel                                                                    |
-| Empty transcript (no Run/trace)             | Pass | Pass                                             | Browse Runs; 184 px panel                                                                    |
-| Recorded transcript loading                 | Pass | Pass                                             | Browse Runs + Refresh; fetch invoked twice; 102 px inner panel / 400 px shell; 150 ms reveal |
-| Recorded transcript empty/error             | Pass | Pass                                             | Safe localized message, Browse Runs + Refresh; action top unchanged; 102 px inner panel      |
-| Work Card loading                           | Pass | Pass                                             | 124 × 624 px; 150 ms reveal                                                                  |
-| Work Card error                             | Pass | Pass                                             | Open Work invokes callback; 124 × 624 px                                                     |
-| Work Card ready/problem with long title     | Pass | Pass                                             | Attention mark, suffix, Open Work; 124 × 624 px                                              |
+| Surface / state                             | en   | zh-CN                                            | Recovery and geometry checked                                                                   |
+| ------------------------------------------- | ---- | ------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
+| Directory/main loading                      | Pass | Pass                                             | Reserves 220/340 px; main/sidebar visibility hidden at animation time 100 ms, visible at 150 ms |
+| Directory/main empty                        | Pass | Pass                                             | Create Work entry remains; 220/340 px                                                           |
+| Directory/main initial error                | Pass | Pass                                             | Retry invokes refresh; 220/340 px                                                               |
+| Directory failed refresh with existing rows | Pass | Localized copy present; interaction tested in en | Stale warning, retained rows, successful Retry clears warning                                   |
+| Directory/main unavailable                  | Pass | Pass                                             | Explains workspace availability; Conversations link; no futile Retry/create                     |
+| Directory/main permission denied            | Pass | Pass                                             | Access guidance and Conversations link; 220/340 px                                              |
+| Detail loading                              | Pass | Pass                                             | Loading explanation and Back to Work; 400 px shell; 150 ms reveal                               |
+| Detail transient 503 / starting             | Pass | Pass                                             | Starting explanation, Back to Work; hook proves polling; 400 px shell                           |
+| Detail disabled Work feature                | Pass | Pass                                             | Availability explanation, Conversations link; hook proves no polling; 400 px shell              |
+| Detail permission error                     | Pass | Pass                                             | Access guidance and Back to Work; hook proves no polling; 400 px shell                          |
+| Detail generic error                        | Pass | Pass                                             | Safe explanation, Retry/return controls; 400 px shell                                           |
+| WorkDetailRootNotFoundError                 | Pass | Pass                                             | Not-found explanation and Back to Work; 400 px shell                                            |
+| Invalid Work ID                             | Pass | Pass                                             | Existing invalid-link message and valid /work return inside viewport                            |
+| Empty Runs                                  | Pass | Pass                                             | Enabled Start Run; 140 px panel                                                                 |
+| Empty artifacts                             | Pass | Pass                                             | Browse Runs; 184 px panel                                                                       |
+| Empty transcript (no Run/trace)             | Pass | Pass                                             | Browse Runs; 184 px panel                                                                       |
+| Recorded transcript loading                 | Pass | Pass                                             | Browse Runs + Refresh; fetch invoked twice; 102 px inner panel / 400 px shell; 150 ms reveal    |
+| Recorded transcript empty/error             | Pass | Pass                                             | Safe localized message, Browse Runs + Refresh; action top unchanged; 102 px inner panel         |
+| Work Card loading                           | Pass | Pass                                             | 124 × 624 px; 150 ms reveal                                                                     |
+| Work Card error                             | Pass | Pass                                             | Open Work invokes callback; 124 × 624 px                                                        |
+| Work Card ready/problem with long title     | Pass | Pass                                             | Attention mark, suffix, Open Work; 124 × 624 px                                                 |
 
 The distinct 503/403 classification is tested at the real `useWorkDetail` hook with a mocked read boundary and deterministic fake timer advancement. Directory stale-refresh recovery uses the real list hook with mocked fetch. Remaining state tests isolate the rendering boundary. Existing list/router integration tests exercise latest-Run synchronization.
 
@@ -128,6 +128,21 @@ Verbatim tail:
       Tests  62 passed (62)
    Start at  22:51:11
    Duration  132.46s (transform 0ms, setup 0ms, import 112.68s, tests 49.60s, environment 0ms)
+```
+
+After adding explicit row/main width and sidebar/detail loading-visibility assertions, both changed files were rerun (exit 0):
+
+```bash
+pnpm test:web apps/web/src/features/work/components/work-list.browser.test.tsx apps/web/src/features/work/components/work-states.browser.test.tsx
+```
+
+Verbatim tail:
+
+```text
+ Test Files  2 passed (2)
+      Tests  38 passed (38)
+   Start at  22:56:15
+   Duration  136.77s (transform 0ms, setup 0ms, import 108.49s, tests 58.98s, environment 0ms)
 ```
 
 `pnpm web:check:types` — exit 0, verbatim output:

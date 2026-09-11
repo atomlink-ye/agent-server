@@ -575,3 +575,39 @@
   margin: 0;
   overflow-wrap: anywhere;
 }
+
+/* WorkRun actions are the first content in the Work record. Record metadata
+   is secondary; it must not displace progress or the links to output/chat. */
+.work-record > .work-runs {
+  margin-top: 0;
+}
+.work-run-list__actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: var(--space-4);
+}
+.work-record-metadata {
+  margin-top: var(--space-5);
+}
+.work-record-metadata > summary {
+  color: var(--ink-500);
+  cursor: pointer;
+}
+.work-definition-scope {
+  margin-top: var(--space-3);
+}
+.work-definition-scope > h2 {
+  margin: 0;
+  font-size: var(--text-title);
+}
+.work-definition-scope .work-definition {
+  margin-top: var(--space-3);
+}
+.work-run-header > a:first-child {
+  flex: 1;
+}
+.work-run-header > .work-run-history-link {
+  flex: 0 0 auto;
+  margin-left: auto;
+  max-width: none;
+}

@@ -61,20 +61,24 @@ The Work tab preserves the useful Work product capabilities that existed before 
 - Work Definition view/edit;
 - bounded Artifact state until the Product API exposes the full Artifact surface.
 
-Work and Run use different presentation levels within `/work/:workId`.
-Without a selected Run, the compact Work header shows the title, Active/Archived
-record state, and Start Run. Its tabs contain a Work summary, Runs, the current
-Definition, and the bounded Files placeholder. The summary is a record of the
-Work's Definition, dates, and run count; it does not render execution results.
-The directory uses the same record state and a run count, with
-`.work-pane-scroll` owning scrolling for both the Work list and catalog.
+Work and WorkRun use different presentation levels within `/work/:workId`.
+Without a selected WorkRun, the Work header shows the title, Active/Archived
+record state, and the existing start action. The default WorkRuns pane lists
+executions newest first, each with its own status and direct Conversation,
+Result, and Activity links. Work record metadata is disclosed below that history;
+the current Work Definition has its own Work-level tab. The old `tab=runs` link
+opens this same history. The unavailable Files placeholder remains reachable
+through old links but is not advertised as a primary destination.
 
-Selecting `?run=:runId` opens a visually distinct Run surface with a breadcrumb
-back to the Work and a chronological Run ordinal. Conversation, Trace, and
-Result belong to that Run. The existing result/journey Overview renderer is
-Run content, not the Work summary. Historical Definition deep links retain the
-exact pinned version. Preparation chat is available only before a Work has any
-Runs; the Run conversation surface requires the Run-scoped chat integration.
+Selecting `?run=:workRunId` opens a distinct WorkRun surface with a breadcrumb
+back to Work, a chronological ordinal/total, its own execution state, and a link
+to all WorkRuns. Conversation, Result, Activity (session transcripts), and
+Definition used all belong to that selected WorkRun. Definition used remains
+read-only and pins the exact historical version; the Work-level Definition is
+current and editable. Result displays captured output and the existing successful
+result-file link. Operational trace inspection belongs to `/observe?work=&run=`.
+Preparation chat is Work-scoped and available only before the first WorkRun;
+selected conversations always use the WorkRun-scoped chat endpoint.
 The Work directory and create surfaces offer no Coworker binding controls.
 
 The current list contract has no aggregate Run count. The Work index reads all

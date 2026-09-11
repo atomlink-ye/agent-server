@@ -56,7 +56,7 @@ export function WorkDetailPage({
     workId,
     selectedRunId,
     preferCurrentDefinition,
-    includeTrace: requestedTab !== 'definition',
+    includeTrace: requestedTab === 'transcript',
     includeRun,
   });
   const detail = query.detail;
@@ -105,23 +105,10 @@ export function WorkDetailPage({
             );
           case 'result':
             return (
-              <>
-                <a
-                  className="work-run-definition-link"
-                  href={workTabHref(
-                    detail.work.id,
-                    'definition',
-                    runId,
-                    originConversationId,
-                  )}
-                >
-                  {t('work.definitionUsed')}
-                </a>
-                <OverviewPane
-                  data={detail}
-                  originConversationId={originConversationId}
-                />
-              </>
+              <OverviewPane
+                data={detail}
+                originConversationId={originConversationId}
+              />
             );
           case 'runs':
             return (
@@ -180,6 +167,7 @@ export function WorkDetailPage({
             work={detail.work}
             run={runView ? detail.run : null}
             runOrdinal={runOrdinal}
+            runCount={detail.runs.length}
             originConversationId={originConversationId}
             actions={
               runView ? undefined : (
@@ -254,44 +242,42 @@ function WorkRecord({
   const t = useT();
   return (
     <section className="work-record" data-testid="work-record">
-      <h2>{t('work.record.summary')}</h2>
-      <dl>
-        <dt>{t('work.record.definition')}</dt>
-        <dd>
-          <a
-            href={workTabHref(
-              data.work.id,
-              'definition',
-              undefined,
-              originConversationId,
-            )}
-          >
-            {data.work.definition_version_id}
-          </a>
-        </dd>
-        <dt>{t('work.tab.runs')}</dt>
-        <dd>
-          <a
-            href={workTabHref(
-              data.work.id,
-              'runs',
-              undefined,
-              originConversationId,
-            )}
-          >
-            {t(
-              data.runs.length === 1
-                ? 'work.record.oneRun'
-                : 'work.record.runCount',
-              { count: data.runs.length },
-            )}
-          </a>
-        </dd>
-        <dt>{t('work.record.created')}</dt>
-        <dd>{formatTimestamp(data.work.created_at)}</dd>
-        <dt>{t('work.record.updated')}</dt>
-        <dd>{formatTimestamp(data.work.updated_at)}</dd>
-      </dl>
+      <RunsPane data={data} originConversationId={originConversationId} />
+      <details className="work-record-metadata">
+        <summary>{t('work.record.summary')}</summary>
+        <dl>
+          <dt>{t('work.record.definition')}</dt>
+          <dd>
+            <a
+              href={workTabHref(
+                data.work.id,
+                'definition',
+                undefined,
+                originConversationId,
+              )}
+            >
+              {data.work.definition_version_id}
+            </a>
+          </dd>
+          <dt>{t('work.scope.history')}</dt>
+          <dd>
+            <a
+              href={workTabHref(
+                data.work.id,
+                'runs',
+                undefined,
+                originConversationId,
+              )}
+            >
+              {data.runs.length}
+            </a>
+          </dd>
+          <dt>{t('work.record.created')}</dt>
+          <dd>{formatTimestamp(data.work.created_at)}</dd>
+          <dt>{t('work.record.updated')}</dt>
+          <dd>{formatTimestamp(data.work.updated_at)}</dd>
+        </dl>
+      </details>
     </section>
   );
 }

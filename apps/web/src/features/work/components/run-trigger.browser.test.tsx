@@ -136,7 +136,7 @@ it('disables the control for a feature-unavailable Run-start failure', async () 
   }
 });
 
-it('projects an incompatible pinned Work before the user clicks Start Run', async () => {
+it('projects an incompatible pinned Work before the user clicks Start WorkRun', async () => {
   const fetchMock = vi.fn(async (path: string) => {
     if (path === '/api/runtime-capabilities')
       return {
@@ -203,7 +203,7 @@ it('projects an incompatible pinned Work before the user clicks Start Run', asyn
     );
     const button = host.querySelector<HTMLButtonElement>('button')!;
     expect(button.disabled).toBe(true);
-    expect(button.textContent).toContain('Can’t start Run');
+    expect(button.textContent).toContain('Can’t start WorkRun');
     expect(button.getAttribute('aria-describedby')).toBe(
       `run-unavailable-${workId}`,
     );
@@ -271,7 +271,7 @@ it('exposes a bounded projection error and retries only that read', async () => 
       'We couldn’t check whether this Work can run here.',
     );
     expect(host.textContent).toContain('Retry availability check');
-    expect(host.textContent).toContain('Start Run');
+    expect(host.textContent).toContain('Start WorkRun');
 
     await act(async () => {
       const retry = [
@@ -285,7 +285,7 @@ it('exposes a bounded projection error and retries only that read', async () => 
     expect(host.textContent).not.toContain(
       'We couldn’t check whether this Work can run here.',
     );
-    expect(host.textContent).toContain('Start Run');
+    expect(host.textContent).toContain('Start WorkRun');
     expect(capabilityReads).toBe(2);
     expect(planSpy).toHaveBeenCalledTimes(2);
   } finally {

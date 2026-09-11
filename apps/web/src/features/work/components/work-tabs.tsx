@@ -22,13 +22,17 @@ export function WorkTabs({
   const t = useT();
   const tabs: readonly WorkTab[] = runId
     ? RUN_TABS
-    : preparation
-      ? [...WORK_TABS, 'chat']
-      : WORK_TABS;
+    : [
+        ...WORK_TABS,
+        ...(preparation ? ['chat' as const] : []),
+        ...(activeTab === 'artifacts' ? ['artifacts' as const] : []),
+      ];
   return (
     <nav
       className="work-tabs"
-      aria-label={runId ? t('work.run.sections') : t('work.detailSections')}
+      aria-label={
+        runId ? t('work.scope.runSections') : t('work.detailSections')
+      }
     >
       {tabs.map((tab) => (
         <a
@@ -39,12 +43,18 @@ export function WorkTabs({
           {tab === 'chat'
             ? t(runId ? 'work.run.conversation' : 'work.record.preparation')
             : tab === 'transcript'
-              ? t('work.run.trace')
+              ? t('work.scope.activity')
               : tab === 'result'
                 ? t('work.run.result')
                 : tab === 'overview'
-                  ? t('work.record.tab')
-                  : t(`work.tab.${tab}`)}
+                  ? t('work.scope.history')
+                  : tab === 'definition'
+                    ? t(
+                        runId
+                          ? 'work.definitionUsed'
+                          : 'work.record.definition',
+                      )
+                    : t(`work.tab.${tab}`)}
         </a>
       ))}
     </nav>

@@ -15,13 +15,8 @@ export type WorkTab =
   | 'definition'
   | 'result';
 
-export const WORK_TABS = [
-  'overview',
-  'runs',
-  'definition',
-  'artifacts',
-] as const;
-export const RUN_TABS = ['chat', 'transcript', 'result'] as const;
+export const WORK_TABS = ['overview', 'definition'] as const;
+export const RUN_TABS = ['chat', 'result', 'transcript', 'definition'] as const;
 
 export function normalizeWorkTab(
   value: string | undefined,
@@ -32,7 +27,10 @@ export function normalizeWorkTab(
     if (value === 'overview' || value === 'result') return 'result';
     return value === 'transcript' ? 'transcript' : 'chat';
   }
-  return value === 'chat' || WORK_TABS.some((tab) => tab === value)
+  if (value === 'runs') return 'overview';
+  return value === 'chat' ||
+    value === 'artifacts' ||
+    WORK_TABS.some((tab) => tab === value)
     ? (value as WorkTab)
     : 'overview';
 }

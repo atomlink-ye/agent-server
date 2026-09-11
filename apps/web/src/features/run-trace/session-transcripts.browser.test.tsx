@@ -187,7 +187,15 @@ it('renders per-session transcripts with switching between sessions that share a
       await new Promise((resolve) => setTimeout(resolve, 10));
     });
 
-    await surfaceMetrics(host, "execution-transcript", [".execution-transcript__heading", ".execution-transcript__summary", ".execution-transcript__attempts button", ".execution-transcript__detail", ".transcript__row", ".transcript__row > summary"]);
+    await surfaceMetrics(host, 'execution-transcript', [
+      '.execution-transcript__heading',
+      '.execution-transcript__summary',
+      '.execution-transcript__attempts button',
+      '.execution-transcript__detail',
+      '.transcript__row',
+      '.transcript__row > summary',
+      '.transcript__detail',
+    ]);
     // 1. Role list is visible and switchable
     const roleNav = host.querySelector('[data-testid="session-role-nav"]');
     expect(roleNav).not.toBeNull();

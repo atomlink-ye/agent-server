@@ -120,7 +120,14 @@ it('scrolls real Board list, content, and canvas to their final entries on deskt
     await act(settle);
     await act(settle);
 
-    await surfaceMetrics(host, "boards", [".title-bar", ".work-board-toolbar", ".work-board-card", ".work-org-list-item", ".work-org-content", ".work-board-canvas"]);
+    await surfaceMetrics(host, 'boards', [
+      '.title-bar',
+      '.work-board-toolbar',
+      '.work-board-card',
+      '.work-org-list-item',
+      '.work-org-content',
+      '.work-board-canvas',
+    ]);
     const list = host.querySelector<HTMLElement>('.work-org-list');
     expect(list).not.toBeNull();
     expect(host.textContent).toContain('Final real Board');

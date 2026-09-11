@@ -826,3 +826,8 @@
   width: auto;
   max-width: 50%;
 }
+
+.work-org-main > .title-bar,
+.work-board-main > .title-bar {
+  padding-inline: var(--space-6);
+}

@@ -26,7 +26,10 @@ vi.mock('../conversations-gateway', async () => {
 
 const conversationId = '11111111-1111-4111-8111-111111111111' as ConversationId;
 
-afterEach(() => {
+const roots: ReturnType<typeof createRoot>[] = [];
+
+afterEach(async () => {
+  for (const root of roots.splice(0)) await act(async () => root.unmount());
   vi.restoreAllMocks();
   document.body.replaceChildren();
 });
@@ -35,6 +38,7 @@ async function render(messages: readonly ChatMessage[]): Promise<HTMLElement> {
   const host = document.createElement('div');
   document.body.append(host);
   const root = createRoot(host);
+  roots.push(root);
   await act(async () => {
     root.render(
       <MemoryRouter>
@@ -176,21 +180,36 @@ it('renders one Work Card for a Work every follow-up message references', async 
 });
 
 it('keeps dispatch cards on the shared surface spacing in both locales', async () => {
-  vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 503, json: async () => ({ error: { code: 'feature_unavailable' } }) })));
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => ({
+      ok: false,
+      status: 503,
+      json: async () => ({ error: { code: 'feature_unavailable' } }),
+    })),
+  );
   try {
-    const host = await render([message({
-      body: 'Review the draft and share the result.',
-      authorType: 'principal',
-      dispatch: {
-        kind: 'work_item_dispatch',
-        workItemId: '33333333-3333-4333-8333-333333333333',
-        reason: 'assignment',
-        actorLabel: 'Alex',
-        recipientLabel: 'Researcher',
-        taskTitle: 'Review the quarterly report',
-      },
-    })]);
-    await surfaceMetrics(host, 'dispatch', ['.dispatch-card', '.dispatch-card__event', '.dispatch-card__status', '.dispatch-card__details', '.chat-transcript']);
+    const host = await render([
+      message({
+        body: 'Review the draft and share the result.',
+        authorType: 'principal',
+        dispatch: {
+          kind: 'work_item_dispatch',
+          workItemId: '33333333-3333-4333-8333-333333333333',
+          reason: 'assignment',
+          actorLabel: 'Alex',
+          recipientLabel: 'Researcher',
+          taskTitle: 'Review the quarterly report',
+        },
+      }),
+    ]);
+    await surfaceMetrics(host, 'dispatch', [
+      '.dispatch-card',
+      '.dispatch-card__event',
+      '.dispatch-card__status',
+      '.dispatch-card__details',
+      '.chat-transcript',
+    ]);
   } finally {
     vi.unstubAllGlobals();
   }

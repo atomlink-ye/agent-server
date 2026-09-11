@@ -208,6 +208,12 @@ it('scrolls the real Agents roster to its final Coworker on desktop', async () =
       await Promise.resolve();
       await Promise.resolve();
     });
+    await surfaceMetrics(host, 'agents-roster', [
+      '.title-bar',
+      '.agents-roster-header',
+      '.agents-roster-card',
+      '.agents-main',
+    ]);
     const region = host.querySelector<HTMLElement>('.agents-main')!;
     expectScrollable(region);
     const final = [...region.querySelectorAll('.agents-roster-card')].at(-1)!;
@@ -267,7 +273,14 @@ it('scrolls the real Agents detail and Coworker rail through their final entries
         await new Promise((resolve) => setTimeout(resolve, 0));
     });
 
-    await surfaceMetrics(host, "agents", [".title-bar", ".agents-profile-header", ".agents-card", ".agents-list-item", ".agents-main", ".agents-first-screen"]);
+    await surfaceMetrics(host, 'agents', [
+      '.title-bar',
+      '.agents-profile-header',
+      '.agents-card',
+      '.agents-list-item',
+      '.agents-main',
+      '.agents-first-screen',
+    ]);
     const listRegion = host.querySelector<HTMLElement>('.agents-list');
     expect(listRegion).not.toBeNull();
     expectScrollable(listRegion!);

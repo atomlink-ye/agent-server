@@ -876,7 +876,7 @@
 .run-trace__activity-tick {
   /* grass (#6ec56a) at 35% alpha; spelled out because a custom property
      cannot carry alpha without relative-color syntax. */
-  background: rgb(110 197 106 / 35%);
+  background: color-mix(in srgb, var(--grass) 35%, transparent);
   height: 100%;
   left: var(--tick-offset);
   position: absolute;

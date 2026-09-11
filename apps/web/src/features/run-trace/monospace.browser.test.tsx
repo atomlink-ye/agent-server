@@ -9,6 +9,10 @@ import './run-trace.css';
 import './execution-transcript.css';
 import './transcript-stream.css';
 
+(
+  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true;
+
 it('uses one code font across source previews, files, trace and transcript output', async () => {
   const host = document.createElement('div');
   document.body.append(host);

@@ -232,3 +232,7 @@
   padding: var(--space-2) var(--space-3);
   gap: var(--space-3);
 }
+
+.observe-pane + .work-main > .title-bar {
+  padding-inline: var(--space-6);
+}

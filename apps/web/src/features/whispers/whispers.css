@@ -57,3 +57,7 @@
   font-size: var(--text-sm);
   margin-bottom: calc(var(--space-1) / 2);
 }
+
+.whispers-main > .title-bar {
+  padding-inline: var(--space-6);
+}

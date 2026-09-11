@@ -130,7 +130,16 @@ it('renders recorder-backed proportional normal and rework geometry', async () =
       await act(async () => {
         root.render(<RunTrace trace={trace} />);
       });
-    await surfaceMetrics(host, "run-trace", [".run-trace__header", ".run-trace__canvas", ".run-trace__item-row", ".run-trace__axis"]);
+      await surfaceMetrics(
+        host,
+        trace === traces[0] ? 'run-trace-parallel' : 'run-trace',
+        [
+          '.run-trace__header',
+          '.run-trace__canvas',
+          '.run-trace__item-row',
+          '.run-trace__axis',
+        ],
+      );
       expect(host.textContent).toContain(trace.work.title);
       const axis = host.querySelector<HTMLElement>('.run-trace__axis');
       expect(axis).not.toBeNull();

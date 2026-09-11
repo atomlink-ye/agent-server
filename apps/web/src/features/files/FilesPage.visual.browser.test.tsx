@@ -91,14 +91,33 @@ it('uses shared card padding and gutters in the Files workspace in both locales'
     await act(async () => {
       root.render(
         <MemoryRouter initialEntries={['/files']}>
-          <AppShell commands={{ loadCoworkers: async () => [], loadConversations: async () => [], loadMessages: async () => [], createConversation: async () => { throw new Error("unused"); }, sendMessage: async () => { throw new Error("unused"); } }} />
+          <AppShell
+            commands={{
+              loadCoworkers: async () => [],
+              loadConversations: async () => [],
+              loadMessages: async () => [],
+              createConversation: async () => {
+                throw new Error('unused');
+              },
+              sendMessage: async () => {
+                throw new Error('unused');
+              },
+            }}
+          />
         </MemoryRouter>,
       );
       for (let turn = 0; turn < 5; turn += 1)
         await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(host.textContent).toContain('final-real-file.md');
-    await surfaceMetrics(host, 'files', ['.title-bar', '.files-files-header', '.files-file-viewer', '.files-file-list button', '.files-main', '.files-files-grid']);
+    await surfaceMetrics(host, 'files', [
+      '.title-bar',
+      '.files-files-header',
+      '.files-file-viewer',
+      '.files-file-list button',
+      '.files-main',
+      '.files-files-grid',
+    ]);
   } finally {
     await act(async () => root.unmount());
     host.remove();

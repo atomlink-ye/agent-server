@@ -66,7 +66,7 @@ and composer visibility. No list overflow ownership was changed.
 ## Verification
 
 Implementation commit `2ab4b1a7` is pushed to `origin/wui3/ia-a`.
-The scoped single-file browser and translation checks are green. Isolated reruns of unrelated timeout files continue after the manager's load advisory.
+The scoped single-file browser and translation checks are green. Broader verification remains blocked as detailed below; the full suite is not green.
 
 `pnpm web:check:types` passed (exit 0) after guarding the nullable unanchored
 WorkRun projection in the row refresh. Verbatim tail:
@@ -106,15 +106,126 @@ $ tsc -p tsconfig.app.json --noEmit
 The broad `pnpm test:web` run was explicitly interrupted (exit 130) under CPU
 starvation. It reproduced the three baseline reds, found the now-corrected
 duplicate i18n key, and timed out on BoardsPage, ObservePage,
-ConversationsPage, TasksPage, and coverage.browser.test.tsx. Those files are
-being rerun one at a time without changing their assertions. This is not a
-claim that the full suite passed.
+ConversationsPage, TasksPage, and coverage.browser.test.tsx. Its final six lines
+are reproduced verbatim:
 
-`pnpm lint` is still running. Its formatting warnings in tracked files were
-compared against `fa344fcc` and are unchanged baseline content. BRIEF.md is a
-supplied untracked dispatch input. The RESULTS.md draft warning is being
-resolved by formatting the final report. Full command tails follow when the
-running checks finish.
+```text
+ ❯ |web-dom (chromium)| src/features/run-trace/coverage.browser.test.tsx (1 test | 1 failed) 51246ms
+   × keeps the activity coverage disclosure present across views and selection 51245ms
+ ❯ |web-dom (chromium)| src/features/work-organization/TasksPage.browser.test.tsx (10 tests | 2 failed) 77559ms
+   × scrolls real Tasks list and detail content to their final entries on desktop 41143ms
+   × selects a published Definition and coworker by display-safe labels while promoting canonical IDs 33478ms
+[ELIFECYCLE] Command failed with exit code 130.
+```
+
+The baseline reds remain outside this lane and were not changed:
+
+- `router.browser.test.tsx > gives a first-time principal an onboarding empty state at /conversations`
+- `router.browser.test.tsx > serves the conversations list at /conversations instead of a route miss`
+- `FilesPage.browser.test.tsx > scrolls the real Files list to its final file on desktop`
+
+Following the manager's load advisory, each additional timeout file was rerun
+alone with its original assertions. Tasks and coverage passed without any code
+changes: Tasks' total test duration fell from 77.559s to 23.88s; coverage fell
+from 51.245s to 5.60s. Boards and Observe could not connect to Chromium and ran
+zero tests. Conversations still timed out at 35.225s (30-second limit) while its
+other eight tests passed. These three isolated checks remain **inconclusive /
+blocked**, not passes and not established code regressions. The affected tests
+and their page implementations were left unchanged. The manager owns rerunning
+these three files on a quiet host before claiming broader acceptance.
+
+`pnpm test:web apps/web/src/features/work-organization/BoardsPage.browser.test.tsx` — blocked: browser session connection timeout; exit 1. Verbatim tail:
+
+```text
+ Test Files   (1)
+      Tests  no tests
+     Errors  1 error
+   Start at  22:28:49
+   Duration  65.37s (transform 0ms, setup 0ms, import 0ms, tests 0ms, environment 0ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+```
+
+`pnpm test:web apps/web/src/features/observe/ObservePage.browser.test.tsx` — blocked: browser session connection timeout; exit 1. Verbatim tail:
+
+```text
+ Test Files   (1)
+      Tests  no tests
+     Errors  1 error
+   Start at  22:31:59
+   Duration  68.76s (transform 0ms, setup 0ms, import 0ms, tests 0ms, environment 0ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+```
+
+`pnpm test:web apps/web/src/features/conversations/ConversationsPage.browser.test.tsx` — blocked: scroll test timed out; exit 1. Verbatim tail:
+
+```text
+ Test Files  1 failed (1)
+      Tests  1 failed | 8 passed (9)
+   Start at  22:33:55
+   Duration  125.91s (transform 0ms, setup 0ms, import 34.34s, tests 48.84s, environment 0ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+```
+
+`pnpm test:web apps/web/src/features/work-organization/TasksPage.browser.test.tsx` — passed; exit 0. Verbatim tail:
+
+```text
+ Test Files  1 passed (1)
+      Tests  10 passed (10)
+   Start at  22:36:47
+   Duration  137.09s (transform 0ms, setup 0ms, import 55.65s, tests 23.88s, environment 0ms)
+```
+
+`pnpm test:web apps/web/src/features/run-trace/coverage.browser.test.tsx` — passed; exit 0. Verbatim tail:
+
+```text
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  22:39:48
+   Duration  50.98s (transform 0ms, setup 0ms, import 10.11s, tests 5.60s, environment 0ms)
+```
+
+`pnpm lint` finished with exit 1. It reported formatting issues in 15 tracked
+files whose contents were verified byte-for-byte against `fa344fcc`, the
+untracked dispatch input BRIEF.md, and the then-unformatted RESULTS.md draft.
+The final report has since been formatted; the full lint command was not rerun.
+No changed implementation/test file appeared in the formatting warnings. The
+baseline formatting files were deliberately left untouched:
+
+```text
+.shoot.mjs
+apps/web/src/features/agents/authoring.ts
+apps/web/src/features/agents/AuthoringPanels.tsx
+apps/web/src/features/observe/ObservePane.browser.test.tsx
+apps/web/src/features/run-trace/events.tsx
+apps/web/src/features/run-trace/inspector.tsx
+apps/web/src/features/run-trace/run-trace-view.tsx
+apps/web/src/features/work-organization/BoardCardPeek.tsx
+docs/architecture/computer-placement-gap.md
+docs/contracts/work-organization-api.md
+docs/decisions/0013-task-ordering-in-the-description.md
+REPORT-workui.md
+src/adapters/paseo/paseo-turn-runner.test.ts
+src/infrastructure/postgres/postgres-work-organization-repository.ts
+tooling/dev/setup-providers.ts
+```
+
+Verbatim `pnpm lint` tail:
+
+```text
+[warn] src/adapters/paseo/paseo-turn-runner.test.ts
+[warn] src/infrastructure/postgres/postgres-work-organization-repository.ts
+[warn] tooling/dev/setup-providers.ts
+[warn] Code style issues found in 17 files. Run Prettier with --write to fix.
+[ELIFECYCLE] Command failed with exit code 1.
+> pnpm typecheck
+$ tsc -p tsconfig.json --noEmit && pnpm web:check:types
+$ pnpm --filter @atomlink-ye/agent-server-web check:types
+$ tsc -p tsconfig.app.json --noEmit
+[ELIFECYCLE] Command failed with exit code 1.
+```
 
 The baseline-only browser measurement run passed 14 tests. An intermediate
 edited run had three failures: one incorrect test expectation (`Status
@@ -125,9 +236,9 @@ geometry assertion.
 
 ## Scope and limitations
 
-Shared-file edits are limited to the two i18n dictionaries: one Work-scope copy
-block and four terminology corrections for the existing start/unavailable/result
-strings. The adjacent run-trigger browser test only updates its expected label
+Shared i18n edits are one Work-scope copy block and four terminology corrections:
+`work.run.start`, `work.run.cantStart`, `work.result.notPresent`, and
+`work.result.updating`, in both dictionaries. The adjacent run-trigger browser test only updates its expected label
 to WorkRun. `docs/frontend.md` updates the affected navigation paragraph because
 it otherwise describes the removed Summary/Files hierarchy. No API, persistence,
 runtime, dependency, or global index.css change.
@@ -153,3 +264,7 @@ runtime, dependency, or global index.css change.
   is committed because the explicit campaign brief requests it, overriding the
   repository's normal prohibition on task reports. BASELINE.md and BRIEF.md are
   dispatch inputs and will not be committed.
+
+No dev/runtime server or database was started. The broad Vitest process was
+interrupted explicitly; the single-file checks and lint process have finished.
+Implementation and report commits are on `wui3/ia-a`; no PR was opened.

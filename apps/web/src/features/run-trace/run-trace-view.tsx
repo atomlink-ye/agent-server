@@ -131,7 +131,7 @@ export function RunTrace({
                 .join(', '),
             })}
             {recordedFeedbackCount
-              ? ` ${recordedFeedbackCount} recorded feedback edge${recordedFeedbackCount === 1 ? '' : 's'} present.`
+              ? ` ${t('trace.feedbackCount', { count: recordedFeedbackCount })}`
               : ''}
           </p>
         </details>
@@ -151,7 +151,14 @@ export function RunTrace({
       <p className="run-trace__subhead">
         {t('trace.chronological')}
         {trace.timeline.startedAt !== null && trace.timeline.endedAt !== null
-          ? ` · recorded ${formatTimestamp(new Date(trace.timeline.startedAt).toISOString())} → ${formatTimestamp(new Date(trace.timeline.endedAt).toISOString())}`
+          ? t('trace.recordedRange', {
+              start: formatTimestamp(
+                new Date(trace.timeline.startedAt).toISOString(),
+              ),
+              end: formatTimestamp(
+                new Date(trace.timeline.endedAt).toISOString(),
+              ),
+            })
           : ''}
       </p>
       <div
@@ -221,7 +228,7 @@ export function RunTrace({
             excluded: trace.coverage.excludedExecution.map(humanize).join(', '),
           })}
           {recordedFeedbackCount
-            ? ` ${recordedFeedbackCount} recorded feedback edge${recordedFeedbackCount === 1 ? '' : 's'} present.`
+            ? ` ${t('trace.feedbackCount', { count: recordedFeedbackCount })}`
             : ''}
         </p>
       </details>

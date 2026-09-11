@@ -1,3 +1,4 @@
+import { t } from '../../i18n';
 import type {
   WorkBoardColumnDto,
   WorkItemCommentDto,
@@ -117,9 +118,11 @@ export function claimBlockedReason(
   participants: readonly Participant[],
 ): string | null {
   if (isClaimable(item, now)) return null;
-  if (item.status === 'done') return 'This Task is already complete.';
+  if (item.status === 'done') return t('workOrg.claimComplete');
   const claim = readClaimState(item);
   const holderId = claim?.claimedBy ?? item.assignee_id;
-  if (!holderId) return 'This Task cannot be claimed right now.';
-  return `This Task has already been claimed by ${participantLabelSafe(participants, holderId)}.`;
+  if (!holderId) return t('workOrg.claimUnavailable');
+  return t('workOrg.claimHeld', {
+    name: participantLabelSafe(participants, holderId),
+  });
 }

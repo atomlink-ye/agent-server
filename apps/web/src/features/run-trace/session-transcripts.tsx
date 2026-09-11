@@ -535,8 +535,7 @@ function LifecycleRow({ entry }: { readonly entry: ProjectedTranscriptEntry }) {
     </div>
   ) : (
     <div className="transcript__rule">
-      {t('observe.run')}
-      {humanize(status)}
+      {t('trace.sessions.runState', { status: humanize(status) })}
     </div>
   );
 }
@@ -547,10 +546,12 @@ function usageParts(
   return [
     event.input_tokens === null
       ? null
-      : `${event.input_tokens.toLocaleString()} input`,
+      : t('trace.inputTokens', { count: event.input_tokens.toLocaleString() }),
     event.output_tokens === null
       ? null
-      : `${event.output_tokens.toLocaleString()} output`,
+      : t('trace.outputTokens', {
+          count: event.output_tokens.toLocaleString(),
+        }),
     event.total_cost_usd === null
       ? null
       : `$${event.total_cost_usd.toFixed(4)}`,

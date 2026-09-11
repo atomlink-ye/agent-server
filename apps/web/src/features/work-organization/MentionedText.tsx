@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 import { findMentionSpans } from './mentions';
 import { findParticipant, type Participant } from './participants';
 
@@ -19,6 +20,7 @@ export function MentionedText({
   readonly participants: readonly Participant[];
   readonly className?: string;
 }) {
+  const t = useT();
   const spans = findMentionSpans(text);
   if (spans.length === 0) return <span className={className}>{text}</span>;
 
@@ -38,7 +40,7 @@ export function MentionedText({
         title={
           participant
             ? `${participant.name} · ${span.id}`
-            : `${span.id} is not in this workspace's member directory.`
+            : t('workOrg.unknownMention', { id: span.id })
         }
       >
         @{participant?.name ?? span.id}

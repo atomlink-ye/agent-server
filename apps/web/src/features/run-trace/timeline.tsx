@@ -188,7 +188,9 @@ function TimelineActivityRow({
       data-event-sequence={sequence}
       data-run-id={runId ?? undefined}
       title={
-        runId ? `Source Run ${runId} · Event ${sequence}` : `Event ${sequence}`
+        runId
+          ? t('trace.sourceEvent', { id: runId, sequence })
+          : t('trace.eventSequence', { sequence })
       }
     >
       <time dateTime={entry.startedAt}>{formatTimestamp(entry.startedAt)}</time>
@@ -321,7 +323,7 @@ function ActivityEventRow({
       className="run-trace__event-row"
       data-event-sequence={event.sequence}
       data-run-id={event.runId}
-      title={`Source Run ${event.runId}`}
+      title={t('trace.sourceRun', { id: event.runId })}
     >
       <time dateTime={event.createdAt}>{formatTimestamp(event.createdAt)}</time>
       <span
@@ -333,7 +335,7 @@ function ActivityEventRow({
             ? (responderName(trace, event.runId) ?? eventLabel(event.type))
             : eventLabel(event.type)}
         </strong>
-        <small title={`Source Run ${event.runId}`}>
+        <small title={t('trace.sourceRun', { id: event.runId })}>
           {t('trace.eventSequence', { sequence: event.sequence })}
         </small>
       </div>
@@ -559,7 +561,8 @@ function RunSpan({
   // itself is not on the span (spans are run-shaped) -- it is looked up
   // from trace.attempts by the caller, the same join selectTimelineSpans
   // used to set span.attemptId in the first place.
-  const attemptLabel = attemptNo !== null ? `Attempt ${attemptNo}` : null;
+  const attemptLabel =
+    attemptNo !== null ? t('work.attempt', { number: attemptNo }) : null;
   const selectionId = span.attemptId ?? span.key;
   if (!geometry)
     return (

@@ -888,9 +888,8 @@ function defaultParticipant(): CapabilityParticipantDraft {
 function reviewerParticipant(): CapabilityParticipantDraft {
   return {
     name: 'reviewer',
-    role: 'Reviewer',
-    instructions:
-      'Review the work independently, identify material gaps, and return clear corrections or approval evidence.',
+    role: t('authoring.reviewer'),
+    instructions: t('authoring.reviewerInstructions'),
     skills: [],
   };
 }

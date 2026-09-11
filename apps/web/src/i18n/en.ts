@@ -140,7 +140,7 @@ export const en = {
   'workCard.unavailable': 'Work update is unavailable.',
   'workCard.open': 'Open Work',
   'workCard.eyebrow': 'Work',
-  'workCard.statusUnavailable': 'Status unavailable',
+  'workCard.statusUnavailable': 'Latest WorkRun unavailable',
   'workCard.result.unavailableHere': 'The latest result is not available here.',
   'workCard.result.redacted': 'The result is unavailable here.',
   'workCard.result.none': 'No result is available yet.',
@@ -235,7 +235,7 @@ export const en = {
   'tasks.backToConversation': 'Back to conversation',
   'tasks.formalExecution': 'Formal execution',
   'tasks.openWork': 'Open Work',
-  'tasks.startWork': 'Start Work',
+  'tasks.startWork': 'Create Work',
   'tasks.startWorkDescription':
     'Select a published Definition to create a formal Work. To create or edit a Definition, go to “New Work”.',
   'tasks.createWork': 'Create Work',
@@ -404,10 +404,10 @@ export const en = {
   'agents.addCapability': '+ Add capability',
   'agents.formalWorkCapability': 'Formal Work capability',
   'agents.inputs': '{count} inputs',
-  'agents.startWork': 'Start Work',
+  'agents.startWork': 'Create Work',
   'agents.noCapabilities':
-    'No Work is available to this Coworker yet. Browse the shared Work catalog or create a Definition.',
-  'agents.browseWorkCatalog': 'Browse Work catalog',
+    'No Definitions are available to this Coworker yet. Browse Definitions or create one.',
+  'agents.browseWorkCatalog': 'Browse Definitions',
   'agents.createWorkDefinition': 'Create Work Definition',
   'agents.teachCapability': 'Teach the first capability',
   'agents.advancedRuntime': 'Advanced · runtime and package details',
@@ -475,7 +475,7 @@ export const en = {
   'authoring.addMember': '+ Add member',
   'authoring.inputs': 'Inputs',
   'authoring.inputsDescription':
-    'These fields become the questions shown when starting Work.',
+    'These fields supply input when starting a WorkRun.',
   'authoring.addInput': '+ Add input',
   'authoring.noInputs':
     'No input fields yet. The Capability can still be started with an empty input object.',
@@ -507,10 +507,10 @@ export const en = {
     'Ready to save. The preview below shows the resolved plan for this Capability.',
   'authoring.fixDetails':
     'Fix the highlighted Capability details before saving.',
-  'authoring.saved': 'Capability saved to this Coworker’s Work Catalog.',
+  'authoring.saved': 'Capability saved to this Coworker’s Definition catalog.',
   'authoring.save': 'Save capability',
   'authoring.saving': 'Saving…',
-  'authoring.saveStart': 'Save & start Work',
+  'authoring.saveStart': 'Save & create Work',
   'authoring.oneSpecialistPlan': 'One specialist',
   'authoring.smallTeamPlan': 'Small team',
   'authoring.participants': 'Participants',
@@ -595,7 +595,7 @@ export const en = {
   'work.loading.body':
     'Checking the current objectives and their latest activity.',
   'work.formalExecution': 'Formal execution',
-  'work.start.title': 'Start a piece of Work',
+  'work.start.title': 'Create a Work',
   'work.start.body':
     'Define an objective, choose its execution setup, then start a WorkRun when it is ready.',
   'work.create': 'Create Work',
@@ -622,7 +622,7 @@ export const en = {
     'No formal Work yet. Start with an objective you want an Agent to run.',
   'work.new': 'New Work',
   'work.items': 'Works',
-  'work.catalog': 'Work catalog',
+  'work.catalog': 'Definition catalog',
   'work.definitions': 'Reusable Definitions',
   'work.teamComposition': 'Team composition',
   'work.singleComposition': 'Single Worker',
@@ -637,7 +637,7 @@ export const en = {
   'work.definitionStartIntro':
     'Review the Definition and inputs. Its Worker or Team executes each WorkRun.',
   'work.definitionExecutor':
-    'The Definition selects the Worker or Team for this Work.',
+    'The Definition selects the Worker or Team for each WorkRun.',
   'work.definitionUnavailable': 'This Work Definition is no longer available.',
   'work.definitionLoadFailed':
     'This Work Definition could not be loaded. Try again.',
@@ -730,7 +730,7 @@ export const en = {
   'work.start.chooseDefinition': 'Choose a Definition…',
   'work.start.noDefinitions':
     'Publish a Definition before creating Work. Advanced authoring is below.',
-  'work.start.heading': 'Start formal Work',
+  'work.start.heading': 'Create Work and start a WorkRun',
   'work.start.new': 'New Work',
   'work.start.fallbackDescription': 'Formal Work Definition',
   'work.start.workTitle': 'Work Title',
@@ -740,7 +740,7 @@ export const en = {
   'work.start.createdStarting': 'Work created. Starting the first WorkRun…',
   'work.start.creating': 'Creating Work…',
   'work.start.starting': 'Starting WorkRun…',
-  'work.start.start': 'Start Work',
+  'work.start.start': 'Create Work & start WorkRun',
   'work.start.openCreated': 'Open the created Work',
   'work.start.retryRun': 'Retry WorkRun',
   'work.start.retry': 'Try again',
@@ -793,7 +793,7 @@ export const en = {
   'work.chat.runEmptyTitle': 'Talk about this WorkRun.',
   'work.chat.runEmptyBody':
     'Ask about this WorkRun. Replies cannot access execution history or change execution.',
-  'work.chat.runPlaceholder': 'Message this WorkRun’s executor…',
+  'work.chat.runPlaceholder': 'Ask about this WorkRun…',
   'work.chat.runLead': 'WorkRun conversation · no execution changes',
   'work.chat.preparation.collecting': 'Gathering details',
   'work.chat.preparation.ready': 'Ready to start',
@@ -834,11 +834,11 @@ export const en = {
   'work.run.errorRetry': 'Error — Retry',
   'work.run.retry': 'Retry WorkRun',
   'work.run.start': 'Start WorkRun',
-  'work.run.checkingBody': 'Checking whether this Work can run here…',
-  'work.run.checkError': 'We couldn’t check whether this Work can run here.',
+  'work.run.checkingBody': 'Checking whether a WorkRun can start here…',
+  'work.run.checkError': 'We couldn’t check whether a WorkRun can start here.',
   'work.run.retryAvailability': 'Retry availability check',
   'work.run.unavailable': 'WorkRun unavailable',
-  'work.run.unavailableTitle': 'This Work can’t run in this deployment.',
+  'work.run.unavailableTitle': 'WorkRuns can’t start in this deployment.',
   'work.run.requires': 'It requires {capability}, which isn’t available here.',
   'work.run.definitionMissing':
     'The current Work Definition version could not be loaded, so runnability cannot be determined.',
@@ -1059,7 +1059,7 @@ export const en = {
   'agents.work': 'Work',
   'agents.directConversation': 'Direct conversation',
   'agents.activityWorkHint':
-    "Work here was started from this Coworker's Capabilities.",
+    'These Work records were created from Definitions available to this Coworker.',
   'agents.justNow': 'Just now',
   'agents.minutesAgo': '{count}m ago',
   'agents.hoursAgo': '{count}h ago',
@@ -1106,8 +1106,8 @@ export const en = {
     'Edit the source, resolve it through Agent Server, then apply an immutable version.',
   'definition.historyHint':
     'Historical Definition versions are immutable and remain read-only.',
-  'definition.currentVersion': 'Current Work version',
-  'definition.historicalVersion': 'Historical WorkRun version',
+  'definition.currentVersion': 'Current Definition version',
+  'definition.historicalVersion': 'WorkRun’s Definition version',
   'definition.yaml': 'YAML source',
   'definition.yamlHint':
     'The API currently returns normalized source. It is re-serialized as YAML here, so original comments and formatting are not round-tripped.',
@@ -1290,6 +1290,16 @@ export const en = {
   'trace.commandOutput': 'Recorded command\n{command}\n\nOutput\n{output}',
   'authoring.defaultInstructions':
     'Complete the requested formal Work carefully and return a concise, evidence-backed result.',
+  'authoring.reviewer': 'Reviewer',
+  'authoring.reviewerInstructions':
+    'Review the work independently, identify material gaps, and return clear corrections or approval evidence.',
+  'workOrg.unknownMention': "{id} is not in this workspace's member directory.",
+  'workOrg.oneComment': ' comment',
+  'workOrg.manyComments': ' comments',
+  'workOrg.unknownMember': 'this member',
+  'workOrg.claimComplete': 'This Task is already complete.',
+  'workOrg.claimUnavailable': 'This Task cannot be claimed right now.',
+  'workOrg.claimHeld': 'This Task has already been claimed by {name}.',
 } as const;
 
 export default en;

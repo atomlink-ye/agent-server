@@ -29,7 +29,14 @@ it('keeps execution vocabulary within the desktop header in both locales', async
   const trace = ProductRunTraceSuccessSchema.parse(
     recording.recording_documents[0],
   );
-  const run = ProductWorkRunSuccessSchema.parse(trace);
+  const run = ProductWorkRunSuccessSchema.parse({
+    work: trace.work,
+    work_run: trace.work_run,
+    work_items: trace.work_items,
+    actors: trace.actors,
+    messages: trace.messages,
+    projection_status: trace.projection_status,
+  });
   const measurements = [];
   for (const locale of ['en', 'zh-CN'] as const) {
     setLocale(locale);

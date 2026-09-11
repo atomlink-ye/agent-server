@@ -479,7 +479,7 @@ it('renders the exact Product DefinitionVersion used by the selected Run', async
     expect(host.textContent).toContain('Researcher');
     expect(host.textContent).toContain(selectedRun.definition_version_id);
     expect(host.querySelector('.work-run-header')?.textContent).toContain(
-      'RUN #1',
+      'WorkRun #1',
     );
     expect(
       [...host.querySelectorAll('.work-tabs a')].map((a) => a.textContent),
@@ -584,7 +584,7 @@ it('keeps Run tabs and an ordinal breadcrumb separate from the Work tabs', async
       [...host.querySelectorAll('.work-tabs a')].map((a) => a.textContent),
     ).toEqual(['Conversation', 'Trace', 'Result']);
     expect(host.querySelector('.work-run-header')?.textContent).toContain(
-      'RUN #1',
+      'WorkRun #1',
     );
     expect(host.querySelector('.work-run-header a')?.getAttribute('href')).toBe(
       `/work/${work.work.id}`,
@@ -619,7 +619,7 @@ it('lists Runs newest first with ordinal identities and opens their conversation
   try {
     const rows = [...host.querySelectorAll('.work-run-list > li')];
     expect(rows.map((row) => row.querySelector('strong')?.textContent)).toEqual(
-      ['Run #2', 'Run #1'],
+      ['WorkRun #2', 'WorkRun #1'],
     );
     expect(rows[0]?.querySelector('a')?.getAttribute('href')).toContain(
       `tab=chat&run=${selectedRun.id}`,

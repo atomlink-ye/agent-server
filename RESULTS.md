@@ -12,7 +12,7 @@ Branch: `wui3/ia-b`; baseline: `fa344fcc`.
 
 ## Browser measurements
 
-Measured in real headless Chromium at **1440×900**, using the production AppRouter, shell, and Work page with 48 deterministic API-fixture Work records. Both locale switches were asserted on the document. Titles contain English or Chinese respectively. These are component-browser measurements; no live backend/provider canary was run.
+Measured in real headless Chromium at **1440×900**, using the production AppRouter, shell, and Work page with 48 deterministic API-fixture Work records. Both locale switches were asserted on the document. Titles contain English or Chinese respectively. These are component-browser measurements; no live backend/provider canary was run. The Vitest harness uses installed fallback fonts from the production font stack and does not load the remote font links in `index.html`.
 
 Sizes come from `getComputedStyle()`. CSSOM returns `normal` for most baseline leading, so the test also measures a two-line probe using the same computed family, size, weight, and line-height with `getBoundingClientRect()`. The following tables report that measured line advance in px, rounded to two decimals. They are not inferred from a nominal multiplier. Unrounded observations stay under ignored `.local/typography/`.
 
@@ -62,15 +62,13 @@ Sizes come from `getComputedStyle()`. CSSOM returns `normal` for most baseline l
 
 Identical measured results in English and Simplified Chinese:
 
-| Metric                          | Before |  After |
-| ------------------------------- | -----: | -----: |
-| Work row height                 |   57px | 49.5px |
-| Fully visible Work rows         |     12 |     14 |
-| Row vertical padding, each side |   10px |    4px |
-| Gap between title and metadata  |    3px |    2px |
-| Scroll viewport height          |  794px |  788px |
-| Scroll viewport top             |   90px |   96px |
-| Scroll content height           | 3007px | 2647px |
+| Metric                  | Before |  After |
+| ----------------------- | -----: | -----: |
+| Work row height         |   57px | 49.5px |
+| Fully visible Work rows |     12 |     14 |
+| Scroll viewport height  |  794px |  788px |
+| Scroll viewport top     |   90px |   96px |
+| Scroll content height   | 3007px | 2647px |
 
 The row count includes only rows completely inside the scroller bounds. The existing 5px gap between rows is unchanged. The header grows by 6px with the new leading; even with that slightly smaller scroll viewport, two additional complete rows fit. `.work-pane-scroll.scroll-region` remains the owner: its scrollHeight exceeds clientHeight, the list itself has `overflow-y: visible`, and scrolling the pane reaches the final row. No overflow rule was reintroduced on the list.
 
@@ -90,28 +88,145 @@ The browser's actual glyph metrics for `审查研究结果`, using the installed
 
 ## Verification
 
-Implementation commit `5532b4ac` has been pushed to `origin/wui3/ia-b`.
-Verification is still in progress; this is not a claim of a green full suite.
+The implementation and measurements are committed on `wui3/ia-b`. No PR was opened.
 
-- The initial focused typography command passed 2 files / 4 tests. Final assertions were subsequently expanded and are included in the ongoing full run.
-- `pnpm web:check:types` completed successfully (exit 0).
-- `pnpm test:web` is still running. It has reproduced the three listed baseline failures and has hit 30-second test deadlines in Work catalog, Observe, Tasks, and Boards. Those files will be rerun individually before attributing a regression.
-- `pnpm lint` is still running. Its formatting stage flags untouched baseline files, including the explicitly out-of-scope `REPORT-workui.md`. No formatting-only cleanup of those files is included.
+`pnpm test:web` was **not green**: 6 failed / 49 passed files, 7 failed / 301 passed tests. Three failures are the documented baseline reds:
 
-Completed focused-command tail (`pnpm test:web apps/web/src/typography.browser.test.tsx apps/web/src/typography.test.ts`):
+1. `router.browser.test.tsx > gives a first-time principal an onboarding empty state at /conversations`
+2. `router.browser.test.tsx > serves the conversations list at /conversations instead of a route miss`
+3. `FilesPage.browser.test.tsx > scrolls the real Files list to its final file on desktop`
+
+The other four failures were test/screenshot deadlines. Work, Observe, Tasks, and Boards were rerun in separate single-file commands, with no changes to those tests or their timeouts. Final rerun outcomes and exact command tails are below. The first isolated Observe attempt lost the browser connection before executing its test (`tests 0ms`, 1 runner error); that was not counted as a pass.
+
+Full-suite verbatim tail:
+
+```text
+
+ Test Files  6 failed | 49 passed (55)
+      Tests  7 failed | 301 passed (308)
+   Start at  22:09:52
+   Duration  803.50s (transform 267.14s, setup 0ms, import 1071.56s, tests 566.85s, environment 38ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+```
+
+| Rerun file                 | Broad-run test execution | Isolated test execution |
+| -------------------------- | -----------------------: | ----------------------: |
+| Work directory and catalog |                  72.299s |                 45.310s |
+| Observe                    |                  37.012s |                 14.220s |
+| Tasks                      |                  48.853s |                 32.120s |
+| Boards                     |                  44.338s |                 42.580s |
+
+These are whole-file test execution times, not total command startup/import time.
+
+### Work directory and catalog
+
+`pnpm test:web apps/web/src/features/work/components/work-list.browser.test.tsx`
+
+```text
+ Test Files  1 passed (1)
+      Tests  8 passed (8)
+   Start at  22:24:47
+   Duration  165.23s (transform 0ms, setup 0ms, import 54.93s, tests 45.31s, environment 0ms)
+```
+
+### Observe
+
+`pnpm test:web apps/web/src/features/observe/ObservePage.browser.test.tsx`
+
+```text
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  22:41:32
+   Duration  84.31s (transform 0ms, setup 0ms, import 32.17s, tests 14.22s, environment 0ms)
+```
+
+### Tasks
+
+`pnpm test:web apps/web/src/features/work-organization/TasksPage.browser.test.tsx`
+
+```text
+ Test Files  1 passed (1)
+      Tests  10 passed (10)
+   Start at  22:33:52
+   Duration  108.21s (transform 0ms, setup 0ms, import 30.88s, tests 32.12s, environment 0ms)
+```
+
+### Boards
+
+`pnpm test:web apps/web/src/features/work-organization/BoardsPage.browser.test.tsx`
+
+```text
+ Test Files  1 passed (1)
+      Tests  15 passed (15)
+   Start at  22:36:24
+   Duration  137.63s (transform 0ms, setup 0ms, import 47.05s, tests 42.58s, environment 0ms)
+```
+
+### Final typography guards
+
+`pnpm test:web apps/web/src/typography.browser.test.tsx apps/web/src/typography.test.ts`
 
 ```text
  Test Files  2 passed (2)
-      Tests  4 passed (4)
-   Start at  22:00:40
-   Duration  134.03s (transform 1.21s, setup 0ms, import 49.38s, tests 37.49s, environment 0ms)
+      Tests  6 passed (6)
+   Start at  22:39:29
+   Duration  78.35s (transform 793ms, setup 0ms, import 35.94s, tests 7.96s, environment 0ms)
 ```
 
-Completed type-command tail:
+### Types and lint
+
+`pnpm web:check:types` completed with exit 0:
 
 ```text
 $ pnpm --filter @atomlink-ye/agent-server-web check:types
 $ tsc -p tsconfig.app.json --noEmit
+```
+
+`pnpm lint` completed with exit 1 because Prettier flagged 15 files. All 15 were compared byte-for-byte with `fa344fcc` and are unchanged by this lane. Both TypeScript stages completed; no TypeScript diagnostic was emitted. The out-of-scope formatting files were deliberately left untouched, especially `REPORT-workui.md`, which the brief explicitly says not to change.
+
+Verbatim lint tail:
+
+```text
+[warn] docs/decisions/0013-task-ordering-in-the-description.md
+[warn] REPORT-workui.md
+[warn] src/adapters/paseo/paseo-turn-runner.test.ts
+[warn] src/infrastructure/postgres/postgres-work-organization-repository.ts
+[warn] tooling/dev/setup-providers.ts
+[warn] Code style issues found in 15 files. Run Prettier with --write to fix.
+[ELIFECYCLE] Command failed with exit code 1.
+> pnpm typecheck
+$ tsc -p tsconfig.json --noEmit && pnpm web:check:types
+$ pnpm --filter @atomlink-ye/agent-server-web check:types
+$ tsc -p tsconfig.app.json --noEmit
+[ELIFECYCLE] Command failed with exit code 1.
+```
+
+Unchanged files flagged by the formatter:
+
+- `.shoot.mjs`
+- `apps/web/src/features/agents/authoring.ts`
+- `apps/web/src/features/agents/AuthoringPanels.tsx`
+- `apps/web/src/features/observe/ObservePane.browser.test.tsx`
+- `apps/web/src/features/run-trace/events.tsx`
+- `apps/web/src/features/run-trace/inspector.tsx`
+- `apps/web/src/features/run-trace/run-trace-view.tsx`
+- `apps/web/src/features/work-organization/BoardCardPeek.tsx`
+- `docs/architecture/computer-placement-gap.md`
+- `docs/contracts/work-organization-api.md`
+- `docs/decisions/0013-task-ordering-in-the-description.md`
+- `REPORT-workui.md`
+- `src/adapters/paseo/paseo-turn-runner.test.ts`
+- `src/infrastructure/postgres/postgres-work-organization-repository.ts`
+- `tooling/dev/setup-providers.ts`
+
+The baseline typography capture also ran `pnpm test:web apps/web/src/typography.browser.test.tsx` against the original CSS and passed both locale cases. Its final baseline-capture tail was:
+
+```text
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  22:04:59
+   Duration  120.72s (transform 0ms, setup 0ms, import 49.50s, tests 17.10s, environment 0ms)
 ```
 
 ## Deliberately not changed

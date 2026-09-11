@@ -209,6 +209,8 @@ for (const locale of ['en', 'zh-CN'] as const) {
       expect(rows[0]!.getBoundingClientRect().height).toBeCloseTo(49.5, 1);
       expect(visible).toBe(14);
       expect(bounds.height).toBeCloseTo(788, 1);
+      expect(bounds.top).toBeCloseTo(96, 1);
+      expect(scroller.scrollHeight).toBe(2647);
       const rowStyle = getComputedStyle(rows[0]!);
       expect(rowStyle.paddingTop).toBe('4px');
       expect(rowStyle.paddingBottom).toBe('4px');

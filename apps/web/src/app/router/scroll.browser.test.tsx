@@ -2,7 +2,8 @@ import { stringify } from 'yaml';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
-import { expect, it, vi } from 'vitest';
+import { afterAll, expect, it, vi } from 'vitest';
+import { commands } from 'vitest/browser';
 import { AppProviders } from '../providers';
 import { AppRouter } from './index';
 import { setLocale } from '../../i18n';
@@ -349,6 +350,7 @@ function measurements(host: HTMLElement) {
       (el) =>
         el.clientHeight > 1 &&
         (el.scrollHeight > el.clientHeight + 1 ||
+          el.scrollWidth > el.clientWidth + 4 ||
           /auto|scroll/.test(getComputedStyle(el).overflowY) ||
           ['files-rendered-markdown', 'files-file-actions'].includes(
             el.className,
@@ -361,11 +363,21 @@ function measurements(host: HTMLElement) {
       width: el.clientWidth,
       contentWidth: el.scrollWidth,
       overflowY: getComputedStyle(el).overflowY,
+      overflowX: getComputedStyle(el).overflowX,
+      visible: el.checkVisibility(),
       scrollTop: el.scrollTop,
       top: Math.round(el.getBoundingClientRect().top),
       bottom: Math.round(el.getBoundingClientRect().bottom),
     }));
 }
+
+const inventory: unknown[] = [];
+afterAll(async () => {
+  await commands.writeFile(
+    '../../.local/browser/scroll-inventory.json',
+    JSON.stringify(inventory, null, 2),
+  );
+});
 
 const routes = [
   '/files',
@@ -378,9 +390,15 @@ const routes = [
   `/work/${workId}`,
   `/work/${workId}?run=${runId}`,
   `/work/${workId}?tab=overview&run=${runId}`,
-  ...['overview', 'runs', 'definition', 'artifacts', 'chat'].map(
-    (tab) => `/work/${workId}?tab=${tab}`,
-  ),
+  ...[
+    'overview',
+    'runs',
+    'definition',
+    'artifacts',
+    'chat',
+    'transcript',
+    'result',
+  ].map((tab) => `/work/${workId}?tab=${tab}`),
   ...['chat', 'transcript', 'result', 'definition', 'runs', 'artifacts'].map(
     (tab) => `/work/${workId}?tab=${tab}&run=${runId}`,
   ),
@@ -432,15 +450,12 @@ it.each(cases)(
         host.querySelector('.app-shell')!.getBoundingClientRect().height,
       ).toBe(900);
       if (route === '/files') {
-        console.log(
-          'SCROLL_AUDIT',
-          JSON.stringify({
-            route: route + ' (list)',
-            size,
-            locale,
-            measurements: measurements(host),
-          }),
-        );
+        inventory.push({
+          route: route + ' (list)',
+          size,
+          locale,
+          measurements: measurements(host),
+        });
         if (size === 'oversized') {
           expectScrollReachable(
             host,
@@ -459,27 +474,21 @@ it.each(cases)(
             await Promise.resolve();
           });
       }
-      console.log(
-        'SCROLL_AUDIT',
-        JSON.stringify({
-          route,
-          size,
-          locale,
-          measurements: measurements(host),
-        }),
-      );
+      inventory.push({
+        route,
+        size,
+        locale,
+        measurements: measurements(host),
+      });
       expectNoVerticalTraps(host);
       verifyRoute(host, route, size);
       if (route === '/files') {
-        console.log(
-          'SCROLL_END',
-          JSON.stringify({
-            route,
-            size,
-            locale,
-            measurements: measurements(host),
-          }),
-        );
+        inventory.push({
+          route: route + ' (scrolled)',
+          size,
+          locale,
+          measurements: measurements(host),
+        });
         await act(async () =>
           host
             .querySelector<HTMLButtonElement>(
@@ -493,6 +502,36 @@ it.each(cases)(
         expectNoVerticalTraps(host);
         if (size === 'oversized')
           expectScrollReachable(host, '.files-main', '.files-file-actions');
+        inventory.push({
+          route: route + ' (source)',
+          size,
+          locale,
+          measurements: measurements(host),
+        });
+      }
+      if (route.startsWith('/observe')) {
+        for (const index of [1, 2]) {
+          await act(async () =>
+            (
+              host.querySelectorAll('.run-trace__tab')[
+                index
+              ] as HTMLButtonElement
+            ).click(),
+          );
+          expectNoVerticalTraps(host);
+          if (size === 'oversized')
+            expectScrollReachable(
+              host,
+              '.work-main-content',
+              '[data-testid="longest-attempt"]',
+            );
+          inventory.push({
+            route: route + (index === 1 ? ' (map)' : ' (events)'),
+            size,
+            locale,
+            measurements: measurements(host),
+          });
+        }
       }
     } finally {
       await act(async () => root.unmount());
@@ -510,6 +549,11 @@ function verifyRoute(host: HTMLElement, route: string, size: Size) {
     expect(host.querySelector(selector), selector).not.toBeNull();
     if (large) expectScrollReachable(host, selector, last);
   };
+  const width = (selector: string, pixels: number) => {
+    const region = host.querySelector<HTMLElement>(selector)!;
+    expect(region.getBoundingClientRect().width, selector).toBe(pixels);
+    expect(region.scrollWidth, selector).toBe(region.clientWidth);
+  };
   if (route === '/' || route.startsWith('/conversations/')) {
     expect(host.textContent).toContain(`Checkpoint ${large ? 2000 : 8}`);
     scroller('.sidebar-section', '.conversation-item');
@@ -523,7 +567,9 @@ function verifyRoute(host: HTMLElement, route: string, size: Size) {
       getComputedStyle(host.querySelector('.work-pane .work-list')!).overflowY,
     ).toBe('visible');
     if (route === '/work') return;
+    width('.work-main-content', 1028);
     expect(host.querySelector('.work-shell')).not.toBeNull();
+    expect(host.querySelector('.work-detail-header')).not.toBeNull();
     const tab =
       host.querySelector<HTMLElement>('.work-shell')!.dataset.activeTab;
     if (tab === 'chat') {
@@ -563,16 +609,29 @@ function verifyRoute(host: HTMLElement, route: string, size: Size) {
       expect(host.textContent).toContain(`Checkpoint ${large ? 2000 : 8}`);
       scroller('.work-overview__outcome', '.assistant-markdown p');
       scroller('.work-main-content');
+    } else if (tab === 'overview') {
+      expect(host.querySelector('[data-testid="work-record"]')).not.toBeNull();
+    } else if (tab === 'artifacts') {
+      expect(
+        host.querySelector('[data-testid="artifacts-unavailable"]'),
+      ).not.toBeNull();
     }
   } else if (route.startsWith('/observe')) {
     expect(host.querySelector('[data-testid="observe-detail"]')).not.toBeNull();
     scroller('.observe-pane .work-list', 'li');
-    scroller('.work-main-content');
+    scroller('.work-main-content', '[data-testid="longest-attempt"]');
+    width('.observe-pane .work-list', 307);
+    width('.observe-pane', 340);
+    width('.observe-filters', 267);
+    width('.work-main-content', 1028);
   } else if (route === '/agents') {
     expect(host.querySelectorAll('.agents-roster-card')).toHaveLength(
       large ? 50 : 3,
     );
     scroller('.agents-main', '.agents-roster-add');
+    const main = host.querySelector<HTMLElement>('.agents-main')!;
+    expect(main.getBoundingClientRect().width).toBe(1368);
+    expect(main.scrollWidth).toBe(main.clientWidth);
   } else if (route.startsWith('/agents/')) {
     expect(host.querySelector('.agents-profile-header')).not.toBeNull();
     scroller('.agents-list', '.agents-list-item');
@@ -581,15 +640,28 @@ function verifyRoute(host: HTMLElement, route: string, size: Size) {
     expect(
       getComputedStyle(host.querySelector('.agents-main')!).overflowY,
     ).toBe('auto');
+    const main = host.querySelector<HTMLElement>('.agents-main')!;
+    const list = host.querySelector<HTMLElement>('.agents-list')!;
+    expect(main.getBoundingClientRect().width).toBe(1028);
+    expect(main.scrollWidth).toBe(main.clientWidth);
+    expect(list.getBoundingClientRect().width).toBe(307);
+    expect(list.scrollWidth).toBe(list.clientWidth);
+    expect(
+      host.querySelector('.agents-profile-actions')!.getBoundingClientRect()
+        .right,
+    ).toBeLessThanOrEqual(1440);
   } else if (route === '/files') {
     expect(host.textContent).toContain(`Checkpoint ${large ? 2000 : 8}`);
     scroller('.files-main', '.files-rendered-markdown p');
     const main = host.querySelector<HTMLElement>('.files-main')!;
     expect(main.getBoundingClientRect().height).toBe(900);
+    expect(main.getBoundingClientRect().width).toBe(1028);
     expect(main.scrollWidth).toBe(main.clientWidth);
     const preview = host.querySelector<HTMLElement>(
       '.files-rendered-markdown',
     )!;
+    expect(preview.clientHeight).toBe(preview.scrollHeight);
+    if (large) expect(preview.clientHeight).toBe(74174);
     const actions = host.querySelector<HTMLElement>('.files-file-actions')!;
     expect(actions.getBoundingClientRect().top).toBeGreaterThanOrEqual(
       preview.getBoundingClientRect().bottom,
@@ -602,5 +674,7 @@ function verifyRoute(host: HTMLElement, route: string, size: Size) {
     ).toHaveLength(large ? 50 : 3);
     scroller('.work-org-list', '[data-testid="task-list-item"]');
     scroller('.work-org-content', '.work-org-comment');
+    width('.work-org-list', 307);
+    width('.work-org-content', 1028);
   }
 }

@@ -49,6 +49,7 @@
   border: 1px solid transparent;
   border-radius: 12px;
   background: transparent;
+  overflow-wrap: anywhere;
 }
 
 .work-org-list-item:hover,
@@ -143,6 +144,8 @@
 }
 
 .work-org-card {
+  min-width: 0;
+  overflow-wrap: anywhere;
   border: 1px solid var(--line, #d8dee8);
   border-radius: 16px;
   background: var(--panel, #fff);

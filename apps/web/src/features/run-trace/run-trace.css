@@ -8,6 +8,9 @@
   --trace-blue: var(--sky-ink);
   color: var(--trace-ink);
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  overflow-wrap: anywhere;
   font-size: 12px;
   margin-top: 24px;
 }

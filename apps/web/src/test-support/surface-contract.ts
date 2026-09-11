@@ -136,6 +136,11 @@ export async function assertSurfaceContract(
     string,
     { width: number; height: number; x: number; y: number }[]
   > = {};
+  const readers: {
+    role: keyof typeof surfaceTargets;
+    matches: HTMLElement[];
+    read: (element: HTMLElement) => number[];
+  }[] = [];
   const opened: HTMLDetailsElement[] = [];
   const elements = (selector: string) => {
     const matches = [...host.querySelectorAll<HTMLElement>(selector)];
@@ -150,6 +155,7 @@ export async function assertSurfaceContract(
     read: (element: HTMLElement) => number[],
   ) => {
     const matches = elements(selector);
+    readers.push({ role, matches, read });
     const values = matches.flatMap(read);
     actual[role] = [...new Set(values)].sort((a, b) => a - b);
     expected[role] = [resolved[role]!];
@@ -190,7 +196,10 @@ export async function assertSurfaceContract(
       measure('collectionGap', row.collection, (element) => {
         const style = getComputedStyle(element);
         expect(['grid', 'flex']).toContain(style.display);
-        return [style.rowGap === 'normal' ? 0 : parseFloat(style.rowGap), style.columnGap === 'normal' ? 0 : parseFloat(style.columnGap)];
+        return [
+          style.rowGap === 'normal' ? 0 : parseFloat(style.rowGap),
+          style.columnGap === 'normal' ? 0 : parseFloat(style.columnGap),
+        ];
       });
     measure('radius', row.card, (element) => {
       const style = getComputedStyle(element);
@@ -207,6 +216,40 @@ export async function assertSurfaceContract(
         parseFloat(style[`border${corner}Radius`]),
       );
     });
+    // Matching today's literal pixels is insufficient: all equivalent roles
+    // must follow the same root tokens when the scale changes.
+    const rootStyle = document.documentElement.style;
+    const overrides = {
+      '--surface-title-height': '48px',
+      '--space-4': '20px',
+      '--space-6': '28px',
+      '--radius-lg': '16px',
+    };
+    const previous = Object.keys(overrides).map((token) => ({
+      token,
+      value: rootStyle.getPropertyValue(token),
+      priority: rootStyle.getPropertyPriority(token),
+    }));
+    const bindings: Record<string, number[]> = {};
+    const bindingTargets: Record<string, number[]> = {};
+    try {
+      for (const [token, value] of Object.entries(overrides))
+        rootStyle.setProperty(token, value);
+      for (const { role, matches, read } of readers) {
+        bindings[role] = [...new Set(matches.flatMap(read))].sort(
+          (a, b) => a - b,
+        );
+        bindingTargets[role] = [tokenPixels(surfaceTargets[role])];
+      }
+      expect
+        .soft(bindings, `${surface}/${locale}: follows changed root tokens`)
+        .toEqual(bindingTargets);
+    } finally {
+      for (const { token, value, priority } of previous) {
+        if (value) rootStyle.setProperty(token, value, priority);
+        else rootStyle.removeProperty(token);
+      }
+    }
     await commands.writeFile(
       `../../.local/surface-contract/${surface}-${locale}.json`,
       JSON.stringify(
@@ -217,6 +260,8 @@ export async function assertSurfaceContract(
           expected,
           actual,
           rectangles,
+          bindings,
+          bindingTargets,
           absent: row.absent,
         },
         null,

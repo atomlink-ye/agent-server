@@ -217,7 +217,7 @@
 .agents-capability-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: var(--space-3);
+  gap: var(--space-4);
 }
 .agents-card {
   display: flex;
@@ -367,7 +367,7 @@
 .agents-home-files-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-3);
+  gap: var(--space-4);
 }
 .agents-home-file-scope {
   display: flex;
@@ -940,5 +940,4 @@
 .agents-main > .title-bar {
   flex-shrink: 0;
   margin: calc(-1 * var(--space-5)) calc(-1 * var(--space-6)) 0;
-  padding-inline: var(--space-6);
 }

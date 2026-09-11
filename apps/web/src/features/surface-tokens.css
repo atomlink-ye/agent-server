@@ -2,3 +2,16 @@
 :root {
   --surface-title-height: calc(var(--space-8) + var(--space-3));
 }
+
+.agents-main > .title-bar,
+.files-main > .title-bar,
+.observe-pane + .work-main > .title-bar,
+.work-org-main > .title-bar,
+.work-board-main > .title-bar,
+.whispers-main > .title-bar {
+  flex-shrink: 0;
+  min-height: var(--surface-title-height);
+  padding-inline: var(--space-6);
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+}

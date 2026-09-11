@@ -42,7 +42,7 @@
   flex: 1;
   flex-direction: column;
   min-height: 0;
-  gap: var(--space-3);
+  gap: var(--space-4);
   padding: var(--space-6);
   overflow-y: auto;
 }
@@ -50,7 +50,7 @@
 .whisper-message {
   max-width: 640px;
   padding: var(--space-4);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: var(--sky-50);
 }
 
@@ -60,6 +60,8 @@
   margin-bottom: calc(var(--space-1) / 2);
 }
 
-.whispers-main > .title-bar {
-  padding-inline: var(--space-6);
+header.whisper-observer-badge {
+  flex-shrink: 0;
+  min-height: var(--surface-title-height);
+  padding-block: 0;
 }

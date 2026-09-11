@@ -9,47 +9,39 @@ import '../index.css';
 const heights: Record<string, Record<string, Record<string, number>>> = {
   agents: {
     en: {
-      '.title-bar': 44,
       '.agents-profile-header': 90.5,
       '.agents-list-item': 57,
     },
     'zh-CN': {
-      '.title-bar': 44,
       '.agents-profile-header': 90.5,
       '.agents-list-item': 57,
     },
   },
   'agents-roster': {
     en: {
-      '.title-bar': 44,
       '.agents-roster-header': 59,
     },
     'zh-CN': {
-      '.title-bar': 44,
       '.agents-roster-header': 59,
     },
   },
   files: {
     en: {
-      '.title-bar': 44,
       '.files-files-header': 64,
       '.files-file-list button': 53,
     },
     'zh-CN': {
-      '.title-bar': 44,
       '.files-files-header': 64,
       '.files-file-list button': 53,
     },
   },
   observe: {
     en: {
-      '.title-bar': 44,
       '.observe-detail-header': 64,
       '.work-list-item': 90,
       '.observe-filters': 76,
     },
     'zh-CN': {
-      '.title-bar': 44,
       '.observe-detail-header': 64,
       '.work-list-item': 76,
       '.observe-filters': 76,
@@ -57,51 +49,41 @@ const heights: Record<string, Record<string, Record<string, number>>> = {
   },
   tasks: {
     en: {
-      '.title-bar': 44,
       '.work-org-detail-header': 81,
       '.work-org-list-item': 90.1875,
     },
     'zh-CN': {
-      '.title-bar': 44,
       '.work-org-detail-header': 81,
       '.work-org-list-item': 90.1875,
     },
   },
   boards: {
     en: {
-      '.title-bar': 44,
       '.work-board-toolbar': 64,
       '.work-org-list-item': 70,
     },
     'zh-CN': {
-      '.title-bar': 44,
       '.work-board-toolbar': 64,
       '.work-org-list-item': 70,
     },
   },
   whispers: {
     en: {
-      '.title-bar': 44,
-      'header.whisper-observer-badge': 29,
       '.whispers-list button': 57,
     },
     'zh-CN': {
-      '.title-bar': 44,
-      'header.whisper-observer-badge': 29,
       '.whispers-list button': 57,
     },
   },
   'run-trace-parallel': {
-    en: { '.run-trace__header': 64, '.run-trace__item-row': 59 },
-    'zh-CN': { '.run-trace__header': 64, '.run-trace__item-row': 59 },
+    en: { '.run-trace__item-row': 59 },
+    'zh-CN': { '.run-trace__item-row': 59 },
   },
   'run-trace': {
     en: {
-      '.run-trace__header': 64,
       '.run-trace__item-row': 105,
     },
     'zh-CN': {
-      '.run-trace__header': 64,
       '.run-trace__item-row': 105,
     },
   },
@@ -128,118 +110,36 @@ const heights: Record<string, Record<string, Record<string, number>>> = {
     },
   },
 };
+// Content rows and section headings are distinct from the shared surface
+// roles. Only these fixture-specific details remain here; the cross-surface
+// geometry and tokens have one authority in surface-contract.ts.
 const styles: Record<string, Record<string, string>> = {
-  '.title-bar': {
-    'padding-inline-start': '--space-6',
-  },
   '.work-list-item': {
     'padding-block-start': '--space-2',
     'padding-inline-start': '--space-3',
     gap: '--space-3',
   },
-  '.work-org-list-item': {
-    padding: '--space-3',
-  },
-  '.agents-profile-header': {
-    gap: '--space-4',
-    'padding-bottom': '--space-4',
-  },
-  '.agents-card': {
-    padding: '--space-4',
-    'border-radius': '--radius-lg',
-  },
-  '.agents-roster-card': {
-    padding: '--space-4',
-    'border-radius': '--radius-lg',
-  },
+  '.work-org-list-item': { padding: '--space-3' },
+  '.agents-profile-header': { gap: '--space-4', 'padding-bottom': '--space-4' },
   '.agents-list-item': {
     'padding-block-start': '--space-2',
     'padding-inline-start': '--space-3',
-  },
-  '.agents-main': {
-    'padding-inline-start': '--space-6',
-  },
-  '.agents-first-screen': {
-    gap: '--space-4',
-  },
-  '.files-file-viewer': {
-    padding: '--space-4',
-    'border-radius': '--radius-lg',
   },
   '.files-file-list button': {
     'padding-block-start': '--space-2',
     'padding-inline-start': '--space-3',
   },
-  '.files-main': {
-    'padding-inline-start': '--space-6',
-  },
-  '.files-files-grid': {
-    gap: '--space-4',
-  },
-  '.observe-detail': {
-    padding: '--space-6',
-  },
-  '.observe-metric-card': {
-    padding: '--space-4',
-    'border-radius': '--radius-lg',
-  },
-  '.observe-metric-cards': {
-    gap: '--space-4',
-  },
   '.observe-filters': {
     'margin-inline-start': '0px',
     'margin-inline-end': '0px',
-  },
-  '.work-org-card': {
-    padding: '--space-4',
-    'border-radius': '--radius-lg',
-  },
-  '.work-board-card': {
-    padding: '--space-4',
-    'border-radius': '--radius-lg',
-  },
-  '.work-org-content': {
-    padding: '--space-6',
-  },
-  '.work-org-detail-grid': {
-    gap: '--space-4',
-  },
-  '.work-board-canvas': {
-    gap: '--space-4',
-  },
-  '.whisper-message': {
-    padding: '--space-4',
-    'border-radius': '--radius-md',
-  },
-  '.whisper-message-log': {
-    padding: '--space-6',
   },
   '.whispers-list button': {
     'padding-block-start': '--space-2',
     'padding-inline-start': '--space-3',
   },
-  '.run-trace__header': {
-    'padding-inline-start': '--space-4',
-  },
-  '.run-trace__canvas': {
-    padding: '--space-4',
-  },
-  '.execution-transcript__summary': {
-    padding: '--space-4',
-  },
-  '.execution-transcript__detail': {
-    padding: '--space-4',
-  },
   '.transcript__row > summary': {
     'padding-block-start': '--space-2',
     'padding-inline-start': '--space-3',
-  },
-  '.transcript__detail': {
-    padding: '--space-3',
-  },
-  '.dispatch-card': {
-    padding: '--space-4',
-    'border-radius': '--radius-lg',
   },
   '.dispatch-card__details': {
     'margin-top': '--space-3',

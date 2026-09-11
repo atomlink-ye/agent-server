@@ -14,7 +14,9 @@ Measurements came from `getBoundingClientRect()` against the original source, be
 - Sidebar loading/empty/error/unavailable heights: English 18 / 78.5 / 103.5 / 71 px; Chinese 18 / 60.5 / 103.5 / 53 px.
 - Detail loading and starting: 137 px. Generic error, permission and disabled-feature error: 352 px. Root-not-found: 399.390625 px. These dimensions were the same in both locales.
 
-After measurements are pending. Assertions currently target 15 complete rows at 48 px, but this is not yet claimed as verified.
+Directory/state after measurements remain pending. Assertions target 15 complete rows at 48 px; this is not yet claimed as verified.
+
+Work Card measurements are complete at 1440 × 900 with an 800 px conversation host: card width 624 → 624 px. Loading 44 → 124 px; error 70 → 124 px; 200-character English title 149 → 124 px; 200-character Chinese title 185 → 124 px. Loading-to-ready height change is 105 → 0 px (English) and 141 → 0 px (Chinese). The original component and original stylesheet were rendered for the before readings; that temporary source copy has been removed. Final tests assert 124 × 624 px, title suffix visibility and Open Work actions in both locales.
 
 ## Checks so far
 

@@ -32,6 +32,8 @@
 .work-pane-scroll > .work-list {
   flex: none;
   overflow: visible;
+  margin: 0;
+  list-style: none;
   padding: var(--space-1) 0 0;
 }
 

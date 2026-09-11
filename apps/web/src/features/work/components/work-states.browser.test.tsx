@@ -146,9 +146,7 @@ for (const locale of ['en', 'zh-CN'] as const) {
         );
       });
       const shell = host.querySelector<HTMLElement>('.work-shell')!;
-      expect(shell.getBoundingClientRect().height).toBe(
-        400,
-      );
+      expect(shell.getBoundingClientRect().height).toBe(400);
       expect(shell.getBoundingClientRect().width).toBe(964);
       expect(shell.querySelector('a')).not.toBeNull();
       expect(shell.querySelector('a')?.getAttribute('href')).toBe(

@@ -92,6 +92,13 @@ for (const locale of ['en', 'zh-CN'] as const) {
           ),
         );
         const action = host.querySelector<HTMLElement>('a,button')!;
+        const surface = host.querySelector<HTMLElement>(
+          '.work-shell > section',
+        )!;
+        expect(surface.getBoundingClientRect().height).toBe(
+          state === 'runs' ? 140 : 184,
+        );
+        expect(surface.getBoundingClientRect().width).toBe(760);
         expect(action).not.toBeNull();
         expect(action.getBoundingClientRect().right).toBeLessThanOrEqual(1440);
         if (state === 'runs')
@@ -116,16 +123,16 @@ for (const locale of ['en', 'zh-CN'] as const) {
       const fetchMock = vi.fn(async () =>
         state === 'loading'
           ? new Promise<Response>(() => {})
-          : state === 'error'
-            ? new Response('{}', { status: 500 })
-            : new Response(
-                JSON.stringify({
-                  work_id: data.work.id,
-                  work_run_id: source.work_run.id,
-                  capture_scope: 'safe_run_events',
-                  sessions: [],
-                }),
-              ),
+          : ({
+              ok: state !== 'error',
+              status: state === 'error' ? 500 : 200,
+              json: async () => ({
+                work_id: data.work.id,
+                work_run_id: source.work_run.id,
+                capture_scope: 'safe_run_events',
+                sessions: [],
+              }),
+            } as Response),
       );
       vi.stubGlobal('fetch', fetchMock);
       const host = document.createElement('div');
@@ -150,6 +157,21 @@ for (const locale of ['en', 'zh-CN'] as const) {
                 : 'trace.sessions.unavailable',
           ),
         );
+        const transcript = host.querySelector<HTMLElement>(
+          '.execution-transcript',
+        )!;
+        expect(transcript.getBoundingClientRect().height).toBe(102);
+        expect(
+          host.querySelector('.work-shell')!.getBoundingClientRect().height,
+        ).toBe(400);
+        if (state === 'loading') {
+          const animation = transcript.getAnimations()[0]!;
+          animation.pause();
+          animation.currentTime = 100;
+          expect(getComputedStyle(transcript).visibility).toBe('hidden');
+          animation.currentTime = 150;
+          expect(getComputedStyle(transcript).visibility).toBe('visible');
+        }
         const back = host.querySelector('a')!;
         expect(back.getAttribute('href')).toBe(
           `/work/${data.work.id}?tab=runs`,

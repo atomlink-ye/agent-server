@@ -50,6 +50,17 @@ for (const locale of ['en', 'zh-CN'] as const) {
         expect(card.getBoundingClientRect().height).toBe(124);
         expect(card.getBoundingClientRect().width).toBe(624);
         expect(card.scrollWidth).toBe(card.clientWidth);
+        if (state === 'loading') {
+          const feedback = card.querySelector<HTMLElement>(
+            '.work-loading-feedback',
+          )!;
+          const animation = feedback.getAnimations()[0]!;
+          animation.pause();
+          animation.currentTime = 100;
+          expect(getComputedStyle(feedback).visibility).toBe('hidden');
+          animation.currentTime = 150;
+          expect(getComputedStyle(feedback).visibility).toBe('visible');
+        }
         if (state !== 'loading') {
           await act(async () => {
             host.querySelector<HTMLButtonElement>('button')!.click();

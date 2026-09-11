@@ -30,7 +30,11 @@
   line-height: 18px;
 }
 /* Reserve geometry immediately, but do not flash feedback for fast reads. */
-.work-loading-feedback {
+.work-transcript-panel > .execution-transcript {
+  min-height: 102px;
+}
+.work-loading-feedback,
+.work-transcript-panel > .execution-transcript {
   animation: work-feedback-reveal 0s 150ms both;
 }
 @keyframes work-feedback-reveal {

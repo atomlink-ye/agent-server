@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import '../work-card.css';
 import { SessionTranscripts } from '@/features/run-trace/session-transcripts';
 import type { WorkDetailData } from '../../queries/load-work-detail';
 import { workTabHref } from '../work-presentation';

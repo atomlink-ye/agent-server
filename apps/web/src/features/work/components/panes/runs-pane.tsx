@@ -74,10 +74,13 @@ function RunState({
   const [state, setState] = useState<
     AnchoredRun['work_run']['product_state'] | null
   >(null);
+  const [readFailed, setReadFailed] = useState(false);
+  const [retryVersion, setRetryVersion] = useState(0);
   useEffect(() => {
     if (selected) return;
     let active = true;
     setState(null);
+    setReadFailed(false);
     void workRunClient.get(run.work_id, run.id).then(
       (detail) => {
         if (active)
@@ -89,13 +92,25 @@ function RunState({
           );
       },
       () => {
-        if (active) setState('not_captured');
+        if (active) setReadFailed(true);
       },
     );
     return () => {
       active = false;
     };
-  }, [run.id, run.work_id, run.updated_at, selected]);
+  }, [run.id, run.work_id, run.updated_at, selected, retryVersion]);
+  if (!selected && readFailed)
+    return (
+      <span className="work-run-read-error">
+        <span role="status">{t('work.run.stateError')}</span>
+        <button
+          type="button"
+          onClick={() => setRetryVersion((value) => value + 1)}
+        >
+          {t('work.retry')}
+        </button>
+      </span>
+    );
   const current = selected?.work_run.product_state ?? state;
   return (
     <span

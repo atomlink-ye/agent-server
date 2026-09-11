@@ -778,6 +778,7 @@ it.each(['en', 'zh-CN'] as const)(
       expect(rect.top).toBe(90);
       for (const row of rows) {
         expect(row.getBoundingClientRect().height).toBe(48);
+        expect(row.getBoundingClientRect().width).toBe(292);
         expect(row.scrollWidth).toBe(row.clientWidth);
       }
       const longRows = rows.filter(
@@ -905,3 +906,54 @@ it('orders by Work or latest Run activity and distinguishes attention without re
     vi.unstubAllGlobals();
   }
 });
+
+it.each(['en', 'zh-CN'] as const)(
+  'keeps distinguishing suffixes visible in %s recent Work names',
+  async (locale) => {
+    await page.viewport(1440, 900);
+    setLocale(locale);
+    const works = populatedWorkList.works.slice(0, 2).map((work, index) => ({
+      ...work,
+      title: index === 0 ? 'A'.repeat(199) + 'B' : '中'.repeat(199) + '文',
+    }));
+    vi.stubGlobal('fetch', workPaneFetch({ works, next_cursor: null }));
+    const host = document.createElement('div');
+    host.className = 'app-shell';
+    document.body.append(host);
+    const root = createRoot(host);
+    try {
+      await act(async () => {
+        root.render(
+          <MemoryRouter>
+            <div />
+            <WorkPage />
+          </MemoryRouter>,
+        );
+      });
+      const names = [
+        ...host.querySelectorAll<HTMLElement>('.work-landing__recent strong'),
+      ];
+      expect(names).toHaveLength(2);
+      for (const [index, name] of names.entries()) {
+        expect(name.getBoundingClientRect().height).toBe(21);
+        expect(name.getBoundingClientRect().width).toBe(
+          locale === 'zh-CN' ? 527.859375 : index === 0 ? 530 : 542.59375,
+        );
+        expect(name.getAttribute('title')).toHaveLength(200);
+        const suffix = name.querySelector<HTMLElement>(
+          '.work-scannable-title__suffix',
+        )!;
+        expect(suffix.textContent).toBe(name.getAttribute('title')!.slice(-8));
+        expect(suffix.getBoundingClientRect().right).toBeLessThanOrEqual(
+          name.getBoundingClientRect().right,
+        );
+        expect(suffix.getBoundingClientRect().width).toBeGreaterThan(0);
+      }
+    } finally {
+      await act(async () => root.unmount());
+      host.remove();
+      vi.unstubAllGlobals();
+      setLocale('en');
+    }
+  },
+);

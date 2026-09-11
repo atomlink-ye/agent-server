@@ -58,6 +58,7 @@ for (const locale of ['en', 'zh-CN'] as const) {
         const main = host.querySelector<HTMLElement>('.work-main-empty')!;
         const pane = host.querySelector<HTMLElement>('.pane-placeholder')!;
         expect(main.getBoundingClientRect().height).toBe(340);
+        expect(main.getBoundingClientRect().width).toBe(420);
         expect(main.getBoundingClientRect().top).toBe(302);
         expect(pane.getBoundingClientRect().height).toBe(220);
         if (status === 'error') {
@@ -73,12 +74,14 @@ for (const locale of ['en', 'zh-CN'] as const) {
           expect(main.querySelector('button')).toBeNull();
         }
         if (status === 'loading') {
-          const animation = main.getAnimations()[0]!;
-          animation.pause();
-          animation.currentTime = 100;
-          expect(getComputedStyle(main).visibility).toBe('hidden');
-          animation.currentTime = 150;
-          expect(getComputedStyle(main).visibility).toBe('visible');
+          for (const feedback of [main, pane]) {
+            const animation = feedback.getAnimations()[0]!;
+            animation.pause();
+            animation.currentTime = 100;
+            expect(getComputedStyle(feedback).visibility).toBe('hidden');
+            animation.currentTime = 150;
+            expect(getComputedStyle(feedback).visibility).toBe('visible');
+          }
         }
         expect(main.textContent).toContain(
           t(
@@ -153,6 +156,17 @@ for (const locale of ['en', 'zh-CN'] as const) {
         state === 'unavailable' ? '/conversations' : '/work',
       );
       if (state !== 'error') expect(shell.querySelector('button')).toBeNull();
+      if (state === 'loading') {
+        const feedback = shell.querySelector<HTMLElement>(
+          '.work-loading-feedback',
+        )!;
+        const animation = feedback.getAnimations()[0]!;
+        animation.pause();
+        animation.currentTime = 100;
+        expect(getComputedStyle(feedback).visibility).toBe('hidden');
+        animation.currentTime = 150;
+        expect(getComputedStyle(feedback).visibility).toBe('visible');
+      }
       if (state === 'permission')
         expect(shell.textContent).toContain(t('work.permission.body'));
       if (state === 'starting')
@@ -168,6 +182,7 @@ for (const locale of ['en', 'zh-CN'] as const) {
 
 for (const locale of ['en', 'zh-CN'] as const) {
   it(`${locale} invalid Work id offers a valid return route`, async () => {
+    await page.viewport(1440, 900);
     setLocale(locale);
     vi.mocked(useWorkList).mockReturnValue({
       status: 'ready',

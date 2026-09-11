@@ -8,19 +8,19 @@ import {
 
 export function WorkTabs({
   activeTab,
-  workRunId,
+  runId,
   workId,
   originConversationId,
   preparation = false,
 }: {
   readonly activeTab: WorkTab;
-  readonly workRunId?: string;
+  readonly runId?: string;
   readonly workId: string;
   readonly originConversationId?: string | null;
   readonly preparation?: boolean;
 }) {
   const t = useT();
-  const tabs: readonly WorkTab[] = workRunId
+  const tabs: readonly WorkTab[] = runId
     ? RUN_TABS
     : preparation
       ? [...WORK_TABS, 'chat']
@@ -28,16 +28,16 @@ export function WorkTabs({
   return (
     <nav
       className="work-tabs"
-      aria-label={workRunId ? t('work.run.sections') : t('work.detailSections')}
+      aria-label={runId ? t('work.run.sections') : t('work.detailSections')}
     >
       {tabs.map((tab) => (
         <a
           key={tab}
           aria-current={activeTab === tab ? 'page' : undefined}
-          href={workTabHref(workId, tab, workRunId, originConversationId)}
+          href={workTabHref(workId, tab, runId, originConversationId)}
         >
           {tab === 'chat'
-            ? t(workRunId ? 'work.run.conversation' : 'work.record.preparation')
+            ? t(runId ? 'work.run.conversation' : 'work.record.preparation')
             : tab === 'transcript'
               ? t('work.run.trace')
               : tab === 'result'

@@ -310,8 +310,10 @@ export function SessionTranscripts({
                       }
                       type="button"
                     >
-                      {entry.workItem.subject} · Attempt{' '}
-                      {entry.attempt.attemptNo}
+                      {t('trace.sessions.attemptLabel', {
+                        subject: entry.workItem.subject,
+                        number: entry.attempt.attemptNo,
+                      })}
                     </button>
                   ))}
                 </nav>

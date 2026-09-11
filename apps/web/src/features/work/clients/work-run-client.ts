@@ -44,7 +44,7 @@ export type AgentSummary = {
   };
 };
 
-export type AnchoredWorkRun = Extract<
+export type AnchoredRun = Extract<
   ProductWorkRun,
   { projection_status: 'internally_anchored' }
 >;

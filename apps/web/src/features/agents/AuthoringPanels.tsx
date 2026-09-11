@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useT } from '../../i18n';
+import { t, useT } from '../../i18n';
 
 import { isFeatureUnavailable } from '../../api/feature-availability';
 import { ApiTransportError } from '../../api/transport';
@@ -189,9 +189,8 @@ export function CapabilityBuilder({
   >([
     {
       name: 'specialist',
-      role: agent.roleLabel ?? 'Specialist',
-      instructions:
-        'Complete the requested formal Work carefully and return a concise, evidence-backed result.',
+      role: agent.roleLabel ?? t('authoring.specialist'),
+      instructions: t('authoring.defaultInstructions'),
       skills: [],
     },
   ]);
@@ -881,9 +880,8 @@ function emptyInput(): EditableInput {
 function defaultParticipant(): CapabilityParticipantDraft {
   return {
     name: 'specialist',
-    role: 'Specialist',
-    instructions:
-      'Complete the requested formal Work carefully and return a concise, evidence-backed result.',
+    role: t('authoring.specialist'),
+    instructions: t('authoring.defaultInstructions'),
     skills: [],
   };
 }

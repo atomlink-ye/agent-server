@@ -4,19 +4,19 @@ import { DefinitionPanel } from '../definition-panel';
 export function DefinitionPane({
   data,
   workId,
-  selectedWorkRunId,
+  selectedRunId,
   originConversationId,
 }: {
   readonly data: WorkDetailData;
   readonly workId: string;
-  readonly selectedWorkRunId?: string;
+  readonly selectedRunId?: string;
   readonly originConversationId?: string | null;
 }) {
   return (
     <DefinitionPanel
       currentWorkVersionId={data.work.definition_version_id}
       editable={
-        !selectedWorkRunId &&
+        !selectedRunId &&
         data.selectedDefinitionVersionId === data.work.definition_version_id
       }
       selectedVersionId={data.selectedDefinitionVersionId}

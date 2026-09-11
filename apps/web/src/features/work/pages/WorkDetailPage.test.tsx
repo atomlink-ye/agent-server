@@ -30,11 +30,7 @@ it.each([undefined, 'historical-run'])(
     } as any);
     const markup = renderToStaticMarkup(
       <MemoryRouter>
-        <WorkDetailPage
-          workId="work"
-          tab="chat"
-          selectedWorkRunId={workRunId}
-        />
+        <WorkDetailPage workId="work" tab="chat" selectedRunId={workRunId} />
       </MemoryRouter>,
     );
     expect(markup).toContain(`data-run="${workRunId ?? 'preparation'}"`);

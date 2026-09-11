@@ -22,7 +22,7 @@ export function ObserveDetail({
   const t = useT();
   const query = useWorkDetail({
     workId,
-    selectedWorkRunId: workRunId,
+    selectedRunId: workRunId,
     preferCurrentDefinition: false,
     includeTrace: true,
   });

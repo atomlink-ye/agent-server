@@ -453,6 +453,7 @@ export const zhCN: Record<MessageKey, string> = {
   'authoring.specialist': '专家',
   'authoring.member': '成员 {index}',
   'authoring.remove': '移除',
+
   'authoring.instructions': '指示',
   'authoring.addMember': '+ 添加成员',
   'authoring.inputs': '输入',
@@ -615,8 +616,8 @@ export const zhCN: Record<MessageKey, string> = {
   'work.activeHint': '在这里跟进这次 WorkRun 的结果和进度。',
   'work.record.active': '未归档',
   'work.record.archived': '已归档',
-  'work.record.oneRun': '1 个 WorkRun',
-  'work.record.runCount': '{count} 个 WorkRun',
+  'work.record.oneRun': '1 WorkRun',
+  'work.record.runCount': '{count} WorkRun',
   'work.record.countLoading': '统计 WorkRun…',
   'work.record.countUnavailable': 'WorkRun 数量暂不可用',
   'work.record.tab': '摘要',
@@ -629,15 +630,15 @@ export const zhCN: Record<MessageKey, string> = {
   'work.run.conversation': '对话',
   'work.run.trace': '执行记录',
   'work.run.result': '结果',
-  'work.run.number': '第 {number} 次 WorkRun',
-  'work.run.breadcrumb': 'WorkRun 第 {number} 次',
+  'work.run.number': 'WorkRun {number}',
+  'work.run.breadcrumb': 'WorkRun {number}',
   'work.run.backToWork': '← Work：{title}',
   'work.run.conversationPending': '此 WorkRun 的对话将在这里提供。',
   'work.run.open': '打开',
   'work.run.stateLoading': '加载状态…',
   'work.tab.overview': '概览',
   'work.detailSections': 'Work 详情分区',
-  'work.tab.runs': 'WorkRun 记录',
+  'work.tab.runs': 'WorkRun',
   'work.tab.chat': '对话',
   'work.tab.transcript': '执行记录',
   'work.tab.artifacts': '文件',
@@ -723,7 +724,7 @@ export const zhCN: Record<MessageKey, string> = {
   'work.start.minimum': '{label} 不得小于 {count}。',
   'work.start.maximum': '{label} 不得大于 {count}。',
   'work.chat.shared': '准备记录',
-  'work.chat.role.assistant': '助手',
+  'work.chat.role.lead': '助手',
   'work.chat.role.system': '系统',
   'work.chat.role.user': '你',
   'work.chat.emptyTitle': '准备 Work',
@@ -740,7 +741,7 @@ export const zhCN: Record<MessageKey, string> = {
   'work.chat.runEmptyBody':
     '可询问此 WorkRun；回复无法读取执行历史或更改执行。',
   'work.chat.runPlaceholder': '向这次 WorkRun 的执行者发消息…',
-  'work.chat.runContext': 'WorkRun 对话 · 不更改执行',
+  'work.chat.runLead': 'WorkRun 对话 · 不更改执行',
   'work.chat.preparation.collecting': '收集信息',
   'work.chat.preparation.ready': '可以开始了',
   'work.chat.preparation.starting': '准备 WorkRun',
@@ -824,7 +825,7 @@ export const zhCN: Record<MessageKey, string> = {
   'trace.messageNotCaptured': '未记录消息内容。',
   'trace.causalMap': 'WorkRun 关系图',
   'trace.causalMap.title': '关系图',
-  'trace.causalMap.emptyTitle': '这个 Work 没有记录协作关系图。',
+  'trace.causalMap.emptyTitle': '此 WorkRun 未记录协作图。',
   'trace.causalMap.emptySingle':
     '此 WorkRun 使用单 Worker，没有 Team 尝试或依赖图。',
   'trace.causalMap.empty':
@@ -1022,7 +1023,7 @@ export const zhCN: Record<MessageKey, string> = {
   'route.missingBody': '找不到 {path}，请返回对话。',
   'definition.unavailable': '无法加载指定 Definition 版本。',
   'definition.versionRefIntro': '所选版本：',
-  'definition.fallback': 'Work 定义',
+  'definition.fallback': 'Work Definition',
   'definition.planFailed': 'Definition 验证通过，但资源解析失败。',
   'definition.lineageMismatch':
     'Definition 不匹配。请保留当前 metadata.name 再应用。',
@@ -1198,6 +1199,8 @@ export const zhCN: Record<MessageKey, string> = {
   'trace.actorActivity': '{actor} · {activity}',
   'trace.recordedCommand': '已记录命令\n{command}',
   'trace.commandOutput': '已记录命令\n{command}\n\n输出\n{output}',
+  'authoring.defaultInstructions':
+    '认真完成指定 Work，返回简洁、有据可查的结果。',
 };
 
 export default zhCN;

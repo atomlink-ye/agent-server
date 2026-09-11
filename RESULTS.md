@@ -26,7 +26,7 @@ Locations below refer to the baseline `fa344fcc` so removed copy remains findabl
 | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | `apps/web/src/i18n/en.ts:663`                                   | Product execution counts called WorkRuns “runs”.                                                           |
 | `apps/web/src/i18n/en.ts:836`                                   | Start/retry/history actions called a WorkRun a Run.                                                        |
-| `apps/web/src/features/work/pages/WorkDetailPage.tsx:31`        | Selected WorkRun ID passed as selectedRunId; renamed through router, hooks and consumers.                  |
+| `apps/web/src/features/work/pages/WorkDetailPage.tsx:31`        | Selected WorkRun ID passed as selectedRunId. Internal clients/hooks use workRunId; shared Work detail props remain unchanged under the manager’s integration ruling.                  |
 | `apps/web/src/features/work/clients/work-run-client.ts:70`      | Product WorkRun client parameter called runId; now workRunId.                                              |
 | `apps/web/src/features/run-trace/normalized.ts:131`             | Trace wrapper called work_run.id runId; now workRunId, preserving technical event.runId.                   |
 | `apps/web/src/features/work/components/WorkCard.tsx:92`         | Work card showed execution status without latest-WorkRun attribution.                                      |
@@ -47,6 +47,10 @@ The baseline catalogs each had 904 keys: their different line counts were format
 ## Browser measurements
 
 Pending isolated rerun at 1440 × 900. No density improvement or CSS change is claimed. The browser assertion compares the current execution header with the baseline heading copy replayed in the same real DOM and asserts no height increase or horizontal overflow in either locale. The initial baseline Work-detail browser file passed 13/13 tests, but its console measurements were not emitted in the captured log and are not reported as numeric evidence.
+
+## Integration boundary
+
+The manager assigns Work detail structure and tabs to ia-a. The five named production pane/tab/page files are restored byte-for-byte to fa344fcc. Shared Work detail test edits only update copy expectations; vocabulary geometry lives in its own browser test. docs/frontend.md only appends a glossary section. Both catalogs retain all 904 original keys in their original order, with 180 new keys appended. Existing legacy key names remain while their displayed values use the corrected vocabulary.
 
 ## Verification in progress
 

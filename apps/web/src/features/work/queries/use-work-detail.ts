@@ -11,13 +11,13 @@ export type WorkDetailQuery = {
 
 export function useWorkDetail({
   workId,
-  selectedWorkRunId,
+  selectedRunId: selectedWorkRunId,
   preferCurrentDefinition,
   includeTrace,
   includeRun = true,
 }: {
   readonly workId: string;
-  readonly selectedWorkRunId?: string;
+  readonly selectedRunId?: string;
   readonly preferCurrentDefinition: boolean;
   readonly includeTrace: boolean;
   readonly includeRun?: boolean;

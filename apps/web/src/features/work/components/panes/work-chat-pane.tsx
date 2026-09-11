@@ -190,7 +190,7 @@ function WorkChatConversation({
       )}
     >
       <p className="work-shell-kicker">
-        {t(workRunId ? 'work.chat.runContext' : 'work.chat.preparationTitle')}
+        {t(workRunId ? 'work.chat.runLead' : 'work.chat.preparationTitle')}
       </p>
       <div
         className="work-chat-history scroll-region"
@@ -222,7 +222,7 @@ function WorkChatConversation({
           >
             <span className="work-chat-message__avatar" aria-hidden="true">
               {message.role === 'lead'
-                ? t('work.chat.role.assistant').slice(0, 1)
+                ? t('work.chat.role.lead').slice(0, 1)
                 : message.role === 'system'
                   ? '·'
                   : t('work.chat.role.user').slice(0, 1)}
@@ -235,7 +235,7 @@ function WorkChatConversation({
             >
               <span className="work-chat-message__author">
                 {message.role === 'lead'
-                  ? t('work.chat.role.assistant')
+                  ? t('work.chat.role.lead')
                   : message.role === 'system'
                     ? t('work.chat.role.system')
                     : t('work.chat.role.user')}

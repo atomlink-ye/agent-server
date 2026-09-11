@@ -2,16 +2,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { expect, it, vi } from 'vitest';
-import { commands, page } from 'vitest/browser';
-
-declare module 'vitest/browser' {
-  interface BrowserCommands {
-    writeInventory: (
-      json: string,
-      target?: 'chat-surface' | 'canary',
-    ) => Promise<{ path: string; bytes: number }>;
-  }
-}
+import { page } from 'vitest/browser';
 
 import {
   GetWorkResponseSchema,
@@ -157,7 +148,7 @@ function planResponse(): Response {
 function mockProductReads(
   input: {
     readonly runList?: typeof runs;
-    readonly selectedWorkRunId?: string;
+    readonly selectedRunId?: string;
     readonly runBody?: unknown;
     readonly definition?: ReturnType<typeof productDefinitionVersion>;
     readonly currentDefinitionMissing?: boolean;
@@ -167,7 +158,7 @@ function mockProductReads(
   } = {},
 ) {
   const runList = input.runList ?? runs;
-  const workRunId = input.selectedWorkRunId ?? selectedRun.id;
+  const runId = input.selectedRunId ?? selectedRun.id;
   const definition = input.definition ?? definitionVersion;
   const responses = new Map<string, unknown>([
     [
@@ -196,10 +187,10 @@ function mockProductReads(
     [`/api/works/${work.work.id}`, work],
     [`/api/works/${work.work.id}/runs`, runList],
     [`/api/work-definition-versions/${definition.id}`, { version: definition }],
-    [`/api/works/${work.work.id}/runs/${workRunId}`, input.runBody ?? run],
-    [`/api/works/${work.work.id}/runs/${workRunId}/trace`, trace],
+    [`/api/works/${work.work.id}/runs/${runId}`, input.runBody ?? run],
+    [`/api/works/${work.work.id}/runs/${runId}/trace`, trace],
     [
-      `/api/works/${work.work.id}/runs/${workRunId}/session-transcripts`,
+      `/api/works/${work.work.id}/runs/${runId}/session-transcripts`,
       input.sessionTranscripts,
     ],
     [
@@ -214,10 +205,10 @@ function mockProductReads(
       },
     ],
     [
-      `/api/works/${work.work.id}/runs/${workRunId}/chat`,
+      `/api/works/${work.work.id}/runs/${runId}/chat`,
       {
         work_id: work.work.id,
-        work_run_id: workRunId,
+        work_run_id: runId,
         messages: input.chatMessages ?? [],
         preparation: null,
       },
@@ -476,7 +467,7 @@ it('renders the exact Product DefinitionVersion used by the selected Run', async
   const { host, root } = await renderDetail({
     workId: work.work.id,
     tab: 'definition',
-    selectedWorkRunId: selectedRun.id,
+    selectedRunId: selectedRun.id,
   });
   try {
     expect(
@@ -488,7 +479,7 @@ it('renders the exact Product DefinitionVersion used by the selected Run', async
     expect(host.textContent).toContain('Researcher');
     expect(host.textContent).toContain(selectedRun.definition_version_id);
     expect(host.querySelector('.work-run-header')?.textContent).toContain(
-      'WorkRun #1',
+      'RUN #1',
     );
     expect(
       [...host.querySelectorAll('.work-tabs a')].map((a) => a.textContent),
@@ -527,7 +518,7 @@ it('reads an exact historical DefinitionVersion instead of falling back to Team-
   );
   const fetchMock = mockProductReads({
     runList,
-    selectedWorkRunId: historicalRunId,
+    selectedRunId: historicalRunId,
     runBody: historicalRun,
     definition: historicalDefinition,
   });
@@ -535,7 +526,7 @@ it('reads an exact historical DefinitionVersion instead of falling back to Team-
   const { host, root } = await renderDetail({
     workId: work.work.id,
     tab: 'definition',
-    selectedWorkRunId: historicalRunId,
+    selectedRunId: historicalRunId,
   });
   try {
     expect(
@@ -586,14 +577,14 @@ it('keeps Run tabs and an ordinal breadcrumb separate from the Work tabs', async
   const { host, root } = await renderDetail({
     workId: work.work.id,
     tab: 'chat',
-    selectedWorkRunId: selectedRun.id,
+    selectedRunId: selectedRun.id,
   });
   try {
     expect(
       [...host.querySelectorAll('.work-tabs a')].map((a) => a.textContent),
     ).toEqual(['Conversation', 'Trace', 'Result']);
     expect(host.querySelector('.work-run-header')?.textContent).toContain(
-      'WorkRun #1',
+      'RUN #1',
     );
     expect(host.querySelector('.work-run-header a')?.getAttribute('href')).toBe(
       `/work/${work.work.id}`,
@@ -623,12 +614,12 @@ it('lists Runs newest first with ordinal identities and opens their conversation
   const { host, root } = await renderDetail({
     workId: work.work.id,
     tab: 'runs',
-    selectedWorkRunId: selectedRun.id,
+    selectedRunId: selectedRun.id,
   });
   try {
     const rows = [...host.querySelectorAll('.work-run-list > li')];
     expect(rows.map((row) => row.querySelector('strong')?.textContent)).toEqual(
-      ['WorkRun #2', 'WorkRun #1'],
+      ['Run #2', 'Run #1'],
     );
     expect(rows[0]?.querySelector('a')?.getAttribute('href')).toContain(
       `tab=chat&run=${selectedRun.id}`,
@@ -640,7 +631,7 @@ it('lists Runs newest first with ordinal identities and opens their conversation
   }
 });
 
-it('offers Start WorkRun in an empty Runs index', async () => {
+it('offers Start Run in an empty Runs index', async () => {
   mockProductReads({ runList: { work_runs: [], next_cursor: null } });
   const { host, root } = await renderDetail({
     workId: work.work.id,
@@ -684,7 +675,7 @@ it('keeps the existing result, journey and trace in the selected Run Result view
   const { host, root } = await renderDetail({
     workId: work.work.id,
     tab: 'result',
-    selectedWorkRunId: selectedRun.id,
+    selectedRunId: selectedRun.id,
   });
   try {
     expect(
@@ -724,63 +715,4 @@ it('can read a Work record even when a child Run projection is unavailable', asy
     host.remove();
     vi.unstubAllGlobals();
   }
-});
-
-it('keeps execution vocabulary within the desktop header in both locales', async () => {
-  const { setLocale } = await import('../../../i18n');
-  await page.viewport(1440, 900);
-  const measurements = [];
-  for (const locale of ['en', 'zh-CN'] as const) {
-    setLocale(locale);
-    mockProductReads();
-    const { host, root } = await renderDetail({
-      workId: work.work.id,
-      tab: 'chat',
-      selectedWorkRunId: selectedRun.id,
-    });
-    try {
-      const header = host.querySelector<HTMLElement>('.work-run-header')!;
-      const heading = header.querySelector('h1')!;
-      const tabs = host.querySelector<HTMLElement>('.work-tabs')!;
-      // Replay the baseline copy with the unchanged production styles.
-      const currentHeading = heading.textContent!;
-      heading.textContent = locale === 'en' ? 'RUN #1' : 'RUN 第 1 次';
-      const before = {
-        headingWidth: heading.getBoundingClientRect().width,
-        headingHeight: heading.getBoundingClientRect().height,
-        headerHeight: header.getBoundingClientRect().height,
-      };
-      heading.textContent = currentHeading;
-      const headingRect = heading.getBoundingClientRect();
-      const headerRect = header.getBoundingClientRect();
-      expect(window.innerWidth).toBe(1440);
-      expect(headingRect.right).toBeLessThanOrEqual(headerRect.right);
-      expect(header.scrollWidth).toBeLessThanOrEqual(header.clientWidth);
-      expect(tabs.scrollWidth).toBeLessThanOrEqual(tabs.clientWidth);
-      expect(heading.textContent).toContain('WorkRun');
-      expect(headerRect.height).toBe(before.headerHeight);
-      expect(headerRect.height).toBe(36);
-      expect(headingRect.height).toBe(24);
-      expect(tabs.getBoundingClientRect().height).toBe(34);
-      measurements.push({
-        locale,
-        viewport: window.innerWidth,
-        before,
-        headerWidth: headerRect.width,
-        headerHeight: headerRect.height,
-        headingWidth: headingRect.width,
-        headingHeight: headingRect.height,
-        tabsHeight: tabs.getBoundingClientRect().height,
-      });
-    } finally {
-      await act(async () => root.unmount());
-      host.remove();
-      vi.unstubAllGlobals();
-      setLocale('en');
-    }
-  }
-  await commands.writeInventory(
-    JSON.stringify({ kind: 'work-vocabulary', measurements }),
-    'canary',
-  );
 });

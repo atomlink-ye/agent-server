@@ -470,6 +470,7 @@ export const en = {
   'authoring.specialist': 'Specialist',
   'authoring.member': 'Member {index}',
   'authoring.remove': 'Remove',
+
   'authoring.instructions': 'Instructions',
   'authoring.addMember': '+ Add member',
   'authoring.inputs': 'Inputs',
@@ -776,7 +777,7 @@ export const en = {
   'work.start.minimum': '{label} must be at least {count}.',
   'work.start.maximum': '{label} must be at most {count}.',
   'work.chat.shared': 'Preparation history',
-  'work.chat.role.assistant': 'Assistant',
+  'work.chat.role.lead': 'Assistant',
   'work.chat.role.system': 'System',
   'work.chat.role.user': 'You',
   'work.chat.emptyTitle': 'Prepare this Work.',
@@ -793,7 +794,7 @@ export const en = {
   'work.chat.runEmptyBody':
     'Ask about this WorkRun. Replies cannot access execution history or change execution.',
   'work.chat.runPlaceholder': 'Message this WorkRun’s executor…',
-  'work.chat.runContext': 'WorkRun conversation · no execution changes',
+  'work.chat.runLead': 'WorkRun conversation · no execution changes',
   'work.chat.preparation.collecting': 'Gathering details',
   'work.chat.preparation.ready': 'Ready to start',
   'work.chat.preparation.starting': 'Preparing your WorkRun',
@@ -1287,6 +1288,8 @@ export const en = {
   'trace.actorActivity': '{actor} · {activity}',
   'trace.recordedCommand': 'Recorded command\n{command}',
   'trace.commandOutput': 'Recorded command\n{command}\n\nOutput\n{output}',
+  'authoring.defaultInstructions':
+    'Complete the requested formal Work carefully and return a concise, evidence-backed result.',
 } as const;
 
 export default en;

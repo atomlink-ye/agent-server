@@ -394,7 +394,7 @@ it('distinguishes a failed Definition read from an empty catalog and retries it'
       setLocale('zh-CN');
       await settle();
     });
-    expect(host.textContent).toContain('选择一个 Definition');
+    expect(host.textContent).toContain('选择 Definition');
     expect(host.textContent).not.toContain('Choose a Definition');
     await page.screenshot({
       path: '../../../../__screenshots__/ux-review/empty-catalog-zh.png',

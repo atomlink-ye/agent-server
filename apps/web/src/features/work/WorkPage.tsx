@@ -58,7 +58,7 @@ export function WorkPage({
   const [works, setWorks] = useState<readonly WorkListItem[]>([]);
   const [selectedLatestRunState, setSelectedLatestRunState] = useState<{
     readonly workId: string;
-    readonly workRunId: string;
+    readonly runId: string;
     readonly state: WorkListItem['product_state'];
   } | null>(null);
   // WorkPane owns the Work list fetch and hands its `refresh` back up here
@@ -175,10 +175,10 @@ export function WorkPage({
               key={`${selectedWorkId}:${selectedWorkRunId ?? 'latest'}`}
               workId={selectedWorkId}
               tab={workTab ?? undefined}
-              selectedWorkRunId={selectedWorkRunId ?? undefined}
+              selectedRunId={selectedWorkRunId ?? undefined}
               selectedSessionIndex={selectedSessionIndex ?? undefined}
               originConversationId={returnConversationId}
-              onSelectedLatestWorkRunState={setSelectedLatestRunState}
+              onSelectedLatestRunState={setSelectedLatestRunState}
             />
           ) : null}
           {!invalidWorkId && isEmpty && workUnavailable ? (

@@ -20,7 +20,7 @@ export interface WorkPaneProps {
   readonly onWorksChange?: (works: readonly WorkListItem[]) => void;
   readonly selectedLatestRunState?: {
     readonly workId: string;
-    readonly workRunId: string;
+    readonly runId: string;
     readonly state: WorkListItem['product_state'];
   } | null;
 }

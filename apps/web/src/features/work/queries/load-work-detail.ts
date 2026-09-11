@@ -6,7 +6,7 @@ import type {
 
 import {
   type AgentSummary,
-  type AnchoredWorkRun,
+  type AnchoredRun,
   workRunClient,
 } from '../clients/work-run-client';
 import { loadWorkRuns } from './load-work-runs';
@@ -18,7 +18,7 @@ import type { NormalizedTrace } from '@/features/run-trace/normalized';
 export type WorkDetailData = {
   readonly work: WorkResponse;
   readonly runs: readonly WorkRunSummary[];
-  readonly run: AnchoredWorkRun | null;
+  readonly run: AnchoredRun | null;
   readonly trace: NormalizedTrace | null;
   readonly selectedDefinitionVersionId: string;
   readonly definitionVersion: ProductWorkDefinitionVersionResponse | null;
@@ -124,4 +124,4 @@ export async function loadRunRoleSummaries(
   return workRunClient.sessionTranscripts(workId, workRunId);
 }
 
-export { type AnchoredWorkRun, type NormalizedTrace, type AgentSummary };
+export { type AnchoredRun, type NormalizedTrace, type AgentSummary };

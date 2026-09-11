@@ -3,17 +3,12 @@ import { Link } from 'react-router-dom';
 import type { WorkListItem } from '@atomlink-ye/agent-server/product-contract';
 
 import { workPath } from '../../app/routes';
-import {
-  formatWorkListTime,
-  productStatePresentation,
-} from './components/work-presentation';
+import { loadWorkRuns } from './queries/load-work-runs';
 import { useWorkList, type WorkListQuery } from './queries/use-work-list';
 import {
   workDefinitionClient,
   type WorkDefinitionCatalogEntry,
 } from './clients/work-definition-client';
-import { loadCoworkers } from '../agents/agents-gateway';
-import type { Coworker } from '../agents/contracts';
 import { useT } from '../../i18n';
 
 export interface WorkPaneProps {
@@ -37,7 +32,6 @@ export function WorkPane({
   onStatusChange,
   onRefreshReady,
   onWorksChange,
-  selectedLatestRunState = null,
 }: WorkPaneProps) {
   const t = useT();
   const { status, works, refresh } = useWorkList();
@@ -175,12 +169,11 @@ export function WorkPane({
                 work={work}
                 selected={selectedWorkId === work.id}
                 originConversationId={originConversationId}
-                stateOverride={selectedLatestRunState}
               />
             ))}
           </ul>
         ) : null}
-        {status === 'ready' ? <WorkCatalog works={works} /> : null}
+        {status === 'ready' ? <WorkCatalog /> : null}
       </div>
     </aside>
   );
@@ -190,21 +183,30 @@ function WorkListRow({
   work,
   selected,
   originConversationId,
-  stateOverride,
 }: {
   readonly work: WorkListItem;
   readonly selected: boolean;
   readonly originConversationId: string | null;
-  readonly stateOverride: WorkPaneProps['selectedLatestRunState'];
 }) {
   const t = useT();
-  const latestRun = work.latest_run_summary;
-  const productState =
-    stateOverride?.workId === work.id && stateOverride.runId === latestRun?.id
-      ? stateOverride.state
-      : work.product_state;
-  const stateView = productStatePresentation(productState);
-  const timestamp = latestRun?.updated_at ?? work.updated_at;
+  const [runCount, setRunCount] = useState<number | null>(null);
+  const [countFailed, setCountFailed] = useState(false);
+  useEffect(() => {
+    let active = true;
+    setRunCount(null);
+    setCountFailed(false);
+    void loadWorkRuns(work.id).then(
+      (runs) => {
+        if (active) setRunCount(runs.length);
+      },
+      () => {
+        if (active) setCountFailed(true);
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [work.id, work.updated_at, work.latest_run_summary?.id]);
   return (
     <li>
       <Link
@@ -218,22 +220,27 @@ function WorkListRow({
         <span className="work-list-copy">
           <strong>{work.title}</strong>
           <span className="work-list-meta">
-            {latestRun ? (
-              <span data-product-state={productState}>
-                <span
-                  aria-hidden="true"
-                  className={`work-status-dot work-status-dot--${productState}`}
-                />
-                {stateView.label}
-              </span>
-            ) : (
-              <span>{t('work.noRuns')}</span>
-            )}
-            <time dateTime={timestamp}>
-              {latestRun
-                ? t('work.runAt', { time: formatWorkListTime(timestamp) })
-                : t('work.updatedAt', { time: formatWorkListTime(timestamp) })}
-            </time>
+            <span>
+              {t(
+                work.archived_at
+                  ? 'work.record.archived'
+                  : 'work.record.active',
+              )}
+            </span>
+            <span>
+              {runCount === null
+                ? t(
+                    countFailed
+                      ? 'work.record.countUnavailable'
+                      : 'work.record.countLoading',
+                  )
+                : t(
+                    runCount === 1
+                      ? 'work.record.oneRun'
+                      : 'work.record.runCount',
+                    { count: runCount },
+                  )}
+            </span>
           </span>
         </span>
       </Link>
@@ -243,18 +250,11 @@ function WorkListRow({
 
 export default WorkPane;
 
-function WorkCatalog({ works }: { readonly works: readonly WorkListItem[] }) {
+function WorkCatalog() {
   const t = useT();
   const [catalog, setCatalog] = useState<readonly WorkDefinitionCatalogEntry[]>(
     [],
   );
-  const [coworkers, setCoworkers] = useState<readonly Coworker[]>([]);
-  const [bindingDefinitionId, setBindingDefinitionId] = useState<string | null>(
-    null,
-  );
-  const [bindingError, setBindingError] = useState<string | null>(null);
-  const [openBindMenuFor, setOpenBindMenuFor] = useState<string | null>(null);
-
   useEffect(() => {
     let active = true;
     // Let the history pane commit its first paint before the independent
@@ -267,41 +267,12 @@ function WorkCatalog({ works }: { readonly works: readonly WorkListItem[] }) {
         },
         () => undefined,
       );
-      void loadCoworkers().then(
-        (items) => {
-          if (active) setCoworkers(items);
-        },
-        () => undefined,
-      );
     }, 0);
     return () => {
       active = false;
       window.clearTimeout(timer);
     };
   }, []);
-
-  async function bindDefinition(
-    definition: WorkDefinitionCatalogEntry,
-    agentId: string,
-  ): Promise<void> {
-    if (!agentId || bindingDefinitionId) return;
-    setOpenBindMenuFor(null);
-    setBindingDefinitionId(definition.definitionId);
-    setBindingError(null);
-    try {
-      await workDefinitionClient.bindAgent(
-        definition.definitionId,
-        agentId,
-        definition.definitionVersionId,
-      );
-      const next = await workDefinitionClient.listCatalog();
-      setCatalog(next);
-    } catch {
-      setBindingError(t('work.bindingFailed'));
-    } finally {
-      setBindingDefinitionId(null);
-    }
-  }
 
   const launchHref = (definition: WorkDefinitionCatalogEntry): string => {
     const params = new URLSearchParams({
@@ -315,11 +286,6 @@ function WorkCatalog({ works }: { readonly works: readonly WorkListItem[] }) {
   if (catalog.length === 0) return null;
   return (
     <section className="work-catalog" aria-label={t('work.catalog')}>
-      {bindingError ? (
-        <p role="alert" className="pane-placeholder">
-          {bindingError}
-        </p>
-      ) : null}
       <div className="pane-section-heading">
         <span className="eyebrow">{t('work.catalog')}</span>
         <strong>{t('work.definitions')}</strong>
@@ -329,18 +295,8 @@ function WorkCatalog({ works }: { readonly works: readonly WorkListItem[] }) {
         data-testid="work-definition-catalog"
       >
         {catalog.map((definition) => {
-          const matchingWork = works.find(
-            (work) => work.definition_id === definition.definitionId,
-          );
-          const visibleToCurrentVersion = definition.availableTo.filter(
-            (agent) =>
-              agent.definitionVersionId === definition.definitionVersionId,
-          );
           return (
-            <li
-              key={definition.definitionId}
-              className={`work-catalog-card ${visibleToCurrentVersion.length ? 'work-catalog-card--bound' : 'work-catalog-card--unbound'}`}
-            >
+            <li key={definition.definitionId} className="work-catalog-card">
               <div className="work-list-item">
                 <span className="work-list-mark" aria-hidden="true">
                   {definition.name.slice(0, 1).toUpperCase()}
@@ -366,32 +322,6 @@ function WorkCatalog({ works }: { readonly works: readonly WorkListItem[] }) {
                         ? t('work.teamComposition')
                         : t('work.singleComposition')}
                     </span>
-                    <span className="work-catalog-card__detail">
-                      {definition.availableTo.length
-                        ? `${t('work.availableTo', { count: definition.availableTo.length })}: ${definition.availableTo.map((item) => item.displayName).join(', ')}`
-                        : t('work.notAssigned')}
-                    </span>
-                    {definition.roster.length > 0 ? (
-                      <span className="work-catalog-card__detail">
-                        {t('work.roster')}:{' '}
-                        {definition.roster
-                          .map((person) => `${person.name} (${person.role})`)
-                          .join(', ')}
-                      </span>
-                    ) : null}
-                    {matchingWork?.latest_run_summary ? (
-                      <span className="work-catalog-card__detail">
-                        {t('work.latestRunStatus')}:{' '}
-                        {
-                          productStatePresentation(matchingWork.product_state)
-                            .label
-                        }
-                      </span>
-                    ) : (
-                      <span className="work-catalog-card__detail">
-                        {t('work.noRuns')}
-                      </span>
-                    )}
                   </span>
                   <span className="work-catalog-card__actions">
                     <a
@@ -401,38 +331,6 @@ function WorkCatalog({ works }: { readonly works: readonly WorkListItem[] }) {
                       {t('work.create')}
                     </a>
                   </span>
-                  {coworkers.length > 0 ? (
-                    <details
-                      className="work-catalog-card__visibility-menu"
-                      open={openBindMenuFor === definition.definitionId}
-                      onToggle={(event) =>
-                        setOpenBindMenuFor(
-                          event.currentTarget.open
-                            ? definition.definitionId
-                            : null,
-                        )
-                      }
-                    >
-                      <summary aria-label={t('work.moreActions')}>•••</summary>
-                      <div role="group" aria-label={t('work.bindCoworker')}>
-                        <span>{t('work.bindCoworker')}</span>
-                        {coworkers.map((coworker) => (
-                          <button
-                            key={coworker.id}
-                            type="button"
-                            disabled={
-                              bindingDefinitionId === definition.definitionId
-                            }
-                            onClick={() =>
-                              void bindDefinition(definition, coworker.id)
-                            }
-                          >
-                            {coworker.displayName}
-                          </button>
-                        ))}
-                      </div>
-                    </details>
-                  ) : null}
                 </span>
               </div>
             </li>

@@ -1,4 +1,10 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import { useT } from '../../../../i18n';
 import { IChat } from '../../../../components/icons';
 import { ChatComposer } from '../../../conversations/components/ChatComposer';
@@ -10,7 +16,42 @@ import type {
   WorkPreparationResponse,
 } from '@atomlink-ye/agent-server/product-contract';
 
-export function WorkChatPane({ workId }: { readonly workId: string }) {
+export function WorkChatPane({
+  workId,
+  workRunId,
+}: {
+  readonly workId: string;
+  readonly workRunId?: string | undefined;
+}) {
+  const [startedRun, setStartedRun] = useState<{
+    workId: string;
+    id: string;
+  } | null>(null);
+  const activeRunId =
+    workRunId ?? (startedRun?.workId === workId ? startedRun.id : undefined);
+  const onRunStarted = useCallback(
+    (id: string) => setStartedRun({ workId, id }),
+    [workId],
+  );
+  return (
+    <WorkChatConversation
+      key={`${workId}:${activeRunId ?? 'preparation'}`}
+      workId={workId}
+      workRunId={activeRunId}
+      onRunStarted={onRunStarted}
+    />
+  );
+}
+
+function WorkChatConversation({
+  workId,
+  workRunId,
+  onRunStarted,
+}: {
+  readonly workId: string;
+  readonly workRunId?: string | undefined;
+  readonly onRunStarted: (id: string) => void;
+}) {
   const t = useT();
   const [messages, setMessages] = useState<
     WorkChatMessagesResponse['messages']
@@ -33,9 +74,17 @@ export function WorkChatPane({ workId }: { readonly workId: string }) {
     let active = true;
     const refresh = () =>
       workClient
-        .chat(workId)
+        .chat(workId, workRunId)
         .then((response) => {
           if (active) {
+            if (
+              !workRunId &&
+              response.preparation?.status === 'started' &&
+              response.preparation.work_run_id
+            ) {
+              onRunStarted(response.preparation.work_run_id);
+              return;
+            }
             if (!sameMessages(messagesRef.current, response.messages)) {
               messagesRef.current = response.messages;
               setMessages(response.messages);
@@ -64,7 +113,7 @@ export function WorkChatPane({ workId }: { readonly workId: string }) {
       active = false;
       window.clearInterval(timer);
     };
-  }, [workId]);
+  }, [workId, workRunId, onRunStarted]);
   useLayoutEffect(() => {
     const history = historyRef.current;
     if (!history || !stickToBottomRef.current) return;
@@ -87,7 +136,12 @@ export function WorkChatPane({ workId }: { readonly workId: string }) {
     const requestId = pendingRequestId ?? crypto.randomUUID();
     setPendingRequestId(requestId);
     try {
-      const message = await workClient.postChat(workId, next, requestId);
+      const message = await workClient.postChat(
+        workId,
+        next,
+        requestId,
+        workRunId,
+      );
       setMessages((current) => {
         const updated = [...current, message];
         messagesRef.current = updated;
@@ -113,6 +167,7 @@ export function WorkChatPane({ workId }: { readonly workId: string }) {
       );
       preparationRef.current = confirmed;
       setPreparation(confirmed);
+      if (confirmed.work_run_id) onRunStarted(confirmed.work_run_id);
     } catch (error) {
       if (
         error instanceof ProductMutationError &&
@@ -129,7 +184,9 @@ export function WorkChatPane({ workId }: { readonly workId: string }) {
   }
   return (
     <section className="work-chat-pane" aria-label={t('work.tab.chat')}>
-      <p className="work-shell-kicker">{t('work.chat.shared')}</p>
+      <p className="work-shell-kicker">
+        {t(workRunId ? 'work.chat.runLead' : 'work.chat.preparationTitle')}
+      </p>
       <div
         className="work-chat-history scroll-region"
         aria-live="polite"
@@ -143,8 +200,14 @@ export function WorkChatPane({ workId }: { readonly workId: string }) {
             <div className="work-chat-empty-state__icon" aria-hidden="true">
               <IChat />
             </div>
-            <h2>{t('work.chat.emptyTitle')}</h2>
-            <p>{t('work.chat.emptyBody')}</p>
+            <h2>
+              {t(
+                workRunId ? 'work.chat.runEmptyTitle' : 'work.chat.emptyTitle',
+              )}
+            </h2>
+            <p>
+              {t(workRunId ? 'work.chat.runEmptyBody' : 'work.chat.emptyBody')}
+            </p>
           </div>
         ) : null}
         {messages.map((message) => (
@@ -190,12 +253,16 @@ export function WorkChatPane({ workId }: { readonly workId: string }) {
                     type="button"
                     onClick={() =>
                       void workClient
-                        .retryChat(workId, message.id)
+                        .retryChat(workId, message.id, workRunId)
                         .then(() =>
                           workClient
-                            .chat(workId)
-                            .then((response) => setMessages(response.messages)),
+                            .chat(workId, workRunId)
+                            .then((response) => {
+                              messagesRef.current = response.messages;
+                              setMessages(response.messages);
+                            }),
                         )
+                        .catch(() => setError(true))
                     }
                   >
                     {t('common.retry')}
@@ -205,18 +272,15 @@ export function WorkChatPane({ workId }: { readonly workId: string }) {
             </article>
           </div>
         ))}
-        {preparation ? (
+        {!workRunId && preparation ? (
           <aside className="work-preparation-card" aria-live="polite">
             <p className="work-shell-kicker">
               {t('work.chat.preparationTitle')}
             </p>
-            <p>
-              {t('work.chat.preparationStatus')}: {preparation.status}
+            <p role="status">
+              {t(`work.chat.preparation.${preparation.status}`)}
             </p>
-            <p>
-              {t('work.chat.preparationVersion')}:{' '}
-              {preparation.definition_version_id}
-            </p>
+            <p>{t(`work.chat.next.${preparation.status}`)}</p>
             <dl>
               {Object.entries(preparation.candidate_input).map(
                 ([key, value]) => (
@@ -238,19 +302,18 @@ export function WorkChatPane({ workId }: { readonly workId: string }) {
                 {preparation.ambiguities.join(', ')}
               </p>
             ) : null}
-            {preparation.status === 'ready' ? (
+            {preparation.status === 'ready' ||
+            preparation.status === 'starting' ? (
               <button
                 type="button"
                 onClick={() => void confirmPreparation()}
-                disabled={confirming}
+                disabled={confirming || preparation.status === 'starting'}
+                aria-busy={confirming || preparation.status === 'starting'}
               >
-                {confirming
+                {confirming || preparation.status === 'starting'
                   ? t('work.chat.starting')
                   : t('work.chat.confirmStart')}
               </button>
-            ) : null}
-            {preparation.status === 'starting' ? (
-              <p>{t('work.chat.starting')}</p>
             ) : null}
             {preparationError ? <p role="alert">{preparationError}</p> : null}
           </aside>
@@ -264,7 +327,9 @@ export function WorkChatPane({ workId }: { readonly workId: string }) {
           sendError={error ? t('work.chat.sendError') : null}
           canRetry={Boolean(body.trim())}
           fieldLabel={t('composer.field.label')}
-          placeholder={t('work.chat.placeholder')}
+          placeholder={t(
+            workRunId ? 'work.chat.runPlaceholder' : 'work.chat.placeholder',
+          )}
           sendLabel={t('work.chat.send')}
           sendingLabel={t('work.chat.sending')}
           hint={t('composer.hint')}

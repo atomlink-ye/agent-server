@@ -79,10 +79,13 @@ export class WorkClient {
     }
   }
 
-  async chat(workId: string): Promise<WorkChatMessagesResponse> {
+  async chat(
+    workId: string,
+    workRunId?: string,
+  ): Promise<WorkChatMessagesResponse> {
     return parseProduct(
       WorkChatMessagesResponseSchema,
-      await readProductJson(`/api/works/${encodeURIComponent(workId)}/chat`, {
+      await readProductJson(chatPath(workId, workRunId), {
         method: 'GET',
         cache: 'no-store',
       }),
@@ -93,19 +96,17 @@ export class WorkClient {
     workId: string,
     body: string,
     clientRequestId: string = crypto.randomUUID(),
+    workRunId?: string,
   ): Promise<WorkChatMessagesResponse['messages'][number]> {
     try {
       const response = parseProduct(
         PostWorkChatMessageResponseSchema,
-        await apiTransport.request(
-          `/api/works/${encodeURIComponent(workId)}/chat`,
-          {
-            method: 'POST',
-            cache: 'no-store',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ body, client_request_id: clientRequestId }),
-          },
-        ),
+        await apiTransport.request(chatPath(workId, workRunId), {
+          method: 'POST',
+          cache: 'no-store',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ body, client_request_id: clientRequestId }),
+        }),
       );
       return response.message;
     } catch (error) {
@@ -116,11 +117,12 @@ export class WorkClient {
   async retryChat(
     workId: string,
     messageId: string,
+    workRunId?: string,
   ): Promise<WorkChatMessagesResponse['messages'][number]> {
     const response = parseProduct(
       RetryWorkChatMessageResponseSchema,
       await apiTransport.request(
-        `/api/works/${encodeURIComponent(workId)}/chat/${encodeURIComponent(messageId)}/retry`,
+        `${chatPath(workId, workRunId)}/${encodeURIComponent(messageId)}/retry`,
         {
           method: 'POST',
           cache: 'no-store',
@@ -163,3 +165,7 @@ export class WorkClient {
 }
 
 export const workClient = new WorkClient();
+
+function chatPath(workId: string, workRunId?: string): string {
+  return `/api/works/${encodeURIComponent(workId)}${workRunId ? `/runs/${encodeURIComponent(workRunId)}` : ''}/chat`;
+}

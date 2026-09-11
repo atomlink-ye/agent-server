@@ -38,7 +38,7 @@ export type RuntimeScope =
       readonly id: string;
     }>
   | Readonly<{
-      readonly kind: 'work_chat';
+      readonly kind: 'work_chat' | 'work_run_chat';
       readonly id: string;
     }>;
 

@@ -1,3 +1,7 @@
+import {
+  WorkChatRequestConflictError,
+  WorkChatRunRequiredError,
+} from '../../application/ports/work-chat-repository.js';
 import { randomUUID } from 'node:crypto';
 import type {
   WorkChatClaim,
@@ -60,12 +64,14 @@ export class PostgresWorkChatRepository implements WorkChatRepository {
   public async list(input: {
     owner: WorkChatOwner;
     workId: string;
+    workRunId?: string | undefined;
     limit?: number;
   }) {
     const result = await this.database.query<Row>(
       `SELECT * FROM (
          SELECT ${COLUMNS} FROM work_chat_messages
           WHERE tenant_id=$1 AND workspace_id=$2 AND work_id=$3
+            AND work_run_id IS NOT DISTINCT FROM $5::uuid
           ORDER BY sequence DESC LIMIT $4
        ) latest ORDER BY sequence ASC`,
       [
@@ -73,6 +79,7 @@ export class PostgresWorkChatRepository implements WorkChatRepository {
         input.owner.workspaceId,
         input.workId,
         Math.min(input.limit ?? 200, 500),
+        input.workRunId ?? null,
       ],
     );
     return (result.rows ?? []).map(mapRow);
@@ -81,6 +88,7 @@ export class PostgresWorkChatRepository implements WorkChatRepository {
   public async enqueue(input: {
     owner: WorkChatOwner;
     workId: string;
+    workRunId?: string | undefined;
     id: string;
     body: string;
     clientRequestId: string;
@@ -101,6 +109,11 @@ export class PostgresWorkChatRepository implements WorkChatRepository {
         ],
       );
       if (existing.rows?.[0]) {
+        if (
+          existing.rows[0].work_run_id !== (input.workRunId ?? null) ||
+          existing.rows[0].body !== input.body
+        )
+          throw new WorkChatRequestConflictError();
         await client.query('COMMIT');
         return { message: mapRow(existing.rows[0]), replayed: true };
       }
@@ -122,8 +135,20 @@ export class PostgresWorkChatRepository implements WorkChatRepository {
         ],
       );
       if (afterLock.rows?.[0]) {
+        if (
+          afterLock.rows[0].work_run_id !== (input.workRunId ?? null) ||
+          afterLock.rows[0].body !== input.body
+        )
+          throw new WorkChatRequestConflictError();
         await client.query('COMMIT');
         return { message: mapRow(afterLock.rows[0]), replayed: true };
+      }
+      if (!input.workRunId) {
+        const runs = await client.query(
+          `SELECT id FROM work_runs WHERE tenant_id=$1 AND workspace_id=$2 AND work_id=$3 LIMIT 1`,
+          [input.owner.tenantId, input.owner.workspaceId, input.workId],
+        );
+        if (runs.rows?.length) throw new WorkChatRunRequiredError();
       }
       const sequence = await client.query<{ next_sequence: string }>(
         `SELECT COALESCE(MAX(sequence),0)+1 AS next_sequence
@@ -133,8 +158,8 @@ export class PostgresWorkChatRepository implements WorkChatRepository {
       const result = await client.query<Row>(
         `INSERT INTO work_chat_messages
           (id,tenant_id,workspace_id,work_id,sequence,kind,body,status,
-           client_request_id,created_at,updated_at)
-         VALUES($1,$2,$3,$4,$5,'user',$6,'queued',$7,$8,$8)
+           client_request_id,created_at,updated_at,work_run_id)
+         VALUES($1,$2,$3,$4,$5,'user',$6,'queued',$7,$8,$8,$9)
          RETURNING ${COLUMNS}`,
         [
           input.id,
@@ -145,6 +170,7 @@ export class PostgresWorkChatRepository implements WorkChatRepository {
           input.body,
           input.clientRequestId,
           input.createdAt,
+          input.workRunId ?? null,
         ],
       );
       const row = result.rows?.[0];
@@ -272,8 +298,8 @@ export class PostgresWorkChatRepository implements WorkChatRepository {
       await client.query(
         `INSERT INTO work_chat_messages
           (id,tenant_id,workspace_id,work_id,sequence,kind,body,status,
-           reply_to_message_id,source_runtime_turn_id,created_at,updated_at)
-         VALUES($1,$2,$3,$4,$5,'lead',$6,'replied',$7,$8,$9,$9)
+           reply_to_message_id,source_runtime_turn_id,created_at,updated_at,work_run_id)
+         VALUES($1,$2,$3,$4,$5,'lead',$6,'replied',$7,$8,$9,$9,$10)
          ON CONFLICT (id) DO NOTHING`,
         [
           input.reply.id,
@@ -285,6 +311,7 @@ export class PostgresWorkChatRepository implements WorkChatRepository {
           input.id,
           input.reply.sourceRuntimeTurnId,
           input.reply.createdAt,
+          user.work_run_id,
         ],
       );
       const updated = await client.query<Row>(
@@ -326,6 +353,10 @@ export class PostgresWorkChatRepository implements WorkChatRepository {
       `UPDATE work_chat_messages SET status='queued',failure_code=NULL,
          lease_owner=NULL,lease_expires_at=NULL,updated_at=$2
        WHERE id=$1 AND tenant_id=$3 AND workspace_id=$4 AND work_id=$5
+         AND work_run_id IS NOT DISTINCT FROM $6::uuid
+         AND ($6::uuid IS NOT NULL OR NOT EXISTS (
+           SELECT 1 FROM work_runs WHERE tenant_id=$3 AND workspace_id=$4 AND work_id=$5
+         ))
          AND kind='user' AND status='failed'
        RETURNING ${COLUMNS}`,
       [
@@ -334,6 +365,7 @@ export class PostgresWorkChatRepository implements WorkChatRepository {
         input.owner.tenantId,
         input.owner.workspaceId,
         input.workId,
+        input.workRunId ?? null,
       ],
     );
     return result.rows?.[0] ? mapRow(result.rows[0]) : false;

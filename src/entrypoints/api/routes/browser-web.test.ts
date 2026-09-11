@@ -592,3 +592,57 @@ describe('browser-safe Vite facade', () => {
     expect(body.error.code).not.toBe('upstream_response_too_large');
   });
 });
+
+it.each(['GET', 'POST', 'retry'])(
+  'proxies Run chat %s through the browser-safe facade',
+  async (operation) => {
+    process.env.AGENT_SERVER_SERVICE_TOKEN = SERVICE_TOKEN;
+    const runId = VERSION_ID;
+    const base = `/api/works/${WORK_ID}/runs/${runId}/chat`;
+    const path = operation === 'retry' ? `${base}/${runId}/retry` : base;
+    const message = {
+      id: runId,
+      work_run_id: runId,
+      sequence: 1,
+      role: 'user',
+      body: 'hello',
+      status: 'queued',
+      reply_to_message_id: null,
+      failure_code: null,
+      created_at: '2026-09-10T00:00:00.000Z',
+    };
+    const upstream = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify(
+          operation === 'GET'
+            ? {
+                work_id: WORK_ID,
+                work_run_id: runId,
+                messages: [message],
+                preparation: null,
+              }
+            : operation === 'POST'
+              ? { message, replayed: false }
+              : { message },
+        ),
+        {
+          status: operation === 'GET' ? 200 : 202,
+          headers: { 'content-type': 'application/json' },
+        },
+      ),
+    );
+    vi.stubGlobal('fetch', upstream);
+    const response = await appWithBrowserRoutes().request(path, {
+      method: operation === 'GET' ? 'GET' : 'POST',
+      headers: { 'content-type': 'application/json' },
+      ...(operation === 'POST'
+        ? { body: JSON.stringify({ body: 'hello', client_request_id: 'key' }) }
+        : {}),
+    });
+    expect(response.status).toBe(operation === 'GET' ? 200 : 202);
+    expect(String(upstream.mock.calls[0]?.[0])).toContain(
+      path.replace('/api/', '/api/v1/'),
+    );
+    expect(JSON.stringify(await response.json())).toContain(runId);
+  },
+);

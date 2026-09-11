@@ -277,46 +277,67 @@ export function registerBrowserWebRoutes(
       ChatWorkCardSchema,
     );
   });
-  app.get('/api/works/:workId/chat', async (c) => {
-    const workId = c.req.param('workId');
-    if (!isUuid(workId)) return invalidProductRequest();
-    return readProductJson(
-      c,
-      config,
-      logger,
-      `/api/v1/works/${encodeURIComponent(workId)}/chat`,
-      WorkChatMessagesResponseSchema,
-    );
-  });
-  app.post('/api/works/:workId/chat', async (c) => {
-    const workId = c.req.param('workId');
-    if (!isUuid(workId)) return invalidProductRequest();
-    const parsed = PostWorkChatMessageRequestSchema.safeParse(
-      await c.req.json().catch(() => undefined),
-    );
-    if (!parsed.success) return invalidProductRequest();
-    return writeProductJson(
-      c,
-      config,
-      logger,
-      `/api/v1/works/${encodeURIComponent(workId)}/chat`,
-      parsed.data,
-      PostWorkChatMessageResponseSchema,
-    );
-  });
-  app.post('/api/works/:workId/chat/:messageId/retry', async (c) => {
-    const workId = c.req.param('workId');
-    const messageId = c.req.param('messageId');
-    if (!isUuid(workId) || !isUuid(messageId)) return invalidProductRequest();
-    return writeProductJson(
-      c,
-      config,
-      logger,
-      `/api/v1/works/${encodeURIComponent(workId)}/chat/${encodeURIComponent(messageId)}/retry`,
-      {},
-      RetryWorkChatMessageResponseSchema,
-    );
-  });
+  app.on(
+    'GET',
+    ['/api/works/:workId/chat', '/api/works/:workId/runs/:runId/chat'],
+    async (c) => {
+      const workId = c.req.param('workId');
+      const runId = c.req.param('runId');
+      if (runId !== undefined && !isUuid(runId)) return invalidProductRequest();
+      if (!isUuid(workId)) return invalidProductRequest();
+      return readProductJson(
+        c,
+        config,
+        logger,
+        `/api/v1/works/${encodeURIComponent(workId)}${runId ? `/runs/${encodeURIComponent(runId)}` : ''}/chat`,
+        WorkChatMessagesResponseSchema,
+      );
+    },
+  );
+  app.on(
+    'POST',
+    ['/api/works/:workId/chat', '/api/works/:workId/runs/:runId/chat'],
+    async (c) => {
+      const workId = c.req.param('workId');
+      const runId = c.req.param('runId');
+      if (runId !== undefined && !isUuid(runId)) return invalidProductRequest();
+      if (!isUuid(workId)) return invalidProductRequest();
+      const parsed = PostWorkChatMessageRequestSchema.safeParse(
+        await c.req.json().catch(() => undefined),
+      );
+      if (!parsed.success) return invalidProductRequest();
+      return writeProductJson(
+        c,
+        config,
+        logger,
+        `/api/v1/works/${encodeURIComponent(workId)}${runId ? `/runs/${encodeURIComponent(runId)}` : ''}/chat`,
+        parsed.data,
+        PostWorkChatMessageResponseSchema,
+      );
+    },
+  );
+  app.on(
+    'POST',
+    [
+      '/api/works/:workId/chat/:messageId/retry',
+      '/api/works/:workId/runs/:runId/chat/:messageId/retry',
+    ],
+    async (c) => {
+      const workId = c.req.param('workId');
+      const runId = c.req.param('runId');
+      if (runId !== undefined && !isUuid(runId)) return invalidProductRequest();
+      const messageId = c.req.param('messageId');
+      if (!isUuid(workId) || !isUuid(messageId)) return invalidProductRequest();
+      return writeProductJson(
+        c,
+        config,
+        logger,
+        `/api/v1/works/${encodeURIComponent(workId)}${runId ? `/runs/${encodeURIComponent(runId)}` : ''}/chat/${encodeURIComponent(messageId)}/retry`,
+        {},
+        RetryWorkChatMessageResponseSchema,
+      );
+    },
+  );
   app.post('/api/works/:workId/preparation/confirm', async (c) => {
     const workId = c.req.param('workId');
     if (!isUuid(workId)) return invalidProductRequest();

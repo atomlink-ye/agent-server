@@ -1,3 +1,5 @@
+import type { TaskRepository } from '../ports/task-repository.js';
+import type { TeamExecutionRepository } from '../ports/team-execution-repository.js';
 import { randomUUID, createHash } from 'node:crypto';
 import type { ExecuteRuntimeTurn } from '../runtime/execute-runtime-turn.js';
 import type { EnsureDesiredRuntimeSpec } from '../ports/ensure-desired-runtime-spec.js';
@@ -33,7 +35,12 @@ export interface WorkChatWorkerOptions {
 
 export interface WorkChatWorkerDependencies {
   readonly repository: WorkChatRepository;
-  readonly workIdentity: Pick<WorkIdentityApi, 'findWorkById'>;
+  readonly workIdentity: Pick<WorkIdentityApi, 'findWorkById' | 'getWorkRun'>;
+  readonly tasks: Pick<TaskRepository, 'findByIdForOwner'>;
+  readonly teams: Pick<
+    TeamExecutionRepository,
+    'findTeamRunByRootTaskId' | 'findMembersByTeamRunId'
+  >;
   readonly definitions: WorkDefinitionResolutionPort;
   readonly workers: WorkerResolutionApi;
   readonly desiredSpec: Pick<EnsureDesiredRuntimeSpec, 'execute'>;
@@ -45,7 +52,7 @@ export interface WorkChatWorkerDependencies {
   >;
 }
 
-/** Serially drains Work Chat messages and invokes the Definition-resolved lead. */
+/** Drains preparation and Run conversations using their scoped executors. */
 export class WorkChatWorker implements StepWorker {
   #running = false;
   #stopping = false;
@@ -134,7 +141,7 @@ export class WorkChatWorker implements StepWorker {
       policySnapshotVersion: 'work-chat',
     };
     const lead = parseLeadOutput(turn.outputText);
-    if (this.dependencies.preparations) {
+    if (!claim.workRunId && this.dependencies.preparations) {
       await this.dependencies.preparations.observeLead({
         owner,
         workId: claim.workId,
@@ -193,17 +200,56 @@ export class WorkChatWorker implements StepWorker {
       principalId: owner.principalId,
       policySnapshotVersion: 'work-chat',
     };
-    const definition = await this.dependencies.definitions.resolve({
-      definitionId: work.definitionId,
-      definitionVersionId: work.currentDefinitionVersionId,
-      accessContext,
-    });
-    const participant = definition.participants.find(
-      (item) => item.role === 'primary' || item.role === 'lead',
-    );
-    if (!participant) throw new Error('work_chat_lead_unavailable');
+    let workerVersionId: string;
+    let runContext: string | null = null;
+    if (claim.workRunId) {
+      const run = await this.dependencies.workIdentity.getWorkRun(
+        claim.workRunId,
+        owner,
+      );
+      if (!run || run.workId !== claim.workId)
+        throw new Error('work_run_not_found');
+      if (!run.rootTaskId) throw new Error('work_run_executor_unavailable');
+      const record = await this.dependencies.tasks.findByIdForOwner(
+        run.rootTaskId,
+        owner,
+      );
+      if (!record) throw new Error('work_run_executor_unavailable');
+      if (record.task.invokableKind === 'worker') {
+        workerVersionId = record.task.invokableVersionId;
+        runContext = `Run ${run.id}; execution status: ${record.latestRun?.status ?? record.task.status}.`;
+      } else if (record.task.invokableKind === 'team') {
+        const team = await this.dependencies.teams.findTeamRunByRootTaskId(
+          run.rootTaskId,
+          owner,
+        );
+        if (!team) throw new Error('work_run_executor_unavailable');
+        const members = await this.dependencies.teams.findMembersByTeamRunId(
+          team.id,
+          owner,
+        );
+        const leads = members.filter((member) => member.role === 'lead');
+        if (leads.length !== 1)
+          throw new Error('work_run_executor_unavailable');
+        workerVersionId = leads[0]!.workerVersionId;
+        runContext = `Run ${run.id}; team status: ${team.status}.`;
+      } else {
+        throw new Error('work_run_executor_unavailable');
+      }
+    } else {
+      const definition = await this.dependencies.definitions.resolve({
+        definitionId: work.definitionId,
+        definitionVersionId: work.currentDefinitionVersionId,
+        accessContext,
+      });
+      const participant = definition.participants.find(
+        (item) => item.role === 'primary' || item.role === 'lead',
+      );
+      if (!participant) throw new Error('work_chat_lead_unavailable');
+      workerVersionId = participant.workerVersionId;
+    }
     const worker = await this.dependencies.workers.resolvePublished(
-      participant.workerVersionId,
+      workerVersionId,
       owner,
       { resolveExtensions: true },
     );
@@ -211,6 +257,7 @@ export class WorkChatWorker implements StepWorker {
     const messages = await this.dependencies.repository.list({
       owner,
       workId: claim.workId,
+      workRunId: claim.workRunId ?? undefined,
       limit: 80,
     });
     const transcript = messages
@@ -219,27 +266,34 @@ export class WorkChatWorker implements StepWorker {
           `${message.sequence} ${message.kind === 'lead' ? 'Lead' : 'User'}: ${message.body}`,
       )
       .join('\n');
-    const intake = this.dependencies.preparations
-      ? await this.dependencies.preparations.getIntakeContext({
-          owner,
-          workId: claim.workId,
-          accessContext,
-        })
-      : null;
+    const intake =
+      !claim.workRunId && this.dependencies.preparations
+        ? await this.dependencies.preparations.getIntakeContext({
+            owner,
+            workId: claim.workId,
+            accessContext,
+          })
+        : null;
     const systemPrompt = createDesiredRuntimeSystemPrompt(
       [
         worker.instructions,
-        'You are the temporary Lead for one shared Work Chat.',
+        runContext
+          ? `You are the executor's conversational counterpart for this Run only. ${runContext} This is an isolated, read-only conversation, not the live execution session. You have only the state and conversation provided here; do not claim access to execution history or results not supplied.`
+          : 'You are the temporary Lead for preparation before a Work Run.',
         'Reply to the latest User message using the shared transcript below.',
         'Return only JSON: {"reply":"...","candidate_input":{},"missing":[],"ambiguities":[]}. candidate_input must contain only fields you actually collected. Do not use tools, start a WorkRun, or claim that execution changed.',
-        renderWorkChatInputSchemaPrompt(intake?.schema),
+        runContext
+          ? 'Do not collect preparation input. Keep candidate_input empty. Answer about this Run only; you cannot steer, resume, or change its execution.'
+          : renderWorkChatInputSchemaPrompt(intake?.schema),
         `Shared Work Chat transcript:\n${transcript}`,
       ].join('\n\n'),
     );
     const ensured = await this.dependencies.desiredSpec.execute({
       owner,
-      scope: { kind: 'work_chat', id: claim.workId },
-      subject: { kind: 'worker', workerVersionId: participant.workerVersionId },
+      scope: claim.workRunId
+        ? { kind: 'work_run_chat', id: claim.workRunId }
+        : { kind: 'work_chat', id: claim.workId },
+      subject: { kind: 'worker', workerVersionId: workerVersionId },
       environmentVersionId: null,
       resolvedSkills: [],
       toolRefs: [],
@@ -261,7 +315,7 @@ export class WorkChatWorker implements StepWorker {
       desiredSystemPrompt: systemPrompt,
     });
     const lead = parseLeadOutput(output.text);
-    if (this.dependencies.preparations) {
+    if (!claim.workRunId && this.dependencies.preparations) {
       await this.dependencies.preparations.observeLead({
         owner,
         workId: claim.workId,

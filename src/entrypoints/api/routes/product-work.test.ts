@@ -1,7 +1,10 @@
+import { HttpError } from '../../../contracts/http.js';
+import { WorkChatRequestConflictError } from '../../../application/ports/work-chat-repository.js';
 import { Hono } from 'hono';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
+  ProductProjectionNotFoundError,
   ProductProjectionInvalidError,
   ProductProjectionUnavailableError,
   type ProductProjectionApi,
@@ -92,3 +95,113 @@ function createTestApp(error: Error) {
   });
   return app;
 }
+
+it('routes each Run chat operation through owner-scoped Run validation', async () => {
+  const app = new Hono<ApiEnvironment>();
+  app.onError((error, context) =>
+    error instanceof HttpError
+      ? context.json({ error: { code: error.code } }, error.status)
+      : context.json({ error: { code: 'unexpected' } }, 500),
+  );
+  const getWorkRun = vi.fn().mockResolvedValue({});
+  const list = vi.fn().mockResolvedValue([]);
+  const message = {
+    id: workRunId,
+    workRunId,
+    sequence: 1,
+    kind: 'user',
+    body: 'hello',
+    status: 'queued',
+    replyToMessageId: null,
+    failureCode: null,
+    createdAt: '2026-09-10T00:00:00.000Z',
+  };
+  const post = vi.fn().mockResolvedValue({ message, replayed: false });
+  const retry = vi.fn().mockResolvedValue(message);
+  registerProductWorkRoutes(app, {
+    config: {
+      serviceAccounts: [
+        {
+          serviceAccountId: 'test',
+          token: 'token',
+          tenantId: 'tenant',
+          workspaceId: 'workspace',
+          policyVersion: 'test',
+          disabled: false,
+        },
+      ],
+    } as unknown as AppConfig,
+    productProjection: {
+      getWork: vi.fn(),
+      getWorkRun,
+    } as unknown as ProductProjectionApi,
+    workChat: { list, post, retry } as any,
+  });
+  const base = `/api/v1/works/${workId}/runs/${workRunId}/chat`;
+  for (const [path, method] of [
+    [base, 'GET'],
+    [base, 'POST'],
+    [`${base}/${workRunId}/retry`, 'POST'],
+  ] as const) {
+    const response = await app.request(path!, {
+      method,
+      headers: {
+        authorization: 'Bearer token',
+        'content-type': 'application/json',
+      },
+      ...(method === 'POST'
+        ? { body: JSON.stringify({ body: 'hello', client_request_id: 'key' }) }
+        : {}),
+    });
+    expect(response.status).toBe(method === 'GET' ? 200 : 202);
+  }
+  expect(getWorkRun).toHaveBeenCalledWith({
+    tenantId: 'tenant',
+    workspaceId: 'workspace',
+    workId,
+    workRunId,
+  });
+  for (const method of [list, post, retry])
+    expect(method).toHaveBeenCalledWith(
+      expect.objectContaining({ workId, workRunId }),
+    );
+  list.mockClear();
+  getWorkRun.mockRejectedValueOnce(new ProductProjectionNotFoundError());
+  expect(
+    (await app.request(base, { headers: { authorization: 'Bearer token' } }))
+      .status,
+  ).toBe(404);
+  expect(list).not.toHaveBeenCalled();
+  expect(
+    (
+      await app.request(base.replace(workRunId, 'invalid'), {
+        headers: { authorization: 'Bearer token' },
+      })
+    ).status,
+  ).toBe(400);
+  expect((await app.request(base)).status).toBe(401);
+  post.mockRejectedValueOnce(new WorkChatRequestConflictError());
+  expect(
+    (
+      await app.request(base, {
+        method: 'POST',
+        headers: {
+          authorization: 'Bearer token',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ body: 'hello', client_request_id: 'key' }),
+      })
+    ).status,
+  ).toBe(409);
+  const preparation = await app.request(`/api/v1/works/${workId}/chat`, {
+    headers: { authorization: 'Bearer token' },
+  });
+  expect(preparation.status).toBe(200);
+  expect(await preparation.json()).toMatchObject({
+    work_run_id: null,
+    messages: [],
+  });
+  expect(list).toHaveBeenLastCalledWith(
+    expect.objectContaining({ workId, workRunId: undefined }),
+  );
+});

@@ -1,3 +1,7 @@
+import {
+  WorkChatRequestConflictError,
+  WorkChatRunRequiredError,
+} from '../../../application/ports/work-chat-repository.js';
 import type { Context, Hono } from 'hono';
 import { z } from 'zod';
 
@@ -55,62 +59,87 @@ export function registerProductWorkRoutes(
   );
   app.use('/api/v1/works/*', requireServiceAccountAccess(authenticator));
 
-  app.get('/api/v1/works/:workId/chat', async (context) => {
-    const workId = context.req.param('workId');
-    if (!z.uuid().safeParse(workId).success) return invalidPath(context);
-    if (!dependencies.workChat)
-      return context.json(
-        {
-          error: {
-            code: 'projection_unavailable',
-            message: 'Work Chat is unavailable.',
-          },
-        },
-        503,
-      );
-    const access = getAuthenticatedAccessContext(context);
-    try {
-      await dependencies.productProjection.getWork({
-        tenantId: access.tenantId,
-        workspaceId: access.workspaceId,
-        workId,
-      });
-      const messages = await dependencies.workChat.list({
-        owner: {
-          tenantId: access.tenantId,
-          workspaceId: access.workspaceId,
-          principalType: access.principalType,
-          principalId: access.principalId,
-        },
-        workId,
-      });
-      const preparation = dependencies.workPreparation
-        ? await dependencies.workPreparation.get({
-            owner: {
-              tenantId: access.tenantId,
-              workspaceId: access.workspaceId,
+  app.on(
+    'GET',
+    ['/api/v1/works/:workId/chat', '/api/v1/works/:workId/runs/:runId/chat'],
+    async (context) => {
+      const workId = context.req.param('workId');
+      const workRunId = context.req.param('runId');
+      if (workRunId !== undefined && !z.uuid().safeParse(workRunId).success)
+        return invalidPath(context);
+      if (!z.uuid().safeParse(workId).success) return invalidPath(context);
+      if (!dependencies.workChat)
+        return context.json(
+          {
+            error: {
+              code: 'projection_unavailable',
+              message: 'Work Chat is unavailable.',
             },
-            workId,
-          })
-        : null;
-      return context.json(
-        WorkChatMessagesResponseSchema.parse({
-          work_id: workId,
-          messages: messages.map(toWorkChatResponse),
-          preparation: preparation ? toPreparationResponse(preparation) : null,
-        }),
-        200,
-      );
-    } catch (error) {
-      if (error instanceof ProductProjectionNotFoundError)
-        throw new HttpError(
-          404,
-          'work_not_found',
-          'The requested Work was not found.',
+          },
+          503,
         );
-      return mapProjectionError(context, error);
-    }
-  });
+      const access = getAuthenticatedAccessContext(context);
+      try {
+        if (workRunId) {
+          await dependencies.productProjection.getWorkRun({
+            tenantId: access.tenantId,
+            workspaceId: access.workspaceId,
+            workId,
+            workRunId,
+          });
+        } else {
+          await dependencies.productProjection.getWork({
+            tenantId: access.tenantId,
+            workspaceId: access.workspaceId,
+            workId,
+          });
+        }
+        const messages = await dependencies.workChat.list({
+          owner: {
+            tenantId: access.tenantId,
+            workspaceId: access.workspaceId,
+            principalType: access.principalType,
+            principalId: access.principalId,
+          },
+          workId,
+          workRunId,
+        });
+        const preparation =
+          !workRunId && dependencies.workPreparation
+            ? await dependencies.workPreparation.get({
+                owner: {
+                  tenantId: access.tenantId,
+                  workspaceId: access.workspaceId,
+                },
+                workId,
+              })
+            : null;
+        return context.json(
+          WorkChatMessagesResponseSchema.parse({
+            work_id: workId,
+            work_run_id: workRunId ?? null,
+            messages: messages.map(toWorkChatResponse),
+            preparation: preparation
+              ? toPreparationResponse(preparation)
+              : null,
+          }),
+          200,
+        );
+      } catch (error) {
+        if (error instanceof WorkChatRunRequiredError)
+          throw new HttpError(409, 'work_run_required', error.message);
+        if (error instanceof WorkChatRequestConflictError)
+          throw new HttpError(409, 'idempotency_conflict', error.message);
+        if (error instanceof ProductProjectionNotFoundError)
+          throw new HttpError(
+            404,
+            'work_not_found',
+            'The requested Work was not found.',
+          );
+        return mapProjectionError(context, error);
+      }
+    },
+  );
 
   app.post('/api/v1/works/:workId/preparation/confirm', async (context) => {
     const workId = context.req.param('workId');
@@ -165,121 +194,166 @@ export function registerProductWorkRoutes(
     }
   });
 
-  app.post('/api/v1/works/:workId/chat', async (context) => {
-    const workId = context.req.param('workId');
-    if (!z.uuid().safeParse(workId).success) return invalidPath(context);
-    if (!dependencies.workChat)
-      return context.json(
-        {
-          error: {
-            code: 'projection_unavailable',
-            message: 'Work Chat is unavailable.',
+  app.on(
+    'POST',
+    ['/api/v1/works/:workId/chat', '/api/v1/works/:workId/runs/:runId/chat'],
+    async (context) => {
+      const workId = context.req.param('workId');
+      const workRunId = context.req.param('runId');
+      if (workRunId !== undefined && !z.uuid().safeParse(workRunId).success)
+        return invalidPath(context);
+      if (!z.uuid().safeParse(workId).success) return invalidPath(context);
+      if (!dependencies.workChat)
+        return context.json(
+          {
+            error: {
+              code: 'projection_unavailable',
+              message: 'Work Chat is unavailable.',
+            },
           },
-        },
-        503,
-      );
-    const parsed = PostWorkChatMessageRequestSchema.safeParse(
-      await readBoundedJson(context.req.raw, 64 * 1024),
-    );
-    if (!parsed.success)
-      throw new HttpError(
-        400,
-        'invalid_request',
-        'A valid Work Chat message is required.',
-      );
-    const access = getAuthenticatedAccessContext(context);
-    try {
-      await dependencies.productProjection.getWork({
-        tenantId: access.tenantId,
-        workspaceId: access.workspaceId,
-        workId,
-      });
-      const result = await dependencies.workChat.post({
-        owner: {
-          tenantId: access.tenantId,
-          workspaceId: access.workspaceId,
-          principalType: access.principalType,
-          principalId: access.principalId,
-        },
-        workId,
-        body: parsed.data.body,
-        clientRequestId: parsed.data.client_request_id,
-      });
-      return context.json(
-        PostWorkChatMessageResponseSchema.parse({
-          message: toWorkChatResponse(result.message),
-          replayed: result.replayed,
-        }),
-        202,
-      );
-    } catch (error) {
-      if (error instanceof ProductProjectionNotFoundError)
-        throw new HttpError(
-          404,
-          'work_not_found',
-          'The requested Work was not found.',
+          503,
         );
-      return mapProjectionError(context, error);
-    }
-  });
+      const parsed = PostWorkChatMessageRequestSchema.safeParse(
+        await readBoundedJson(context.req.raw, 64 * 1024),
+      );
+      if (!parsed.success)
+        throw new HttpError(
+          400,
+          'invalid_request',
+          'A valid Work Chat message is required.',
+        );
+      const access = getAuthenticatedAccessContext(context);
+      try {
+        if (workRunId) {
+          await dependencies.productProjection.getWorkRun({
+            tenantId: access.tenantId,
+            workspaceId: access.workspaceId,
+            workId,
+            workRunId,
+          });
+        } else {
+          await dependencies.productProjection.getWork({
+            tenantId: access.tenantId,
+            workspaceId: access.workspaceId,
+            workId,
+          });
+        }
+        const result = await dependencies.workChat.post({
+          owner: {
+            tenantId: access.tenantId,
+            workspaceId: access.workspaceId,
+            principalType: access.principalType,
+            principalId: access.principalId,
+          },
+          workId,
+          workRunId,
+          body: parsed.data.body,
+          clientRequestId: parsed.data.client_request_id,
+        });
+        return context.json(
+          PostWorkChatMessageResponseSchema.parse({
+            message: toWorkChatResponse(result.message),
+            replayed: result.replayed,
+          }),
+          202,
+        );
+      } catch (error) {
+        if (error instanceof WorkChatRunRequiredError)
+          throw new HttpError(409, 'work_run_required', error.message);
+        if (error instanceof WorkChatRequestConflictError)
+          throw new HttpError(409, 'idempotency_conflict', error.message);
+        if (error instanceof ProductProjectionNotFoundError)
+          throw new HttpError(
+            404,
+            'work_not_found',
+            'The requested Work was not found.',
+          );
+        return mapProjectionError(context, error);
+      }
+    },
+  );
 
-  app.post('/api/v1/works/:workId/chat/:messageId/retry', async (context) => {
-    const workId = context.req.param('workId');
-    const messageId = context.req.param('messageId');
-    if (
-      !z.uuid().safeParse(workId).success ||
-      !z.uuid().safeParse(messageId).success
-    )
-      return invalidPath(context);
-    if (!dependencies.workChat)
-      return context.json(
-        {
-          error: {
-            code: 'projection_unavailable',
-            message: 'Work Chat is unavailable.',
+  app.on(
+    'POST',
+    [
+      '/api/v1/works/:workId/chat/:messageId/retry',
+      '/api/v1/works/:workId/runs/:runId/chat/:messageId/retry',
+    ],
+    async (context) => {
+      const workId = context.req.param('workId');
+      const workRunId = context.req.param('runId');
+      if (workRunId !== undefined && !z.uuid().safeParse(workRunId).success)
+        return invalidPath(context);
+      const messageId = context.req.param('messageId');
+      if (
+        !z.uuid().safeParse(workId).success ||
+        !z.uuid().safeParse(messageId).success
+      )
+        return invalidPath(context);
+      if (!dependencies.workChat)
+        return context.json(
+          {
+            error: {
+              code: 'projection_unavailable',
+              message: 'Work Chat is unavailable.',
+            },
           },
-        },
-        503,
-      );
-    const access = getAuthenticatedAccessContext(context);
-    try {
-      await dependencies.productProjection.getWork({
-        tenantId: access.tenantId,
-        workspaceId: access.workspaceId,
-        workId,
-      });
-      const retried = await dependencies.workChat.retry({
-        owner: {
-          tenantId: access.tenantId,
-          workspaceId: access.workspaceId,
-          principalType: access.principalType,
-          principalId: access.principalId,
-        },
-        workId,
-        messageId,
-      });
-      if (!retried)
-        throw new HttpError(
-          404,
-          'work_chat_message_not_found',
-          'The Work Chat message was not found or cannot be retried.',
+          503,
         );
-      return context.json(
-        RetryWorkChatMessageResponseSchema.parse({
-          message: toWorkChatResponse(retried),
-        }),
-        202,
-      );
-    } catch (error) {
-      if (error instanceof ProductProjectionNotFoundError)
-        throw new HttpError(
-          404,
-          'work_not_found',
-          'The requested Work was not found.',
+      const access = getAuthenticatedAccessContext(context);
+      try {
+        if (workRunId) {
+          await dependencies.productProjection.getWorkRun({
+            tenantId: access.tenantId,
+            workspaceId: access.workspaceId,
+            workId,
+            workRunId,
+          });
+        } else {
+          await dependencies.productProjection.getWork({
+            tenantId: access.tenantId,
+            workspaceId: access.workspaceId,
+            workId,
+          });
+        }
+        const retried = await dependencies.workChat.retry({
+          owner: {
+            tenantId: access.tenantId,
+            workspaceId: access.workspaceId,
+            principalType: access.principalType,
+            principalId: access.principalId,
+          },
+          workId,
+          workRunId,
+          messageId,
+        });
+        if (!retried)
+          throw new HttpError(
+            404,
+            'work_chat_message_not_found',
+            'The Work Chat message was not found or cannot be retried.',
+          );
+        return context.json(
+          RetryWorkChatMessageResponseSchema.parse({
+            message: toWorkChatResponse(retried),
+          }),
+          202,
         );
-      return mapProjectionError(context, error);
-    }
-  });
+      } catch (error) {
+        if (error instanceof WorkChatRunRequiredError)
+          throw new HttpError(409, 'work_run_required', error.message);
+        if (error instanceof WorkChatRequestConflictError)
+          throw new HttpError(409, 'idempotency_conflict', error.message);
+        if (error instanceof ProductProjectionNotFoundError)
+          throw new HttpError(
+            404,
+            'work_not_found',
+            'The requested Work was not found.',
+          );
+        return mapProjectionError(context, error);
+      }
+    },
+  );
 
   app.get('/api/v1/works/:workId', async (context) => {
     const workId = context.req.param('workId');
@@ -504,6 +578,7 @@ function toWorkChatResponse(
 ) {
   return {
     id: message.id,
+    work_run_id: message.workRunId ?? null,
     sequence: message.sequence,
     role: message.kind,
     body: message.body,

@@ -1,5 +1,5 @@
 .observe-pane-subhead {
-  margin: 0 var(--space-5) var(--space-3);
+  margin: 0 0 var(--space-3);
   color: var(--ink-500);
   font-size: var(--text-sm);
 }
@@ -9,7 +9,7 @@
   flex-wrap: wrap;
   gap: var(--space-3);
   align-items: flex-end;
-  margin: 0 var(--space-5) var(--space-4);
+  margin: 0 0 var(--space-4);
 }
 
 .observe-filters label {
@@ -39,7 +39,7 @@
 .observe-agent-chip {
   display: inline-block;
   margin-top: var(--space-1);
-  padding: 2px var(--space-2);
+  padding: calc(var(--space-1) / 2) var(--space-2);
   border-radius: var(--radius-pill);
   background: var(--sky-100);
   color: var(--sky-ink);
@@ -57,6 +57,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-4);
+  min-height: calc(var(--space-8) * 2);
 }
 
 .observe-detail-header h2 {
@@ -65,6 +66,7 @@
 }
 
 .observe-detail-timestamps {
+  margin: 0;
   color: var(--ink-500);
   font-size: var(--text-sm);
 }
@@ -114,14 +116,14 @@
 .observe-metric-cards {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--space-3);
+  gap: var(--space-4);
 }
 
 .observe-metric-card {
   border: 1px solid var(--ink-100);
   border-radius: var(--radius-lg);
   background: var(--cloud);
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-4);
 }
 
 .observe-metric-card-value {
@@ -191,7 +193,7 @@
   border: 1px solid var(--ink-100);
   border-radius: var(--radius-lg);
   background: var(--cloud);
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-4);
 }
 
 .observe-summary-status-list {
@@ -218,4 +220,15 @@
 .observe-summary-status-list strong {
   color: var(--ink-900);
   font-variant-numeric: tabular-nums;
+}
+
+.observe-detail {
+  padding: var(--space-6);
+}
+.observe-detail-header h2 {
+  margin: var(--space-1) 0;
+}
+.observe-pane .work-list-item {
+  padding: var(--space-2) var(--space-3);
+  gap: var(--space-3);
 }

@@ -59,6 +59,9 @@
   --radius-xl: 22px;
   --radius-pill: 999px;
 
+  --font-mono:
+    'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
   --transition-base: 160ms ease;
 
   color: var(--ink-900);

@@ -15,6 +15,7 @@ import {
 import { WorkPane } from '../WorkPane';
 import { WorkCard } from './WorkCard';
 import { RunsPane } from './panes/runs-pane';
+import { productStatePresentation } from './work-presentation';
 import { useWorkCard } from '../queries/use-work-card';
 import { workRunClient } from '../clients/work-run-client';
 import type { WorkDetailData } from '../queries/load-work-detail';
@@ -236,6 +237,7 @@ for (const locale of ['en', 'zh-CN'] as const) {
         expect(
           host.querySelector('[data-testid="work-list-error"]'),
         ).toBeNull();
+        expect(list.children).toHaveLength(30);
         expect(getComputedStyle(list).overflowY).toBe('visible');
         expect(getComputedStyle(pane).overflowY).toBe('auto');
         expect(pane.scrollHeight).toBeGreaterThan(pane.clientHeight);
@@ -297,6 +299,9 @@ for (const locale of ['en', 'zh-CN'] as const) {
         data.runs[0]!.id,
       );
       expect(row.querySelector('button')).toBeNull();
+      expect(row.querySelector('.work-state-pill')?.textContent).toBe(
+        productStatePresentation(loadedRun.work_run.product_state).label,
+      );
       expect(row.getBoundingClientRect().height).toBe(before.height);
       expect(
         row.querySelector('a')!.getBoundingClientRect().bottom,

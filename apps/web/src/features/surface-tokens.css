@@ -1,0 +1,4 @@
+/* Workspace bars share a semantic size without changing the type scale. */
+:root {
+  --surface-title-height: calc(var(--space-8) + var(--space-3));
+}

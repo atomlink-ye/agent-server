@@ -1,3 +1,5 @@
+@import '../surface-tokens.css';
+
 .execution-transcript {
   border-top: 1px solid var(--trace-line);
   margin-top: var(--space-8);

@@ -1,3 +1,4 @@
+import { assertSurfaceContract, type Surface } from './surface-contract';
 import { act } from 'react';
 import { expect } from 'vitest';
 import { getLocale, setLocale } from '../i18n';
@@ -257,6 +258,13 @@ export async function surfaceMetrics(
   try {
     for (const locale of ['en', 'zh-CN'] as const) {
       await act(async () => setLocale(locale));
+      const names: Surface[] =
+        surface === 'execution-transcript'
+          ? ['sessions', 'stream']
+          : surface.startsWith('run-trace')
+            ? ['trace']
+            : [surface as Surface];
+      for (const name of names) await assertSurfaceContract(host, name, locale);
       for (const selector of selectors) {
         const element = host.querySelector<HTMLElement>(selector);
         expect(element, `${surface}: ${selector}`).not.toBeNull();

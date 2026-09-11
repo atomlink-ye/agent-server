@@ -1,3 +1,5 @@
+@import '../surface-tokens.css';
+
 .transcript__events {
   display: block;
 }

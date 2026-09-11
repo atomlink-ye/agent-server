@@ -1,3 +1,5 @@
+@import '../surface-tokens.css';
+
 .run-trace {
   --trace-ink: var(--ink-900);
   --trace-muted: var(--ink-500);

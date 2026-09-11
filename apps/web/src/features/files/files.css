@@ -1,3 +1,5 @@
+@import '../surface-tokens.css';
+
 .files-main,
 .files-pane {
   display: flex;

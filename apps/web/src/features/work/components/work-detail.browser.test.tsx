@@ -800,15 +800,37 @@ it.each(
         header.getBoundingClientRect().top,
       contentOffset:
         tabs.getBoundingClientRect().bottom - shell.getBoundingClientRect().top,
+      shellInset:
+        header.getBoundingClientRect().top - shell.getBoundingClientRect().top,
+      headerPadding: getComputedStyle(header).paddingBottom,
+      headerBorder: getComputedStyle(header).borderBottomWidth,
+      tabPadding: getComputedStyle(tabs).paddingTop,
+      tabLinkPadding: getComputedStyle(tabs.querySelector('a')!).paddingBottom,
+      paneGap:
+        tabs.nextElementSibling!.getBoundingClientRect().top -
+        tabs.getBoundingClientRect().bottom,
+      firstContentOffset:
+        shell
+          .querySelector(
+            view === 'work'
+              ? '.work-run-list__identity strong'
+              : view === 'result'
+                ? '[data-testid=outcome-summary] > .work-shell-kicker'
+                : view === 'chat'
+                  ? '.work-chat-pane > .work-shell-kicker'
+                  : '.work-definition-scope > h2',
+          )!
+          .getBoundingClientRect().top - shell.getBoundingClientRect().top,
       firstPaneOffset:
         tabs.nextElementSibling!.getBoundingClientRect().top -
         shell.getBoundingClientRect().top,
     };
     console.info(`Work navigation measurement: ${JSON.stringify(measurement)}`);
-    expect(measurement.chrome).toBeLessThanOrEqual(view === 'work' ? 78 : 70);
-    expect(measurement.firstPaneOffset).toBeLessThanOrEqual(
-      view === 'work' ? 102 : view === 'chat' ? 103 : 95,
-    );
+    expect.soft(measurement.chrome).toBe(view === 'work' ? 62 : 54);
+    expect.soft(measurement.firstPaneOffset).toBe(view === 'work' ? 78 : 71);
+    expect
+      .soft(measurement.firstContentOffset)
+      .toBe(view === 'work' ? 99.5 : view === 'result' ? 92 : 71);
     for (const link of tabs.querySelectorAll('a')) {
       expect(link.getBoundingClientRect().height).toBeGreaterThan(0);
       expect(link.getBoundingClientRect().right).toBeLessThanOrEqual(

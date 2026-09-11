@@ -611,3 +611,31 @@
   margin-left: auto;
   max-width: none;
 }
+
+/* Identity and tabs share one navigation band. The tab underline supplies its
+   separator; a second border and stacked padding above it displace the pane. */
+.work-shell:has(> .work-detail-header) {
+  padding-top: var(--space-2);
+}
+.work-shell > .work-detail-header {
+  flex-shrink: 0;
+  min-height: 36px;
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+.work-shell > .work-run-header {
+  min-height: 28px;
+}
+.work-shell > .work-tabs {
+  flex-shrink: 0;
+  padding-top: var(--space-1);
+}
+.work-shell > .work-tabs a {
+  padding-bottom: var(--space-1);
+}
+.work-shell > .work-record,
+.work-shell > .work-overview,
+.work-shell > .work-chat-pane,
+.work-shell > .work-definition-scope {
+  margin-top: var(--space-2);
+}

@@ -11,13 +11,13 @@
 .transcript__row {
   align-items: flex-start;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   color: var(--trace-muted);
   display: flex;
   font-size: var(--text-sm);
-  gap: 8px;
-  margin: 0 -10px;
-  padding: 6px 10px;
+  gap: var(--space-2);
+  margin: 0 calc(-1 * var(--space-3));
+  padding: var(--space-2) var(--space-3);
 }
 .transcript__row[open],
 .transcript__row:hover {
@@ -37,10 +37,10 @@ details.transcript__row[open] {
   align-items: flex-start;
   cursor: pointer;
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
   list-style: none;
   min-width: 0;
-  padding: 6px 10px;
+  padding: var(--space-2) var(--space-3);
 }
 .transcript__row > summary::-webkit-details-marker {
   display: none;
@@ -52,7 +52,7 @@ details.transcript__row[open] {
   align-items: baseline;
   display: grid;
   font-size: var(--text-sm);
-  gap: 2px 10px;
+  gap: calc(var(--space-1) / 2) var(--space-3);
   grid-template-columns: minmax(0, 1fr) auto;
   line-height: var(--leading-ui);
   min-width: 0;
@@ -74,7 +74,7 @@ details.transcript__row[open] {
   color: var(--trace-muted);
   display: inline-flex;
   font-size: var(--text-eyebrow);
-  gap: 6px;
+  gap: var(--space-2);
   grid-column: 2;
   white-space: nowrap;
 }
@@ -147,10 +147,11 @@ details.transcript__row:focus-within .transcript__chevron {
   background: var(--trace-wash);
   border: 1px solid var(--trace-soft-line);
   border-top: 0;
-  border-radius: 0 0 8px 8px;
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
   color: var(--trace-muted);
-  margin: 0 -1px -1px;
-  padding: 10px 13px;
+  margin: 0 calc(-1 * calc(var(--space-1) / 4))
+    calc(-1 * calc(var(--space-1) / 4));
+  padding: var(--space-3) var(--space-3);
   white-space: pre-wrap;
 }
 .transcript__detail pre {
@@ -164,18 +165,18 @@ details.transcript__row:focus-within .transcript__chevron {
   margin: 0;
 }
 .transcript__detail p + p {
-  margin-top: 8px;
+  margin-top: var(--space-2);
 }
 .transcript__detail small {
   color: var(--trace-muted);
   display: block;
   font-size: var(--text-eyebrow);
-  margin-top: 8px;
+  margin-top: var(--space-2);
 }
 .transcript__children {
   border-top: 1px solid var(--trace-soft-line);
-  margin-top: 8px;
-  padding-top: 5px;
+  margin-top: var(--space-2);
+  padding-top: var(--space-1);
 }
 .transcript__row--nested {
   margin-left: 0;
@@ -185,7 +186,7 @@ details.transcript__row:focus-within .transcript__chevron {
   color: var(--trace-ink);
   font-size: var(--text-lg);
   line-height: var(--leading-code);
-  padding: 12px 0 12px 14px;
+  padding: var(--space-3) 0 var(--space-3) var(--space-4);
 }
 .transcript__speaker {
   color: var(--trace-muted);
@@ -193,7 +194,7 @@ details.transcript__row:focus-within .transcript__chevron {
   font-size: var(--text-eyebrow);
   font-weight: 650;
   letter-spacing: 0.04em;
-  margin-bottom: 5px;
+  margin-bottom: var(--space-1);
   text-transform: uppercase;
 }
 .transcript__prose .assistant-markdown > :first-child {
@@ -207,8 +208,8 @@ details.transcript__row:focus-within .transcript__chevron {
   color: var(--trace-muted);
   display: flex;
   font-size: var(--text-xs);
-  gap: 8px;
-  padding: 10px 0;
+  gap: var(--space-2);
+  padding: var(--space-3) 0;
   text-align: center;
 }
 .transcript__rule::before,
@@ -221,11 +222,17 @@ details.transcript__row:focus-within .transcript__chevron {
 .transcript__lifecycle-start {
   color: var(--trace-muted);
   font-size: var(--text-xs);
-  padding: 8px 0;
+  padding: var(--space-2) 0;
 }
 .transcript__footer {
   color: var(--trace-muted);
   font-size: var(--text-eyebrow);
-  padding: 4px 0 0;
+  padding: var(--space-1) 0 0;
   text-align: right;
+}
+
+/* Tool output and generated source use the same code face as Files. */
+.transcript__detail pre,
+.transcript__prose code {
+  font-family: var(--font-mono);
 }

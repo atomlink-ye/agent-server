@@ -2,15 +2,15 @@
 .agents-pane {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-3);
   min-height: 0;
 }
 .chat-panel.agents-main {
   overflow-y: auto;
-  padding: 20px 24px;
+  padding: var(--space-5) var(--space-6);
 }
 .agents-new-coworker-cta {
-  padding: 6px 10px;
+  padding: var(--space-2) var(--space-3);
   border-color: var(--sky-200);
   border-radius: var(--radius-sm);
   background: var(--sky-50);
@@ -27,14 +27,14 @@
 .agents-status-filters {
   display: flex;
   flex-wrap: wrap;
-  gap: 7px;
+  gap: var(--space-2);
 }
 .agents-list {
   display: flex;
   flex: 1;
   flex-direction: column;
   min-height: 0;
-  gap: 4px;
+  gap: var(--space-1);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -43,11 +43,11 @@
 .agents-list-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   width: 100%;
-  padding: 8px 10px;
+  padding: var(--space-2) var(--space-3);
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: none;
   text-align: left;
   cursor: pointer;
@@ -73,7 +73,7 @@
   display: grid;
   flex: none;
   place-items: center;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   border: 1px solid var(--sky-200);
   background: var(--sky-100);
   color: var(--skype-deep);
@@ -92,8 +92,8 @@
 .agents-profile-header {
   display: flex;
   align-items: flex-start;
-  gap: 14px;
-  padding-bottom: 16px;
+  gap: var(--space-4);
+  padding-bottom: var(--space-4);
   border-bottom: 1px solid var(--ink-100);
 }
 .agents-profile-copy {
@@ -104,7 +104,7 @@
   font-size: var(--text-title);
 }
 .agents-profile-header p {
-  margin: 4px 0 0;
+  margin: var(--space-1) 0 0;
   color: var(--ink-500);
   font-size: var(--text-md);
 }
@@ -112,7 +112,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
 }
 .agents-profile-bio {
   max-width: 68ch;
@@ -127,8 +127,8 @@
   overflow: hidden;
 }
 .agents-host-badge {
-  padding: 2px 10px;
-  border-radius: 999px;
+  padding: calc(var(--space-1) / 2) var(--space-3);
+  border-radius: var(--radius-pill);
   background: var(--ink-100);
   color: var(--ink-700);
   font-size: var(--text-xs);
@@ -136,10 +136,10 @@
 .agents-profile-actions {
   display: flex;
   flex: none;
-  gap: 8px;
+  gap: var(--space-2);
 }
 .agents-whisper {
-  padding: 8px 12px;
+  padding: var(--space-2) var(--space-3);
   border: 1px solid var(--ink-100);
   border-radius: var(--radius-sm);
   background: var(--cloud);
@@ -148,8 +148,8 @@
 }
 .agents-runtime {
   align-self: flex-start;
-  padding: 2px 10px;
-  border-radius: 999px;
+  padding: calc(var(--space-1) / 2) var(--space-3);
+  border-radius: var(--radius-pill);
   background: var(--ink-100);
   color: var(--ink-700);
   font-size: var(--text-xs);
@@ -193,10 +193,10 @@
 .agents-authoring {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding: 18px;
+  gap: var(--space-4);
+  padding: var(--space-4);
   border: 1px solid var(--ink-100);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   background: var(--cloud);
 }
 .agents-authoring > header h1,
@@ -216,15 +216,15 @@
 .agents-capability-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 12px;
+  gap: var(--space-3);
 }
 .agents-card {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 14px 16px;
+  gap: var(--space-3);
+  padding: var(--space-4);
   border: 1px solid var(--ink-100);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   background: var(--cloud);
   box-shadow: var(--shadow-soft);
   text-align: left;
@@ -232,20 +232,20 @@
 .agents-first-screen {
   display: grid;
   grid-template-columns: minmax(0, 3fr) minmax(300px, 2fr);
-  gap: 24px;
+  gap: var(--space-4);
   align-items: start;
 }
 .agents-capabilities,
 .agents-activity {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-3);
   min-width: 0;
 }
 .agents-activity-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -253,10 +253,10 @@
 .agents-activity-item {
   display: flex;
   align-items: baseline;
-  gap: 10px;
-  padding: 8px 10px;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   color: inherit;
   text-decoration: none;
 }
@@ -266,8 +266,8 @@
 }
 .agents-activity-kind {
   flex: none;
-  padding: 2px 8px;
-  border-radius: 999px;
+  padding: calc(var(--space-1) / 2) var(--space-2);
+  border-radius: var(--radius-pill);
   background: var(--ink-100);
   color: var(--ink-700);
   font-size: var(--text-xs);
@@ -281,7 +281,7 @@
   display: grid;
   flex: 1;
   min-width: 0;
-  gap: 2px;
+  gap: calc(var(--space-1) / 2);
 }
 .agents-activity-copy strong {
   overflow: hidden;
@@ -303,13 +303,13 @@
   display: flex;
   flex: none;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
   color: var(--ink-500);
   font-size: var(--text-xs);
 }
 .agents-activity-state {
-  padding: 2px 8px;
-  border-radius: 999px;
+  padding: calc(var(--space-1) / 2) var(--space-2);
+  border-radius: var(--radius-pill);
   background: var(--ink-100);
   color: var(--ink-700);
 }
@@ -336,7 +336,7 @@
 .agents-activity-error {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   color: var(--coral-deep);
   font-size: var(--text-sm);
 }
@@ -352,13 +352,13 @@
 .agents-home-files {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding-top: 16px;
+  gap: var(--space-3);
+  padding-top: var(--space-4);
   border-top: 1px solid var(--ink-100);
 }
 .agents-home-files-intro {
   max-width: 760px;
-  margin: -4px 0 0;
+  margin: calc(-1 * var(--space-1)) 0 0;
   color: var(--ink-500);
   font-size: var(--text-md);
   line-height: var(--leading-body);
@@ -366,17 +366,17 @@
 .agents-home-files-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: var(--space-3);
 }
 .agents-home-file-scope {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 9px;
+  gap: var(--space-2);
   min-width: 0;
-  padding: 14px 16px;
+  padding: var(--space-4);
   border: 1px solid var(--ink-100);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   background: var(--paper);
 }
 .agents-home-file-scope h3,
@@ -394,10 +394,10 @@
 }
 .agents-home-file-scope ul {
   display: grid;
-  gap: 5px;
+  gap: var(--space-1);
   width: 100%;
   margin: 0;
-  padding-left: 17px;
+  padding-left: var(--space-4);
 }
 .agents-home-file-scope li {
   min-width: 0;
@@ -417,7 +417,7 @@
 .agents-home-files-error {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   color: var(--coral-deep);
   font-size: var(--text-sm);
 }
@@ -445,35 +445,35 @@
   font-size: var(--text-sm);
 }
 .agents-empty-capabilities {
-  padding: 18px;
+  padding: var(--space-4);
   border: 1px dashed var(--ink-100);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   text-align: center;
 }
 .agents-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--space-2);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 .agents-chips span {
-  padding: 3px 7px;
-  border-radius: 999px;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-pill);
   background: var(--ink-100);
   font-size: var(--text-xs);
 }
 .agents-mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: var(--text-sm);
   line-height: var(--leading-body);
   word-break: break-word;
 }
 .agents-error,
 .agents-status {
-  padding: 10px 12px;
-  border-radius: 8px;
+  padding: var(--space-3) var(--space-3);
+  border-radius: var(--radius-sm);
   font-size: var(--text-md);
 }
 .agents-error {
@@ -485,28 +485,28 @@
   color: var(--ink-700);
 }
 .agents-primary {
-  padding: 8px 12px;
+  padding: var(--space-2) var(--space-3);
   border-color: var(--skype);
   border-radius: var(--radius-sm);
   background: linear-gradient(135deg, var(--skype), var(--skype-deep));
   color: var(--cloud);
-  box-shadow: 0 8px 18px -12px rgb(0 120 200 / 72%);
+  box-shadow: var(--shadow-soft);
   font-weight: 600;
 }
 .agents-primary:hover:not(:disabled) {
   border-color: var(--skype-deep);
-  background: linear-gradient(135deg, #16b4f4, var(--skype-deep));
+  background: linear-gradient(135deg, var(--skype), var(--skype-deep));
   color: var(--cloud);
 }
 .agents-form-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 14px;
+  gap: var(--space-4);
 }
 .agents-field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-2);
   color: var(--ink-900);
   font-size: var(--text-md);
   font-weight: 600;
@@ -523,9 +523,9 @@
 .agents-input-row select {
   width: 100%;
   box-sizing: border-box;
-  padding: 9px 10px;
+  padding: var(--space-2) var(--space-3);
   border: 1px solid var(--ink-100);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--paper);
   color: var(--ink-900);
   font: inherit;
@@ -539,7 +539,7 @@
 .agents-participant-heading {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-3);
 }
 .agents-form-actions {
   justify-content: flex-end;
@@ -552,9 +552,9 @@
   flex-wrap: wrap;
 }
 .agents-choice-row label {
-  padding: 9px 12px;
+  padding: var(--space-2) var(--space-3);
   border: 1px solid var(--ink-100);
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   background: var(--paper);
 }
 .agents-choice-row small {
@@ -564,32 +564,32 @@
 .agents-authoring-section {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding-top: 14px;
+  gap: var(--space-3);
+  padding-top: var(--space-4);
   border-top: 1px solid var(--ink-100);
 }
 .agents-participant-list {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 10px;
+  gap: var(--space-3);
 }
 .agents-participant {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 12px;
+  gap: var(--space-3);
+  padding: var(--space-3);
   border: 1px solid var(--ink-100);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--paper);
 }
 .agents-input-row {
   display: grid;
   grid-template-columns: minmax(120px, 1fr) minmax(100px, 0.8fr) 110px auto;
-  gap: 8px;
+  gap: var(--space-2);
   align-items: center;
-  padding: 10px;
+  padding: var(--space-3);
   border: 1px solid var(--ink-100);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--paper);
 }
 .agents-input-wide {
@@ -598,7 +598,7 @@
 .agents-inline-check {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--space-1);
   white-space: nowrap;
   font-size: var(--text-sm);
 }
@@ -608,20 +608,20 @@
 .agents-skill-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
 }
 .agents-skill-grant {
-  margin-left: 6px;
+  margin-left: var(--space-2);
   opacity: 0.7;
   font-size: var(--text-xs);
 }
 .agents-plan-preview {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 10px;
-  padding: 12px;
+  gap: var(--space-3);
+  padding: var(--space-3);
   border: 1px solid var(--ink-100);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--paper);
 }
 .agents-plan-preview > div {
@@ -630,21 +630,21 @@
 .agents-plan-preview strong,
 .agents-plan-preview p {
   display: block;
-  margin: 4px 0 0;
+  margin: var(--space-1) 0 0;
   font-size: var(--text-sm);
   word-break: break-word;
 }
 .agents-runtime-requirements {
-  margin: 4px 0 0;
-  padding-left: 16px;
+  margin: var(--space-1) 0 0;
+  padding-left: var(--space-4);
   font-size: var(--text-sm);
 }
 .agents-runtime-requirements li {
-  margin-top: 2px;
+  margin-top: calc(var(--space-1) / 2);
   word-break: break-word;
 }
 .agents-advanced {
-  padding: 10px 0;
+  padding: var(--space-3) 0;
 }
 .agents-advanced summary {
   cursor: pointer;
@@ -654,15 +654,13 @@
 .agents-source-preview {
   max-height: 360px;
   overflow: auto;
-  padding: 12px;
+  padding: var(--space-3);
   border: 1px solid var(--ink-100);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--paper);
-  font:
-    var(--text-sm)/var(--leading-code) ui-monospace,
-    SFMono-Regular,
-    Menlo,
-    monospace;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  line-height: var(--leading-code);
   white-space: pre-wrap;
 }
 .agents-technical-details {
@@ -674,7 +672,7 @@
   /* The roster owns the sidebar column too; the Coworker rail only exists
      alongside an open profile. */
   grid-column: 2 / -1;
-  padding: 20px 28px 32px;
+  padding: var(--space-5) var(--space-7) var(--space-8);
 }
 /* Authoring keeps the width it had beside the Coworker rail; the roster route
    is wider, and a four-across field grid is not an improvement. */
@@ -684,14 +682,14 @@
 .agents-roster {
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  padding-top: 8px;
+  gap: var(--space-4);
+  padding-top: 0;
 }
 .agents-roster-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 24px;
+  gap: var(--space-6);
 }
 .agents-roster-copy {
   min-width: 0;
@@ -710,7 +708,7 @@
 }
 .agents-roster-copy p {
   max-width: 74ch;
-  margin: 8px 0 0;
+  margin: var(--space-2) 0 0;
   color: var(--ink-500);
   font-size: var(--text-lg);
   line-height: var(--leading-body);
@@ -727,7 +725,7 @@
 }
 .agents-roster-new {
   flex: none;
-  padding: 10px 18px;
+  padding: var(--space-3) var(--space-4);
 }
 .agents-roster-note {
   margin: 0;
@@ -747,7 +745,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  padding: var(--space-4) var(--space-5) var(--space-5);
+  padding: var(--space-4);
   border: 1px solid var(--ink-100);
   border-radius: var(--radius-lg);
   background: var(--cloud);
@@ -771,7 +769,7 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 3px;
+  gap: var(--space-1);
   min-width: 0;
 }
 .agents-roster-identity-copy strong {
@@ -796,7 +794,7 @@
   height: 54px;
   place-items: center;
   border: 1px solid var(--sky-200);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: linear-gradient(135deg, var(--sky-100), var(--cloud));
   color: var(--skype-deep);
   font-size: var(--text-title);
@@ -811,7 +809,7 @@
   width: 13px;
   height: 13px;
   border: 2px solid var(--cloud);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--ink-300);
   content: '';
 }
@@ -830,7 +828,7 @@
 .agents-roster-bio {
   flex: 1;
   margin: 0;
-  padding-left: 11px;
+  padding-left: var(--space-3);
   border-left: 2px solid var(--sky-200);
   color: var(--ink-700);
   font-size: var(--text-md);
@@ -864,7 +862,7 @@
   padding: var(--space-5);
   border: 1px dashed var(--ink-200);
   border-radius: var(--radius-lg);
-  background: rgb(255 255 255 / 40%);
+  background: var(--cloud);
   text-align: center;
 }
 .agents-roster-add:hover {
@@ -889,7 +887,7 @@
   width: 42px;
   height: 42px;
   place-items: center;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--sky-100);
   color: var(--skype-deep);
   font-size: var(--text-title);
@@ -897,8 +895,8 @@
 }
 .agents-roster-back {
   align-self: flex-start;
-  margin-bottom: 10px;
-  padding: 5px 9px;
+  margin-bottom: var(--space-3);
+  padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);
   color: var(--ink-500);
   font-size: var(--text-sm);
@@ -911,7 +909,7 @@
 @media (max-width: 1180px) {
   .agents-first-screen {
     grid-template-columns: minmax(0, 1fr);
-    gap: 20px;
+    gap: var(--space-5);
   }
 }
 @media (max-width: 760px) {
@@ -937,4 +935,11 @@
   .agents-activity-item {
     flex-wrap: wrap;
   }
+}
+
+/* Keep the workspace bar flush with the shell while content keeps its gutter. */
+.agents-main > .title-bar {
+  flex-shrink: 0;
+  margin: calc(-1 * var(--space-5)) calc(-1 * var(--space-6)) 0;
+  padding-inline: var(--space-6);
 }

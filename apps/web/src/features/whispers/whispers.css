@@ -3,8 +3,8 @@
   flex: 1;
   flex-direction: column;
   min-height: 0;
-  gap: 4px;
-  padding: 8px;
+  gap: var(--space-1);
+  padding: 0;
   overflow-y: auto;
 }
 
@@ -12,25 +12,27 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 2px;
+  gap: calc(var(--space-1) / 2);
   text-align: left;
-  padding: 10px 12px;
-  border-radius: 8px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
   border: none;
   background: transparent;
   cursor: pointer;
 }
 
 .whispers-list button[data-active='true'] {
-  background: var(--surface-active, rgba(0, 0, 0, 0.06));
+  background: var(--sky-100);
 }
 
 .whisper-observer-badge {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
   font-size: var(--text-sm);
-  color: var(--ink-300, #6b7280);
+  color: var(--ink-500);
+  margin: 0;
+  padding: var(--space-3) var(--space-6) 0;
 }
 
 .whisper-message-log {
@@ -38,22 +40,26 @@
   flex: 1;
   flex-direction: column;
   min-height: 0;
-  gap: 10px;
-  padding: 16px;
+  gap: var(--space-3);
+  padding: var(--space-6);
   overflow-y: auto;
 }
 
 .whisper-message {
   max-width: 640px;
-  padding: 8px 12px;
-  border-radius: 10px;
-  background: var(--surface-raised, rgba(0, 0, 0, 0.04));
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--sky-50);
 }
 
 .whisper-message strong {
   display: block;
   font-size: var(--text-sm);
-  margin-bottom: 2px;
+  margin-bottom: calc(var(--space-1) / 2);
+}
+
+.whispers-main > .title-bar {
+  padding-inline: var(--space-6);
 }
 
 .whispers-list small {

@@ -1,3 +1,4 @@
+import { surfaceMetrics } from '@/test-support/surface-metrics';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
@@ -226,6 +227,16 @@ it('scrolls the real Observe page list and Trace detail on desktop', async () =>
         await new Promise((resolve) => setTimeout(resolve, 0));
     });
 
+    await surfaceMetrics(host, 'observe', [
+      '.title-bar',
+      '.observe-detail-header',
+      '.observe-metric-card',
+      '.work-list-item',
+      '.work-main-content',
+      '.observe-metric-cards',
+      '.observe-detail',
+      '.observe-filters',
+    ]);
     const list = host.querySelector<HTMLElement>(
       '[data-testid="observe-list"]',
     );

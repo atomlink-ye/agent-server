@@ -1,3 +1,4 @@
+import { t } from '@/i18n';
 import {
   findParticipant,
   participantInitials,
@@ -15,7 +16,7 @@ import {
 export function ParticipantChip({
   participants,
   id,
-  fallback = 'Unassigned',
+  fallback = t('tasks.unassigned'),
   compact = false,
 }: {
   readonly participants: readonly Participant[];

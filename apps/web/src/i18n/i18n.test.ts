@@ -14,7 +14,7 @@ it('leaves no message untranslated by copying the English through', () => {
   const untranslated = (Object.keys(en) as MessageKey[]).filter(
     (key) => zhCN[key] === en[key],
   );
-  // Product nouns and one shared symbol are the same word in both languages;
+  // Product nouns, provider labels and punctuation-only templates are shared;
   // anything else identical to the English is a translation nobody wrote.
   expect(untranslated).toEqual([
     'shell.nav.work',
@@ -23,9 +23,14 @@ it('leaves no message untranslated by copying the English through', () => {
     'dispatch.recipient.fallback',
     'workCard.eyebrow',
     'coworker.role.fallback',
+    'tasks.taskEyebrow',
     'boards.title',
     'work.title',
     'work.tab.definition',
+    'authoring.runtimeClaude',
+    'authoring.runtimeCodex',
+    'shell.brand',
+    'trace.actorActivity',
   ]);
 });
 
@@ -65,4 +70,16 @@ it('reads a Chinese browser in any script or region as Simplified Chinese', () =
   expect(detectLocaleFrom(['fr-FR', 'zh-CN'])).toBe('zh-CN');
   expect(detectLocaleFrom([])).toBe('en');
   expect(detectLocaleFrom([undefined])).toBe('en');
+});
+
+it('keeps exactly the same message keys in English and Simplified Chinese', () => {
+  expect(Object.keys(zhCN).sort()).toEqual(Object.keys(en).sort());
+});
+
+it('preserves every interpolation placeholder in both catalogs', () => {
+  const placeholders = (value: string) =>
+    [...value.matchAll(/\{(\w+)\}/g)].map((match) => match[1]).sort();
+  for (const key of Object.keys(en) as MessageKey[]) {
+    expect(placeholders(zhCN[key]), key).toEqual(placeholders(en[key]));
+  }
 });

@@ -17,22 +17,26 @@ vi.mock('../components/panes/work-chat-pane', () => ({
 
 it.each([undefined, 'historical-run'])(
   'passes selected Run %s into its conversation',
-  (runId) => {
+  (workRunId) => {
     vi.mocked(useWorkDetail).mockReturnValue({
       status: 'ready',
       detail: {
         work: { id: 'work' },
-        run: runId
-          ? { work_run: { id: runId, product_state: 'complete' } }
+        run: workRunId
+          ? { work_run: { id: workRunId, product_state: 'complete' } }
           : null,
         runs: [],
       },
     } as any);
     const markup = renderToStaticMarkup(
       <MemoryRouter>
-        <WorkDetailPage workId="work" tab="chat" selectedRunId={runId} />
+        <WorkDetailPage
+          workId="work"
+          tab="chat"
+          selectedWorkRunId={workRunId}
+        />
       </MemoryRouter>,
     );
-    expect(markup).toContain(`data-run="${runId ?? 'preparation'}"`);
+    expect(markup).toContain(`data-run="${workRunId ?? 'preparation'}"`);
   },
 );

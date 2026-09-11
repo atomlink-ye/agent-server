@@ -55,9 +55,9 @@ export function useObserveRunMetrics(entries: readonly ObserveEntry[]): {
     setResolving(true);
     void Promise.all(
       pending.map(async (entry) => {
-        const runId = entry.latest_run_summary!.id;
+        const workRunId = entry.latest_run_summary!.id;
         try {
-          const transcripts = await loadSessionTranscripts(entry.id, runId);
+          const transcripts = await loadSessionTranscripts(entry.id, workRunId);
           return [entry.id, deriveMetrics(transcripts)] as const;
         } catch {
           return [entry.id, EMPTY_METRICS] as const;

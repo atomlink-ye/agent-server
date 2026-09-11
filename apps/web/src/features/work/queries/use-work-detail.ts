@@ -11,13 +11,13 @@ export type WorkDetailQuery = {
 
 export function useWorkDetail({
   workId,
-  selectedRunId,
+  selectedWorkRunId,
   preferCurrentDefinition,
   includeTrace,
   includeRun = true,
 }: {
   readonly workId: string;
-  readonly selectedRunId?: string;
+  readonly selectedWorkRunId?: string;
   readonly preferCurrentDefinition: boolean;
   readonly includeTrace: boolean;
   readonly includeRun?: boolean;
@@ -43,7 +43,7 @@ export function useWorkDetail({
       try {
         const loaded = await loadWorkDetail(
           workId,
-          selectedRunId,
+          selectedWorkRunId,
           preferCurrentDefinition,
           includeTrace,
           includeRun,
@@ -80,7 +80,7 @@ export function useWorkDetail({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     workId,
-    selectedRunId,
+    selectedWorkRunId,
     preferCurrentDefinition,
     includeTrace,
     includeRun,

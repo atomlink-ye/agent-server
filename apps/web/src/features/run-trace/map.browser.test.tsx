@@ -12,7 +12,7 @@ import type { NormalizedTrace } from './normalized';
 /** A single-agent Work: no Team, so no actors, Work Items, or Attempts. */
 function singleAgentTrace(): NormalizedTrace {
   return {
-    runId: 'work-run-1',
+    workRunId: 'work-run-1',
     work: { id: 'work-1', title: 'Single-agent Work' },
     workRun: { id: 'work-run-1', productState: 'succeeded' },
     actors: new Map(),

@@ -185,7 +185,7 @@ it('blocks an unselected required boolean, then starts Run in the same turn afte
     });
     expect(submit!.disabled).toBe(true);
     const retry = [...host.querySelectorAll('button')].find(
-      (button) => button.textContent === 'Retry Run',
+      (button) => button.textContent === 'Retry WorkRun',
     )!;
     await act(async () => {
       retry.click();

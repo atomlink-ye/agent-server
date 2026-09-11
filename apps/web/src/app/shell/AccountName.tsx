@@ -65,8 +65,8 @@ export function AccountName() {
       const saved = await setDisplayName(trimmed);
       setName(saved);
       setEditing(false);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+    } catch {
+      setError(t('account.saveError'));
     } finally {
       setBusy(false);
     }
@@ -78,7 +78,7 @@ export function AccountName() {
     return (
       <form
         className="account-name-form"
-        aria-label="Change your display name"
+        aria-label={t('account.changeName')}
         onSubmit={(event) => {
           event.preventDefault();
           void submit();
@@ -93,14 +93,14 @@ export function AccountName() {
           onKeyDown={(event) => {
             if (event.key === 'Escape') setEditing(false);
           }}
-          aria-label="Your display name"
+          aria-label={t('account.displayName')}
         />
         <button
           className="account-name-save"
           type="submit"
           disabled={busy || !draft.trim()}
         >
-          {busy ? 'Saving…' : 'Save'}
+          {busy ? t('authoring.saving') : t('tasks.save')}
         </button>
         <button
           className="account-name-cancel"
@@ -108,7 +108,7 @@ export function AccountName() {
           onClick={() => setEditing(false)}
           disabled={busy}
         >
-          Cancel
+          {t('boards.cancel')}
         </button>
         {error ? (
           <span className="account-name-error" role="alert">
@@ -125,7 +125,7 @@ export function AccountName() {
         className="account-name-badge"
         type="button"
         onClick={startEditing}
-        title="Change your display name"
+        title={t('account.changeName')}
       >
         {name ?? username}
       </button>

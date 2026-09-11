@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import type { WorkResponse } from '@atomlink-ye/agent-server/product-contract';
-import type { AnchoredRun } from '../clients/work-run-client';
+import type { AnchoredWorkRun } from '../clients/work-run-client';
 import { workPath } from '../../../app/routes';
 import { productStatePresentation } from './work-presentation';
 import { useT } from '../../../i18n';
@@ -13,7 +13,7 @@ export function WorkDetailHeader({
   actions,
 }: {
   readonly work: WorkResponse;
-  readonly run: AnchoredRun | null;
+  readonly run: AnchoredWorkRun | null;
   readonly runOrdinal?: number;
   readonly originConversationId?: string | null;
   readonly actions?: ReactNode;
@@ -36,7 +36,7 @@ export function WorkDetailHeader({
     );
   return (
     <header className="work-detail-header">
-      <span className="work-shell-kicker">WORK</span>
+      <span className="work-shell-kicker">{t('work.title')}</span>
       <h1 title={work.title}>{work.title}</h1>
       <span className="work-state-pill">
         {t(work.archived_at ? 'work.record.archived' : 'work.record.active')}

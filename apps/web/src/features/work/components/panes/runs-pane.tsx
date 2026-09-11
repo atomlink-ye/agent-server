@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
 import type { WorkRunSummary } from '@atomlink-ye/agent-server/product-contract';
 import type { WorkDetailData } from '../../queries/load-work-detail';
-import { workRunClient, type AnchoredRun } from '../../clients/work-run-client';
+import {
+  workRunClient,
+  type AnchoredWorkRun,
+} from '../../clients/work-run-client';
 import { RunTrigger } from '../run-trigger';
 import {
   formatTimestamp,
@@ -68,11 +71,11 @@ function RunState({
   selected,
 }: {
   readonly run: WorkRunSummary;
-  readonly selected: AnchoredRun | null;
+  readonly selected: AnchoredWorkRun | null;
 }) {
   const t = useT();
   const [state, setState] = useState<
-    AnchoredRun['work_run']['product_state'] | null
+    AnchoredWorkRun['work_run']['product_state'] | null
   >(null);
   useEffect(() => {
     if (selected) return;

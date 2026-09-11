@@ -181,11 +181,11 @@ it('shows a single loading action and plain startup guidance', async () => {
 
 it('loads the selected Run conversation instead of preparation', async () => {
   const { host } = await renderChat([]);
-  const runId = '00000000-0000-4000-8000-000000000200';
+  const workRunId = '00000000-0000-4000-8000-000000000200';
   await act(async () => {
-    root!.render(<WorkChatPane workId={workId} workRunId={runId} />);
+    root!.render(<WorkChatPane workId={workId} workRunId={workRunId} />);
   });
-  expect(workClient.chat).toHaveBeenLastCalledWith(workId, runId);
+  expect(workClient.chat).toHaveBeenLastCalledWith(workId, workRunId);
   expect(host.textContent).toContain('Run’s Lead');
   expect(host.textContent).toContain(
     'cannot access execution history or change the Run',

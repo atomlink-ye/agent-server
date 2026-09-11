@@ -32,7 +32,7 @@ export function Rail({ activeTab, onSelectTab }: RailProps) {
   const t = useT();
   return (
     <aside className="rail" aria-label={t('shell.nav.primary')}>
-      <div className="rail-brand" aria-label="Agent Server">
+      <div className="rail-brand" aria-label={t('shell.brand')}>
         <span aria-hidden="true">✦</span>
       </div>
       <nav className="rail-tabs" aria-label={t('shell.nav.sections')}>

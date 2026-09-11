@@ -18,7 +18,7 @@ export type ObserveRunTokensQuery =
  */
 export function useObserveRunTokens(
   workId: string,
-  runId: string,
+  workRunId: string,
 ): ObserveRunTokensQuery {
   const [state, setState] = useState<ObserveRunTokensQuery>({
     status: 'loading',
@@ -27,7 +27,7 @@ export function useObserveRunTokens(
   useEffect(() => {
     let active = true;
     setState({ status: 'loading' });
-    void loadSessionTranscripts(workId, runId)
+    void loadSessionTranscripts(workId, workRunId)
       .then((data) => {
         if (active) setState({ status: 'ready', totalTokens: sumTokens(data) });
       })
@@ -37,7 +37,7 @@ export function useObserveRunTokens(
     return () => {
       active = false;
     };
-  }, [workId, runId]);
+  }, [workId, workRunId]);
 
   return state;
 }

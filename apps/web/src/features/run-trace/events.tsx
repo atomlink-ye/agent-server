@@ -1,3 +1,4 @@
+import { t } from '@/i18n';
 import { useState } from 'react';
 
 import { captureLabel, humanize, type EventModel } from './selectors';
@@ -13,23 +14,20 @@ export function Events({
   return (
     <section
       className="run-trace__events"
-      aria-label="Recorded MCP activities"
+      aria-label={t('trace.recordedActivity')}
       data-testid="trace-events"
     >
-      <p className="run-trace__events-caption">
-        Recorded MCP activities. Sequence values are shown as captured; no
-        additional ordering or timing is inferred. This panel counts only calls
-        to server-authorized team collaboration MCP tools; other activity is
-        shown in Agent Execution and Session Transcripts instead.
-      </p>
+      <p className="run-trace__events-caption">{t('trace.events.caption')}</p>
       <div className="run-trace__events-toolbar">
-        <strong>Recorded MCP activities</strong>
-        <span>{model.activities.length} captured rows</span>
+        <strong>{t('trace.recordedActivity')}</strong>
+        <span>
+          {t('trace.events.count', { count: model.activities.length })}
+        </span>
       </div>
       <div className="run-trace__events-scroll">
         {model.activities.length === 0 ? (
           <p style={{ padding: '1rem', color: 'var(--trace-muted)' }}>
-            No collaboration MCP tool calls were captured for this Run.
+            {t('trace.events.empty')}
           </p>
         ) : (
           model.activities.map((entry) => {
@@ -49,21 +47,27 @@ export function Events({
                 }}
               >
                 <strong>#{entry.activity.sequence}</strong>
-                <span>{entry.actor?.name ?? 'Name not captured'}</span>
+                <span>{entry.actor?.name ?? t('trace.nameNotCaptured')}</span>
                 <span>
-                  {entry.workItem?.subject ?? 'Team-level action'}
+                  {entry.workItem?.subject ?? t('trace.events.teamAction')}
                 </span>
-                <span>MCP activity: {humanize(entry.activity.status)}</span>
+                <span>
+                  {t('trace.events.status', {
+                    status: humanize(entry.activity.status),
+                  })}
+                </span>
                 <span>{entry.activity.toolName}</span>
                 <span>
-                  Result: {captureLabel(entry.activity.resultCaptureStatus)}
+                  {t('trace.events.result', {
+                    result: captureLabel(entry.activity.resultCaptureStatus),
+                  })}
                 </span>
                 {entry.workItem && entry.workItem.attempts.length > 1 ? (
                   <span
                     className="run-trace__event-uncaptured"
                     data-testid="attempt-not-captured"
                   >
-                    Attempt attribution not captured
+                    {t('trace.events.noAttempt')}
                   </span>
                 ) : null}
               </button>

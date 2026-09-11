@@ -15,7 +15,7 @@ import type {
 
 function baseTrace(overrides: Partial<NormalizedTrace> = {}): NormalizedTrace {
   return {
-    runId: 'work-run-1',
+    workRunId: 'work-run-1',
     work: { id: 'work-1', title: 'Test Work' },
     workRun: { id: 'work-run-1', productState: 'succeeded' },
     actors: new Map(),
@@ -312,8 +312,8 @@ describe('selectActorRows', () => {
         ],
       }),
     );
-    expect(rows.map((row) => row.name)).toEqual(['analyst', 'Work Run']);
-    expect(rows.at(-1)?.note).toBe('The Work Run itself, not an agent');
+    expect(rows.map((row) => row.name)).toEqual(['analyst', 'Root Task Run']);
+    expect(rows.at(-1)?.note).toBe('Attempts of the root Task that coordinates this WorkRun');
   });
 
   it('still reports a span that resolves to neither an actor nor the root run', () => {

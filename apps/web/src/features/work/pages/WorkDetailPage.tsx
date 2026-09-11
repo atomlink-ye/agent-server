@@ -28,63 +28,68 @@ import '../components/work-detail.css';
 export function WorkDetailPage({
   workId,
   tab,
-  selectedRunId,
+  selectedWorkRunId,
   selectedSessionIndex,
   originConversationId,
-  onSelectedLatestRunState,
+  onSelectedLatestWorkRunState,
 }: {
   readonly workId: string;
   readonly tab?: string;
-  readonly selectedRunId?: string;
+  readonly selectedWorkRunId?: string;
   readonly selectedSessionIndex?: number;
   readonly originConversationId?: string | null;
-  readonly onSelectedLatestRunState?: (
+  readonly onSelectedLatestWorkRunState?: (
     state: {
       readonly workId: string;
-      readonly runId: string;
+      readonly workRunId: string;
       readonly state: WorkListItem['product_state'];
     } | null,
   ) => void;
 }) {
   const t = useT();
   const requestedRunView =
-    Boolean(selectedRunId) && !['runs', 'artifacts'].includes(tab ?? '');
+    Boolean(selectedWorkRunId) && !['runs', 'artifacts'].includes(tab ?? '');
   const requestedTab = normalizeWorkTab(tab, requestedRunView);
   const includeRun = requestedRunView || tab === 'chat';
   const preferCurrentDefinition = !includeRun;
   const query = useWorkDetail({
     workId,
-    selectedRunId,
+    selectedWorkRunId,
     preferCurrentDefinition,
     includeTrace: requestedTab !== 'definition',
     includeRun,
   });
   const detail = query.detail;
-  const runId = detail?.run?.work_run.id;
-  const latestRunId = detail?.runs[0]?.id;
+  const workRunId = detail?.run?.work_run.id;
+  const latestWorkRunId = detail?.runs[0]?.id;
   const runView =
     requestedRunView || (tab === 'chat' && Boolean(detail?.runs.length));
   const activeTab = normalizeWorkTab(tab, runView);
   const runOrdinal =
-    detail && runId
-      ? detail.runs.length - detail.runs.findIndex((run) => run.id === runId)
+    detail && workRunId
+      ? detail.runs.length -
+        detail.runs.findIndex((run) => run.id === workRunId)
       : undefined;
   useEffect(() => {
     const selectedRun = detail?.run?.work_run;
-    onSelectedLatestRunState?.(
+    onSelectedLatestWorkRunState?.(
       detail?.work.id === workId &&
         selectedRun &&
-        selectedRun.id === latestRunId &&
-        (!selectedRunId || selectedRun.id === selectedRunId)
-        ? { workId, runId: selectedRun.id, state: selectedRun.product_state }
+        selectedRun.id === latestWorkRunId &&
+        (!selectedWorkRunId || selectedRun.id === selectedWorkRunId)
+        ? {
+            workId,
+            workRunId: selectedRun.id,
+            state: selectedRun.product_state,
+          }
         : null,
     );
   }, [
     detail?.work.id,
     detail?.run?.work_run,
-    latestRunId,
-    onSelectedLatestRunState,
-    selectedRunId,
+    latestWorkRunId,
+    onSelectedLatestWorkRunState,
+    selectedWorkRunId,
     workId,
   ]);
   const pane = detail
@@ -92,7 +97,7 @@ export function WorkDetailPage({
         switch (activeTab) {
           case 'chat':
             return runView ? (
-              <WorkChatPane workId={detail.work.id} workRunId={runId} />
+              <WorkChatPane workId={detail.work.id} workRunId={workRunId} />
             ) : (
               <WorkChatPane workId={detail.work.id} />
             );
@@ -111,7 +116,7 @@ export function WorkDetailPage({
                   href={workTabHref(
                     detail.work.id,
                     'definition',
-                    runId,
+                    workRunId,
                     originConversationId,
                   )}
                 >
@@ -143,7 +148,7 @@ export function WorkDetailPage({
             return (
               <DefinitionPane
                 data={detail}
-                selectedRunId={selectedRunId}
+                selectedWorkRunId={selectedWorkRunId}
                 workId={detail.work.id}
                 originConversationId={originConversationId}
               />
@@ -194,7 +199,7 @@ export function WorkDetailPage({
           <WorkTabs
             activeTab={activeTab}
             preparation={detail.runs.length === 0}
-            runId={runView ? runId : undefined}
+            workRunId={runView ? workRunId : undefined}
             workId={detail.work.id}
             originConversationId={originConversationId}
           />

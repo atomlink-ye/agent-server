@@ -32,7 +32,7 @@ export function workPath(
 export function workTabPath(
   workId: string,
   tab: string,
-  runId: string | null = null,
+  workRunId: string | null = null,
   originConversationId: string | null = null,
   sessionIndex: number | null = null,
 ): string {
@@ -40,7 +40,7 @@ export function workTabPath(
   if (originConversationId)
     query.set('from_conversation', originConversationId);
   if (tab !== 'overview') query.set('tab', tab);
-  if (runId) query.set('run', runId);
+  if (workRunId) query.set('run', workRunId);
   if (sessionIndex !== null) query.set('session', String(sessionIndex));
   const suffix = query.toString();
   return `/work/${encodeURIComponent(workId)}${suffix ? `?${suffix}` : ''}`;

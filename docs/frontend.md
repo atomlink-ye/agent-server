@@ -36,7 +36,7 @@ The surface responsibilities are explicit:
 - `Tasks` is the user-facing projection of durable backend `WorkItem` coordination commitments.
 - `Boards` is a Kanban projection over the same WorkItems; it is not a second Task model.
 - `Work` owns formal Work Definition / Work / WorkRun execution.
-- `Observe` is a read-only cross-Work projection of the same Product WorkRun/Trace facts the Work tab already renders for one selected Work; it lists traced Runs and opens the existing Run Trace view, filterable by Agent participation and Product state. It introduces no new backend contract or Work/Run state.
+- `Observe` is a read-only cross-Work projection of the same Product WorkRun/Trace facts the Work tab already renders for one selected Work; it lists the latest traced WorkRun of each Work and opens the existing Run Trace view, filterable by Agent participation and Product state. It introduces no new backend contract or Work/Run state.
 - `Files` exposes the existing coworker file surface.
 
 A persisted Conversation message can create a WorkItem through an editable `Create task` affordance. The source Conversation/message is retained on the WorkItem. A WorkItem can then be assigned, discussed, organized on a Board, and promoted to a formal Work through the existing canonical Work application contract.
@@ -54,34 +54,34 @@ The Work tab preserves the useful Work product capabilities that existed before 
 
 - real Work list and create flow;
 - Work detail and product status;
-- start/continue Run actions exposed by the current Product API;
-- latest and historical Runs;
-- overview and Run trace;
+- start/continue WorkRun actions exposed by the current Product API;
+- latest and historical WorkRuns;
+- overview and WorkRun trace;
 - execution/session transcript views;
 - Work Definition view/edit;
 - bounded Artifact state until the Product API exposes the full Artifact surface.
 
-Work and Run use different presentation levels within `/work/:workId`.
-Without a selected Run, the compact Work header shows the title, Active/Archived
-record state, and Start Run. Its tabs contain a Work summary, Runs, the current
+Work and WorkRun use different presentation levels within `/work/:workId`.
+Without a selected WorkRun, the compact Work header shows the title, Unarchived/Archived
+record state, and Start WorkRun. Its tabs contain a Work summary, WorkRuns, the current
 Definition, and the bounded Files placeholder. The summary is a record of the
 Work's Definition, dates, and run count; it does not render execution results.
 The directory uses the same record state and a run count, with
 `.work-pane-scroll` owning scrolling for both the Work list and catalog.
 
-Selecting `?run=:runId` opens a visually distinct Run surface with a breadcrumb
-back to the Work and a chronological Run ordinal. Conversation, Trace, and
-Result belong to that Run. The existing result/journey Overview renderer is
-Run content, not the Work summary. Historical Definition deep links retain the
+Selecting `?run=:runId` opens a visually distinct WorkRun surface with a breadcrumb
+back to the Work and a chronological WorkRun ordinal. Conversation, Trace, and
+Result belong to that WorkRun. The existing result/journey Overview renderer is
+WorkRun content, not the Work summary. Historical Definition deep links retain the
 exact pinned version. Preparation chat is available only before a Work has any
-Runs; the Run conversation surface requires the Run-scoped chat integration.
+WorkRuns; the WorkRun conversation surface requires the WorkRun-scoped chat integration.
 The Work directory and create surfaces offer no Coworker binding controls.
 
-The current list contract has no aggregate Run count. The Work index reads all
-pages of the existing Runs endpoint to produce exact counts and chronological
-ordinals; failed reads do not become zero counts. Run row states come from the
-existing Run detail projection, since Run summaries do not contain state.
-These reads add per-Work/per-Run requests and are an MVE limitation for large
+The current list contract has no aggregate WorkRun count. The Work index reads all
+pages of the existing WorkRuns endpoint to produce exact counts and chronological
+ordinals; failed reads do not become zero counts. WorkRun row states come from the
+existing WorkRun detail projection, since WorkRun summaries do not contain state.
+These reads add per-Work/per-WorkRun requests and are an MVE limitation for large
 histories, not a new server-side aggregation contract.
 
 The Cumora-derived `Rail` and desktop shell are the only visible layout owners. Tasks, Boards, Work, Agents, Files, and Conversations are feature content rendered inside that shell.
@@ -217,12 +217,12 @@ Three rules hold the layer together:
   dictionary is a _total_ `Record<MessageKey, string>`. A key a translation forgot is
   `TS2739`; a key it misspelled is `TS2353`. Runtime lookup still falls back to English, so a
   stale bundle renders a mixed UI rather than an empty one.
-- **Product nouns stay English in every locale** — Work, Run, Agent, Coworker, Board,
+- **Product nouns stay English in every locale** — Work, WorkRun, Run, Definition, Worker, Task, Agent, Coworker, Board,
   Workspace. They name things in this product; a translated name is a second name for the same
   thing, and a reader would have to learn both.
 - **The register matches the English, which is plain and direct.** The product says
   "Coworkers work on their own and with each other", so the Chinese says
-  「同事各自工作，也彼此协作」— not 「智能体实例自主执行任务」.
+  「Coworker 各自工作，也彼此协作」— not 「智能体实例自主执行任务」.
 
 The locale is a per-device choice in `localStorage` under `agent-server.locale`, detected from
 the browser on a first visit (anything `zh*` resolves to `zh-CN`). It is not an account
@@ -247,13 +247,25 @@ for a person reading English at work and Chinese at home.
 6. A label table stops being a frozen `const` and becomes a function, so it reads the current
    locale at call time.
 
-### Known gap
+### Vocabulary and catalog checks
 
-`pnpm web:check:types` runs `tsc --noEmit` against a solution-style `tsconfig.json` with
-`files: []` and project references, which checks nothing. The real command is
-`tsc -p tsconfig.app.json --noEmit`, and it currently reports eight pre-existing errors
-unrelated to translation. Until that is cleaned up, `apps/web/src/i18n/i18n.test.ts` asserts
-dictionary parity at runtime so the guarantee is enforced by a command that actually runs.
+| Term (both locales) | Meaning                                                                                 |
+| ------------------- | --------------------------------------------------------------------------------------- |
+| Work                | Durable record pinned to a Definition version; only archive state                       |
+| WorkRun             | One product execution of a Work                                                         |
+| Run                 | One attempt at a technical Task                                                         |
+| Definition          | Versioned execution specification; selects Worker or Team                               |
+| Worker              | Formal executor selected by the Definition                                              |
+| Coworker            | Conversational identity; access to Definitions is not a Work binding                    |
+| Task                | Technical execution node; the Tasks navigation remains the existing WorkItem projection |
+
+Preparation collects input before a WorkRun exists. Its chat bucket has a null
+`work_run_id`; confirmation creates the WorkRun. Execution chat carries the selected
+WorkRun ID. Chat's compatibility `lead` role does not establish a Team lead; the UI
+uses “Assistant” / “助手” unless actual Team membership supplies the role.
+
+`pnpm web:check:types` checks `tsconfig.app.json`. The i18n unit suite also asserts
+exact key parity and interpolation-placeholder parity between both catalogs.
 
 ## Source-of-truth rule
 

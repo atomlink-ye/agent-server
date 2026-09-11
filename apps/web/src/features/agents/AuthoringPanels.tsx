@@ -65,19 +65,17 @@ export function NewCoworkerForm({
   }
 
   return (
-    <section className="agents-authoring" aria-label={t('authoring.newCoworker')}>
+    <section
+      className="agents-authoring"
+      aria-label={t('authoring.newCoworker')}
+    >
       <header>
         <span className="eyebrow">{t('authoring.newCoworker')}</span>
         <h1>{t('authoring.hire')}</h1>
-        <p>
-          {t('authoring.hireDescription')}
-        </p>
+        <p>{t('authoring.hireDescription')}</p>
       </header>
       <div className="agents-form-grid">
-        <Field
-          label={t('authoring.name')}
-          hint={t('authoring.nameHint')}
-        >
+        <Field label={t('authoring.name')} hint={t('authoring.nameHint')}>
           <input
             value={name}
             onChange={(event) => setName(event.target.value)}
@@ -99,7 +97,10 @@ export function NewCoworkerForm({
             placeholder={t('authoring.summaryPlaceholder')}
           />
         </Field>
-        <Field label={t('authoring.workingStyle')} hint={t('authoring.workingStyleHint')}>
+        <Field
+          label={t('authoring.workingStyle')}
+          hint={t('authoring.workingStyleHint')}
+        >
           <textarea
             value={instructions}
             onChange={(event) => setInstructions(event.target.value)}
@@ -120,18 +121,18 @@ export function NewCoworkerForm({
               setModelPolicyRef(event.target.value as typeof modelPolicyRef)
             }
           >
-            <option value="free-only">{t('authoring.recommendedFreeOnly')}</option>
+            <option value="free-only">
+              {t('authoring.recommendedFreeOnly')}
+            </option>
             <option value="claude/deepseek-v4-flash">
-              Claude · deepseek-v4-flash
+              {t('authoring.runtimeClaude')}
             </option>
             <option value="codex/deepseek-v4-flash">
-              Codex · deepseek-v4-flash
+              {t('authoring.runtimeCodex')}
             </option>
           </select>
         </Field>
-        <p className="agents-form-hint">
-          {t('authoring.compilerHint')}
-        </p>
+        <p className="agents-form-hint">{t('authoring.compilerHint')}</p>
       </details>
       {error ? (
         <p className="agents-error" role="alert">
@@ -256,9 +257,7 @@ export function CapabilityBuilder({
       const nextPlan = await workDefinitionClient.plan(source);
       setPlan(nextPlan);
       setStatus('ready');
-      setMessage(
-        t('authoring.readyToSave'),
-      );
+      setMessage(t('authoring.readyToSave'));
       return { source, plan: nextPlan };
     } catch (reason) {
       if (isFeatureUnavailable(reason)) {
@@ -326,13 +325,14 @@ export function CapabilityBuilder({
   }
 
   return (
-    <section className="agents-authoring" aria-label={t('authoring.capabilityBuilder')}>
+    <section
+      className="agents-authoring"
+      aria-label={t('authoring.capabilityBuilder')}
+    >
       <header>
         <span className="eyebrow">{t('authoring.teachCapability')}</span>
         <h1>{t('authoring.whatCan', { name: agent.displayName })}</h1>
-        <p>
-          {t('authoring.capabilityDescription')}
-        </p>
+        <p>{t('authoring.capabilityDescription')}</p>
       </header>
 
       <div className="agents-form-grid">
@@ -372,7 +372,8 @@ export function CapabilityBuilder({
                 resetPreview();
               }}
             />{' '}
-            {t('authoring.oneSpecialist')} <small>{t('authoring.recommended')}</small>
+            {t('authoring.oneSpecialist')}{' '}
+            <small>{t('authoring.recommended')}</small>
           </label>
           <label>
             <input
@@ -487,9 +488,7 @@ export function CapabilityBuilder({
           </button>
         </div>
         {inputs.length === 0 ? (
-          <p className="agents-empty-note">
-            {t('authoring.noInputs')}
-          </p>
+          <p className="agents-empty-note">{t('authoring.noInputs')}</p>
         ) : null}
         {inputs.map((input) => (
           <article className="agents-input-row" key={input.id}>
@@ -614,7 +613,9 @@ export function CapabilityBuilder({
               surfaceUnavailable
             }
           >
-            {status === 'previewing' ? t('authoring.resolving') : t('authoring.previewPlan')}
+            {status === 'previewing'
+              ? t('authoring.resolving')
+              : t('authoring.previewPlan')}
           </button>
         </div>
         {plan ? <PlanPreview plan={plan} inputs={inputs} /> : null}
@@ -632,8 +633,7 @@ export function CapabilityBuilder({
         <details className="agents-advanced">
           <summary>{t('authoring.generatedSource')}</summary>
           <pre className="agents-source-preview">
-            {generatedSource ||
-              t('authoring.previewSource')}
+            {generatedSource || t('authoring.previewSource')}
           </pre>
         </details>
       </div>
@@ -788,9 +788,7 @@ function SkillPicker({
     // feature_unavailable means this workspace does not compose the Product
     // Work surface, so Skill selection can never succeed here. No Retry.
     return (
-      <p className="agents-empty-note">
-        {t('authoring.skillsUnavailable')}
-      </p>
+      <p className="agents-empty-note">{t('authoring.skillsUnavailable')}</p>
     );
   if (catalog.status === 'error')
     return (
@@ -803,9 +801,7 @@ function SkillPicker({
     );
   if (catalog.skills.length === 0)
     return (
-      <p className="agents-empty-note">
-        {t('authoring.noPublishedSkills')}
-      </p>
+      <p className="agents-empty-note">{t('authoring.noPublishedSkills')}</p>
     );
   return (
     <Field label={t('authoring.skillsLabel')} hint={t('authoring.skillsHint')}>
@@ -833,10 +829,14 @@ function SkillPicker({
             */}
             {skill.requiredToolRefs.length ? (
               <span className="agents-skill-grant">
-                {t('authoring.grants', { tools: skill.requiredToolRefs.join(', ') })}
+                {t('authoring.grants', {
+                  tools: skill.requiredToolRefs.join(', '),
+                })}
               </span>
             ) : (
-              <span className="agents-skill-grant">{t('authoring.grantsNone')}</span>
+              <span className="agents-skill-grant">
+                {t('authoring.grantsNone')}
+              </span>
             )}
           </label>
         ))}
@@ -941,7 +941,10 @@ function unique(values: readonly string[]): string[] {
 // they are internal vocabulary rather than user-facing copy. Translate before
 // the author ever commits to creating a Work: some deployments do not support every token, and finding that out
 // only after Run start is the exact gap this preview closes.
-function describeRuntimeCapability(t: ReturnType<typeof useT>, token: string): string {
+function describeRuntimeCapability(
+  t: ReturnType<typeof useT>,
+  token: string,
+): string {
   if (token === 'external_workspace') return t('authoring.externalWorkspace');
   if (token === 'reusable_session') return t('authoring.reusableSession');
   if (token === 'platform_mcp') return t('authoring.platformMcp');

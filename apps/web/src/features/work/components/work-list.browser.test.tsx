@@ -222,8 +222,8 @@ it('renders Work state and run counts without latest Run summaries', async () =>
     expect(cards).toHaveLength(stateCases.length);
     for (const [index] of stateCases.entries()) {
       const card = cards[index]!;
-      expect(card.textContent).toContain('Active');
-      expect(card.textContent).toContain('3 runs');
+      expect(card.textContent).toContain('Unarchived');
+      expect(card.textContent).toContain('3 WorkRuns');
       // The list row is a navigation index, not a place to read a Run's
       // result: it shows state and a compact timestamp, not result text.
       expect(card.textContent).not.toContain(

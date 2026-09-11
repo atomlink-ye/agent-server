@@ -183,9 +183,14 @@ function WorkChatConversation({
     }
   }
   return (
-    <section className="work-chat-pane" aria-label={t('work.tab.chat')}>
+    <section
+      className="work-chat-pane"
+      aria-label={t(
+        workRunId ? 'work.run.conversation' : 'work.record.preparation',
+      )}
+    >
       <p className="work-shell-kicker">
-        {t(workRunId ? 'work.chat.runLead' : 'work.chat.preparationTitle')}
+        {t(workRunId ? 'work.chat.runContext' : 'work.chat.preparationTitle')}
       </p>
       <div
         className="work-chat-history scroll-region"
@@ -217,10 +222,10 @@ function WorkChatConversation({
           >
             <span className="work-chat-message__avatar" aria-hidden="true">
               {message.role === 'lead'
-                ? 'L'
+                ? t('work.chat.role.assistant').slice(0, 1)
                 : message.role === 'system'
                   ? '·'
-                  : 'Y'}
+                  : t('work.chat.role.user').slice(0, 1)}
             </span>
             <article
               className="chat-message"
@@ -230,7 +235,7 @@ function WorkChatConversation({
             >
               <span className="work-chat-message__author">
                 {message.role === 'lead'
-                  ? t('work.chat.role.lead')
+                  ? t('work.chat.role.assistant')
                   : message.role === 'system'
                     ? t('work.chat.role.system')
                     : t('work.chat.role.user')}

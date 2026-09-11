@@ -13,8 +13,8 @@ export function ObservePage() {
   const t = useT();
   const [searchParams] = useSearchParams();
   const workId = searchParams.get('work');
-  const runId = searchParams.get('run');
-  const hasSelection = Boolean(workId && runId);
+  const workRunId = searchParams.get('run');
+  const hasSelection = Boolean(workId && workRunId);
 
   const [aggregate, setAggregate] = useState<ObserveAggregate | null>(null);
   const [aggregateResolving, setAggregateResolving] = useState(false);
@@ -36,8 +36,8 @@ export function ObservePage() {
           className="work-main-content scroll-region"
           data-empty={hasSelection || aggregate ? 'false' : 'true'}
         >
-          {workId && runId ? (
-            <ObserveDetail workId={workId} runId={runId} />
+          {workId && workRunId ? (
+            <ObserveDetail workId={workId} workRunId={workRunId} />
           ) : aggregate ? (
             <ObserveSummary
               aggregate={aggregate}

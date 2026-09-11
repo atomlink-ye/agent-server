@@ -121,7 +121,7 @@ function OverviewContent({
       <RunTrace live={live} presentation="record" trace={trace} />
       <RunRoleCards
         workId={data.work.id}
-        runId={run.work_run.id}
+        workRunId={run.work_run.id}
         originConversationId={originConversationId}
       />
     </section>
@@ -171,11 +171,11 @@ function RunJourney({
 
 function RunRoleCards({
   workId,
-  runId,
+  workRunId,
   originConversationId,
 }: {
   readonly workId: string;
-  readonly runId: string;
+  readonly workRunId: string;
   readonly originConversationId?: string | null;
 }) {
   const t = useT();
@@ -185,7 +185,7 @@ function RunRoleCards({
 
   useEffect(() => {
     let active = true;
-    loadRunRoleSummaries(workId, runId)
+    loadRunRoleSummaries(workId, workRunId)
       .then((next) => {
         if (active) setSessions(next);
       })
@@ -195,7 +195,7 @@ function RunRoleCards({
     return () => {
       active = false;
     };
-  }, [workId, runId]);
+  }, [workId, workRunId]);
 
   if (!sessions || sessions.length === 0) return null;
 
@@ -212,7 +212,7 @@ function RunRoleCards({
                 workTabPath(
                   workId,
                   'transcript',
-                  runId,
+                  workRunId,
                   originConversationId ?? null,
                   index,
                 ),

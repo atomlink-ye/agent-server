@@ -2,7 +2,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { expect, it, vi } from 'vitest';
-import { page } from 'vitest/browser';
+import { commands, page } from 'vitest/browser';
 
 import {
   GetWorkResponseSchema,
@@ -148,7 +148,7 @@ function planResponse(): Response {
 function mockProductReads(
   input: {
     readonly runList?: typeof runs;
-    readonly selectedRunId?: string;
+    readonly selectedWorkRunId?: string;
     readonly runBody?: unknown;
     readonly definition?: ReturnType<typeof productDefinitionVersion>;
     readonly currentDefinitionMissing?: boolean;
@@ -158,7 +158,7 @@ function mockProductReads(
   } = {},
 ) {
   const runList = input.runList ?? runs;
-  const runId = input.selectedRunId ?? selectedRun.id;
+  const workRunId = input.selectedWorkRunId ?? selectedRun.id;
   const definition = input.definition ?? definitionVersion;
   const responses = new Map<string, unknown>([
     [
@@ -187,10 +187,10 @@ function mockProductReads(
     [`/api/works/${work.work.id}`, work],
     [`/api/works/${work.work.id}/runs`, runList],
     [`/api/work-definition-versions/${definition.id}`, { version: definition }],
-    [`/api/works/${work.work.id}/runs/${runId}`, input.runBody ?? run],
-    [`/api/works/${work.work.id}/runs/${runId}/trace`, trace],
+    [`/api/works/${work.work.id}/runs/${workRunId}`, input.runBody ?? run],
+    [`/api/works/${work.work.id}/runs/${workRunId}/trace`, trace],
     [
-      `/api/works/${work.work.id}/runs/${runId}/session-transcripts`,
+      `/api/works/${work.work.id}/runs/${workRunId}/session-transcripts`,
       input.sessionTranscripts,
     ],
     [
@@ -205,10 +205,10 @@ function mockProductReads(
       },
     ],
     [
-      `/api/works/${work.work.id}/runs/${runId}/chat`,
+      `/api/works/${work.work.id}/runs/${workRunId}/chat`,
       {
         work_id: work.work.id,
-        work_run_id: runId,
+        work_run_id: workRunId,
         messages: input.chatMessages ?? [],
         preparation: null,
       },
@@ -435,7 +435,7 @@ it('renders a Work record with Work-only tabs through Product reads only', async
       [...host.querySelectorAll<HTMLAnchorElement>('.work-tabs a')].map(
         (item) => item.textContent?.trim(),
       ),
-    ).toEqual(['Summary', 'Runs', 'Definition', 'Files']);
+    ).toEqual(['Summary', 'WorkRuns', 'Definition', 'Files']);
     await page.screenshot({
       path: '../../../../__screenshots__/ux-review/work-overview.png',
     });
@@ -443,9 +443,9 @@ it('renders a Work record with Work-only tabs through Product reads only', async
       host.querySelector('.work-tabs a[aria-current="page"]')?.textContent,
     ).toBe('Summary');
     expect(host.textContent).not.toContain(
-      'Everything captured during this Run',
+      'Everything captured during this WorkRun',
     );
-    expect(host.textContent).toContain('Start Run');
+    expect(host.textContent).toContain('Start WorkRun');
     expect(host.querySelector('[data-testid=work-record]')).not.toBeNull();
     const paths = fetchMock.mock.calls.map(([path]) => path as string);
     expect(paths).toContain(`/api/works/${work.work.id}`);
@@ -467,7 +467,7 @@ it('renders the exact Product DefinitionVersion used by the selected Run', async
   const { host, root } = await renderDetail({
     workId: work.work.id,
     tab: 'definition',
-    selectedRunId: selectedRun.id,
+    selectedWorkRunId: selectedRun.id,
   });
   try {
     expect(
@@ -479,7 +479,7 @@ it('renders the exact Product DefinitionVersion used by the selected Run', async
     expect(host.textContent).toContain('Researcher');
     expect(host.textContent).toContain(selectedRun.definition_version_id);
     expect(host.querySelector('.work-run-header')?.textContent).toContain(
-      'RUN #1',
+      'WorkRun #1',
     );
     expect(
       [...host.querySelectorAll('.work-tabs a')].map((a) => a.textContent),
@@ -518,7 +518,7 @@ it('reads an exact historical DefinitionVersion instead of falling back to Team-
   );
   const fetchMock = mockProductReads({
     runList,
-    selectedRunId: historicalRunId,
+    selectedWorkRunId: historicalRunId,
     runBody: historicalRun,
     definition: historicalDefinition,
   });
@@ -526,7 +526,7 @@ it('reads an exact historical DefinitionVersion instead of falling back to Team-
   const { host, root } = await renderDetail({
     workId: work.work.id,
     tab: 'definition',
-    selectedRunId: historicalRunId,
+    selectedWorkRunId: historicalRunId,
   });
   try {
     expect(
@@ -552,7 +552,7 @@ it('does not invent a runnable Work when its current DefinitionVersion is missin
   try {
     expect(host.textContent).toContain(work.work.title);
     expect(host.textContent).not.toContain(
-      'Everything captured during this Run',
+      'Everything captured during this WorkRun',
     );
     expect(host.textContent).toContain(
       'The current Work Definition version could not be loaded, so runnability cannot be determined.',
@@ -560,7 +560,7 @@ it('does not invent a runnable Work when its current DefinitionVersion is missin
     const button = host.querySelector<HTMLButtonElement>(
       '.work-run-trigger button',
     );
-    expect(button?.textContent).toContain('Can’t start Run');
+    expect(button?.textContent).toContain('Can’t start WorkRun');
     expect(button?.disabled).toBe(true);
     expect(host.textContent).not.toContain('Retry availability check');
     expect(fetchMock.mock.calls.map(([path]) => path)).toContain(
@@ -577,14 +577,14 @@ it('keeps Run tabs and an ordinal breadcrumb separate from the Work tabs', async
   const { host, root } = await renderDetail({
     workId: work.work.id,
     tab: 'chat',
-    selectedRunId: selectedRun.id,
+    selectedWorkRunId: selectedRun.id,
   });
   try {
     expect(
       [...host.querySelectorAll('.work-tabs a')].map((a) => a.textContent),
     ).toEqual(['Conversation', 'Trace', 'Result']);
     expect(host.querySelector('.work-run-header')?.textContent).toContain(
-      'RUN #1',
+      'WorkRun #1',
     );
     expect(host.querySelector('.work-run-header a')?.getAttribute('href')).toBe(
       `/work/${work.work.id}`,
@@ -614,12 +614,12 @@ it('lists Runs newest first with ordinal identities and opens their conversation
   const { host, root } = await renderDetail({
     workId: work.work.id,
     tab: 'runs',
-    selectedRunId: selectedRun.id,
+    selectedWorkRunId: selectedRun.id,
   });
   try {
     const rows = [...host.querySelectorAll('.work-run-list > li')];
     expect(rows.map((row) => row.querySelector('strong')?.textContent)).toEqual(
-      ['Run #2', 'Run #1'],
+      ['WorkRun #2', 'WorkRun #1'],
     );
     expect(rows[0]?.querySelector('a')?.getAttribute('href')).toContain(
       `tab=chat&run=${selectedRun.id}`,
@@ -631,7 +631,7 @@ it('lists Runs newest first with ordinal identities and opens their conversation
   }
 });
 
-it('offers Start Run in an empty Runs index', async () => {
+it('offers Start WorkRun in an empty Runs index', async () => {
   mockProductReads({ runList: { work_runs: [], next_cursor: null } });
   const { host, root } = await renderDetail({
     workId: work.work.id,
@@ -641,7 +641,7 @@ it('offers Start Run in an empty Runs index', async () => {
     expect(
       host.querySelector('.work-detail-state .work-run-trigger button')
         ?.textContent,
-    ).toBe('Start Run');
+    ).toBe('Start WorkRun');
   } finally {
     await act(async () => root.unmount());
     host.remove();
@@ -675,7 +675,7 @@ it('keeps the existing result, journey and trace in the selected Run Result view
   const { host, root } = await renderDetail({
     workId: work.work.id,
     tab: 'result',
-    selectedRunId: selectedRun.id,
+    selectedWorkRunId: selectedRun.id,
   });
   try {
     expect(
@@ -685,7 +685,9 @@ it('keeps the existing result, journey and trace in the selected Run Result view
       'The result summary is still unavailable.',
     );
     expect(host.textContent).toContain('Key steps');
-    expect(host.textContent).toContain('Everything captured during this Run');
+    expect(host.textContent).toContain(
+      'Everything captured during this WorkRun',
+    );
     for (const excluded of trace.timeline_coverage.excluded_execution)
       expect(host.textContent?.toLowerCase()).toContain(
         excluded.replaceAll('_', ' '),
@@ -713,4 +715,46 @@ it('can read a Work record even when a child Run projection is unavailable', asy
     host.remove();
     vi.unstubAllGlobals();
   }
+});
+
+it('keeps execution vocabulary within the desktop header in both locales', async () => {
+  const { setLocale } = await import('../../../i18n');
+  await page.viewport(1440, 900);
+  const measurements = [];
+  for (const locale of ['en', 'zh-CN'] as const) {
+    setLocale(locale);
+    mockProductReads();
+    const { host, root } = await renderDetail({
+      workId: work.work.id,
+      tab: 'chat',
+      selectedWorkRunId: selectedRun.id,
+    });
+    try {
+      const header = host.querySelector<HTMLElement>('.work-run-header')!;
+      const heading = header.querySelector('h1')!;
+      const tabs = host.querySelector<HTMLElement>('.work-tabs')!;
+      const headingRect = heading.getBoundingClientRect();
+      const headerRect = header.getBoundingClientRect();
+      expect(window.innerWidth).toBe(1440);
+      expect(headingRect.right).toBeLessThanOrEqual(headerRect.right);
+      expect(header.scrollWidth).toBeLessThanOrEqual(header.clientWidth);
+      expect(tabs.scrollWidth).toBeLessThanOrEqual(tabs.clientWidth);
+      expect(heading.textContent).toContain('WorkRun');
+      measurements.push({
+        locale,
+        viewport: window.innerWidth,
+        headerWidth: headerRect.width,
+        headerHeight: headerRect.height,
+        headingWidth: headingRect.width,
+        headingHeight: headingRect.height,
+        tabsHeight: tabs.getBoundingClientRect().height,
+      });
+    } finally {
+      await act(async () => root.unmount());
+      host.remove();
+      vi.unstubAllGlobals();
+      setLocale('en');
+    }
+  }
+  await commands.writeInventory(JSON.stringify(measurements), 'canary');
 });

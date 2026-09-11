@@ -1,3 +1,5 @@
+import { capturedValue } from '@/i18n/captured-value';
+import { t } from '@/i18n';
 import { useEffect, useState } from 'react';
 
 import { AssistantMarkdown } from '@/features/conversations/components/assistant-markdown';
@@ -216,12 +218,11 @@ export function SessionTranscripts({
           <p className="work-shell-kicker">{t('trace.sessions')}</p>
           <h2>{t('trace.sessions.workers')}</h2>
           <p>
-            This Work Run is {humanize(productState)}. Choose a Worker to see
-            its captured log, completed activity, and any block.
+            {t('trace.sessions.statusHint', { status: humanize(productState) })}
           </p>
         </div>
         <span>
-          {data.sessions.length} agent{data.sessions.length > 1 ? 's' : ''}
+          {t('trace.sessions.agentCount', { count: data.sessions.length })}
         </span>
       </div>
       <div className="execution-transcript__body">
@@ -247,8 +248,10 @@ export function SessionTranscripts({
                   <span>{session.label.role}</span>
                 ) : null}
                 <small>
-                  Session {humanize(session.label.status)} ·{' '}
-                  {session.summary.entry_count} entries
+                  {t('work.sessionSummary', {
+                    status: humanize(session.label.status),
+                    count: session.summary.entry_count,
+                  })}
                 </small>
               </button>
             );
@@ -266,22 +269,27 @@ export function SessionTranscripts({
                   <strong>{selected.label.name}</strong>
                   <span>
                     {selected.label.role !== null
-                      ? `Role: ${selected.label.role} · `
+                      ? t('trace.sessionRole', { role: selected.label.role })
                       : ''}
-                    Session {humanize(selected.label.status)}
+                    {t('trace.sessionStatus', {
+                      status: humanize(selected.label.status),
+                    })}
                   </span>
                 </div>
                 <span>
-                  {selected.summary.entry_count} entries ·{' '}
+                  {t('trace.entriesCount', {
+                    count: selected.summary.entry_count,
+                  })}{' '}
+                  ·{' '}
                   {selected.summary.last_timestamp
                     ? formatTimestamp(selected.summary.last_timestamp)
-                    : 'no activity captured'}
+                    : t('trace.sessions.noActivity')}
                 </span>
               </header>
               {agentAttempts.length ? (
                 <nav
                   className="execution-transcript__work-item-filter"
-                  aria-label="Filter by work item"
+                  aria-label={t('trace.sessions.workItemFilter')}
                   data-testid="session-work-item-filter"
                 >
                   <button
@@ -289,7 +297,7 @@ export function SessionTranscripts({
                     onClick={() => setSelectedWorkItemFilter(null)}
                     type="button"
                   >
-                    All work
+                    {t('trace.sessions.allWork')}
                   </button>
                   {agentAttempts.map((entry) => (
                     <button
@@ -313,7 +321,7 @@ export function SessionTranscripts({
                   className="execution-transcript__messages"
                   data-testid="session-messages"
                 >
-                  <h3>Agent-to-Agent messages</h3>
+                  <h3>{t('trace.sessions.agentMessages')}</h3>
                   {messages.map((message) => (
                     <article key={message.id}>
                       <div>
@@ -350,7 +358,7 @@ export function SessionTranscripts({
                   />
                 ) : (
                   <p className="execution-transcript__notice">
-                    No entries were captured for this session.
+                    {t('trace.sessions.emptyEntries')}
                   </p>
                 )}
               </section>
@@ -359,15 +367,15 @@ export function SessionTranscripts({
                   className="execution-transcript__notice"
                   data-testid="session-truncated-warning"
                 >
-                  ⚠️ This log is truncated — newer entries exist but were not
-                  returned. The captured window shows the earliest{' '}
-                  {selected.entries.length} entries.
+                  {t('trace.sessions.truncated', {
+                    count: selected.entries.length,
+                  })}
                 </p>
               ) : null}
             </>
           ) : (
             <p className="execution-transcript__notice">
-              Select a role to view its session transcript.
+              {t('trace.sessions.select')}
             </p>
           )}
         </div>
@@ -520,9 +528,14 @@ function LifecycleRow({ entry }: { readonly entry: ProjectedTranscriptEntry }) {
   const status =
     entry.event.kind === 'lifecycle' ? entry.event.status : 'unknown';
   return status === 'started' ? (
-    <div className="transcript__lifecycle-start">Run started</div>
+    <div className="transcript__lifecycle-start">
+      {t('trace.sessions.runStarted')}
+    </div>
   ) : (
-    <div className="transcript__rule">Run {humanize(status)}</div>
+    <div className="transcript__rule">
+      {t('observe.run')}
+      {humanize(status)}
+    </div>
   );
 }
 
@@ -560,45 +573,50 @@ function SessionSummaryBlock({
     >
       <dl>
         <div>
-          <dt>Entries</dt>
+          <dt>{t('trace.entries')}</dt>
           <dd>{summary.entry_count}</dd>
         </div>
         <div>
-          <dt>Last activity</dt>
+          <dt>{t('trace.lastActivity')}</dt>
           <dd>
             {summary.last_timestamp
               ? formatTimestamp(summary.last_timestamp)
-              : 'Not captured'}
+              : t('trace.notCaptured')}
           </dd>
         </div>
         {summary.work_refs.length ? (
           <div>
-            <dt>Work refs</dt>
+            <dt>{t('trace.workRefs')}</dt>
             <dd>{summary.work_refs.join(', ')}</dd>
           </div>
         ) : null}
         {platformToolCount ? (
           <div data-testid="session-platform-tool-count">
-            <dt>Platform tools</dt>
+            <dt>{t('trace.platformTools')}</dt>
             <dd>{platformToolCount}</dd>
           </div>
         ) : null}
       </dl>
       {summary.last_meaningful?.action || summary.last_meaningful?.result ? (
         <aside className="execution-transcript__last-meaningful">
-          <strong>Latest activity summary</strong>
+          <strong>{t('trace.latestSummary')}</strong>
           {summary.last_meaningful.action ? (
-            <p>Action: {summary.last_meaningful.action}</p>
+            <p>
+              {t('trace.sessions.action', {
+                action: summary.last_meaningful.action,
+              })}
+            </p>
           ) : null}
           {summary.last_meaningful.result ? (
-            <p>Result: {summary.last_meaningful.result}</p>
+            <p>
+              {t('trace.events.result', {
+                result: summary.last_meaningful.result,
+              })}
+            </p>
           ) : null}
           <details>
-            <summary>About this summary</summary>
-            <p>
-              This is assembled from captured messages and actions. Original
-              wording appears in the log below.
-            </p>
+            <summary>{t('trace.aboutSummary')}</summary>
+            <p>{t('trace.sessions.summaryHint')}</p>
           </details>
         </aside>
       ) : null}
@@ -607,7 +625,7 @@ function SessionSummaryBlock({
 }
 
 function humanize(value: string) {
-  return value.replaceAll('_', ' ');
+  return capturedValue(value);
 }
 function formatTimestamp(value: string) {
   return `${value.replace('T', ' ').slice(0, 19)} UTC`;
@@ -642,9 +660,9 @@ function collaborationMessages(trace: NormalizedTrace, workItemId: string) {
     return [
       {
         id: edge.messageId,
-        sender: message?.senderName ?? 'Agent',
-        recipient: message?.recipientName ?? 'Agent',
-        summary: message?.summary ?? 'Message content was not captured.',
+        sender: message?.senderName ?? t('files.agent'),
+        recipient: message?.recipientName ?? t('files.agent'),
+        summary: message?.summary ?? t('trace.messageNotCaptured'),
         createdAt: edge.sourceCreatedAt,
       },
     ];

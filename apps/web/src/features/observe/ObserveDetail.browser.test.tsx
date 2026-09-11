@@ -22,7 +22,7 @@ vi.mock('@/features/run-trace/run-trace-gateway', () => ({
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
 const TRACE = {
-  runId: 'run-1',
+  workRunId: 'run-1',
   work: { id: 'work-1', title: 'Draft the quarterly report' },
   workRun: { id: 'run-1', productState: 'complete' },
   actors: new Map(),
@@ -148,7 +148,7 @@ it('renders Duration/Inbox/Tools/Tokens metric cards from the loaded Trace', asy
 
   const { host, root } = renderDetail();
   await act(async () => {
-    root.render(<ObserveDetail workId="work-1" runId="run-1" />);
+    root.render(<ObserveDetail workId="work-1" workRunId="run-1" />);
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
@@ -187,7 +187,7 @@ it('shows a not-captured placeholder for Tokens when no usage was recorded', asy
 
   const { host, root } = renderDetail();
   await act(async () => {
-    root.render(<ObserveDetail workId="work-1" runId="run-1" />);
+    root.render(<ObserveDetail workId="work-1" workRunId="run-1" />);
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();

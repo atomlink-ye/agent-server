@@ -222,12 +222,12 @@ it('renders recorder-backed proportional normal and rework geometry', async () =
             (actor) => actor.name ?? 'Name not captured',
           ),
           // The Work Run's own lane is always appended after the agents.
-          ...(hasRootRun ? ['Work Run'] : []),
+          ...(hasRootRun ? ['Root Task Run'] : []),
         ]);
         const rootLane = laneNodes.at(-1);
         expect(
           rootLane?.querySelector('.run-trace__lane-note')?.textContent,
-        ).toBe('The Work Run itself, not an agent');
+        ).toBe('Attempts of the root Task that coordinates this WorkRun');
       }
       expect(
         attemptButtons.every(

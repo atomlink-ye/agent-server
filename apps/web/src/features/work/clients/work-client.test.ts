@@ -3,10 +3,10 @@ import { WorkClient } from './work-client';
 import { apiTransport } from '../../../api/transport';
 
 const workId = '00000000-0000-4000-8000-000000000100';
-const runId = '00000000-0000-4000-8000-000000000200';
+const workRunId = '00000000-0000-4000-8000-000000000200';
 const message = {
-  id: runId,
-  work_run_id: runId,
+  id: workRunId,
+  work_run_id: workRunId,
   sequence: 1,
   role: 'user',
   body: 'hello',
@@ -21,22 +21,22 @@ it('uses the Run-scoped browser routes for reads, writes, and retries', async ()
   const client = new WorkClient();
   request.mockResolvedValueOnce({
     work_id: workId,
-    work_run_id: runId,
+    work_run_id: workRunId,
     messages: [],
     preparation: null,
   });
-  await client.chat(workId, runId);
+  await client.chat(workId, workRunId);
   expect(request.mock.calls[0]?.[0]).toBe(
-    `/api/works/${workId}/runs/${runId}/chat`,
+    `/api/works/${workId}/runs/${workRunId}/chat`,
   );
   request.mockResolvedValueOnce({ message, replayed: false });
-  await client.postChat(workId, 'hello', 'key', runId);
+  await client.postChat(workId, 'hello', 'key', workRunId);
   expect(request.mock.calls[1]?.[0]).toBe(
-    `/api/works/${workId}/runs/${runId}/chat`,
+    `/api/works/${workId}/runs/${workRunId}/chat`,
   );
   request.mockResolvedValueOnce({ message });
-  await client.retryChat(workId, message.id, runId);
+  await client.retryChat(workId, message.id, workRunId);
   expect(request.mock.calls[2]?.[0]).toBe(
-    `/api/works/${workId}/runs/${runId}/chat/${message.id}/retry`,
+    `/api/works/${workId}/runs/${workRunId}/chat/${message.id}/retry`,
   );
 });

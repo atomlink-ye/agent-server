@@ -80,16 +80,16 @@ function WorkCardContent({ card }: { readonly card: WorkChatCard }) {
   );
 }
 
-// The same Work is named the same way wherever it appears: the Work list, the
-// Work page, and this tile all read their label from productStatePresentation.
-// A null state is the one case the server could not read at all; every other
-// stage, including a Work that has not started, has a name of its own.
+// The card projects the latest WorkRun state; Work itself has no status
+// machine. A pre-execution card states that it has no WorkRuns yet.
 function statusLabel(
   t: Translate,
   state: WorkChatCard['productState'],
 ): string {
   if (state === null) return t('workCard.statusUnavailable');
-  return productStatePresentation(state).label;
+  return state === 'not_started'
+    ? t('work.noExecution')
+    : t('work.latestState', { state: productStatePresentation(state).label });
 }
 
 function resultText(t: Translate, card: WorkChatCard): string {

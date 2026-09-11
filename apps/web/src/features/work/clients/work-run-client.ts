@@ -44,7 +44,7 @@ export type AgentSummary = {
   };
 };
 
-export type AnchoredRun = Extract<
+export type AnchoredWorkRun = Extract<
   ProductWorkRun,
   { projection_status: 'internally_anchored' }
 >;
@@ -67,18 +67,18 @@ export class WorkRunClient {
     return body;
   }
 
-  async get(workId: string, runId: string): Promise<ProductWorkRun> {
+  async get(workId: string, workRunId: string): Promise<ProductWorkRun> {
     const body = parseProduct(
       ProductWorkRunResponseSchema,
       await readProductJson(
-        `/api/works/${encodeURIComponent(workId)}/runs/${encodeURIComponent(runId)}`,
+        `/api/works/${encodeURIComponent(workId)}/runs/${encodeURIComponent(workRunId)}`,
         { method: 'GET', cache: 'no-store' },
       ),
     );
     if (
       'projection_status' in body &&
       body.projection_status === 'internally_anchored' &&
-      (body.work?.id !== workId || body.work_run?.id !== runId)
+      (body.work?.id !== workId || body.work_run?.id !== workRunId)
     ) {
       throw new ProductReadError(
         'The Product Run response did not match the requested Work.',
@@ -88,11 +88,11 @@ export class WorkRunClient {
     return body;
   }
 
-  async trace(workId: string, runId: string): Promise<NormalizedTrace> {
+  async trace(workId: string, workRunId: string): Promise<NormalizedTrace> {
     const body = parseProduct(
       ProductRunTraceResponseSchema,
       await readProductJson(
-        `/api/works/${encodeURIComponent(workId)}/runs/${encodeURIComponent(runId)}/trace`,
+        `/api/works/${encodeURIComponent(workId)}/runs/${encodeURIComponent(workRunId)}/trace`,
         { method: 'GET', cache: 'no-store' },
       ),
     );
@@ -102,7 +102,7 @@ export class WorkRunClient {
     ) {
       throw new Error('The Product WorkRun projection was not captured.');
     }
-    if (body.work?.id !== workId || body.work_run?.id !== runId) {
+    if (body.work?.id !== workId || body.work_run?.id !== workRunId) {
       throw new ProductReadError(
         'The Product Trace response did not match the requested Run.',
         502,
@@ -113,16 +113,16 @@ export class WorkRunClient {
 
   async sessionTranscripts(
     workId: string,
-    runId: string,
+    workRunId: string,
   ): Promise<readonly AgentSummary[]> {
     const body = parseProduct(
       ProductSessionTranscriptsResponseSchema,
       await readProductJson(
-        `/api/works/${encodeURIComponent(workId)}/runs/${encodeURIComponent(runId)}/session-transcripts`,
+        `/api/works/${encodeURIComponent(workId)}/runs/${encodeURIComponent(workRunId)}/session-transcripts`,
         { method: 'GET', cache: 'no-store' },
       ),
     );
-    if (body.work_id !== workId || body.work_run_id !== runId) {
+    if (body.work_id !== workId || body.work_run_id !== workRunId) {
       throw new ProductReadError(
         'The session transcript response did not match the requested Run.',
         502,

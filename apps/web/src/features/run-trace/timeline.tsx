@@ -1,3 +1,4 @@
+import { t } from '@/i18n';
 import type { CSSProperties } from 'react';
 
 import {
@@ -41,7 +42,7 @@ export function Timeline({
   return (
     <div className="run-trace__timeline" data-testid="trace-timeline">
       <ActivityTimeline trace={trace} />
-      <p className="run-trace__supporting-label">Execution lanes</p>
+      <p className="run-trace__supporting-label">{t('trace.executionLanes')}</p>
       <TimeAxis range={model.range} />
       <div className="run-trace__lanes">
         {model.actorRows.map((actor) => (
@@ -125,13 +126,20 @@ function ActivityTimeline({ trace }: { readonly trace: NormalizedTrace }) {
   );
   const projected = projectTranscript(transcriptEntries);
   return (
-    <section className="run-trace__activity-timeline" aria-label="Run activity">
+    <section
+      className="run-trace__activity-timeline"
+      aria-label={t('trace.runActivity')}
+    >
       <header>
         <div>
-          <strong>Activity</strong>
-          <p>Captured activity, with each tool shown once per Run.</p>
+          <strong>{t('agents.activity')}</strong>
+          <p>{t('trace.activityHint')}</p>
         </div>
-        <span>{projected.length || chronological.length} activities</span>
+        <span>
+          {t('trace.activityCount', {
+            count: projected.length || chronological.length,
+          })}
+        </span>
       </header>
       {projected.length ? (
         <ol>
@@ -158,9 +166,7 @@ function ActivityTimeline({ trace }: { readonly trace: NormalizedTrace }) {
           )}
         </ol>
       ) : (
-        <p className="run-trace__empty-activity">
-          No activity events were captured for this Run.
-        </p>
+        <p className="run-trace__empty-activity">{t('trace.activityEmpty')}</p>
       )}
     </section>
   );
@@ -188,7 +194,7 @@ function TimelineActivityRow({
       <time dateTime={entry.startedAt}>{formatTimestamp(entry.startedAt)}</time>
       <div className="run-trace__timeline-activity-copy">
         <ActivityRow actorName={responder} entry={entry} />
-        <small>Event {sequence}</small>
+        <small>{t('trace.eventSequence', { sequence })}</small>
       </div>
     </li>
   );
@@ -278,15 +284,18 @@ function OutputEventGroup({
             </span>
             <span>
               <strong>
-                {responderName(trace, first.runId) ?? 'Agent responded'}
+                {responderName(trace, first.runId) ?? t('trace.agentResponded')}
               </strong>
               <small>
-                {group.events.length} updates · {observedDuration(group.events)}
+                {t('trace.updateCount', {
+                  count: group.events.length,
+                  sequence: observedDuration(group.events),
+                })}
               </small>
             </span>
           </span>
         </summary>
-        <ol aria-label="Output updates">
+        <ol aria-label={t('trace.outputUpdates')}>
           {group.events.map((event) => (
             <ActivityEventRow
               event={event}
@@ -325,7 +334,7 @@ function ActivityEventRow({
             : eventLabel(event.type)}
         </strong>
         <small title={`Source Run ${event.runId}`}>
-          Event {event.sequence}
+          {t('trace.eventSequence', { sequence: event.sequence })}
         </small>
       </div>
     </li>
@@ -343,28 +352,28 @@ function isOutputEvent(event: TraceExecutionEvent): boolean {
 function observedDuration(events: readonly TraceExecutionEvent[]): string {
   const first = events[0];
   const last = events.at(-1);
-  if (!first || !last) return 'duration not captured';
+  if (!first || !last) return t('trace.durationMissing');
   const milliseconds = Date.parse(last.createdAt) - Date.parse(first.createdAt);
-  if (!Number.isFinite(milliseconds)) return 'duration not captured';
+  if (!Number.isFinite(milliseconds)) return t('trace.durationMissing');
   const seconds = Math.max(0, Math.round(milliseconds / 1000));
   const minutes = Math.floor(seconds / 60);
   return minutes
-    ? `${minutes}m ${seconds % 60}s observed`
-    : `${seconds}s observed`;
+    ? t('trace.observedMinutes', { minutes, seconds: seconds % 60 })
+    : t('trace.observedSeconds', { count: seconds });
 }
 
 function eventLabel(type: string): string {
   const normalized = type.toLocaleLowerCase();
-  if (normalized.includes('output')) return 'Output update';
-  if (normalized.includes('start')) return 'Run started';
+  if (normalized.includes('output')) return t('trace.outputUpdate');
+  if (normalized.includes('start')) return t('trace.sessions.runStarted');
   if (
     normalized.includes('succeed') ||
     normalized.includes('complete') ||
     normalized.includes('finish')
   )
-    return 'Run finished';
-  if (normalized.includes('fail')) return 'Run stopped with a problem';
-  if (normalized.includes('cancel')) return 'Run cancelled';
+    return t('trace.runFinished');
+  if (normalized.includes('fail')) return t('trace.runProblem');
+  if (normalized.includes('cancel')) return t('trace.runCancelled');
   return humanize(type);
 }
 
@@ -413,14 +422,16 @@ function RowInteractionSummary({
         .join(', ')}
     >
       {interactions.calls
-        ? `${interactions.calls} ${interactions.calls === 1 ? 'call' : 'calls'}`
+        ? t('trace.callCount', { count: interactions.calls })
         : ''}
       {interactions.calls && interactions.messages ? ' · ' : ''}
-      {interactions.messages ? `${interactions.messages} msg` : ''}
+      {interactions.messages
+        ? t('trace.messageCount', { count: interactions.messages })
+        : ''}
       {toolText ? (
         <span className="run-trace__item-tools">
           {toolText}
-          {remaining > 0 ? ` +${remaining} more` : ''}
+          {remaining > 0 ? t('trace.moreCount', { count: remaining }) : ''}
         </span>
       ) : null}
     </small>
@@ -453,11 +464,11 @@ function TimelineMessages({
   return (
     <div
       className="run-trace__timeline-messages"
-      aria-label="Message markers"
+      aria-label={t('trace.messageMarkers')}
       data-testid="timeline-messages"
     >
       <div className="run-trace__timeline-messages-name">
-        <span>Handoffs</span>
+        <span>{t('trace.handoffs')}</span>
         <small>{messageEdges.length}</small>
       </div>
       <div className="run-trace__timeline-message-track">
@@ -477,7 +488,7 @@ function TimelineMessages({
               style={{ '--marker-position': `${position}%` } as CSSProperties}
               title={
                 trace.messages.get(edge.messageId)?.summary ??
-                'Message summary not captured'
+                t('trace.messageSummaryMissing')
               }
               type="button"
             >
@@ -498,7 +509,7 @@ function TimelineMessages({
 function TimeAxis({ range }: { readonly range: CapturedRange | null }) {
   const ticks = range ? relativeTicks(range.startedAt, range.endedAt) : [];
   return (
-    <div className="run-trace__axis" aria-label="Recorded time axis">
+    <div className="run-trace__axis" aria-label={t('trace.timeAxis')}>
       {range ? (
         <>
           <span aria-hidden="true" style={{ display: 'none' }}>
@@ -555,8 +566,11 @@ function RunSpan({
       <button
         aria-label={
           subject && attemptLabel
-            ? `${subject}, ${attemptLabel}, timing not captured`
-            : 'Run, timing not captured'
+            ? t('trace.attemptTimingMissing', {
+                subject: subject ?? '',
+                attempt: attemptLabel ?? '',
+              })
+            : t('trace.runTimingMissing')
         }
         aria-pressed={selected}
         className="run-trace__attempt-unpositioned"
@@ -564,16 +578,20 @@ function RunSpan({
         type="button"
       >
         {subject && attemptLabel
-          ? `${attemptLabel} · Timing not captured`
-          : 'Run · Timing not captured'}
+          ? t('trace.attemptTimingLabel', { attempt: attemptLabel })
+          : t('trace.runTimingLabel')}
       </button>
     );
   return (
     <button
       aria-label={
         subject && attemptLabel
-          ? `${subject}, ${attemptLabel}, ${durationLabel(span)}`
-          : `Run, ${durationLabel(span)}`
+          ? t('trace.attemptDuration', {
+              subject: subject ?? '',
+              attempt: attemptLabel ?? '',
+              duration: durationLabel(span),
+            })
+          : t('trace.runDuration', { duration: durationLabel(span) })
       }
       aria-pressed={selected}
       className={`run-trace__attempt${live ? ' run-trace__attempt--live' : ''}`}
@@ -585,24 +603,25 @@ function RunSpan({
           '--attempt-width': `${geometry.width}%`,
         } as CSSProperties
       }
-      title={subject ?? 'Run'}
+      title={subject ?? t('observe.run')}
       type="button"
     >
       <span className="run-trace__attempt-label">
-        {subject && attemptLabel ? attemptLabel : 'Run'} · {durationLabel(span)}
+        {subject && attemptLabel ? attemptLabel : t('observe.run')} ·{' '}
+        {durationLabel(span)}
       </span>
       {feedbackSource ? (
         <span
-          aria-label="Recorded feedback relation"
+          aria-label={t('trace.feedbackRelation')}
           data-attempt-id={span.attemptId}
         >
-          Feedback recorded
+          {t('trace.feedbackRecorded')}
         </span>
       ) : null}
       {activityCount > 0 ? (
         <span
           className="run-trace__activity-ticks"
-          aria-label={`${activityCount} MCP activities`}
+          aria-label={t('trace.mcpCount', { count: activityCount })}
           data-testid="activity-ticks"
         >
           {Array.from({ length: Math.min(activityCount, 12) }, (_, index) => (

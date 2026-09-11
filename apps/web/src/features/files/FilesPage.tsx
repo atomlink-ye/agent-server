@@ -745,7 +745,8 @@ export function FilesPage() {
                   >
                     <span className="files-scope-title">{entry.path}</span>
                     <span className="files-scope-meta">
-                      v{entry.currentVersion} · {shortHash(entry.contentSha256)}
+                      {t('files.version', { version: entry.currentVersion })} ·{' '}
+                      {shortHash(entry.contentSha256)}
                     </span>
                   </button>
                 ))}
@@ -759,8 +760,10 @@ export function FilesPage() {
                     <span className="work-main-icon">▱</span>
                     <h1>{t('files.resultUnavailable')}</h1>
                     <p>
-                      <code>{resultRoute.path}</code> is not available in this
-                      {t('files.workScope')}
+                      {t('files.unavailableScope', {
+                        name: resultRoute.path,
+                        scope: t('files.workScope'),
+                      })}
                     </p>
                   </div>
                 ) : fileState === 'missing' && coworkerRoute?.path ? (
@@ -768,8 +771,10 @@ export function FilesPage() {
                     <span className="work-main-icon">▱</span>
                     <h1>{t('files.fileUnavailable')}</h1>
                     <p>
-                      <code>{coworkerRoute.path}</code> is not available in this
-                      {t('files.coworkerScope')}
+                      {t('files.unavailableScope', {
+                        name: coworkerRoute.path,
+                        scope: t('files.coworkerScope'),
+                      })}
                     </p>
                   </div>
                 ) : !visibleFile ? (

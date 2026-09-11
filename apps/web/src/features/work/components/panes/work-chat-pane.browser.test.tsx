@@ -170,7 +170,7 @@ it('shows a single loading action and plain startup guidance', async () => {
   });
   await act(async () => new Promise((resolve) => setTimeout(resolve, 1100)));
   const status = host.querySelector('[role="status"]');
-  expect(status?.textContent).toContain('Preparing your Run');
+  expect(status?.textContent).toContain('Preparing your WorkRun');
   const button = host.querySelector<HTMLButtonElement>(
     '.work-preparation-card button',
   );
@@ -186,9 +186,15 @@ it('loads the selected Run conversation instead of preparation', async () => {
     root!.render(<WorkChatPane workId={workId} workRunId={runId} />);
   });
   expect(workClient.chat).toHaveBeenLastCalledWith(workId, runId);
-  expect(host.textContent).toContain('Run’s Lead');
   expect(host.textContent).toContain(
-    'cannot access execution history or change the Run',
+    'WorkRun conversation · cannot change execution',
+  );
+  expect(host.textContent).toContain(
+    'cannot access execution history, steer, resume, or change this WorkRun',
   );
   expect(host.textContent).not.toContain('Definition lead');
+  expect(host.querySelector('.work-chat-pane')?.textContent).not.toContain(
+    'Lead',
+  );
+  expect(host.textContent).toContain('Send to assistant');
 });

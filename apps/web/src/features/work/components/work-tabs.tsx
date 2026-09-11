@@ -45,7 +45,7 @@ export function WorkTabs({
             : tab === 'transcript'
               ? t('work.scope.activity')
               : tab === 'result'
-                ? t('work.run.result')
+                ? t('work.scope.output')
                 : tab === 'overview'
                   ? t('work.scope.history')
                   : tab === 'definition'
@@ -54,7 +54,7 @@ export function WorkTabs({
                           ? 'work.definitionUsed'
                           : 'work.record.definition',
                       )
-                    : t(`work.tab.${tab}`)}
+                    : t('work.scope.filesUnavailable')}
         </a>
       ))}
     </nav>

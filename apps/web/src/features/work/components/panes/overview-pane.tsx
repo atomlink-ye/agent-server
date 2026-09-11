@@ -3,10 +3,7 @@ import { useEffect, useState } from 'react';
 import type { WorkDetailData } from '../../queries/load-work-detail';
 import { AssistantMarkdown } from '@/features/conversations/components/assistant-markdown';
 import { loadSessionTranscripts } from '@/features/run-trace/run-trace-gateway';
-import {
-  productStatePresentation,
-  resultCaptureLabel,
-} from '../work-presentation';
+import { productStatePresentation } from '../work-presentation';
 import { latestAssistantSegmentFromSessions } from '../run-outcome';
 import { workRunResultFilePath } from '@/app/routes';
 import { outcomeBody } from './outcome-headline';
@@ -81,12 +78,13 @@ function OverviewContent({
           {stateView.label}
         </span>
         <div data-testid="outcome-summary">
-          <p className="work-shell-kicker">{t('work.result')}</p>
+          <p className="work-shell-kicker">{t('work.scope.output')}</p>
           <h2>
             {outcome
               ? t('work.scope.capturedOutput')
-              : resultCaptureLabel(run.work_run.result_capture_status)}
+              : t('work.scope.outputUnavailable')}
           </h2>
+          {outcome ? <p>{t('work.scope.outputSource')}</p> : null}
           <p data-testid="attention-basis">
             {t(`work.scope.state.${run.work_run.product_state}`)}
           </p>
@@ -96,7 +94,7 @@ function OverviewContent({
             </div>
           ) : null}
           {live ? (
-            <p className="work-live-note">{t('work.result.updating')}</p>
+            <p className="work-live-note">{t('work.scope.outputSnapshot')}</p>
           ) : null}
           {hasSuccessfulResult ? (
             <a

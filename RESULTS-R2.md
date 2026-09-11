@@ -57,7 +57,72 @@ Actual browser measurements were identical in English and Chinese:
 The Work first-text hypothesis was corrected: it is 123.5px, not the estimated
 119px, because the row aligns its two-line identity vertically. The intended
 reduction comes from shell/navigation/pane spacing, not shrinking history rows.
-After-values remain pending the real browser run.
+The first green browser run passed all 25 tests. Header + tabs are now 62px for
+Work and 54px for WorkRun. Exact first-pane and first-text assertions pass in both
+locales (the same fixtures and viewport as the red run).
+
+| View                 | Header + tabs, before → after | First pane, before → after | First text, before → after |
+| -------------------- | ----------------------------- | -------------------------- | -------------------------- |
+| Work history         | 78 → 62px                     | 102 → 78px                 | 123.5 → 99.5px             |
+| WorkRun output       | 70 → 54px                     | 95 → 71px                  | 116 → 92px                 |
+| WorkRun conversation | 70 → 54px                     | 103 → 71px                 | 103 → 71px                 |
+| WorkRun Definition   | 70 → 54px                     | 95 → 71px                  | 95 → 71px                  |
+
+All offsets are relative to the Work detail shell, not the window. First text is
+respectively the first history identity, output kicker inside the padded card,
+conversation heading, or Definition scope heading. The AppShell title bar is not
+included or changed. The pane boundary is not substituted for visible content.
+
+Red output, verbatim assertion excerpts:
+
+```text
+AssertionError: expected 78 to be 62 // Object.is equality
+AssertionError: expected 102 to be 78 // Object.is equality
+```
+
+Green output for the same command after the spacing change:
+
+```text
+ Test Files  1 passed (1)
+      Tests  25 passed (25)
+   Start at  23:17:00
+   Duration  106.51s (transform 0ms, setup 0ms, import 36.59s, tests 34.58s, environment 0ms)
+```
+
+### Pane corrections
+
+The UI now calls the captured-session pane Output and the snippet “Latest captured
+assistant message”. Its source note warns that this may be worker progress. A
+completed WorkRun still links to its result file. The former “Updating” promise is
+replaced by a snapshot caveat and a direction to Activity: this output read is not
+polled while the WorkRun runs.
+
+Conversation is labeled as a WorkRun conversation that cannot change execution,
+with the responding role named Assistant. This preserves the service's actual
+constraint; a writable composer does not imply execution steering. Preparation's
+started callback navigates through the owning page into the selected WorkRun and
+preserves conversation origin. The legacy Files tab says Files unavailable.
+
+Only the two locale dictionaries are shared-file edits: ten new scoped keys and
+eleven corrected values in each. No global CSS, backend, contracts, dependencies,
+or other lane components were changed.
+
+### Remaining scope blocker
+
+`apps/web/src/features/work/components/definition-panel.tsx` is outside the explicit
+lane file set. Its inner viewer still says “Historical Run version” and describes
+all read-only versions as historical, even when a selected WorkRun used today's
+current version. Its current-version editor also calls WorkRun start actions Run
+and contains hardcoded English. The owning lane/integration manager must correct
+these labels. The wrapper selects the right exact version and names its scope,
+but that does not make the inner copy correct. No claim of an entirely clean pane
+audit is made.
 
 In progress. Logs stay under ignored `.local/work-detail-r2/`. No green result is
 claimed until the corresponding command completes.
+
+The first semantic verification run had one real assertion failure: the existing
+Output-empty test still expected “The result summary is still unavailable.” The
+new pane correctly says “Captured assistant text is unavailable.” The assertion
+was updated to the new data claim, not weakened. Geometry and the new preparation
+navigation scenario passed in that run (25 passed, 1 failed). This was not a timeout.

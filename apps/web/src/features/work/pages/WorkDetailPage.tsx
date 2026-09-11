@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { useCallback, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import type { WorkListItem } from '@atomlink-ye/agent-server/product-contract';
 
 import { ArtifactsPane } from '../components/panes/artifacts-pane';
@@ -47,6 +47,13 @@ export function WorkDetailPage({
   ) => void;
 }) {
   const t = useT();
+  const navigate = useNavigate();
+  const openStartedWorkRun = useCallback(
+    (id: string) => {
+      navigate(workTabHref(workId, 'chat', id, originConversationId));
+    },
+    [navigate, workId, originConversationId],
+  );
   const requestedRunView =
     Boolean(selectedRunId) && !['runs', 'artifacts'].includes(tab ?? '');
   const requestedTab = normalizeWorkTab(tab, requestedRunView);
@@ -92,9 +99,16 @@ export function WorkDetailPage({
         switch (activeTab) {
           case 'chat':
             return runView ? (
-              <WorkChatPane workId={detail.work.id} workRunId={runId} />
+              <WorkChatPane
+                workId={detail.work.id}
+                workRunId={runId}
+                onWorkRunStarted={openStartedWorkRun}
+              />
             ) : (
-              <WorkChatPane workId={detail.work.id} />
+              <WorkChatPane
+                workId={detail.work.id}
+                onWorkRunStarted={openStartedWorkRun}
+              />
             );
           case 'overview':
             return (

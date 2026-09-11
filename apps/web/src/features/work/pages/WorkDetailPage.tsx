@@ -173,18 +173,18 @@ export function WorkDetailPage({
         >
           <h2>{t('work.detail.loading')}</h2>
           <p>{t('work.loading.body')}</p>
-          <Link to={workRootPath(originConversationId ?? null)}>
+          <a href={workRootPath(originConversationId ?? null)}>
             {t('work.invalidLink.back')}
-          </Link>
+          </a>
         </section>
       ) : null}
       {query.status === 'starting' ? (
         <section className="work-detail-feedback" role="status">
           <h2>{t('work.detail.starting')}</h2>
           <p>{t('work.detail.startingBody')}</p>
-          <Link to={workRootPath(originConversationId ?? null)}>
+          <a href={workRootPath(originConversationId ?? null)}>
             {t('work.invalidLink.back')}
-          </Link>
+          </a>
         </section>
       ) : null}
       {query.status === 'error' ? (
@@ -245,8 +245,8 @@ function WorkDetailError({
         <p>
           {t(unavailable ? 'work.unavailable.body' : 'work.permission.body')}
         </p>
-        <Link
-          to={
+        <a
+          href={
             unavailable
               ? '/conversations'
               : workRootPath(originConversationId ?? null)
@@ -255,7 +255,7 @@ function WorkDetailError({
           {t(
             unavailable ? 'work.backToConversations' : 'work.invalidLink.back',
           )}
-        </Link>
+        </a>
       </section>
     );
   const rootWorkMissing = error instanceof WorkDetailRootNotFoundError;

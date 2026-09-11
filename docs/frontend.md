@@ -66,10 +66,7 @@ Without a selected Run, the compact Work header shows the title, Active/Archived
 record state, and Start Run. Its tabs contain a Work summary, Runs, the current
 Definition, and the bounded Files placeholder. The summary is a record of the
 Work's Definition, dates, and run count; it does not render execution results.
-The directory keeps record state in each navigation label and shows the Run count,
-latest Run state, and latest recorded activity time. Failed and waiting Runs use
-distinct marks; long names preserve their suffix as well as their beginning.
-Rows are ordered by the latest Work or Run update, with
+The directory uses the same record state and a run count, with
 `.work-pane-scroll` owning scrolling for both the Work list and catalog.
 
 Selecting `?run=:runId` opens a visually distinct Run surface with a breadcrumb
@@ -271,3 +268,17 @@ existing Product/Conversation/WorkItem contract
 ```
 
 rather than adding framework-specific server logic inside the frontend package.
+
+## Work directory activity and feedback
+
+The Work directory orders records by the latest Work or latest Run update. Each
+navigation label retains Work record state; the visible row shows a Run count,
+latest Run state, and recorded activity time. Failed and waiting Runs have distinct
+marks, and long names preserve their suffix as well as their beginning. The pane
+remains the scroll owner.
+
+A failed directory refresh identifies retained rows as previously loaded data and
+offers Retry. A disabled Work feature is distinct from transient detail readiness;
+permission failures offer account/access guidance. Loading feedback reserves space
+and waits 150 ms before becoming visible. Empty artifact and transcript surfaces
+link to Runs, while recorded transcripts also offer an explicit refresh action.

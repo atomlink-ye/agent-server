@@ -1,3 +1,4 @@
+import { stringify } from 'yaml';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
@@ -6,7 +7,12 @@ import { AppProviders } from '../providers';
 import { AppRouter } from './index';
 import { setLocale } from '../../i18n';
 import type { ChatCommands } from '../../features/conversations/contracts';
-import { ProductRunTraceSuccessSchema } from '@atomlink-ye/agent-server/product-contract';
+import {
+  ProductRunTraceSuccessSchema,
+  ProductWorkDefinitionVersionSchema,
+  ProductSessionTranscriptsResponseSchema,
+  WorkChatMessagesResponseSchema,
+} from '@atomlink-ye/agent-server/product-contract';
 import recording from '../../test-support/fixtures/product-recordings/rework-once.json';
 import {
   projectWorkList,
@@ -46,6 +52,11 @@ function fixtures(size: Size, locale: 'en' | 'zh-CN', preparation: boolean) {
     ? (locale === 'en' ? 'Research' : '研究').repeat(100).slice(0, 200)
     : 'Supplier research';
   const prose = lines(large ? 2000 : 8);
+  const paragraphs = prose.split('\n\n');
+  const chunks = Array.from(
+    { length: Math.ceil(paragraphs.length / 10) },
+    (_, i) => paragraphs.slice(i * 10, i * 10 + 10).join('\n\n'),
+  );
   const work = { ...recordedTrace.work, title };
   const works = Array.from({ length: count }, (_, i) => ({
     ...recordedWork,
@@ -166,6 +177,10 @@ function fixtures(size: Size, locale: 'en' | 'zh-CN', preparation: boolean) {
       definition: `/api/v1/work-definitions/${work.definition_id}`,
     },
   };
+  const version = ProductWorkDefinitionVersionSchema.parse({
+    ...definition,
+    source_yaml: stringify(definition.source),
+  });
   const fetch = vi.fn(async (input: RequestInfo | URL) => {
     const url = new URL(
       typeof input === 'object' && 'url' in input ? input.url : String(input),
@@ -192,7 +207,7 @@ function fixtures(size: Size, locale: 'en' | 'zh-CN', preparation: boolean) {
     else if (path === '/api/work-definitions')
       body = { items: [], next_cursor: null };
     else if (path.startsWith('/api/work-definition-versions/'))
-      body = { version: definition };
+      body = { version };
     else if (path === '/api/runtime-capabilities')
       body = {
         supported_runtime_capabilities: [
@@ -249,21 +264,19 @@ function fixtures(size: Size, locale: 'en' | 'zh-CN', preparation: boolean) {
             },
             summary: {
               status: 'completed',
-              entry_count: 1,
+              entry_count: chunks.length,
               last_timestamp: date,
               last_meaningful: null,
               work_refs: [],
               truncated: false,
             },
-            entries: [
-              {
-                ordinal: 1,
-                kind: 'assistant_text',
-                sequence: 1,
-                created_at: date,
-                text: prose,
-              },
-            ],
+            entries: chunks.map((text, i) => ({
+              ordinal: i + 1,
+              kind: 'assistant_text',
+              sequence: i + 1,
+              created_at: date,
+              text,
+            })),
           },
         ],
       };
@@ -291,18 +304,16 @@ function fixtures(size: Size, locale: 'en' | 'zh-CN', preparation: boolean) {
         work_id: workId,
         work_run_id: path.includes('/runs/') ? runId : null,
         preparation: null,
-        messages: [
-          {
-            id: uuid(960),
-            sequence: 1,
-            role: 'lead',
-            body: prose,
-            status: 'replied',
-            reply_to_message_id: null,
-            failure_code: null,
-            created_at: date,
-          },
-        ],
+        messages: chunks.map((body, i) => ({
+          id: uuid(1100 + i),
+          sequence: i + 1,
+          role: 'lead',
+          body,
+          status: 'replied',
+          reply_to_message_id: null,
+          failure_code: null,
+          created_at: date,
+        })),
       };
     else if (path.startsWith('/api/works/')) body = { work };
     else if (path === '/api/work-items') body = { work_items: tasks };
@@ -322,6 +333,9 @@ function fixtures(size: Size, locale: 'en' | 'zh-CN', preparation: boolean) {
     else if (path === '/api/context/file')
       body = { entry: { ...entries.at(-1), content: prose } };
     else throw new Error(`Unexpected scroll fixture request: ${path}`);
+    if (path.endsWith('/session-transcripts'))
+      ProductSessionTranscriptsResponseSchema.parse(body);
+    if (path.endsWith('/chat')) WorkChatMessagesResponseSchema.parse(body);
     return { ok: true, status: 200, json: async () => body } as Response;
   });
   return { commands, fetch };
@@ -333,9 +347,12 @@ function measurements(host: HTMLElement) {
   return [...host.querySelectorAll<HTMLElement>('*')]
     .filter(
       (el) =>
-        el.clientHeight > 0 &&
+        el.clientHeight > 1 &&
         (el.scrollHeight > el.clientHeight + 1 ||
-          /auto|scroll/.test(getComputedStyle(el).overflowY)),
+          /auto|scroll/.test(getComputedStyle(el).overflowY) ||
+          ['files-rendered-markdown', 'files-file-actions'].includes(
+            el.className,
+          )),
     )
     .map((el) => ({
       selector: el.className || el.tagName,
@@ -344,15 +361,23 @@ function measurements(host: HTMLElement) {
       width: el.clientWidth,
       contentWidth: el.scrollWidth,
       overflowY: getComputedStyle(el).overflowY,
+      scrollTop: el.scrollTop,
       top: Math.round(el.getBoundingClientRect().top),
       bottom: Math.round(el.getBoundingClientRect().bottom),
     }));
 }
 
 const routes = [
+  '/files',
+  '/agents',
+  `/agents/${uuid(300)}`,
+  `/tasks/${taskId}`,
   '/',
   `/conversations/${uuid(500)}`,
   '/work',
+  `/work/${workId}`,
+  `/work/${workId}?run=${runId}`,
+  `/work/${workId}?tab=overview&run=${runId}`,
   ...['overview', 'runs', 'definition', 'artifacts', 'chat'].map(
     (tab) => `/work/${workId}?tab=${tab}`,
   ),
@@ -360,10 +385,6 @@ const routes = [
     (tab) => `/work/${workId}?tab=${tab}&run=${runId}`,
   ),
   `/observe?work=${workId}&run=${runId}`,
-  '/agents',
-  `/agents/${uuid(300)}`,
-  '/files',
-  `/tasks/${taskId}`,
 ];
 
 const cases = routes.flatMap((route) =>
@@ -424,7 +445,7 @@ it.each(cases)(
           expectScrollReachable(
             host,
             '.files-scope-list',
-            '.files-scope-agent',
+            ':scope > :last-child',
           );
           expectScrollReachable(host, '.files-file-list', 'button');
         }
@@ -449,6 +470,30 @@ it.each(cases)(
       );
       expectNoVerticalTraps(host);
       verifyRoute(host, route, size);
+      if (route === '/files') {
+        console.log(
+          'SCROLL_END',
+          JSON.stringify({
+            route,
+            size,
+            locale,
+            measurements: measurements(host),
+          }),
+        );
+        await act(async () =>
+          host
+            .querySelector<HTMLButtonElement>(
+              '.files-viewer-toolbar button:last-child',
+            )!
+            .click(),
+        );
+        expect(
+          host.querySelector('.files-rendered-markdown pre')?.textContent,
+        ).toContain(`Checkpoint ${size === 'oversized' ? 2000 : 8}`);
+        expectNoVerticalTraps(host);
+        if (size === 'oversized')
+          expectScrollReachable(host, '.files-main', '.files-file-actions');
+      }
     } finally {
       await act(async () => root.unmount());
       host.remove();
@@ -479,7 +524,8 @@ function verifyRoute(host: HTMLElement, route: string, size: Size) {
     ).toBe('visible');
     if (route === '/work') return;
     expect(host.querySelector('.work-shell')).not.toBeNull();
-    const tab = new URL(route, location.href).searchParams.get('tab');
+    const tab =
+      host.querySelector<HTMLElement>('.work-shell')!.dataset.activeTab;
     if (tab === 'chat') {
       expect(host.textContent).toContain(`Checkpoint ${large ? 2000 : 8}`);
       scroller('.work-chat-history', '.assistant-markdown p');
@@ -530,10 +576,26 @@ function verifyRoute(host: HTMLElement, route: string, size: Size) {
   } else if (route.startsWith('/agents/')) {
     expect(host.querySelector('.agents-profile-header')).not.toBeNull();
     scroller('.agents-list', '.agents-list-item');
-    scroller('.agents-main');
+    // The profile deliberately clamps its summary to three lines. A short
+    // profile need not overflow, even when the directory contains 50 agents.
+    expect(
+      getComputedStyle(host.querySelector('.agents-main')!).overflowY,
+    ).toBe('auto');
   } else if (route === '/files') {
     expect(host.textContent).toContain(`Checkpoint ${large ? 2000 : 8}`);
     scroller('.files-main', '.files-rendered-markdown p');
+    const main = host.querySelector<HTMLElement>('.files-main')!;
+    expect(main.getBoundingClientRect().height).toBe(900);
+    expect(main.scrollWidth).toBe(main.clientWidth);
+    const preview = host.querySelector<HTMLElement>(
+      '.files-rendered-markdown',
+    )!;
+    const actions = host.querySelector<HTMLElement>('.files-file-actions')!;
+    expect(actions.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+      preview.getBoundingClientRect().bottom,
+    );
+    if (large)
+      expectScrollReachable(host, '.files-main', '.files-file-actions');
   } else if (route.startsWith('/tasks/')) {
     expect(
       host.querySelectorAll('[data-testid="task-list-item"]'),

@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { expect, it, vi } from 'vitest';
 import { commands, page } from 'vitest/browser';
+import { ProductRunTraceSuccessSchema } from '@atomlink-ye/agent-server/product-contract';
 import { AppProviders } from './app/providers';
 import { AppRouter } from './app/router';
 import { AssistantMarkdown } from './features/conversations/components/assistant-markdown';
@@ -84,7 +85,11 @@ for (const locale of ['en', 'zh-CN'] as const) {
   it(`measures long Chinese Work titles in ${locale} at 1440`, async () => {
     await page.viewport(1440, 900);
     setLocale(locale);
-    const work = { ...recording.recording_documents[0]!.work, title };
+    const work = {
+      ...ProductRunTraceSuccessSchema.parse(recording.recording_documents[0])
+        .work,
+      title,
+    };
     const works = [
       {
         ...projectWorkList(recording).works[0]!,

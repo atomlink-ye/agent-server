@@ -97,17 +97,15 @@ export function FilesPage() {
         setCoworkers(next);
         setCoworkersState('ready');
       },
-      (reason: unknown) => {
+      () => {
         if (!active) return;
         setCoworkersState('error');
-        setError(reason instanceof Error ? reason.message : String(reason));
+        setError(t('agents.loadError'));
       },
     );
     void loadConversations().then(
       (next) => active && setConversations(next),
-      (reason: unknown) =>
-        active &&
-        setError(reason instanceof Error ? reason.message : String(reason)),
+      () => active && setError(t('conversations.list.loadError')),
     );
     void workClient.list().then(
       (response) => {
@@ -123,7 +121,7 @@ export function FilesPage() {
         // through the error alert. A genuine transport failure of Work
         // still must, same as coworkers/conversations.
         if (isFeatureUnavailable(reason)) return;
-        setError(reason instanceof Error ? reason.message : String(reason));
+        setError(t('files.workScopesError'));
       },
     );
     return () => {
@@ -282,9 +280,7 @@ export function FilesPage() {
     setError(null);
     void loadContextFiles(selected.request).then(
       (next) => active && setListing(next),
-      (reason: unknown) =>
-        active &&
-        setError(reason instanceof Error ? reason.message : String(reason)),
+      () => active && setError(t('files.loadError')),
     );
     return () => {
       active = false;
@@ -355,7 +351,7 @@ export function FilesPage() {
             : 'error',
         );
         if (!(reason instanceof ApiTransportError && reason.status === 404))
-          setError(reason instanceof Error ? reason.message : String(reason));
+          setError(t('files.loadError'));
       },
     );
     return () => {
@@ -397,7 +393,7 @@ export function FilesPage() {
             : 'error',
         );
         if (!(reason instanceof ApiTransportError && reason.status === 404))
-          setError(reason instanceof Error ? reason.message : String(reason));
+          setError(t('files.loadError'));
       },
     );
     return () => {
@@ -443,10 +439,10 @@ export function FilesPage() {
         setFileScopeKey(selected.key);
         setFileState('loaded');
       },
-      (reason: unknown) => {
+      () => {
         if (requestId !== fileRequest.current) return;
         setFileState('error');
-        setError(reason instanceof Error ? reason.message : String(reason));
+        setError(t('files.loadError'));
       },
     );
   }
@@ -518,8 +514,8 @@ export function FilesPage() {
         targetPath: basename(file.path),
       });
       setNotice(t('files.promoted'));
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+    } catch {
+      setError(t('files.actionError'));
     }
   }
 
@@ -535,8 +531,8 @@ export function FilesPage() {
         targetPath: `input/${basename(file.path)}`,
       });
       setNotice(t('files.admitted'));
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+    } catch {
+      setError(t('files.actionError'));
     }
   }
 
@@ -552,8 +548,8 @@ export function FilesPage() {
       });
       setNotice(t('files.published'));
       setListing(await loadContextFiles(selected.request));
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+    } catch {
+      setError(t('files.actionError'));
     }
   }
 

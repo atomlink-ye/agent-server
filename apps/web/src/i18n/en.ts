@@ -1300,6 +1300,21 @@ export const en = {
   'workOrg.claimComplete': 'This Task is already complete.',
   'workOrg.claimUnavailable': 'This Task cannot be claimed right now.',
   'workOrg.claimHeld': 'This Task has already been claimed by {name}.',
+  'conversations.createError':
+    'Unable to create this conversation. Please try again.',
+  'authoring.createError': 'Unable to create this Coworker. Please try again.',
+  'authoring.previewError':
+    'Unable to preview this Definition. Please try again.',
+  'authoring.saveError': 'Unable to save this Capability. Please try again.',
+  'files.workScopesError': 'Unable to load Work file scopes.',
+  'files.loadError': 'Unable to load these files. Please try again.',
+  'files.actionError':
+    'This file operation could not be completed. Please try again.',
+  'whispers.loadError': 'Unable to load Whisper channels.',
+  'whispers.messagesError': 'Unable to load Whisper messages.',
+  'authoring.inputFallback': 'Input',
+  'work.runFailure.capability':
+    'This WorkRun requires runtime capabilities that this deployment does not support.',
 } as const;
 
 export default en;

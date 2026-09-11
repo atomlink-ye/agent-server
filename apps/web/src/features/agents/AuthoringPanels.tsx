@@ -58,8 +58,8 @@ export function NewCoworkerForm({
         agentId: created.agentId,
         conversationId: created.conversationId,
       });
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+    } catch {
+      setError(t('authoring.createError'));
       setBusy(false);
     }
   }
@@ -272,9 +272,7 @@ export function CapabilityBuilder({
       setMessage(
         nextDiagnostics.length
           ? t('authoring.fixDetails')
-          : reason instanceof Error
-            ? reason.message
-            : String(reason),
+          : t('authoring.previewError'),
       );
       return null;
     }
@@ -300,7 +298,7 @@ export function CapabilityBuilder({
         return;
       }
       setStatus('error');
-      setMessage(reason instanceof Error ? reason.message : String(reason));
+      setMessage(t('authoring.saveError'));
     }
   }
 

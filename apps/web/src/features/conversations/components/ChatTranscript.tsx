@@ -101,8 +101,8 @@ function NormalMessage({
         sourceMessageId: message.id,
       });
       navigate(`/tasks/${encodeURIComponent(detail.work_item.id)}`);
-    } catch (reason) {
-      setTaskError(reason instanceof Error ? reason.message : String(reason));
+    } catch {
+      setTaskError(t('tasks.actionError'));
     } finally {
       setSavingTask(false);
     }

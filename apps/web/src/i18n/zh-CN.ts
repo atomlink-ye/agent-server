@@ -1209,6 +1209,17 @@ export const zhCN: Record<MessageKey, string> = {
   'workOrg.claimComplete': '此 Task 已完成。',
   'workOrg.claimUnavailable': '此 Task 暂不可领取。',
   'workOrg.claimHeld': '此 Task 已由{name}领取。',
+  'conversations.createError': '无法创建对话，请重试。',
+  'authoring.createError': '无法创建 Coworker，请重试。',
+  'authoring.previewError': '无法预览 Definition，请重试。',
+  'authoring.saveError': '无法保存此能力，请重试。',
+  'files.workScopesError': '无法加载 Work 文件范围。',
+  'files.loadError': '无法加载文件，请重试。',
+  'files.actionError': '未能完成文件操作，请重试。',
+  'whispers.loadError': '无法加载 Whisper 频道。',
+  'whispers.messagesError': '无法加载 Whisper 消息。',
+  'authoring.inputFallback': '输入字段',
+  'work.runFailure.capability': '当前部署不支持此 WorkRun 所需的运行能力。',
 };
 
 export default zhCN;

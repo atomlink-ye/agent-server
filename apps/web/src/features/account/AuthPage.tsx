@@ -22,8 +22,8 @@ export default function AuthPage() {
       else await register(username, password);
       const next = new URLSearchParams(location.search).get('next');
       navigate(next?.startsWith('/') ? next : '/', { replace: true });
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : t('auth.error'));
+    } catch {
+      setError(t('auth.error'));
     } finally {
       setBusy(false);
     }

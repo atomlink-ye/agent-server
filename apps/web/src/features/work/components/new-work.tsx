@@ -758,9 +758,7 @@ function AdvancedDefinitionAuthoring({
       setStatusMessage(
         nextDiagnostics.length
           ? t('work.start.fixDiagnostics')
-          : error instanceof Error
-            ? error.message
-            : t('work.start.validationFailed'),
+          : t('work.start.validationFailed'),
       );
       return null;
     }
@@ -786,11 +784,9 @@ function AdvancedDefinitionAuthoring({
           originConversationId,
         ),
       );
-    } catch (error) {
+    } catch {
       setState('error');
-      setStatusMessage(
-        error instanceof Error ? error.message : t('work.start.applyFailed'),
-      );
+      setStatusMessage(t('work.start.applyFailed'));
     }
   }
 

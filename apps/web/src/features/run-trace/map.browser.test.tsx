@@ -289,9 +289,9 @@ it('renders an explicit empty state for a single-agent Work with no collaboratio
     expect(host.querySelector('.run-trace__map-node')).toBeNull();
     expect(host.textContent).not.toContain('Attempt node(s)');
     expect(host.textContent).toContain(
-      'No collaboration graph was recorded for this Work.',
+      'No collaboration graph was recorded for this WorkRun.',
     );
-    expect(host.textContent).toContain('ran as a single Agent');
+    expect(host.textContent).toContain('uses a single Worker');
   } finally {
     await act(async () => root.unmount());
     host.remove();

@@ -835,7 +835,7 @@ export const zhCN: Record<MessageKey, string> = {
   'trace.recordedActivity': '已记录的 MCP 活动',
   'trace.workItemNotCaptured': '未记录 Work Item',
   'trace.executionLanes': '执行通道',
-  'trace.runActivity': 'Run 活动',
+  'trace.runActivity': 'WorkRun 活动',
   'trace.activity': '活动',
   'trace.activityBody': '按记录顺序列出所有已捕获的事件。',
   'trace.agentResponded': 'Agent 已回复',

@@ -4,6 +4,15 @@ import { MemoryRouter } from 'react-router-dom';
 import { expect, it, vi } from 'vitest';
 import { commands, page } from 'vitest/browser';
 
+declare module 'vitest/browser' {
+  interface BrowserCommands {
+    writeInventory: (
+      json: string,
+      target?: 'chat-surface' | 'canary',
+    ) => Promise<{ path: string; bytes: number }>;
+  }
+}
+
 import {
   GetWorkResponseSchema,
   ProductRunTraceSuccessSchema,
@@ -733,6 +742,15 @@ it('keeps execution vocabulary within the desktop header in both locales', async
       const header = host.querySelector<HTMLElement>('.work-run-header')!;
       const heading = header.querySelector('h1')!;
       const tabs = host.querySelector<HTMLElement>('.work-tabs')!;
+      // Replay the baseline copy with the unchanged production styles.
+      const currentHeading = heading.textContent!;
+      heading.textContent = locale === 'en' ? 'RUN #1' : 'RUN 第 1 次';
+      const before = {
+        headingWidth: heading.getBoundingClientRect().width,
+        headingHeight: heading.getBoundingClientRect().height,
+        headerHeight: header.getBoundingClientRect().height,
+      };
+      heading.textContent = currentHeading;
       const headingRect = heading.getBoundingClientRect();
       const headerRect = header.getBoundingClientRect();
       expect(window.innerWidth).toBe(1440);
@@ -740,9 +758,14 @@ it('keeps execution vocabulary within the desktop header in both locales', async
       expect(header.scrollWidth).toBeLessThanOrEqual(header.clientWidth);
       expect(tabs.scrollWidth).toBeLessThanOrEqual(tabs.clientWidth);
       expect(heading.textContent).toContain('WorkRun');
+      expect(headerRect.height).toBe(before.headerHeight);
+      expect(headerRect.height).toBe(36);
+      expect(headingRect.height).toBe(24);
+      expect(tabs.getBoundingClientRect().height).toBe(34);
       measurements.push({
         locale,
         viewport: window.innerWidth,
+        before,
         headerWidth: headerRect.width,
         headerHeight: headerRect.height,
         headingWidth: headingRect.width,
@@ -756,5 +779,8 @@ it('keeps execution vocabulary within the desktop header in both locales', async
       setLocale('en');
     }
   }
-  await commands.writeInventory(JSON.stringify(measurements), 'canary');
+  await commands.writeInventory(
+    JSON.stringify({ kind: 'work-vocabulary', measurements }),
+    'canary',
+  );
 });

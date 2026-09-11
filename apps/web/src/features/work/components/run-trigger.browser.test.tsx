@@ -194,7 +194,7 @@ it('projects an incompatible pinned Work before the user clicks Start WorkRun', 
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
   try {
-    expect(host.textContent).toContain('Run unavailable');
+    expect(host.textContent).toContain('WorkRun unavailable');
     expect(host.textContent).toContain(
       'This Work can’t run in this deployment.',
     );

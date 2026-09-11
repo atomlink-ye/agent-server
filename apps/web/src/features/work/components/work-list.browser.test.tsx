@@ -703,7 +703,7 @@ it.each([
       expect(host.querySelector('#work-definition-choice')).not.toBeNull();
       expect(host.querySelector('#work-coworker')).toBeNull();
       expect(host.textContent).toContain(
-        'No published Definitions are available',
+        'Publish a Definition before creating Work',
       );
     } finally {
       await act(async () => root.unmount());

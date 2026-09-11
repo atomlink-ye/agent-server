@@ -179,10 +179,16 @@ function textSummary(text: string): string | null {
 }
 
 function lifecycleLabel(status: string, actorName?: string | null): string {
-  const activity = status === 'started' || status === 'succeeded' || status === 'failed' || status === 'cancelled'
-    ? t(`trace.lifecycle.${status}`)
-    : t('trace.lifecycle.other', { status: humanize(status) });
-  return actorName?.trim() ? t('trace.actorActivity', { actor: actorName.trim(), activity }) : activity;
+  const activity =
+    status === 'started' ||
+    status === 'succeeded' ||
+    status === 'failed' ||
+    status === 'cancelled'
+      ? t(`trace.lifecycle.${status}`)
+      : t('trace.lifecycle.other', { status: humanize(status) });
+  return actorName?.trim()
+    ? t('trace.actorActivity', { actor: actorName.trim(), activity })
+    : activity;
 }
 
 function lifecycleIcon(status: string): string {
@@ -231,9 +237,9 @@ function isGenericActivityText(value: string): boolean {
 }
 
 export function humanize(value: string | null | undefined): string {
-  return (
-    value ? capturedValue(value).replace(/\b\w/g, (letter) => letter.toUpperCase()) : ''
-  );
+  return value
+    ? capturedValue(value).replace(/\b\w/g, (letter) => letter.toUpperCase())
+    : '';
 }
 
 function iconForTool(category: string): string {

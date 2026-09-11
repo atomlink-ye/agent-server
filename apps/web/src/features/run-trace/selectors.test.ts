@@ -313,7 +313,9 @@ describe('selectActorRows', () => {
       }),
     );
     expect(rows.map((row) => row.name)).toEqual(['analyst', 'Root Task Run']);
-    expect(rows.at(-1)?.note).toBe('Attempts of the root Task that coordinates this WorkRun');
+    expect(rows.at(-1)?.note).toBe(
+      'Attempts of the root Task that coordinates this WorkRun',
+    );
   });
 
   it('still reports a span that resolves to neither an actor nor the root run', () => {

@@ -884,7 +884,7 @@ export const en = {
   'trace.causalMap': 'WorkRun causal map',
   'trace.causalMap.title': 'Causal map',
   'trace.causalMap.emptyTitle':
-    'No collaboration graph was recorded for this Work.',
+    'No collaboration graph was recorded for this WorkRun.',
   'trace.causalMap.emptySingle':
     'This WorkRun uses a single Worker. Team Work Item Attempts and dependency graphs do not apply.',
   'trace.causalMap.empty':
@@ -895,7 +895,7 @@ export const en = {
   'trace.recordedActivity': 'Recorded MCP activities',
   'trace.workItemNotCaptured': 'Work Item not captured',
   'trace.executionLanes': 'Execution lanes',
-  'trace.runActivity': 'Run activity',
+  'trace.runActivity': 'WorkRun activity',
   'trace.activity': 'Activity',
   'trace.activityBody': 'All captured events, in recorded order.',
   'trace.agentResponded': 'Agent responded',
@@ -1177,7 +1177,7 @@ export const en = {
   'trace.coverage':
     'This record covers {scope}; excluded execution: {excluded}',
   'trace.chronological':
-    'A chronological record of this Run’s captured activity',
+    'A chronological record of this WorkRun’s captured activity',
   'trace.executionScope':
     'The activity list records event sequence, type, time, and Run only. It does not expose output bodies. Read the Transcript for captured Worker messages and tool details. Structured collaboration detail covers {scope}; excluded execution: {excluded}',
   'trace.longestAttempt': 'Longest captured attempt: {duration}',

@@ -387,7 +387,7 @@ it('distinguishes a failed Definition read from an empty catalog and retries it'
     });
     expect(catalog).toHaveBeenCalledTimes(2);
     expect(host.textContent).toContain(
-      'No published Definitions are available',
+      'Publish a Definition before creating Work',
     );
     expect(host.querySelector('#work-coworker')).toBeNull();
     await act(async () => {

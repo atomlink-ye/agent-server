@@ -1,3 +1,4 @@
+import { t } from '@/i18n';
 import { buildEntryPresentation } from './transcript-presentation';
 import type { ProjectedTranscriptEntry } from './transcript-projection';
 
@@ -86,7 +87,9 @@ export function ActivityRow({
               <pre>{presentation.detailText}</pre>
             ) : null}
             {presentation.exitCode !== null ? (
-              <small>Exit code: {presentation.exitCode}</small>
+              <small>
+                {t('trace.exitCode', { code: presentation.exitCode })}
+              </small>
             ) : null}
           </>
         )}
@@ -167,10 +170,16 @@ function formatActivityTiming(entry: ProjectedTranscriptEntry): {
   // A single provider event captures a point in time, not a duration. Do not
   // turn that missing information into a misleading "0 ms" claim.
   if (entry.sourceOrdinals.length < 2 || duration <= 0)
-    return { label: capturedAt, title: `Captured at ${capturedAt}` };
+    return {
+      label: capturedAt,
+      title: t('trace.capturedAt', { time: capturedAt }),
+    };
   return {
     label: `${formatDuration(duration)} · ${capturedAt}`,
-    title: `Captured from ${started.toLocaleTimeString()} to ${ended.toLocaleTimeString()}`,
+    title: t('trace.capturedRange', {
+      start: started.toLocaleTimeString(),
+      end: ended.toLocaleTimeString(),
+    }),
   };
 }
 
@@ -194,12 +203,12 @@ function PlatformToolDetail({
   return (
     <>
       <p>
-        Platform tool · {name} · {status}
+        {t('trace.platformTool', { name })} · {status}
       </p>
       <p>
-        Arguments and result are not captured in this transcript.
+        {t('trace.argumentsMissing')}
         <br />
-        Only dispatch and completion were recorded.
+        {t('trace.dispatchOnly')}
       </p>
     </>
   );

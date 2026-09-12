@@ -64,13 +64,9 @@ export function compileCapabilityDraft(
   if (!draft.description.trim())
     throw new Error(t('authoring.error.description'));
   if (draft.mode === 'single' && draft.participants.length !== 1)
-    throw new Error(
-      t('authoring.error.singleParticipants'),
-    );
+    throw new Error(t('authoring.error.singleParticipants'));
   if (draft.mode === 'collaboration' && draft.participants.length < 2)
-    throw new Error(
-      t('authoring.error.collaborationParticipants'),
-    );
+    throw new Error(t('authoring.error.collaborationParticipants'));
   if (draft.participants.length > 17)
     throw new Error(t('authoring.error.maxParticipants'));
 
@@ -81,7 +77,7 @@ export function compileCapabilityDraft(
     if (!participant.instructions.trim())
       throw new Error(
         t('authoring.error.participantInstructions', {
-          name: participant.name || 'the participant',
+          name: participant.name,
         }),
       );
     const key = participant.name.trim().toLocaleLowerCase();
@@ -110,16 +106,12 @@ export function compileCapabilityDraft(
         input.minLength !== undefined &&
         (!Number.isInteger(input.minLength) || input.minLength < 0)
       )
-        throw new Error(
-          t('authoring.error.minLength', { label: input.label }),
-        );
+        throw new Error(t('authoring.error.minLength', { label: input.label }));
       if (
         input.maxLength !== undefined &&
         (!Number.isInteger(input.maxLength) || input.maxLength < 0)
       )
-        throw new Error(
-          t('authoring.error.maxLength', { label: input.label }),
-        );
+        throw new Error(t('authoring.error.maxLength', { label: input.label }));
       if (
         input.minLength !== undefined &&
         input.maxLength !== undefined &&
@@ -139,7 +131,9 @@ export function compileCapabilityDraft(
         input.maximum !== undefined &&
         input.minimum > input.maximum
       )
-      throw new Error(t('authoring.error.numberOrder', { label: input.label }));
+        throw new Error(
+          t('authoring.error.numberOrder', { label: input.label }),
+        );
     }
   }
 
@@ -226,7 +220,9 @@ export function compileCapabilityDraft(
           ),
         ];
         if (choices.length === 0)
-          throw new Error(`${input.label || key} needs at least one choice.`);
+          throw new Error(
+            t('authoring.error.choice', { label: input.label || key }),
+          );
         lines.push('        enum:');
         choices.forEach((choice) =>
           lines.push(`          - ${scalar(choice)}`),
@@ -270,9 +266,7 @@ function workerSource(
       skills.flatMap((ref) => {
         const entry = skillCatalog.find((skill) => skill.ref === ref);
         if (!entry)
-          throw new Error(
-            t('authoring.error.skillUnavailable', { ref }),
-          );
+          throw new Error(t('authoring.error.skillUnavailable', { ref }));
         return entry.requiredToolRefs;
       }),
     ),
@@ -386,12 +380,18 @@ function indent(value: string, spaces: number): string[] {
 function nonNegativeInteger(value: number, label: string): number {
   if (!Number.isInteger(value) || value < 0)
     throw new Error(
-      t('authoring.error.numericBound', { label: label || 'Input' }),
+      t('authoring.error.numericBound', {
+        label: label || t('authoring.inputFallback'),
+      }),
     );
   return value;
 }
 function finite(value: number, label: string): number {
   if (!Number.isFinite(value))
-    throw new Error(t('authoring.error.numericBound', { label: label || 'Input' }));
+    throw new Error(
+      t('authoring.error.numericBound', {
+        label: label || t('authoring.inputFallback'),
+      }),
+    );
   return value;
 }

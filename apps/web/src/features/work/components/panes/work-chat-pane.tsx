@@ -19,9 +19,11 @@ import type {
 export function WorkChatPane({
   workId,
   workRunId,
+  onWorkRunStarted,
 }: {
   readonly workId: string;
   readonly workRunId?: string | undefined;
+  readonly onWorkRunStarted?: (id: string) => void;
 }) {
   const [startedRun, setStartedRun] = useState<{
     workId: string;
@@ -30,8 +32,11 @@ export function WorkChatPane({
   const activeRunId =
     workRunId ?? (startedRun?.workId === workId ? startedRun.id : undefined);
   const onRunStarted = useCallback(
-    (id: string) => setStartedRun({ workId, id }),
-    [workId],
+    (id: string) => {
+      if (onWorkRunStarted) onWorkRunStarted(id);
+      else setStartedRun({ workId, id });
+    },
+    [workId, onWorkRunStarted],
   );
   return (
     <WorkChatConversation
@@ -183,7 +188,12 @@ function WorkChatConversation({
     }
   }
   return (
-    <section className="work-chat-pane" aria-label={t('work.tab.chat')}>
+    <section
+      className="work-chat-pane"
+      aria-label={t(
+        workRunId ? 'work.run.conversation' : 'work.record.preparation',
+      )}
+    >
       <p className="work-shell-kicker">
         {t(workRunId ? 'work.chat.runLead' : 'work.chat.preparationTitle')}
       </p>
@@ -217,10 +227,10 @@ function WorkChatConversation({
           >
             <span className="work-chat-message__avatar" aria-hidden="true">
               {message.role === 'lead'
-                ? 'L'
+                ? t('work.chat.role.lead').slice(0, 1)
                 : message.role === 'system'
                   ? '·'
-                  : 'Y'}
+                  : t('work.chat.role.user').slice(0, 1)}
             </span>
             <article
               className="chat-message"
@@ -230,7 +240,11 @@ function WorkChatConversation({
             >
               <span className="work-chat-message__author">
                 {message.role === 'lead'
-                  ? t('work.chat.role.lead')
+                  ? t(
+                      workRunId
+                        ? 'work.scope.conversationAssistant'
+                        : 'work.chat.role.lead',
+                    )
                   : message.role === 'system'
                     ? t('work.chat.role.system')
                     : t('work.chat.role.user')}
@@ -241,10 +255,22 @@ function WorkChatConversation({
                 <AssistantMarkdown text={message.body} />
               )}
               {message.status === 'queued' ? (
-                <small>{t('work.chat.queued')}</small>
+                <small>
+                  {t(
+                    workRunId
+                      ? 'work.scope.conversationQueued'
+                      : 'work.chat.queued',
+                  )}
+                </small>
               ) : null}
               {message.status === 'processing' ? (
-                <small>{t('work.chat.processing')}</small>
+                <small>
+                  {t(
+                    workRunId
+                      ? 'work.scope.conversationProcessing'
+                      : 'work.chat.processing',
+                  )}
+                </small>
               ) : null}
               {message.status === 'failed' ? (
                 <small>
@@ -330,7 +356,9 @@ function WorkChatConversation({
           placeholder={t(
             workRunId ? 'work.chat.runPlaceholder' : 'work.chat.placeholder',
           )}
-          sendLabel={t('work.chat.send')}
+          sendLabel={t(
+            workRunId ? 'work.scope.conversationSend' : 'work.chat.send',
+          )}
           sendingLabel={t('work.chat.sending')}
           hint={t('composer.hint')}
           onDraftChange={setBody}

@@ -1,3 +1,4 @@
+import { capturedValue } from '@/i18n/captured-value';
 import type {
   LatestWorkRunSummary,
   ProductWorkRunDetail,
@@ -15,13 +16,8 @@ export type WorkTab =
   | 'definition'
   | 'result';
 
-export const WORK_TABS = [
-  'overview',
-  'runs',
-  'definition',
-  'artifacts',
-] as const;
-export const RUN_TABS = ['chat', 'transcript', 'result'] as const;
+export const WORK_TABS = ['overview', 'definition'] as const;
+export const RUN_TABS = ['chat', 'result', 'transcript', 'definition'] as const;
 
 export function normalizeWorkTab(
   value: string | undefined,
@@ -32,7 +28,10 @@ export function normalizeWorkTab(
     if (value === 'overview' || value === 'result') return 'result';
     return value === 'transcript' ? 'transcript' : 'chat';
   }
-  return value === 'chat' || WORK_TABS.some((tab) => tab === value)
+  if (value === 'runs') return 'overview';
+  return value === 'chat' ||
+    value === 'artifacts' ||
+    WORK_TABS.some((tab) => tab === value)
     ? (value as WorkTab)
     : 'overview';
 }
@@ -40,24 +39,23 @@ export function normalizeWorkTab(
 export function workTabHref(
   workId: string,
   tab: WorkTab,
-  runId?: string,
+  workRunId?: string,
   originConversationId?: string | null,
 ) {
   const runTab =
     RUN_TABS.some((id) => id === tab) ||
-    ((tab === 'overview' || tab === 'definition') && runId);
+    ((tab === 'overview' || tab === 'definition') && workRunId);
   return workTabPath(
     workId,
     tab,
-    runTab ? (runId ?? null) : null,
+    runTab ? (workRunId ?? null) : null,
     originConversationId ?? null,
   );
 }
 
 /**
- * Every stage a Work Card or a Run row can be in. The two Work-level stages a
- * Run state cannot express are named here so no surface has to invent a label
- * for them.
+ * Presentation of the latest WorkRun, plus pre-execution/loading states.
+ * This is not a Work lifecycle: Work itself only has archived_at.
  */
 export type WorkStage =
   WorkListItem['product_state'] | 'not_started' | 'starting';
@@ -148,5 +146,5 @@ export function formatWorkListTime(
 }
 
 export function humanize(value: string) {
-  return value.replaceAll('_', ' ');
+  return capturedValue(value);
 }

@@ -21,7 +21,6 @@ import {
 } from './WorkItemMeta';
 import { useT } from '../../i18n';
 
-
 type Comments = Awaited<ReturnType<typeof workOrganizationClient.listComments>>;
 type PeekStatus = 'loading' | 'ready' | 'error';
 
@@ -124,7 +123,11 @@ export function BoardCardPeek({
     >
       <header className="work-board-peek-head">
         <span className="eyebrow">{t('boards.cardDetails')}</span>
-        <button type="button" aria-label={t('boards.closeCard')} onClick={onClose}>
+        <button
+          type="button"
+          aria-label={t('boards.closeCard')}
+          onClick={onClose}
+        >
           ×
         </button>
       </header>
@@ -156,7 +159,9 @@ export function BoardCardPeek({
             />
           </h2>
           <p className="work-org-muted">
-              {t('boards.createdBy', { name: participantLabel(participants, detail.work_item.created_by) })}
+            {t('boards.createdBy', {
+              name: participantLabel(participants, detail.work_item.created_by),
+            })}
           </p>
           {detail.work_item.description ? (
             <p className="work-board-peek-description">
@@ -166,9 +171,7 @@ export function BoardCardPeek({
               />
             </p>
           ) : (
-            <p className="work-org-muted">
-              {t('boards.cardNoDescription')}
-            </p>
+            <p className="work-org-muted">{t('boards.cardNoDescription')}</p>
           )}
           <MentionRow
             ids={readMentionIds(detail.work_item)}
@@ -177,7 +180,8 @@ export function BoardCardPeek({
           />
           {detail.linked_work ? (
             <p className="work-org-chip">
-              Work · {productStateLabel(detail.linked_work.product_state)}
+              {t('workOrg.linkedWork')} ·{' '}
+              {productStateLabel(detail.linked_work.product_state)}
             </p>
           ) : null}
           {notice ? (

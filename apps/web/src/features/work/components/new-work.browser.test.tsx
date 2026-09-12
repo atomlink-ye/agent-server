@@ -185,7 +185,7 @@ it('blocks an unselected required boolean, then starts Run in the same turn afte
     });
     expect(submit!.disabled).toBe(true);
     const retry = [...host.querySelectorAll('button')].find(
-      (button) => button.textContent === 'Retry Run',
+      (button) => button.textContent === 'Retry WorkRun',
     )!;
     await act(async () => {
       retry.click();
@@ -387,14 +387,14 @@ it('distinguishes a failed Definition read from an empty catalog and retries it'
     });
     expect(catalog).toHaveBeenCalledTimes(2);
     expect(host.textContent).toContain(
-      'No published Definitions are available',
+      'Publish a Definition before creating Work',
     );
     expect(host.querySelector('#work-coworker')).toBeNull();
     await act(async () => {
       setLocale('zh-CN');
       await settle();
     });
-    expect(host.textContent).toContain('选择一个 Definition');
+    expect(host.textContent).toContain('选择 Definition');
     expect(host.textContent).not.toContain('Choose a Definition');
     await page.screenshot({
       path: '../../../../__screenshots__/ux-review/empty-catalog-zh.png',

@@ -14,19 +14,19 @@ import './observe.css';
 
 export function ObserveDetail({
   workId,
-  runId,
+  workRunId,
 }: {
   readonly workId: string;
-  readonly runId: string;
+  readonly workRunId: string;
 }) {
   const t = useT();
   const query = useWorkDetail({
     workId,
-    selectedRunId: runId,
+    selectedRunId: workRunId,
     preferCurrentDefinition: false,
     includeTrace: true,
   });
-  const tokens = useObserveRunTokens(workId, runId);
+  const tokens = useObserveRunTokens(workId, workRunId);
   const detail = query.detail;
 
   if (query.status === 'loading') {

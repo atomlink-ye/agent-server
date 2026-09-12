@@ -207,6 +207,6 @@ describe('claimBlockedReason', () => {
         now,
         [],
       ),
-    ).toBe('This Task has already been claimed by this Coworker.');
+    ).toBe('This Task has already been claimed by this member.');
   });
 });

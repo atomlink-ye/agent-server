@@ -36,15 +36,19 @@ export function statusLabel(status: WorkItemStatus): string {
 export function productStateLabel(state: string): string {
   switch (state) {
     case 'running':
-      return t('productState.running.label');
+      return t('work.latestState', { state: t('productState.running.label') });
     case 'needs_you':
-      return t('productState.needs_you.label');
+      return t('work.latestState', {
+        state: t('productState.needs_you.label'),
+      });
     case 'complete':
-      return t('productState.complete.label');
+      return t('work.latestState', { state: t('productState.complete.label') });
     case 'problem':
-      return t('productState.problem.label');
+      return t('work.latestState', { state: t('productState.problem.label') });
     case 'not_captured':
-      return t('productState.not_captured.label');
+      return t('work.latestState', {
+        state: t('productState.not_captured.label'),
+      });
     default:
       return state;
   }

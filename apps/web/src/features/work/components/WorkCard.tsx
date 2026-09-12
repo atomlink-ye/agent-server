@@ -4,6 +4,8 @@ import {
 } from '../../conversations/conversations-gateway';
 import { useT, type Translate } from '../../../i18n';
 import { useWorkCard } from '../queries/use-work-card';
+import './work-card.css';
+import { WorkTitle } from './work-title';
 import { productStatePresentation } from './work-presentation';
 
 export interface WorkCardProps {
@@ -15,8 +17,8 @@ export interface WorkCardProps {
  * The live handle on a Work inside a conversation: what it is, where it stands
  * now, and a way in. It is deliberately not a place to read the Work's output.
  * A result summary is a whole report — rendering it here turned the card into a
- * wall of raw markdown that dwarfed the conversation — so the card shows one
- * condensed line and the full text stays on the Work page, or in the Agent's
+ * wall of raw markdown that dwarfed the conversation — so the card shows a
+ * short preview and the full text stays on the Work page, or in the Agent's
  * own message when the Agent chooses to say it.
  */
 export function WorkCard({ workRef, onOpen }: WorkCardProps) {
@@ -32,11 +34,16 @@ export function WorkCard({ workRef, onOpen }: WorkCardProps) {
   return (
     <aside
       className="work-card"
+      data-state={
+        state.status === 'ready' ? state.card.productState : state.status
+      }
       aria-label={t('workCard.label')}
       aria-live="off"
     >
       {state.status === 'loading' ? (
-        <p className="work-card-main">{t('workCard.loading')}</p>
+        <p className="work-card-main work-loading-feedback">
+          {t('workCard.loading')}
+        </p>
       ) : null}
       {state.status === 'error' ? (
         // Not role="alert": a refresh that failed is transient, and an
@@ -72,24 +79,35 @@ function WorkCardContent({ card }: { readonly card: WorkChatCard }) {
     <div className="work-card-main">
       <div className="work-card-heading">
         <span className="eyebrow">{t('workCard.eyebrow')}</span>
-        <span className={`work-status ${statusClass}`}>{status}</span>
+        <span className={`work-status ${statusClass}`}>
+          <span aria-hidden="true">
+            {card.productState === 'problem'
+              ? '! '
+              : card.productState === 'needs_you'
+                ? '? '
+                : ''}
+          </span>
+          {status}
+        </span>
       </div>
-      <h3>{card.title}</h3>
+      <h3>
+        <WorkTitle title={card.title} />
+      </h3>
       <p className="work-card-result">{resultText(t, card)}</p>
     </div>
   );
 }
 
-// The same Work is named the same way wherever it appears: the Work list, the
-// Work page, and this tile all read their label from productStatePresentation.
-// A null state is the one case the server could not read at all; every other
-// stage, including a Work that has not started, has a name of its own.
+// The card projects the latest WorkRun state; Work itself has no status
+// machine. A pre-execution card states that it has no WorkRuns yet.
 function statusLabel(
   t: Translate,
   state: WorkChatCard['productState'],
 ): string {
   if (state === null) return t('workCard.statusUnavailable');
-  return productStatePresentation(state).label;
+  return state === 'not_started'
+    ? t('work.noExecution')
+    : t('work.latestState', { state: productStatePresentation(state).label });
 }
 
 function resultText(t: Translate, card: WorkChatCard): string {
@@ -117,8 +135,8 @@ const summaryCharacterLimit = 180;
 /**
  * A Work's result is authored as markdown, so the card was showing the syntax
  * itself — headings, fences, table pipes — as one unbroken paragraph. Flatten
- * it to a single readable line and cut it: this is a glance, not the document.
- * The character limit is the ceiling; CSS clamps to the visible line count.
+ * it to a short readable preview: this is a glance, not the document.
+ * The character limit bounds the preview; CSS wraps all of that bounded text.
  */
 function condense(text: string): string {
   const flat = text

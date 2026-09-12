@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 
+import { isFeatureUnavailable } from '../../../api/feature-availability';
 import { ProductReadError } from '../clients/errors';
 import { loadWorkDetail, type WorkDetailData } from './load-work-detail';
 
@@ -11,7 +12,7 @@ export type WorkDetailQuery = {
 
 export function useWorkDetail({
   workId,
-  selectedRunId,
+  selectedRunId: selectedWorkRunId,
   preferCurrentDefinition,
   includeTrace,
   includeRun = true,
@@ -32,6 +33,7 @@ export function useWorkDetail({
     let firstLoad = true;
     let hasDetail = false;
     setError(null);
+    setStatus('loading');
 
     const scheduleRefresh = () => {
       if (timer) clearTimeout(timer);
@@ -39,11 +41,10 @@ export function useWorkDetail({
     };
 
     const refresh = async () => {
-      if (firstLoad) setStatus('loading');
       try {
         const loaded = await loadWorkDetail(
           workId,
-          selectedRunId,
+          selectedWorkRunId,
           preferCurrentDefinition,
           includeTrace,
           includeRun,
@@ -57,8 +58,20 @@ export function useWorkDetail({
         if (loaded.run?.work_run.product_state === 'running') scheduleRefresh();
       } catch (error) {
         if (!active) return;
+        const featureUnavailable = isFeatureUnavailable(error);
         const projectionUnavailable =
-          error instanceof ProductReadError && error.status === 503;
+          !featureUnavailable &&
+          error instanceof ProductReadError &&
+          error.status === 503;
+        const denied =
+          error instanceof ProductReadError &&
+          (error.status === 401 || error.status === 403);
+        if (featureUnavailable || denied) {
+          setDetail(null);
+          setError(error);
+          setStatus('error');
+          return;
+        }
         if (projectionUnavailable && firstLoad) {
           setStatus('starting');
           scheduleRefresh();
@@ -80,7 +93,7 @@ export function useWorkDetail({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     workId,
-    selectedRunId,
+    selectedWorkRunId,
     preferCurrentDefinition,
     includeTrace,
     includeRun,

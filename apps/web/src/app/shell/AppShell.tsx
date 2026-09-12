@@ -28,7 +28,7 @@ export interface AppShellProps {
   readonly returnWorkItemId?: string | null;
   readonly selectedWorkId?: string | null;
   readonly workTab?: string | null;
-  readonly selectedRunId?: string | null;
+  readonly selectedWorkRunId?: string | null;
   readonly selectedSessionIndex?: number | null;
 }
 
@@ -44,7 +44,7 @@ export function AppShell({
   returnWorkItemId = null,
   selectedWorkId = null,
   workTab = null,
-  selectedRunId = null,
+  selectedWorkRunId = null,
   selectedSessionIndex = null,
 }: AppShellProps) {
   const location = useLocation();
@@ -129,7 +129,7 @@ export function AppShell({
           returnWorkItemId={returnWorkItemId}
           selectedWorkId={selectedWorkId}
           workTab={workTab}
-          selectedRunId={selectedRunId}
+          selectedWorkRunId={selectedWorkRunId}
           selectedSessionIndex={selectedSessionIndex}
         />
       ) : null}

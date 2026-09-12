@@ -12,7 +12,7 @@ import type { NormalizedTrace } from './normalized';
 /** A single-agent Work: no Team, so no actors, Work Items, or Attempts. */
 function singleAgentTrace(): NormalizedTrace {
   return {
-    runId: 'work-run-1',
+    workRunId: 'work-run-1',
     work: { id: 'work-1', title: 'Single-agent Work' },
     workRun: { id: 'work-run-1', productState: 'succeeded' },
     actors: new Map(),
@@ -289,9 +289,9 @@ it('renders an explicit empty state for a single-agent Work with no collaboratio
     expect(host.querySelector('.run-trace__map-node')).toBeNull();
     expect(host.textContent).not.toContain('Attempt node(s)');
     expect(host.textContent).toContain(
-      'No collaboration graph was recorded for this Work.',
+      'No collaboration graph was recorded for this WorkRun.',
     );
-    expect(host.textContent).toContain('ran as a single Agent');
+    expect(host.textContent).toContain('uses a single Worker');
   } finally {
     await act(async () => root.unmount());
     host.remove();

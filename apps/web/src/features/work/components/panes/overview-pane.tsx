@@ -1,21 +1,12 @@
 import { useEffect, useState } from 'react';
 
-import {
-  loadRunRoleSummaries,
-  type AgentSummary,
-  type WorkDetailData,
-} from '../../queries/load-work-detail';
+import type { WorkDetailData } from '../../queries/load-work-detail';
 import { AssistantMarkdown } from '@/features/conversations/components/assistant-markdown';
-import { RunTrace } from '@/features/run-trace/run-trace-view';
 import { loadSessionTranscripts } from '@/features/run-trace/run-trace-gateway';
-import {
-  productStatePresentation,
-  resultCaptureLabel,
-} from '../work-presentation';
+import { productStatePresentation } from '../work-presentation';
 import { latestAssistantSegmentFromSessions } from '../run-outcome';
-import { workRunResultFilePath, workTabPath } from '@/app/routes';
+import { workRunResultFilePath } from '@/app/routes';
 import { outcomeBody } from './outcome-headline';
-import { humanize } from '../work-presentation';
 import { useT } from '../../../../i18n';
 
 export function OverviewPane({
@@ -26,7 +17,7 @@ export function OverviewPane({
   readonly originConversationId?: string | null;
 }) {
   const t = useT();
-  if (!data.run || !data.trace)
+  if (!data.run)
     return (
       <section className="work-detail-state" data-testid="work-no-runs">
         <p className="work-shell-kicker">{t('work.overview.empty')}</p>
@@ -37,7 +28,7 @@ export function OverviewPane({
 
   return (
     <OverviewContent
-      data={{ ...data, run: data.run, trace: data.trace }}
+      data={{ ...data, run: data.run }}
       originConversationId={originConversationId}
     />
   );
@@ -49,16 +40,15 @@ function OverviewContent({
 }: {
   readonly data: WorkDetailData & {
     readonly run: NonNullable<WorkDetailData['run']>;
-    readonly trace: NonNullable<WorkDetailData['trace']>;
   };
   readonly originConversationId?: string | null;
 }) {
   const t = useT();
   const run = data.run;
-  const trace = data.trace;
   const [outcome, setOutcome] = useState<string | null>(null);
   useEffect(() => {
     let active = true;
+    setOutcome(null);
     void loadSessionTranscripts(data.work.id, run.work_run.id)
       .then((transcripts) => {
         if (active)
@@ -88,20 +78,23 @@ function OverviewContent({
           {stateView.label}
         </span>
         <div data-testid="outcome-summary">
-          <p className="work-shell-kicker">{t('work.result')}</p>
+          <p className="work-shell-kicker">{t('work.scope.output')}</p>
           <h2>
             {outcome
-              ? t('work.result.completed')
-              : resultCaptureLabel(run.work_run.result_capture_status)}
+              ? t('work.scope.capturedOutput')
+              : t('work.scope.outputUnavailable')}
           </h2>
-          <p data-testid="attention-basis">{stateView.description}</p>
+          {outcome ? <p>{t('work.scope.outputSource')}</p> : null}
+          <p data-testid="attention-basis">
+            {t(`work.scope.state.${run.work_run.product_state}`)}
+          </p>
           {outcomeDocument ? (
             <div className="work-overview__outcome" id="run-result">
               <AssistantMarkdown text={outcomeDocument} />
             </div>
           ) : null}
           {live ? (
-            <p className="work-live-note">{t('work.result.updating')}</p>
+            <p className="work-live-note">{t('work.scope.outputSnapshot')}</p>
           ) : null}
           {hasSuccessfulResult ? (
             <a
@@ -117,125 +110,17 @@ function OverviewContent({
           ) : null}
         </div>
       </div>
-      <RunJourney trace={trace} />
-      <RunTrace live={live} presentation="record" trace={trace} />
-      <RunRoleCards
-        workId={data.work.id}
-        runId={run.work_run.id}
-        originConversationId={originConversationId}
-      />
+      <a
+        className="work-result-link"
+        href={`/observe?${new URLSearchParams({ work: data.work.id, run: run.work_run.id })}`}
+      >
+        {t('work.scope.observe')}
+      </a>
     </section>
   );
 }
 
 // Kept as a named export for the focused projector tests and existing callers.
 export { latestAssistantSegmentFromSessions as outcomeFromSessions } from '../run-outcome';
-
-function RunJourney({
-  trace,
-}: {
-  readonly trace: NonNullable<WorkDetailData['trace']>;
-}) {
-  const t = useT();
-  if (!trace || trace.workItems.size === 0) return null;
-  return (
-    <section className="work-journey" aria-labelledby="work-journey-heading">
-      <div className="work-section-heading">
-        <p className="work-shell-kicker">{t('work.journey.eyebrow')}</p>
-        <h2 id="work-journey-heading">{t('work.journey.title')}</h2>
-        <p>{t('work.journey.body')}</p>
-      </div>
-      <ol className="work-journey__steps">
-        {[...trace.workItems.values()].map((item) => (
-          <li key={item.id}>
-            <strong>{item.subject}</strong>
-            <ul>
-              {item.attempts.map((attempt) => (
-                <li key={attempt.id}>
-                  <span>
-                    {t('work.attempt', { number: attempt.attemptNo })} ·{' '}
-                    {humanize(attempt.status)}
-                  </span>
-                  {attempt.resultSummary ? (
-                    <p>{attempt.resultSummary}</p>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          </li>
-        ))}
-      </ol>
-    </section>
-  );
-}
-
-function RunRoleCards({
-  workId,
-  runId,
-  originConversationId,
-}: {
-  readonly workId: string;
-  readonly runId: string;
-  readonly originConversationId?: string | null;
-}) {
-  const t = useT();
-  const [sessions, setSessions] = useState<readonly AgentSummary[] | null>(
-    null,
-  );
-
-  useEffect(() => {
-    let active = true;
-    loadRunRoleSummaries(workId, runId)
-      .then((next) => {
-        if (active) setSessions(next);
-      })
-      .catch(() => {
-        if (active) setSessions([]);
-      });
-    return () => {
-      active = false;
-    };
-  }, [workId, runId]);
-
-  if (!sessions || sessions.length === 0) return null;
-
-  return (
-    <div className="work-role-cards" data-testid="run-role-cards">
-      {sessions.map((session, index) => {
-        const action = session.summary.last_meaningful?.action;
-        return (
-          <button
-            className="work-role-card"
-            key={`${session.label.name}-${index}`}
-            onClick={() => {
-              window.location.assign(
-                workTabPath(
-                  workId,
-                  'transcript',
-                  runId,
-                  originConversationId ?? null,
-                  index,
-                ),
-              );
-            }}
-            title={action ?? undefined}
-            type="button"
-          >
-            <strong>{session.label.name}</strong>
-            {session.label.role !== null ? (
-              <span>{session.label.role}</span>
-            ) : null}
-            <span>
-              {t('work.sessionSummary', {
-                status: session.label.status,
-                count: session.summary.entry_count,
-              })}
-            </span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
 
 export { outcomeBody } from './outcome-headline';

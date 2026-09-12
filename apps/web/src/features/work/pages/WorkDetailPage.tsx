@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { useCallback, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import type { WorkListItem } from '@atomlink-ye/agent-server/product-contract';
 
 import { ArtifactsPane } from '../components/panes/artifacts-pane';
@@ -21,6 +21,8 @@ import { useWorkDetail } from '../queries/use-work-detail';
 import { WorkDetailRootNotFoundError } from '../queries/load-work-detail';
 import { NotFoundContent } from '../../../app/router/NotFoundPage';
 import { useT } from '../../../i18n';
+import { isFeatureUnavailable } from '../../../api/feature-availability';
+import { ProductReadError } from '../clients/errors';
 import '../components/work-shell.css';
 import '../components/work-list.css';
 import '../components/work-detail.css';
@@ -47,6 +49,13 @@ export function WorkDetailPage({
   ) => void;
 }) {
   const t = useT();
+  const navigate = useNavigate();
+  const openStartedWorkRun = useCallback(
+    (id: string) => {
+      navigate(workTabHref(workId, 'chat', id, originConversationId));
+    },
+    [navigate, workId, originConversationId],
+  );
   const requestedRunView =
     Boolean(selectedRunId) && !['runs', 'artifacts'].includes(tab ?? '');
   const requestedTab = normalizeWorkTab(tab, requestedRunView);
@@ -56,7 +65,7 @@ export function WorkDetailPage({
     workId,
     selectedRunId,
     preferCurrentDefinition,
-    includeTrace: requestedTab !== 'definition',
+    includeTrace: requestedTab === 'transcript',
     includeRun,
   });
   const detail = query.detail;
@@ -92,9 +101,16 @@ export function WorkDetailPage({
         switch (activeTab) {
           case 'chat':
             return runView ? (
-              <WorkChatPane workId={detail.work.id} workRunId={runId} />
+              <WorkChatPane
+                workId={detail.work.id}
+                workRunId={runId}
+                onWorkRunStarted={openStartedWorkRun}
+              />
             ) : (
-              <WorkChatPane workId={detail.work.id} />
+              <WorkChatPane
+                workId={detail.work.id}
+                onWorkRunStarted={openStartedWorkRun}
+              />
             );
           case 'overview':
             return (
@@ -105,23 +121,10 @@ export function WorkDetailPage({
             );
           case 'result':
             return (
-              <>
-                <a
-                  className="work-run-definition-link"
-                  href={workTabHref(
-                    detail.work.id,
-                    'definition',
-                    runId,
-                    originConversationId,
-                  )}
-                >
-                  {t('work.definitionUsed')}
-                </a>
-                <OverviewPane
-                  data={detail}
-                  originConversationId={originConversationId}
-                />
-              </>
+              <OverviewPane
+                data={detail}
+                originConversationId={originConversationId}
+              />
             );
           case 'runs':
             return (
@@ -138,7 +141,12 @@ export function WorkDetailPage({
               />
             );
           case 'artifacts':
-            return <ArtifactsPane />;
+            return (
+              <ArtifactsPane
+                workId={workId}
+                originConversationId={originConversationId}
+              />
+            );
           case 'definition':
             return (
               <DefinitionPane
@@ -155,18 +163,30 @@ export function WorkDetailPage({
   return (
     <div
       className={`work-shell${runView ? ' work-shell--run' : ''}`}
+      data-load-state={query.status}
       data-active-tab={activeTab}
       data-testid="work-detail-shell"
     >
       {query.status === 'loading' ? (
-        <p className="work-detail-loading" aria-live="polite">
-          {t('work.detail.loading')}
-        </p>
+        <section
+          className="work-detail-feedback work-loading-feedback"
+          role="status"
+        >
+          <h2>{t('work.detail.loading')}</h2>
+          <p>{t('work.loading.body')}</p>
+          <a href={workRootPath(originConversationId ?? null)}>
+            {t('work.invalidLink.back')}
+          </a>
+        </section>
       ) : null}
       {query.status === 'starting' ? (
-        <p className="work-detail-loading" aria-live="polite">
-          {t('work.detail.starting')}
-        </p>
+        <section className="work-detail-feedback" role="status">
+          <h2>{t('work.detail.starting')}</h2>
+          <p>{t('work.detail.startingBody')}</p>
+          <a href={workRootPath(originConversationId ?? null)}>
+            {t('work.invalidLink.back')}
+          </a>
+        </section>
       ) : null}
       {query.status === 'error' ? (
         <WorkDetailError
@@ -180,6 +200,7 @@ export function WorkDetailPage({
             work={detail.work}
             run={runView ? detail.run : null}
             runOrdinal={runOrdinal}
+            runCount={detail.runs.length}
             originConversationId={originConversationId}
             actions={
               runView ? undefined : (
@@ -213,6 +234,32 @@ function WorkDetailError({
   readonly originConversationId?: string | null;
 }) {
   const t = useT();
+  const unavailable = isFeatureUnavailable(error);
+  const denied =
+    error instanceof ProductReadError &&
+    (error.status === 401 || error.status === 403);
+  if (unavailable || denied)
+    return (
+      <section className="work-detail-feedback" role="status">
+        <h2>
+          {t(unavailable ? 'work.unavailable.title' : 'work.permission.title')}
+        </h2>
+        <p>
+          {t(unavailable ? 'work.unavailable.body' : 'work.permission.body')}
+        </p>
+        <a
+          href={
+            unavailable
+              ? '/conversations'
+              : workRootPath(originConversationId ?? null)
+          }
+        >
+          {t(
+            unavailable ? 'work.backToConversations' : 'work.invalidLink.back',
+          )}
+        </a>
+      </section>
+    );
   const rootWorkMissing = error instanceof WorkDetailRootNotFoundError;
   if (rootWorkMissing) {
     return (
@@ -228,7 +275,10 @@ function WorkDetailError({
   }
 
   return (
-    <section className="work-list-state work-list-state--error" role="alert">
+    <section
+      className="work-detail-feedback work-list-state--error"
+      role="alert"
+    >
       <p className="work-list-state__eyebrow">{t('work.couldNotLoad')}</p>
       <h2>{t('work.couldNotLoad.title')}</h2>
       <p>{t('work.couldNotLoad.body')}</p>
@@ -254,44 +304,42 @@ function WorkRecord({
   const t = useT();
   return (
     <section className="work-record" data-testid="work-record">
-      <h2>{t('work.record.summary')}</h2>
-      <dl>
-        <dt>{t('work.record.definition')}</dt>
-        <dd>
-          <a
-            href={workTabHref(
-              data.work.id,
-              'definition',
-              undefined,
-              originConversationId,
-            )}
-          >
-            {data.work.definition_version_id}
-          </a>
-        </dd>
-        <dt>{t('work.tab.runs')}</dt>
-        <dd>
-          <a
-            href={workTabHref(
-              data.work.id,
-              'runs',
-              undefined,
-              originConversationId,
-            )}
-          >
-            {t(
-              data.runs.length === 1
-                ? 'work.record.oneRun'
-                : 'work.record.runCount',
-              { count: data.runs.length },
-            )}
-          </a>
-        </dd>
-        <dt>{t('work.record.created')}</dt>
-        <dd>{formatTimestamp(data.work.created_at)}</dd>
-        <dt>{t('work.record.updated')}</dt>
-        <dd>{formatTimestamp(data.work.updated_at)}</dd>
-      </dl>
+      <RunsPane data={data} originConversationId={originConversationId} />
+      <details className="work-record-metadata">
+        <summary>{t('work.record.summary')}</summary>
+        <dl>
+          <dt>{t('work.record.definition')}</dt>
+          <dd>
+            <a
+              href={workTabHref(
+                data.work.id,
+                'definition',
+                undefined,
+                originConversationId,
+              )}
+            >
+              {data.work.definition_version_id}
+            </a>
+          </dd>
+          <dt>{t('work.scope.history')}</dt>
+          <dd>
+            <a
+              href={workTabHref(
+                data.work.id,
+                'runs',
+                undefined,
+                originConversationId,
+              )}
+            >
+              {data.runs.length}
+            </a>
+          </dd>
+          <dt>{t('work.record.created')}</dt>
+          <dd>{formatTimestamp(data.work.created_at)}</dd>
+          <dt>{t('work.record.updated')}</dt>
+          <dd>{formatTimestamp(data.work.updated_at)}</dd>
+        </dl>
+      </details>
     </section>
   );
 }

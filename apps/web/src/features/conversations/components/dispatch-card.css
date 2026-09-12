@@ -1,3 +1,5 @@
+@import '../../surface-tokens.css';
+
 .dispatch-card {
   width: min(100%, 620px);
   align-self: flex-start;
@@ -6,7 +8,7 @@
   border-radius: var(--radius-lg);
   background: linear-gradient(135deg, var(--sky-50), var(--cloud));
   box-shadow: var(--shadow-soft);
-  padding: 13px 15px;
+  padding: var(--space-4);
   color: var(--ink-700);
 }
 
@@ -17,7 +19,7 @@
 }
 
 .dispatch-card__event {
-  line-height: 1.5;
+  line-height: var(--leading-body);
 }
 
 .dispatch-card__event a {
@@ -28,28 +30,28 @@
 }
 
 .dispatch-card__status {
-  margin-top: 7px;
+  margin-top: var(--space-2);
   color: var(--ink-500);
   font-size: var(--text-sm);
 }
 
 .dispatch-card__details {
-  margin-top: 10px;
+  margin-top: var(--space-3);
   border-top: 1px solid var(--sky-100);
-  padding-top: 8px;
-  color: var(--ink-600);
+  padding-top: var(--space-2);
+  color: var(--ink-700);
   font-size: var(--text-sm);
 }
 
 .dispatch-card__details summary {
   width: fit-content;
   cursor: pointer;
-  color: var(--ink-600);
+  color: var(--ink-700);
   font-weight: 600;
 }
 
 .dispatch-card__details p {
-  margin-top: 8px;
+  margin-top: var(--space-2);
   white-space: pre-wrap;
 }
 

@@ -1,3 +1,4 @@
+import { t } from '@/i18n';
 /**
  * A TimelineSpan is a run's plotted activity window. Runs are what the
  * server actually captures execution timing against; a Team Work Item
@@ -92,8 +93,8 @@ export function relativeTicks(startedAt: string, endedAt: string) {
 
 export function durationLabel(span: TimelineSpan): string {
   return span.durationMs === null
-    ? 'Not captured'
-    : `${(span.durationMs / 1000).toFixed(1)} seconds`;
+    ? t('trace.notCaptured')
+    : t('trace.seconds', { count: (span.durationMs / 1000).toFixed(1) });
 }
 
 export function formatActiveDuration(spans: readonly TimelineSpan[]): string {
@@ -101,11 +102,11 @@ export function formatActiveDuration(spans: readonly TimelineSpan[]): string {
     (total, span) => total + (span.durationMs ?? 0),
     0,
   );
-  if (!milliseconds) return 'active time not captured';
+  if (!milliseconds) return t('trace.activeMissing');
   const minutes = Math.round(milliseconds / 60_000);
   return minutes
-    ? `${minutes}m active`
-    : `${Math.round(milliseconds / 1000)}s active`;
+    ? t('trace.activeMinutes', { count: minutes })
+    : t('trace.activeSeconds', { count: Math.round(milliseconds / 1000) });
 }
 
 function formatClock(value: Date): string {

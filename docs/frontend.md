@@ -61,20 +61,24 @@ The Work tab preserves the useful Work product capabilities that existed before 
 - Work Definition view/edit;
 - bounded Artifact state until the Product API exposes the full Artifact surface.
 
-Work and Run use different presentation levels within `/work/:workId`.
-Without a selected Run, the compact Work header shows the title, Active/Archived
-record state, and Start Run. Its tabs contain a Work summary, Runs, the current
-Definition, and the bounded Files placeholder. The summary is a record of the
-Work's Definition, dates, and run count; it does not render execution results.
-The directory uses the same record state and a run count, with
-`.work-pane-scroll` owning scrolling for both the Work list and catalog.
+Work and WorkRun use different presentation levels within `/work/:workId`.
+Without a selected WorkRun, the Work header shows the title, Active/Archived
+record state, and the existing start action. The default WorkRuns pane lists
+executions newest first, each with its own status and direct Conversation,
+Result, and Activity links. Work record metadata is disclosed below that history;
+the current Work Definition has its own Work-level tab. The old `tab=runs` link
+opens this same history. The unavailable Files placeholder remains reachable
+through old links but is not advertised as a primary destination.
 
-Selecting `?run=:runId` opens a visually distinct Run surface with a breadcrumb
-back to the Work and a chronological Run ordinal. Conversation, Trace, and
-Result belong to that Run. The existing result/journey Overview renderer is
-Run content, not the Work summary. Historical Definition deep links retain the
-exact pinned version. Preparation chat is available only before a Work has any
-Runs; the Run conversation surface requires the Run-scoped chat integration.
+Selecting `?run=:workRunId` opens a distinct WorkRun surface with a breadcrumb
+back to Work, a chronological ordinal/total, its own execution state, and a link
+to all WorkRuns. Conversation, Result, Activity (session transcripts), and
+Definition used all belong to that selected WorkRun. Definition used remains
+read-only and pins the exact historical version; the Work-level Definition is
+current and editable. Result displays captured output and the existing successful
+result-file link. Operational trace inspection belongs to `/observe?work=&run=`.
+Preparation chat is Work-scoped and available only before the first WorkRun;
+selected conversations always use the WorkRun-scoped chat endpoint.
 The Work directory and create surfaces offer no Coworker binding controls.
 
 The current list contract has no aggregate Run count. The Work index reads all
@@ -229,6 +233,35 @@ the browser on a first visit (anything `zh*` resolves to `zh-CN`). It is not an 
 preference: one language pushed onto every browser someone signs in from is the wrong default
 for a person reading English at work and Chinese at home.
 
+### Typography and reading density
+
+All authored CSS font sizes in `apps/web` use the `--text-*` scale in `index.css`.
+Compact labels, metadata, and small hints share a 12px floor; body and emphasized
+text use 13px and 14px, with 16px, 20px, and 24px heading steps. The same floor
+applies in both locales because user-authored titles and messages can mix scripts.
+The eyebrow, xs, and sm names retain semantic roles but resolve to the same size.
+Use weight and color for their hierarchy rather than shrinking metadata.
+
+Leading also uses tokens: `--leading-tight` (1.35) for short headings,
+`--leading-ui` (1.5) for controls, `--leading-body` (1.6) for prose, and
+`--leading-code` (1.65) for source/transcript reading. Symbol alignment tokens
+are reserved for existing icon controls. Explicitly size `<small>` hints rather
+than relying on the browser's relative-size default. The shared Markdown renderer
+also explicitly maps H1–H6 to 24/20/16/14/13/12px with UI leading, so nested
+report, transcript, and chat headings cannot inherit sub-floor browser multipliers.
+
+The Work directory balances its two text lines with 4px vertical row padding
+and a 2px internal gap; `.work-pane-scroll` remains the scroll owner. The
+compact desktop budget is a 49.5px row with 14 fully visible entries at
+1440×900 in English and Simplified Chinese. Directory activity and title
+structure must fit that budget without shrinking text. The Chromium typography
+test pins rendered roles and fully visible rows. The node typography test rejects
+raw sizes across the complete authored `apps/web` tree, including inline styles
+and HTML/SVG attributes, with positive controls for the inventory and detector.
+It also rejects non-token CSS font shorthands and local line-height literals.
+Browser tests pin Markdown heading geometry and compare long Chinese title
+ellipsis paint against complete-character prefixes at the desktop viewport.
+
 ### Migrating a surface
 
 1. Add the English strings to `en.ts` under a namespaced key (`conversations.list.empty`).
@@ -268,3 +301,31 @@ existing Product/Conversation/WorkItem contract
 ```
 
 rather than adding framework-specific server logic inside the frontend package.
+
+## Work directory activity and feedback
+
+The Work directory orders records by the latest Work or latest Run update. Each
+navigation label retains Work record state; the visible row shows a Run count,
+latest Run state, and recorded activity time. Failed and waiting Runs have distinct
+marks, and long names preserve their suffix as well as their beginning. The pane
+remains the scroll owner.
+
+A failed directory refresh identifies retained rows as previously loaded data and
+offers Retry. A disabled Work feature is distinct from transient detail readiness;
+permission failures offer account/access guidance. Loading feedback reserves space
+and waits 150 ms before becoming visible. Empty artifact and transcript surfaces
+link to Runs, while recorded transcripts also offer an explicit refresh action.
+Transcript loading, empty, and error feedback share a 112px minimum height so
+readable explanations do not move the recovery controls when a read completes.
+
+## Product vocabulary and locales
+
+Work is the durable product record pinned to a Definition version. Its record state is archived or unarchived; execution state shown beside a Work belongs to its latest WorkRun and must say so. A WorkRun is one product execution; a technical Run is one Task attempt. A Definition selects the Worker or Team indirectly. Preparation chat precedes WorkRun creation; execution chat belongs to the selected WorkRun. The chat protocol's `lead` role does not establish a universal execution lead: its neutral display name is Assistant. Actual Team roles come from captured membership data.
+
+English and Simplified Chinese retain the nouns Work, WorkRun, Run, Definition, Worker, Coworker, and Task. Localize surrounding copy and known captured enum labels through `apps/web/src/i18n`; authored content and identifiers remain data. Catalog tests enforce identical key sets and interpolation placeholders. Technical event Run IDs remain distinct from the normalized trace wrapper's WorkRun ID.
+
+### Bilingual product copy and failure presentation
+
+Work is a durable record, WorkRun is its product execution instance, and Run is one Task attempt. A Definition supplies each WorkRun's Worker or Team; a Work has neither an executor binding nor an execution status. Conversation content is Run-scoped; the null WorkRun bucket is preparation. WorkRun question-panel wording describes the selected context without asserting that WorkRun owns a Conversation.
+
+Both locale catalogs must retain identical key and placeholder sets, and each source key may be declared only once. Component copy, accessible labels, title-bar sections, template fragments, and editable defaults use catalog keys. The source-copy guard includes known-positive samples so a broken scanner cannot silently report an empty result. Gateways retain typed errors for control flow; presentation catches choose localized operation-specific copy instead of displaying raw gateway messages. Structured Definition diagnostics and user/runtime-authored content remain data and are not evidence that frontend copy is untranslated.

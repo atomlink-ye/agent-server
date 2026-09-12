@@ -1,3 +1,4 @@
+import { useT } from '../../i18n';
 import type { WorkItemStatus } from '@atomlink-ye/agent-server/product-contract';
 
 import { statusLabel } from './format';
@@ -51,6 +52,7 @@ export function MentionRow({
 
 /** Comment count, rendered only once the projection reports one. */
 export function CommentCount({ count }: { readonly count: number | null }) {
+  const t = useT();
   if (count === null || count === 0) return null;
   return (
     <span
@@ -60,7 +62,7 @@ export function CommentCount({ count }: { readonly count: number | null }) {
       <span aria-hidden="true">💬</span>
       {count}
       <span className="work-org-visually-hidden">
-        {count === 1 ? ' comment' : ' comments'}
+        {t(count === 1 ? 'workOrg.oneComment' : 'workOrg.manyComments')}
       </span>
     </span>
   );

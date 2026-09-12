@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import type { WorkListItem } from '@atomlink-ye/agent-server/product-contract';
 
 import { NewWork } from './components/new-work';
@@ -18,6 +18,7 @@ import { NotFoundContent } from '../../app/router/NotFoundPage';
 import { TitleBar } from '../../app/shell/TitleBar';
 import { useT } from '../../i18n';
 import WorkPane from './WorkPane';
+import { WorkTitle } from './components/work-title';
 import './work-page.css';
 
 export interface WorkPageProps {
@@ -25,7 +26,7 @@ export interface WorkPageProps {
   readonly returnWorkItemId?: string | null;
   readonly selectedWorkId?: string | null;
   readonly workTab?: string | null;
-  readonly selectedRunId?: string | null;
+  readonly selectedWorkRunId?: string | null;
   readonly selectedSessionIndex?: number | null;
 }
 
@@ -34,7 +35,7 @@ export function WorkPage({
   returnWorkItemId = null,
   selectedWorkId = null,
   workTab = null,
-  selectedRunId = null,
+  selectedWorkRunId = null,
   selectedSessionIndex = null,
 }: WorkPageProps) {
   const t = useT();
@@ -94,7 +95,8 @@ export function WorkPage({
     navigate(`/tasks/${encodeURIComponent(returnWorkItemId)}`);
   };
 
-  const workUnavailable = workListStatus === 'unavailable';
+  const workUnavailable =
+    workListStatus === 'unavailable' || workListStatus === 'denied';
   const workListFailed = workListStatus === 'error';
   const invalidWorkId =
     selectedWorkId !== null && !isValidDetailId('work', selectedWorkId);
@@ -172,10 +174,10 @@ export function WorkPage({
           !showNewWork &&
           selectedWorkId ? (
             <WorkDetailPage
-              key={`${selectedWorkId}:${selectedRunId ?? 'latest'}`}
+              key={`${selectedWorkId}:${selectedWorkRunId ?? 'latest'}`}
               workId={selectedWorkId}
               tab={workTab ?? undefined}
-              selectedRunId={selectedRunId ?? undefined}
+              selectedRunId={selectedWorkRunId ?? undefined}
               selectedSessionIndex={selectedSessionIndex ?? undefined}
               originConversationId={returnConversationId}
               onSelectedLatestRunState={setSelectedLatestRunState}
@@ -189,8 +191,21 @@ export function WorkPage({
               <span className="work-main-icon" aria-hidden="true">
                 ✓
               </span>
-              <h1>{t('work.unavailable.title')}</h1>
-              <p>{t('work.unavailable.body')}</p>
+              <h1>
+                {t(
+                  workListStatus === 'denied'
+                    ? 'work.permission.title'
+                    : 'work.unavailable.title',
+                )}
+              </h1>
+              <p>
+                {t(
+                  workListStatus === 'denied'
+                    ? 'work.permission.body'
+                    : 'work.unavailable.body',
+                )}
+              </p>
+              <Link to="/conversations">{t('work.backToConversations')}</Link>
             </div>
           ) : isEmpty && workListFailed ? (
             <div className="work-main-empty" data-testid="work-page-error">
@@ -229,9 +244,12 @@ function WorkLanding({
   readonly onCreate: () => void;
 }) {
   const t = useT();
-  if (status === 'loading')
+  if (status === 'loading' && works.length === 0)
     return (
-      <div className="work-main-empty work-main-empty--loading" role="status">
+      <div
+        className="work-main-empty work-main-empty--loading work-loading-feedback"
+        role="status"
+      >
         <span className="work-main-icon" aria-hidden="true">
           …
         </span>
@@ -297,7 +315,7 @@ function RecentWorkRow({
   const t = useT();
   const latestRun = work.latest_run_summary;
   const [transcriptSummary, setTranscriptSummary] = useState<{
-    readonly runId: string;
+    readonly workRunId: string;
     readonly segment: string | null;
   } | null>(null);
 
@@ -312,7 +330,7 @@ function RecentWorkRow({
       .then((transcripts) => {
         if (active)
           setTranscriptSummary({
-            runId: latestRun.id,
+            workRunId: latestRun.id,
             segment: recentWorkRunSummary(transcripts.sessions),
           });
       })
@@ -320,7 +338,7 @@ function RecentWorkRow({
         // The capture label is the safe fallback when transcript data is not
         // available; a raw result_summary may be an incomplete provider chunk.
         if (active)
-          setTranscriptSummary({ runId: latestRun.id, segment: null });
+          setTranscriptSummary({ workRunId: latestRun.id, segment: null });
       });
     return () => {
       active = false;
@@ -330,7 +348,7 @@ function RecentWorkRow({
   const state = productStatePresentation(work.product_state);
   const timestamp = latestRun?.updated_at ?? work.updated_at;
   const matchingTranscript =
-    latestRun && transcriptSummary?.runId === latestRun.id
+    latestRun && transcriptSummary?.workRunId === latestRun.id
       ? transcriptSummary
       : null;
   const transcriptSegment = matchingTranscript?.segment ?? null;
@@ -344,12 +362,12 @@ function RecentWorkRow({
           <span
             className={`work-state-pill work-state-pill--${work.product_state}`}
           >
-            {state.label}
+            {t('work.latestState', { state: state.label })}
           </span>
         ) : (
           <span className="work-landing__no-run">{t('work.noRuns')}</span>
         )}
-        <strong>{work.title}</strong>
+        <WorkTitle title={work.title} />
         <span className="work-landing__summary">{summary}</span>
         <time dateTime={timestamp}>
           {latestRun

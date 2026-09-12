@@ -2,7 +2,7 @@
 .work-detail-header__summary {
   color: var(--ink-500);
   font-size: var(--text-sm);
-  line-height: 1.5;
+  line-height: var(--leading-body);
   margin: var(--space-3) 0 0;
   max-width: 620px;
 }
@@ -12,7 +12,7 @@
   margin: var(--space-2) 0 0;
   color: var(--ink-500);
   font-size: var(--text-sm);
-  line-height: 1.5;
+  line-height: var(--leading-body);
 }
 .work-tabs {
   border-bottom: 1px solid var(--ink-200);
@@ -132,6 +132,7 @@
   text-transform: uppercase;
 }
 .work-chat-message small {
+  font-size: var(--text-xs);
   color: var(--ink-500);
   display: block;
   margin-top: var(--space-2);
@@ -172,7 +173,7 @@
 .work-chat-empty-state p {
   margin: var(--space-2) 0 0;
   color: var(--ink-500);
-  line-height: 1.55;
+  line-height: var(--leading-body);
 }
 
 .work-preparation-card {
@@ -245,7 +246,7 @@
   padding-top: var(--space-3);
   color: var(--ink-700);
   font-size: var(--text-sm);
-  line-height: 1.6;
+  line-height: var(--leading-body);
 }
 .work-overview__outcome .assistant-markdown > :first-child {
   margin-top: 0;
@@ -282,11 +283,11 @@
   max-width: 760px;
 }
 .work-section-heading > p:last-child,
-.work-capability-unavailable > p:last-child,
-.work-detail-state > p:last-child {
+.work-capability-unavailable > p:not(.work-shell-kicker),
+.work-detail-state > p:not(.work-shell-kicker) {
   color: var(--ink-500);
   font-size: var(--text-sm);
-  line-height: 1.55;
+  line-height: var(--leading-body);
   margin: var(--space-3) 0 0;
 }
 .work-live-note {
@@ -348,7 +349,7 @@
 }
 .work-journey__steps ul p {
   color: var(--ink-700);
-  line-height: 1.55;
+  line-height: var(--leading-body);
   margin: var(--space-1) 0 0;
   white-space: pre-wrap;
 }
@@ -480,9 +481,11 @@
   border-radius: var(--radius-sm);
   cursor: pointer;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   font: inherit;
   gap: 3px;
   min-width: 160px;
+  overflow-wrap: anywhere;
   padding: var(--space-3);
   text-align: left;
 }
@@ -491,7 +494,7 @@
 }
 .work-role-card strong {
   font-size: var(--text-xs);
-  line-height: 1.35;
+  line-height: var(--leading-tight);
 }
 .work-role-card span {
   color: var(--ink-500);
@@ -539,9 +542,10 @@
   font-size: var(--text-sm);
 }
 
+/* Keep navigation inside its compact height budget as labels use readable leading. */
 .work-tabs {
   gap: var(--space-5);
-  padding-top: var(--space-2);
+  padding-top: calc(var(--space-3) / 2);
 }
 .work-tabs a {
   padding-bottom: var(--space-2);
@@ -574,4 +578,68 @@
 .work-record dd {
   margin: 0;
   overflow-wrap: anywhere;
+}
+
+/* WorkRun actions are the first content in the Work record. Record metadata
+   is secondary; it must not displace progress or the links to output/chat. */
+.work-record > .work-runs {
+  margin-top: 0;
+}
+.work-run-list__actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: var(--space-4);
+}
+.work-record-metadata {
+  margin-top: var(--space-5);
+}
+.work-record-metadata > summary {
+  color: var(--ink-500);
+  cursor: pointer;
+}
+.work-definition-scope {
+  margin-top: var(--space-3);
+}
+.work-definition-scope > h2 {
+  margin: 0;
+  font-size: var(--text-title);
+}
+.work-definition-scope .work-definition {
+  margin-top: var(--space-3);
+}
+.work-run-header > a:first-child {
+  flex: 1;
+}
+.work-run-header > .work-run-history-link {
+  flex: 0 0 auto;
+  margin-left: auto;
+  max-width: none;
+}
+
+/* Identity and tabs share one navigation band. The tab underline supplies its
+   separator; a second border and stacked padding above it displace the pane. */
+.work-shell:has(> .work-detail-header) {
+  padding-top: var(--space-2);
+}
+.work-shell > .work-detail-header {
+  flex-shrink: 0;
+  min-height: 36px;
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+.work-shell > .work-run-header {
+  min-height: 28px;
+}
+.work-shell > .work-tabs {
+  flex-shrink: 0;
+  padding-top: var(--space-1);
+}
+.work-shell > .work-tabs a {
+  padding-bottom: var(--space-1);
+}
+.work-shell > .work-record,
+.work-shell > .work-overview,
+.work-shell > .work-chat-pane,
+.work-shell > .work-definition-scope {
+  margin-top: var(--space-2);
 }

@@ -35,9 +35,9 @@ export function WhispersPage() {
         setChannels(next);
         setSelectedId((current) => current ?? next[0]?.id ?? null);
       },
-      (reason: unknown) => {
+      () => {
         if (!active) return;
-        setError(reason instanceof Error ? reason.message : String(reason));
+        setError(t('whispers.loadError'));
       },
     );
     return () => {
@@ -54,9 +54,9 @@ export function WhispersPage() {
     setMessages(null);
     void loadWhisperMessages(selectedId).then(
       (next) => active && setMessages(next),
-      (reason: unknown) => {
+      () => {
         if (!active) return;
-        setError(reason instanceof Error ? reason.message : String(reason));
+        setError(t('whispers.messagesError'));
       },
     );
     return () => {

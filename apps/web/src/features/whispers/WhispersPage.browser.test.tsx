@@ -1,3 +1,4 @@
+import { surfaceMetrics } from '@/test-support/surface-metrics';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -5,7 +6,8 @@ import { page } from 'vitest/browser';
 
 import '../../index.css';
 
-import WhispersPage from './WhispersPage';
+import { MemoryRouter } from 'react-router-dom';
+import { AppShell } from '../../app/shell/AppShell';
 
 (
   globalThis as typeof globalThis & {
@@ -21,13 +23,29 @@ function jsonResponse(body: unknown): Response {
   } as Response;
 }
 
+const roots: ReturnType<typeof createRoot>[] = [];
+
 async function renderPage(host: HTMLElement) {
+  host.style.height = '900px';
   const root = createRoot(host);
+  roots.push(root);
   await act(async () => {
     root.render(
-      <div className="app-shell" style={{ height: '900px' }}>
-        <WhispersPage />
-      </div>,
+      <MemoryRouter initialEntries={['/whispers']}>
+        <AppShell
+          commands={{
+            loadCoworkers: async () => [],
+            loadConversations: async () => [],
+            loadMessages: async () => [],
+            createConversation: async () => {
+              throw new Error('unused');
+            },
+            sendMessage: async () => {
+              throw new Error('unused');
+            },
+          }}
+        />
+      </MemoryRouter>,
     );
   });
   await act(async () => {
@@ -36,7 +54,8 @@ async function renderPage(host: HTMLElement) {
   return root;
 }
 
-afterEach(() => {
+afterEach(async () => {
+  for (const root of roots.splice(0)) await act(async () => root.unmount());
   vi.unstubAllGlobals();
   document.body.innerHTML = '';
 });
@@ -100,6 +119,13 @@ it('lists a whisper channel and peeks its messages without offering a compose bo
     await Promise.resolve();
   });
 
+  await surfaceMetrics(host, 'whispers', [
+    '.title-bar',
+    'header.whisper-observer-badge',
+    '.whisper-message',
+    '.whispers-list button',
+    '.whisper-message-log',
+  ]);
   expect(host.textContent).toContain('agent-a ↔ agent-b');
   expect(host.textContent).toContain('Need to align privately.');
   expect(host.textContent).toContain('Observer mode');

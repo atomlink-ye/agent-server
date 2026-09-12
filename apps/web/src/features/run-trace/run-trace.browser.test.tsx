@@ -1,3 +1,4 @@
+import { surfaceMetrics } from '@/test-support/surface-metrics';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { expect, it } from 'vitest';
@@ -129,6 +130,17 @@ it('renders recorder-backed proportional normal and rework geometry', async () =
       await act(async () => {
         root.render(<RunTrace trace={trace} />);
       });
+      await surfaceMetrics(
+        host,
+        trace === traces[0] ? 'run-trace-parallel' : 'run-trace',
+        [
+          '.run-trace__header',
+          '.run-trace__canvas',
+          '.run-trace__item-row',
+          '.run-trace__item-name small',
+          '.run-trace__axis',
+        ],
+      );
       expect(host.textContent).toContain(trace.work.title);
       const axis = host.querySelector<HTMLElement>('.run-trace__axis');
       expect(axis).not.toBeNull();
@@ -222,12 +234,12 @@ it('renders recorder-backed proportional normal and rework geometry', async () =
             (actor) => actor.name ?? 'Name not captured',
           ),
           // The Work Run's own lane is always appended after the agents.
-          ...(hasRootRun ? ['Work Run'] : []),
+          ...(hasRootRun ? ['Root Task Run'] : []),
         ]);
         const rootLane = laneNodes.at(-1);
         expect(
           rootLane?.querySelector('.run-trace__lane-note')?.textContent,
-        ).toBe('The Work Run itself, not an agent');
+        ).toBe('Attempts of the root Task that coordinates this WorkRun');
       }
       expect(
         attemptButtons.every(

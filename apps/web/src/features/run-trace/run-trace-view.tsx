@@ -13,11 +13,11 @@ import {
 import { useT } from '../../i18n';
 import './run-trace.css';
 
-const TAB_LABELS: Record<TraceView, string> = {
-  timeline: 'Timeline',
-  map: 'Map',
-  events: 'MCP Activity',
-};
+const TAB_KEYS = {
+  timeline: 'trace.timeline',
+  map: 'trace.map',
+  events: 'trace.mcpActivity',
+} as const;
 
 export function RunTrace({
   trace,
@@ -67,13 +67,12 @@ export function RunTrace({
             <h2 id="run-trace-heading">{t('trace.record.title')}</h2>
           </div>
           <span className={live ? 'run-trace__live' : 'run-trace__historical'}>
-            {live ? t('trace.updating') : t('trace.eventCount', { count: trace.events.length })}
+            {live
+              ? t('trace.updating')
+              : t('trace.eventCount', { count: trace.events.length })}
           </span>
         </header>
-        <p className="run-trace__subhead">
-          Open a section when you need the underlying record; no provider output
-          is inferred from these events.
-        </p>
+        <p className="run-trace__subhead">{t('trace.recordHint')}</p>
         <details className="run-trace__record-section">
           <summary>{t('trace.eventTimeline')}</summary>
           <div className="run-trace__record-canvas">
@@ -100,7 +99,9 @@ export function RunTrace({
           </div>
         </details>
         <details className="run-trace__record-section">
-          <summary>Recorded tool activity ({trace.activities.length})</summary>
+          <summary>
+            {t('trace.toolCount', { count: trace.activities.length })}
+          </summary>
           <div className="run-trace__record-canvas">
             <Events
               model={model.events}
@@ -123,11 +124,14 @@ export function RunTrace({
         >
           <summary>{t('trace.includes')}</summary>
           <p>
-            This record covers {humanize(trace.coverage.scope)}; excluded
-            execution:{' '}
-            {trace.coverage.excludedExecution.map(humanize).join(', ')}.
+            {t('trace.coverage', {
+              scope: humanize(trace.coverage.scope),
+              excluded: trace.coverage.excludedExecution
+                .map(humanize)
+                .join(', '),
+            })}
             {recordedFeedbackCount
-              ? ` ${recordedFeedbackCount} recorded feedback edge${recordedFeedbackCount === 1 ? '' : 's'} present.`
+              ? ` ${t('trace.feedbackCount', { count: recordedFeedbackCount })}`
               : ''}
           </p>
         </details>
@@ -145,12 +149,23 @@ export function RunTrace({
         </span>
       </header>
       <p className="run-trace__subhead">
-        A chronological record of this Run’s captured activity
+        {t('trace.chronological')}
         {trace.timeline.startedAt !== null && trace.timeline.endedAt !== null
-          ? ` · recorded ${formatTimestamp(new Date(trace.timeline.startedAt).toISOString())} → ${formatTimestamp(new Date(trace.timeline.endedAt).toISOString())}`
+          ? t('trace.recordedRange', {
+              start: formatTimestamp(
+                new Date(trace.timeline.startedAt).toISOString(),
+              ),
+              end: formatTimestamp(
+                new Date(trace.timeline.endedAt).toISOString(),
+              ),
+            })
           : ''}
       </p>
-      <div className="run-trace__tabs" role="tablist" aria-label={t('trace.views')}>
+      <div
+        className="run-trace__tabs"
+        role="tablist"
+        aria-label={t('trace.views')}
+      >
         {(['timeline', 'map', 'events'] as const).map((item) => (
           <button
             aria-selected={activeView === item}
@@ -160,7 +175,7 @@ export function RunTrace({
             role="tab"
             type="button"
           >
-            {TAB_LABELS[item]}
+            {t(TAB_KEYS[item])}
           </button>
         ))}
       </div>
@@ -208,20 +223,22 @@ export function RunTrace({
       >
         <summary>{t('trace.aboutActivity')}</summary>
         <p>
-          The activity list records event sequence, type, time, and Run only. It
-          does not expose output bodies. Read the Transcript for captured Worker
-          messages and tool details. Structured collaboration detail covers{' '}
-          {humanize(trace.coverage.scope)}; excluded execution:{' '}
-          {trace.coverage.excludedExecution.map(humanize).join(', ')}.
+          {t('trace.executionScope', {
+            scope: humanize(trace.coverage.scope),
+            excluded: trace.coverage.excludedExecution.map(humanize).join(', '),
+          })}
           {recordedFeedbackCount
-            ? ` ${recordedFeedbackCount} recorded feedback edge${recordedFeedbackCount === 1 ? '' : 's'} present.`
+            ? ` ${t('trace.feedbackCount', { count: recordedFeedbackCount })}`
             : ''}
         </p>
       </details>
       <p className="run-trace__longest-attempt" data-testid="longest-attempt">
-        Longest captured attempt:{' '}
-        {longestAttemptMs(trace) ?? 'timing not captured'}
-        {longestAttemptMs(trace) !== null ? ' ms' : ''}
+        {t('trace.longestAttempt', {
+          duration:
+            longestAttemptMs(trace) !== null
+              ? `${longestAttemptMs(trace)} ms`
+              : t('trace.timingMissing'),
+        })}
       </p>
     </section>
   );

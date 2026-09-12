@@ -1,3 +1,4 @@
+import { surfaceMetrics } from '@/test-support/surface-metrics';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
@@ -38,7 +39,7 @@ const recordedRun = ProductWorkRunSuccessSchema.parse({
 });
 
 const workId = uuid(47);
-const runId = uuid(147);
+const workRunId = uuid(147);
 const longResult = Array.from({ length: 48 }, (_, index) =>
   index === 47
     ? '### Final real Observe Trace result'
@@ -53,7 +54,7 @@ const trace = ProductRunTraceSuccessSchema.parse({
   },
   work_run: {
     ...recordedTrace.work_run,
-    id: runId,
+    id: workRunId,
     work_id: workId,
     result_summary: longResult,
   },
@@ -81,7 +82,7 @@ works[47] = {
   id: workId,
   latest_run_summary: {
     ...works[47]!.latest_run_summary,
-    id: runId,
+    id: workRunId,
     result_summary: longResult,
   },
 };
@@ -90,7 +91,7 @@ const runList = {
   work_runs: [
     {
       ...recordedRunList.work_runs[0]!,
-      id: runId,
+      id: workRunId,
       work_id: workId,
     },
   ],
@@ -197,14 +198,15 @@ it('scrolls the real Observe page list and Trace detail on desktop', async () =>
     if (url.pathname === `/api/works/${workId}`) return jsonResponse(work);
     if (url.pathname === `/api/works/${workId}/runs`)
       return jsonResponse(runList);
-    if (url.pathname === `/api/works/${workId}/runs/${runId}`)
+    if (url.pathname === `/api/works/${workId}/runs/${workRunId}`)
       return jsonResponse(run);
-    if (url.pathname === `/api/works/${workId}/runs/${runId}/trace`)
+    if (url.pathname === `/api/works/${workId}/runs/${workRunId}/trace`)
       return jsonResponse(trace);
     if (
-      url.pathname === `/api/works/${workId}/runs/${runId}/session-transcripts`
+      url.pathname ===
+      `/api/works/${workId}/runs/${workRunId}/session-transcripts`
     )
-      return jsonResponse(sessionTranscripts(workId, runId));
+      return jsonResponse(sessionTranscripts(workId, workRunId));
     if (url.pathname.startsWith('/api/work-definition-versions/'))
       return notFoundResponse();
     throw new Error(`unexpected Observe request URL: ${url.pathname}`);
@@ -218,7 +220,9 @@ it('scrolls the real Observe page list and Trace detail on desktop', async () =>
   try {
     await act(async () => {
       root.render(
-        <MemoryRouter initialEntries={[`/observe?work=${workId}&run=${runId}`]}>
+        <MemoryRouter
+          initialEntries={[`/observe?work=${workId}&run=${workRunId}`]}
+        >
           <AppShell commands={shellCommands()} />
         </MemoryRouter>,
       );
@@ -226,6 +230,16 @@ it('scrolls the real Observe page list and Trace detail on desktop', async () =>
         await new Promise((resolve) => setTimeout(resolve, 0));
     });
 
+    await surfaceMetrics(host, 'observe', [
+      '.title-bar',
+      '.observe-detail-header',
+      '.observe-metric-card',
+      '.work-list-item',
+      '.work-main-content',
+      '.observe-metric-cards',
+      '.observe-detail',
+      '.observe-filters',
+    ]);
     const list = host.querySelector<HTMLElement>(
       '[data-testid="observe-list"]',
     );

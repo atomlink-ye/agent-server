@@ -45,14 +45,14 @@ it('refreshes a live Work Card and stops polling once the Work becomes terminal'
       await Promise.resolve();
     });
     expect(load).toHaveBeenCalledTimes(1);
-    expect(host.textContent).toContain('Running');
+    expect(host.textContent).toContain('Latest WorkRun: Running');
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(3000);
       await Promise.resolve();
     });
     expect(load).toHaveBeenCalledTimes(2);
-    expect(host.textContent).toContain('Complete');
+    expect(host.textContent).toContain('Latest WorkRun: Complete');
     expect(host.textContent).toContain('Research complete.');
 
     await act(async () => {
@@ -85,7 +85,7 @@ it('shows a Work that has not been run as ready to start, and follows it into it
 
     // A Work that was just created is at a stage, not in a fault. Nothing on
     // the card may read as unavailable.
-    expect(host.textContent).toContain('Ready to start');
+    expect(host.textContent).toContain('No WorkRun yet');
     expect(host.textContent).not.toContain('unavailable');
     expect(host.textContent).not.toContain('not available');
     expect(host.querySelector('.work-status--not_started')).not.toBeNull();
@@ -96,13 +96,13 @@ it('shows a Work that has not been run as ready to start, and follows it into it
       await vi.advanceTimersByTimeAsync(3000);
       await Promise.resolve();
     });
-    expect(host.textContent).toContain('Running');
+    expect(host.textContent).toContain('Latest WorkRun: Running');
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(3000);
       await Promise.resolve();
     });
-    expect(host.textContent).toContain('Complete');
+    expect(host.textContent).toContain('Latest WorkRun: Complete');
     expect(host.textContent).toContain('Two release risks found.');
   } finally {
     await act(async () => root.unmount());

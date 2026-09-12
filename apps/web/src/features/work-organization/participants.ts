@@ -1,3 +1,4 @@
+import { t } from '../../i18n';
 import type { Coworker } from '../agents/contracts';
 import { coworkerRoleFallback, runtimeStatusLabel } from './format';
 
@@ -83,7 +84,7 @@ export function participantLabel(
 export function participantLabelSafe(
   directory: readonly Participant[],
   id: string,
-  fallback = 'this Coworker',
+  fallback = t('workOrg.unknownMember'),
 ): string {
   return findParticipant(directory, id)?.name ?? fallback;
 }

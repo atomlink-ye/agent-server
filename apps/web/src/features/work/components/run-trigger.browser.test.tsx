@@ -77,11 +77,9 @@ it('disables the control and offers no Retry for a permanent Run-start failure',
   const root = await renderAndClickStart(host);
   try {
     const button = host.querySelector<HTMLButtonElement>('button')!;
-    // The specific, real reason must reach the user instead of a generic
-    // constant, and there must be no enabled Retry — a retry here cannot
-    // succeed.
+    // The capability mismatch remains explicit and offers no Retry.
     expect(host.textContent).toContain(
-      'The Work requires unsupported runtime capability: external_workspace.',
+      'This WorkRun requires runtime capabilities that this deployment does not support.',
     );
     expect(button.disabled).toBe(true);
     expect(host.textContent).not.toContain('Retry');
@@ -136,7 +134,7 @@ it('disables the control for a feature-unavailable Run-start failure', async () 
   }
 });
 
-it('projects an incompatible pinned Work before the user clicks Start Run', async () => {
+it('projects an incompatible pinned Work before the user clicks Start WorkRun', async () => {
   const fetchMock = vi.fn(async (path: string) => {
     if (path === '/api/runtime-capabilities')
       return {
@@ -194,16 +192,16 @@ it('projects an incompatible pinned Work before the user clicks Start Run', asyn
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
   try {
-    expect(host.textContent).toContain('Run unavailable');
+    expect(host.textContent).toContain('WorkRun unavailable');
     expect(host.textContent).toContain(
-      'This Work can’t run in this deployment.',
+      'WorkRuns can’t start in this deployment.',
     );
     expect(host.textContent).toContain(
       'It requires External workspace, which isn’t available here.',
     );
     const button = host.querySelector<HTMLButtonElement>('button')!;
     expect(button.disabled).toBe(true);
-    expect(button.textContent).toContain('Can’t start Run');
+    expect(button.textContent).toContain('Can’t start WorkRun');
     expect(button.getAttribute('aria-describedby')).toBe(
       `run-unavailable-${workId}`,
     );
@@ -268,10 +266,10 @@ it('exposes a bounded projection error and retries only that read', async () => 
   });
   try {
     expect(host.textContent).toContain(
-      'We couldn’t check whether this Work can run here.',
+      'We couldn’t check whether a WorkRun can start here.',
     );
     expect(host.textContent).toContain('Retry availability check');
-    expect(host.textContent).toContain('Start Run');
+    expect(host.textContent).toContain('Start WorkRun');
 
     await act(async () => {
       const retry = [
@@ -283,9 +281,9 @@ it('exposes a bounded projection error and retries only that read', async () => 
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(host.textContent).not.toContain(
-      'We couldn’t check whether this Work can run here.',
+      'We couldn’t check whether a WorkRun can start here.',
     );
-    expect(host.textContent).toContain('Start Run');
+    expect(host.textContent).toContain('Start WorkRun');
     expect(capabilityReads).toBe(2);
     expect(planSpy).toHaveBeenCalledTimes(2);
   } finally {

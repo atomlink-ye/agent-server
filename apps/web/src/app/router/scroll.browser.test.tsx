@@ -625,6 +625,14 @@ it.each(cases)(
         await act(async () => {
           await Promise.resolve();
         });
+      // `.execution-transcript` (work-card.css) holds itself `visibility:
+      // hidden` for its first 150ms so a fast read never flashes a loading
+      // state; setInterval/clearInterval are faked above but setTimeout is
+      // real, so this actually waits out that CSS delay before any scroll
+      // probe treats the transcript as visible content.
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      });
       expect(window.innerWidth).toBe(1440);
       expect(host.querySelector('.app-shell')).not.toBeNull();
       expect(
@@ -815,8 +823,12 @@ function verifyRoute(host: HTMLElement, route: string, size: Size) {
       scroller('.work-main-content', '.transcript__prose p');
     } else if (tab === 'result') {
       expect(host.textContent).toContain(`Checkpoint ${large ? 2000 : 8}`);
+      // The Result view (OverviewPane) dropped its RunJourney/RunTrace/
+      // RunRoleCards sections in #156 in favor of a compact summary plus an
+      // Observe link; `.work-overview__outcome` now owns the only overflow
+      // an oversized report can create, so `.work-main-content` no longer
+      // needs (or is expected) to scroll on its own.
       scroller('.work-overview__outcome', '.assistant-markdown p');
-      scroller('.work-main-content');
     } else if (tab === 'overview') {
       expect(host.querySelector('[data-testid="work-record"]')).not.toBeNull();
     } else if (tab === 'artifacts') {
@@ -830,7 +842,11 @@ function verifyRoute(host: HTMLElement, route: string, size: Size) {
     scroller('.work-main-content', '[data-testid="longest-attempt"]');
     width('.observe-pane .work-list', 307);
     width('.observe-pane', 340);
-    width('.observe-filters', 267);
+    // 307, not 267: `.observe-filters` is a sibling of `.observe-pane
+    // .work-list` inside the same 340px sidebar, so it shares the same
+    // `.work-pane-scroll { scrollbar-gutter: stable }` reservation already
+    // accounted for in the `.work-list` pin above.
+    width('.observe-filters', 307);
     width('.work-main-content', 1028);
   } else if (route === '/agents') {
     expect(host.querySelectorAll('.agents-roster-card')).toHaveLength(

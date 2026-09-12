@@ -14,9 +14,9 @@ export function ArtifactsPane({
       className="work-capability-unavailable"
       data-testid="artifacts-unavailable"
     >
-      <p className="work-shell-kicker">{t('work.artifacts')}</p>
+      <p className="work-shell-kicker">{t('work.scope.filesUnavailable')}</p>
       <h2>{t('work.artifacts.emptyTitle')}</h2>
-      <p>{t('work.artifacts.emptyBody')}</p>
+      <p>{t('work.scope.filesUnavailableBody')}</p>
       <a
         href={
           workId

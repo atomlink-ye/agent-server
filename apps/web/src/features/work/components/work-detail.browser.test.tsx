@@ -158,6 +158,7 @@ function mockProductReads(
     readonly sessionTranscripts?: ProductSessionTranscriptsResponse;
     readonly chatMessages?: readonly unknown[];
     readonly preparationMessages?: readonly unknown[];
+    readonly preparation?: unknown;
   } = {},
 ) {
   const runList = input.runList ?? runs;
@@ -204,7 +205,7 @@ function mockProductReads(
         // The preparation bucket serves the fixture messages too, so
         // Work-level preparation-chat assertions keep real content.
         messages: input.preparationMessages ?? input.chatMessages ?? [],
-        preparation: null,
+        preparation: input.preparation ?? null,
       },
     ],
     [
@@ -469,7 +470,7 @@ it('renders a Work record with Work-only tabs through Product reads only', async
     expect(row).not.toBeNull();
     expect([...row.querySelectorAll('a')].map((a) => a.textContent)).toEqual([
       'Conversation',
-      'Result',
+      'Output',
       'Activity',
     ]);
     for (const [index, tab] of ['chat', 'result', 'transcript'].entries())
@@ -515,7 +516,7 @@ it('renders the exact Product DefinitionVersion used by the selected Run', async
     );
     expect(
       [...host.querySelectorAll('.work-tabs a')].map((a) => a.textContent),
-    ).toEqual(['Conversation', 'Result', 'Activity', 'Definition used']);
+    ).toEqual(['Conversation', 'Output', 'Activity', 'Definition used']);
   } finally {
     await act(async () => root.unmount());
     host.remove();
@@ -614,7 +615,7 @@ it('keeps Run tabs and an ordinal breadcrumb separate from the Work tabs', async
   try {
     expect(
       [...host.querySelectorAll('.work-tabs a')].map((a) => a.textContent),
-    ).toEqual(['Conversation', 'Result', 'Activity', 'Definition used']);
+    ).toEqual(['Conversation', 'Output', 'Activity', 'Definition used']);
     expect(host.querySelector('.work-run-header')?.textContent).toContain(
       'WorkRun 1 of 1',
     );
@@ -712,9 +713,9 @@ it('keeps output in WorkRun Result and sends operational inspection to Observe',
   try {
     expect(
       host.querySelector('.work-tabs a[aria-current="page"]')?.textContent,
-    ).toBe('Result');
+    ).toBe('Output');
     expect(host.textContent).toContain(
-      'The result summary is still unavailable.',
+      'Captured assistant text is unavailable.',
     );
     expect(host.textContent).not.toContain('Key steps');
     expect(host.textContent).not.toContain(
@@ -800,15 +801,41 @@ it.each(
         header.getBoundingClientRect().top,
       contentOffset:
         tabs.getBoundingClientRect().bottom - shell.getBoundingClientRect().top,
+      shellInset:
+        header.getBoundingClientRect().top - shell.getBoundingClientRect().top,
+      headerPadding: getComputedStyle(header).paddingBottom,
+      headerBorder: getComputedStyle(header).borderBottomWidth,
+      tabPadding: getComputedStyle(tabs).paddingTop,
+      tabLinkPadding: getComputedStyle(tabs.querySelector('a')!).paddingBottom,
+      paneGap:
+        tabs.nextElementSibling!.getBoundingClientRect().top -
+        tabs.getBoundingClientRect().bottom,
+      firstContentOffset:
+        shell
+          .querySelector(
+            view === 'work'
+              ? '.work-run-list__identity strong'
+              : view === 'result'
+                ? '[data-testid=outcome-summary] > .work-shell-kicker'
+                : view === 'chat'
+                  ? '.work-chat-pane > .work-shell-kicker'
+                  : '.work-definition-scope > h2',
+          )!
+          .getBoundingClientRect().top - shell.getBoundingClientRect().top,
       firstPaneOffset:
         tabs.nextElementSibling!.getBoundingClientRect().top -
         shell.getBoundingClientRect().top,
     };
     console.info(`Work navigation measurement: ${JSON.stringify(measurement)}`);
-    expect(measurement.chrome).toBeLessThanOrEqual(view === 'work' ? 78 : 70);
-    expect(measurement.firstPaneOffset).toBeLessThanOrEqual(
-      view === 'work' ? 102 : view === 'chat' ? 103 : 95,
-    );
+    expect.soft(measurement.header).toBe(view === 'work' ? 36 : 28);
+    expect.soft(measurement.tabs).toBe(26);
+    expect.soft(measurement.shellInset).toBe(view === 'work' ? 8 : 9);
+    expect.soft(measurement.paneGap).toBe(8);
+    expect.soft(measurement.chrome).toBe(view === 'work' ? 62 : 54);
+    expect.soft(measurement.firstPaneOffset).toBe(view === 'work' ? 78 : 71);
+    expect
+      .soft(measurement.firstContentOffset)
+      .toBe(view === 'work' ? 99.5 : view === 'result' ? 92 : 71);
     for (const link of tabs.querySelectorAll('a')) {
       expect(link.getBoundingClientRect().height).toBeGreaterThan(0);
       expect(link.getBoundingClientRect().right).toBeLessThanOrEqual(
@@ -925,7 +952,7 @@ it('keeps old Files links honest without advertising an unavailable Artifact bro
     ).not.toBeNull();
     expect(
       host.querySelector('.work-tabs a[aria-current="page"]')?.textContent,
-    ).toBe('Files');
+    ).toBe('Files unavailable');
   } finally {
     await act(async () => root.unmount());
     host.remove();
@@ -945,6 +972,11 @@ it('offers the completed WorkRun result file without inferring a file for a runn
       selectedRunId: selectedRun.id,
     });
     try {
+      expect(
+        host.querySelector('[data-testid=outcome-summary] h2')?.textContent,
+      ).toBe('Latest captured assistant message');
+      expect(host.textContent).toContain('it may be a worker progress update');
+      expect(host.textContent).not.toContain('Captured WorkRun output');
       const file = host.querySelector<HTMLAnchorElement>('a[href^="/files?"]');
       if (state === 'complete') {
         expect(file?.textContent).toBe('Open result file');
@@ -986,6 +1018,83 @@ it('labels the current Work Definition and keeps its editor outside historical e
     expect(
       host.querySelector('[data-testid="definition-authoring"]'),
     ).not.toBeNull();
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
+it('moves started preparation into a selected WorkRun shell and preserves conversation origin', async () => {
+  const fetchMock = mockProductReads({
+    preparation: {
+      id: work.work.id,
+      work_id: work.work.id,
+      revision: 1,
+      status: 'started',
+      definition_version_id: work.work.definition_version_id,
+      schema_fingerprint: 'test',
+      candidate_input: {},
+      confirmed_fingerprint: 'test',
+      start_intent: 'test',
+      work_run_id: selectedRun.id,
+      missing: [],
+      ambiguities: [],
+      created_at: work.work.created_at,
+      updated_at: work.work.updated_at,
+    },
+  });
+  const read = fetchMock.getMockImplementation()!;
+  let runListReads = 0;
+  fetchMock.mockImplementation(async (path: string) => {
+    if (path === `/api/works/${work.work.id}/runs` && runListReads++ === 0)
+      return jsonResponse({ ...runs, work_runs: [] });
+    return read(path);
+  });
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(
+        <MemoryRouter
+          initialEntries={[
+            `/work/${work.work.id}?tab=chat&from_conversation=origin-chat`,
+          ]}
+        >
+          <AppProviders commands={shellCommands()}>
+            <AppRouter />
+          </AppProviders>
+        </MemoryRouter>,
+      );
+      for (let turn = 0; turn < 16; turn += 1)
+        await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    await expect
+      .poll(() => host.querySelector('.work-run-header h1')?.textContent)
+      .toBe('WorkRun 1 of 1');
+    expect(
+      host.querySelector('.work-tabs a[aria-current=page]')?.textContent,
+    ).toBe('Conversation');
+    for (const link of host.querySelectorAll<HTMLAnchorElement>(
+      '.work-tabs a',
+    )) {
+      expect(new URL(link.href).searchParams.get('run')).toBe(selectedRun.id);
+      expect(new URL(link.href).searchParams.get('from_conversation')).toBe(
+        'origin-chat',
+      );
+    }
+    expect(fetchMock.mock.calls.map(([path]) => path)).toContain(
+      `/api/works/${work.work.id}/chat`,
+    );
+    expect(fetchMock.mock.calls.map(([path]) => path)).toContain(
+      `/api/works/${work.work.id}/runs/${selectedRun.id}/chat`,
+    );
+    expect(
+      host.querySelector('.work-chat-pane')?.getAttribute('aria-label'),
+    ).toBe('Conversation');
+    expect(host.textContent).toContain('cannot change execution');
+    expect(host.textContent).not.toContain('Run’s Lead');
   } finally {
     await act(async () => root.unmount());
     host.remove();

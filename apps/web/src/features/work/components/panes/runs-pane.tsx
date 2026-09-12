@@ -66,7 +66,7 @@ export function RunsPane({
                     tab === 'chat'
                       ? 'work.run.conversation'
                       : tab === 'result'
-                        ? 'work.run.result'
+                        ? 'work.scope.output'
                         : 'work.scope.activity',
                   )}
                 </a>

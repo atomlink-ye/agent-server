@@ -121,6 +121,7 @@ export async function assertSurfaceContract(
   host: HTMLElement,
   surface: Surface,
   locale: string,
+  state = 'default',
 ) {
   expect(window.innerWidth).toBe(1440);
   const row: SurfaceRow = surfaceContract[surface];
@@ -134,7 +135,7 @@ export async function assertSurfaceContract(
   const expected: Record<string, number[]> = {};
   const rectangles: Record<
     string,
-    { width: number; height: number; x: number; y: number }[]
+    { width: number; height: number; x: number; y: number; element: string }[]
   > = {};
   const readers: {
     role: keyof typeof surfaceTargets;
@@ -161,7 +162,7 @@ export async function assertSurfaceContract(
     expected[role] = [resolved[role]!];
     rectangles[role] = matches.map((element) => {
       const { width, height, x, y } = element.getBoundingClientRect();
-      return { width, height, x, y };
+      return { width, height, x, y, element: element.className };
     });
   };
   try {
@@ -242,7 +243,10 @@ export async function assertSurfaceContract(
         bindingTargets[role] = [tokenPixels(surfaceTargets[role])];
       }
       expect
-        .soft(bindings, `${surface}/${locale}: follows changed root tokens`)
+        .soft(
+          bindings,
+          `${surface}/${locale}/${state}: follows changed root tokens`,
+        )
         .toEqual(bindingTargets);
     } finally {
       for (const { token, value, priority } of previous) {
@@ -251,11 +255,12 @@ export async function assertSurfaceContract(
       }
     }
     await commands.writeFile(
-      `../../.local/surface-contract/${surface}-${locale}.json`,
+      `../../.local/surface-contract/${surface}-${locale}${state === 'default' ? '' : `-${state}`}.json`,
       JSON.stringify(
         {
           surface,
           locale,
+          state,
           tokens: surfaceTargets,
           expected,
           actual,
@@ -269,7 +274,7 @@ export async function assertSurfaceContract(
       ),
     );
     expect
-      .soft(actual, `${surface}/${locale}: shared surface token table`)
+      .soft(actual, `${surface}/${locale}/${state}: shared surface token table`)
       .toEqual(expected);
   } finally {
     for (const details of opened) details.open = false;

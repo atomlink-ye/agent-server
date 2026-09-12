@@ -244,3 +244,7 @@ All affected surface assertions passed in that full run. The suite is **not gree
 - Capture JSON, CSS snapshots and screenshots remain ignored under `.local/`; the final browser assertions have no dependency on those files. No development server was started. Final test and lint processes have exited.
 - This report is committed because the campaign explicitly requires `RESULTS.md`; raw runtime evidence is not committed. Only the monospace token touches shared `index.css`. There are no API, domain, dependency or translation-string changes, and no Human Gate is introduced.
 - Commits are pushed to `wui3/lane-c`. No pull request, merge or rebase was performed.
+
+## Round 2 convergence addendum
+
+See RESULTS-R2.md for the shared token matrix and completed verification. Under the deputy's quota ruling, the expanded `pnpm test:web trace-inspector-surfaces.browser.test.tsx session-transcripts.browser.test.tsx` probe is **unverified at convergence**; its selector expansion was discarded and the last passing CSS/table restored. The final restored tree was not rerun. Nested structural variants remain unfinished as listed in RESULTS-R2.md. Full web verification had three known baseline failures plus two Conversations timeouts; the isolated Conversations rerun passed all nine tests. No claim of an entirely green full suite is made.

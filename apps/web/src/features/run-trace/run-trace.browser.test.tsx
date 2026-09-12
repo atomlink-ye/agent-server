@@ -137,6 +137,7 @@ it('renders recorder-backed proportional normal and rework geometry', async () =
           '.run-trace__header',
           '.run-trace__canvas',
           '.run-trace__item-row',
+          '.run-trace__item-name small',
           '.run-trace__axis',
         ],
       );

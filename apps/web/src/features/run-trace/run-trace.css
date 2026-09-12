@@ -360,6 +360,7 @@
   padding: var(--space-3) var(--space-2) var(--space-3) var(--space-3);
 }
 .run-trace__item-name small {
+  font-size: var(--text-xs);
   color: var(--ink-500);
 }
 /* The tool names are the row's explanation, so they get their own line and are

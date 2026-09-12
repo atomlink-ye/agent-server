@@ -5,125 +5,127 @@ import '../index.css';
 
 // Content-driven heights belong to these representative fixtures. Shared
 // spacing is checked against the tokens too, so a local override cannot drift.
+// These content-driven surfaces keep readable type and visible explanations;
+// the compact Work directory has its own fixed budget in the typography test.
 const heights: Record<string, Record<string, Record<string, number>>> = {
   agents: {
     en: {
       '.title-bar': 44,
-      '.agents-profile-header': 90.5,
-      '.agents-list-item': 57,
+      '.agents-profile-header': 97.796875,
+      '.agents-list-item': 60,
     },
     'zh-CN': {
       '.title-bar': 44,
-      '.agents-profile-header': 90.5,
-      '.agents-list-item': 57,
+      '.agents-profile-header': 97.796875,
+      '.agents-list-item': 60,
     },
   },
   'agents-roster': {
     en: {
       '.title-bar': 44,
-      '.agents-roster-header': 59,
+      '.agents-roster-header': 62.78125,
     },
     'zh-CN': {
       '.title-bar': 44,
-      '.agents-roster-header': 59,
+      '.agents-roster-header': 62.78125,
     },
   },
   files: {
     en: {
       '.title-bar': 44,
       '.files-files-header': 64,
-      '.files-file-list button': 53,
+      '.files-file-list button': 57.5,
     },
     'zh-CN': {
       '.title-bar': 44,
       '.files-files-header': 64,
-      '.files-file-list button': 53,
+      '.files-file-list button': 57.5,
     },
   },
   observe: {
     en: {
       '.title-bar': 44,
-      '.observe-detail-header': 64,
-      '.work-list-item': 90,
-      '.observe-filters': 76,
+      '.observe-detail-header': 65,
+      '.work-list-item': 102,
+      '.observe-filters': 79,
     },
     'zh-CN': {
       '.title-bar': 44,
-      '.observe-detail-header': 64,
-      '.work-list-item': 76,
-      '.observe-filters': 76,
+      '.observe-detail-header': 65,
+      '.work-list-item': 84,
+      '.observe-filters': 79,
     },
   },
   tasks: {
     en: {
       '.title-bar': 44,
-      '.work-org-detail-header': 81,
-      '.work-org-list-item': 90.1875,
+      '.work-org-detail-header': 88,
+      '.work-org-list-item': 97.1875,
     },
     'zh-CN': {
       '.title-bar': 44,
-      '.work-org-detail-header': 81,
-      '.work-org-list-item': 90.1875,
+      '.work-org-detail-header': 88,
+      '.work-org-list-item': 97.1875,
     },
   },
   boards: {
     en: {
       '.title-bar': 44,
       '.work-board-toolbar': 64,
-      '.work-org-list-item': 70,
+      '.work-org-list-item': 73,
     },
     'zh-CN': {
       '.title-bar': 44,
       '.work-board-toolbar': 64,
-      '.work-org-list-item': 70,
+      '.work-org-list-item': 73,
     },
   },
   whispers: {
     en: {
       '.title-bar': 44,
-      'header.whisper-observer-badge': 29,
-      '.whispers-list button': 57,
+      'header.whisper-observer-badge': 30,
+      '.whispers-list button': 60,
     },
     'zh-CN': {
       '.title-bar': 44,
-      'header.whisper-observer-badge': 29,
-      '.whispers-list button': 57,
+      'header.whisper-observer-badge': 30,
+      '.whispers-list button': 60,
     },
   },
   'run-trace-parallel': {
-    en: { '.run-trace__header': 64, '.run-trace__item-row': 59 },
-    'zh-CN': { '.run-trace__header': 64, '.run-trace__item-row': 59 },
+    en: { '.run-trace__header': 69, '.run-trace__item-row': 116 },
+    'zh-CN': { '.run-trace__header': 69, '.run-trace__item-row': 116 },
   },
   'run-trace': {
     en: {
-      '.run-trace__header': 64,
-      '.run-trace__item-row': 105,
+      '.run-trace__header': 69,
+      '.run-trace__item-row': 174,
     },
     'zh-CN': {
-      '.run-trace__header': 64,
-      '.run-trace__item-row': 105,
+      '.run-trace__header': 69,
+      '.run-trace__item-row': 174,
     },
   },
   'execution-transcript': {
     en: {
-      '.execution-transcript__heading': 76,
-      '.execution-transcript__attempts button': 68.84375,
-      '.transcript__row': 51.890625,
+      '.execution-transcript__heading': 84.375,
+      '.execution-transcript__attempts button': 78.1875,
+      '.transcript__row': 56,
     },
     'zh-CN': {
-      '.execution-transcript__heading': 76,
-      '.execution-transcript__attempts button': 68.84375,
-      '.transcript__row': 51.890625,
+      '.execution-transcript__heading': 84.375,
+      '.execution-transcript__attempts button': 78.1875,
+      '.transcript__row': 56,
     },
   },
   dispatch: {
     en: {
-      '.dispatch-card__event': 24,
-      '.dispatch-card__status': 17,
+      '.dispatch-card__event': 25.59375,
+      '.dispatch-card__status': 18,
     },
     'zh-CN': {
-      '.dispatch-card__event': 24,
-      '.dispatch-card__status': 17,
+      '.dispatch-card__event': 25.59375,
+      '.dispatch-card__status': 18,
     },
   },
 };
@@ -219,6 +221,9 @@ const styles: Record<string, Record<string, string>> = {
   },
   '.run-trace__header': {
     'padding-inline-start': '--space-4',
+  },
+  '.run-trace__item-name small': {
+    'font-size': '--text-xs',
   },
   '.run-trace__canvas': {
     padding: '--space-4',

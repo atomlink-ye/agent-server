@@ -175,7 +175,8 @@
 .work-org-form select,
 .work-org-card input,
 .work-org-card textarea,
-.work-org-card select {
+.work-org-card select,
+.work-board-column select {
   width: 100%;
   box-sizing: border-box;
   border: 1px solid var(--ink-100);

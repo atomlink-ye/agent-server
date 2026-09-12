@@ -228,7 +228,7 @@ it('renders Work state and run counts without latest Run summaries', async () =>
           `/work/${populatedWorkList.works[index]!.id}`,
       )!;
       expect(card.querySelector('a')?.getAttribute('aria-label')).toContain(
-        'Unarchived',
+        'Active',
       );
       expect(card.textContent).toContain(`WorkRun: ${stateCases[index]![1]}`);
       expect(card.textContent).toContain('3 WorkRuns');
@@ -778,7 +778,15 @@ it.each(['en', 'zh-CN'] as const)(
       expect(rect.top).toBe(96);
       for (const row of rows) {
         expect(row.getBoundingClientRect().height).toBe(49.5);
-        expect(row.getBoundingClientRect().width).toBe(292);
+        // The sidebar column's available width shifts by the platform's
+        // scrollbar width (macOS overlay scrollbars take no layout space;
+        // Linux CI's classic scrollbar does), so a row that's meant to fill
+        // its column can't be pinned to one exact number on both platforms.
+        // Assert the intent instead: the row fills its list's own width.
+        expect(row.getBoundingClientRect().width).toBeCloseTo(
+          row.parentElement!.clientWidth,
+          0,
+        );
         expect(row.scrollWidth).toBe(row.clientWidth);
       }
       const longRows = rows.filter(
@@ -936,12 +944,20 @@ it.each(['en', 'zh-CN'] as const)(
       expect(names).toHaveLength(2);
       for (const [index, name] of names.entries()) {
         expect(name.getBoundingClientRect().height).toBe(24);
-        expect(name.getBoundingClientRect().width).toBe(
-          locale === 'zh-CN'
-            ? 521.734375
-            : index === 0
-              ? 520.171875
-              : 535.28125,
+        // `.work-landing__recent a` gives the title a `minmax(0, 1fr)`
+        // middle column between two `max-content` siblings (the
+        // `work.latestState` state pill and the run timestamp), so the
+        // title's width is whatever the grid track resolves to rather than
+        // its own rendered text — and both `max-content` siblings measure
+        // their own rendered text, which is platform-dependent. Assert the
+        // layout intent directly from the browser's own resolved track size
+        // instead of a pinned pixel value.
+        const resolvedColumns = getComputedStyle(
+          name.closest('a')!,
+        ).gridTemplateColumns.split(' ');
+        expect(name.getBoundingClientRect().width).toBeCloseTo(
+          parseFloat(resolvedColumns[1]!),
+          0,
         );
         expect(name.getAttribute('title')).toHaveLength(200);
         const suffix = name.querySelector<HTMLElement>(

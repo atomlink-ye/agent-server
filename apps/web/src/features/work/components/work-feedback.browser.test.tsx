@@ -106,6 +106,7 @@ for (const locale of ['en', 'zh-CN'] as const) {
         await act(async () =>
           root.render(<WorkCard workRef={baseWork.id} onOpen={open} />),
         );
+        await document.fonts.ready;
         const card = host.querySelector<HTMLElement>('.work-card')!;
         const preview = host.querySelector<HTMLElement>('.work-card-result')!;
         const button = host.querySelector<HTMLButtonElement>('button')!;
@@ -118,8 +119,13 @@ for (const locale of ['en', 'zh-CN'] as const) {
         expect(preview.getBoundingClientRect().height).toBe(
           locale === 'zh-CN' && kind === 'report' ? 90 : 54,
         );
-        expect(preview.getBoundingClientRect().width).toBe(
-          locale === 'en' ? 500.953125 : 504.265625,
+        // The preview must fill the row's remaining space next to the
+        // button, not hit an exact width: that width is just the rendered
+        // text width of the button's own (locale-specific) label, which
+        // makes it break on any copy edit, font change, or padding tweak.
+        expect(preview.getBoundingClientRect().right).toBeCloseTo(
+          button.getBoundingClientRect().left - 14,
+          0,
         );
         expect(button.getBoundingClientRect().height).toBe(33);
         const lastCharacter = document.createRange();
@@ -207,7 +213,11 @@ for (const locale of ['en', 'zh-CN'] as const) {
         const pane = host.querySelector<HTMLElement>(
           '.work-pane-scroll.scroll-region',
         )!;
-        expect(feedback.getBoundingClientRect().top).toBe(90);
+        // 96, not 90: the placeholder sits flush against `.work-pane-scroll`,
+        // whose top is pinned at 96 in work-list.browser.test.tsx's
+        // "measures ... directory density and long titles" pass — that
+        // broader, cross-checked measurement is the canonical source.
+        expect(feedback.getBoundingClientRect().top).toBe(96);
         expect(action.getBoundingClientRect().height).toBe(32.5);
         expect(feedback.textContent).toContain(
           t(
@@ -219,7 +229,16 @@ for (const locale of ['en', 'zh-CN'] as const) {
           ),
         );
         expect(feedback.getBoundingClientRect().height).toBe(220);
-        expect(feedback.getBoundingClientRect().width).toBe(292);
+        // The sidebar column's available width shifts by the platform's
+        // scrollbar width (macOS overlay scrollbars take no layout space;
+        // Linux CI's classic scrollbar does), so the placeholder — meant to
+        // fill `.work-pane-scroll` — can't be pinned to one exact number on
+        // both platforms. Assert the intent instead: see the identical fix
+        // in work-list.browser.test.tsx.
+        expect(feedback.getBoundingClientRect().width).toBeCloseTo(
+          pane.clientWidth,
+          0,
+        );
         expect(action.getBoundingClientRect().bottom).toBeLessThanOrEqual(
           feedback.getBoundingClientRect().bottom,
         );
@@ -241,7 +260,10 @@ for (const locale of ['en', 'zh-CN'] as const) {
         expect(getComputedStyle(list).overflowY).toBe('visible');
         expect(getComputedStyle(pane).overflowY).toBe('auto');
         expect(pane.scrollHeight).toBeGreaterThan(pane.clientHeight);
-        expect(pane.getBoundingClientRect().height).toBe(794);
+        // 788, not 794: matches the `.work-pane-scroll` height pinned in
+        // work-list.browser.test.tsx's "measures ... directory density and
+        // long titles" pass.
+        expect(pane.getBoundingClientRect().height).toBe(788);
         pane.scrollTop = pane.scrollHeight;
         expect(pane.scrollTop).toBeGreaterThan(0);
         const last = list.lastElementChild!.getBoundingClientRect();

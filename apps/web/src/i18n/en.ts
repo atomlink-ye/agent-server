@@ -666,7 +666,7 @@ export const en = {
     'This WorkRun’s status was not captured. Review its recorded activity.',
   'work.activeHint':
     'Follow the result and progress of this active WorkRun here.',
-  'work.record.active': 'Unarchived',
+  'work.record.active': 'Active',
   'work.scope.state.running':
     'This WorkRun is in progress. Open Activity to follow its execution.',
   'work.scope.state.needs_you':
@@ -680,7 +680,6 @@ export const en = {
   'work.scope.history': 'WorkRuns',
   'work.scope.runSections': 'Selected WorkRun sections',
   'work.scope.number': 'WorkRun #{number}',
-  'work.scope.selected': 'WorkRun {number} of {count}',
   'work.scope.all': 'All WorkRuns',
   'work.scope.activity': 'Activity',
   'work.scope.pinnedDefinition': 'Definition used by this WorkRun',
@@ -718,8 +717,6 @@ export const en = {
   'work.run.conversation': 'Conversation',
   'work.run.trace': 'Trace',
   'work.run.result': 'Result',
-  'work.run.number': 'WorkRun #{number}',
-  'work.run.breadcrumb': 'WorkRun #{number}',
   'work.run.backToWork': '← Work: {title}',
   'work.run.conversationPending':
     'Conversation for this WorkRun will be available here.',

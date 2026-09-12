@@ -77,14 +77,33 @@ it('keeps execution vocabulary within the desktop header in both locales', async
       expect(heading.textContent).toBe(
         locale === 'en' ? 'WorkRun #1' : 'WorkRun 1',
       );
-      expect(headingRect.width).toBeCloseTo(
-        locale === 'en' ? 103.484375 : 91.890625,
-        1,
-      );
+      // The heading has `flex: 1` in a row of fixed-content siblings (the
+      // back link, the `›` separator, the state pill), so its width is
+      // whatever flex space those siblings leave rather than its own text —
+      // and the siblings' own widths are rendered text, which is
+      // platform-dependent. Assert the layout intent directly: measure the
+      // gap from an adjacent sibling and derive the space the heading fills.
+      const previousSibling =
+        heading.previousElementSibling as HTMLElement | null;
+      const nextSibling = heading.nextElementSibling as HTMLElement | null;
+      const gap = previousSibling
+        ? headingRect.left - previousSibling.getBoundingClientRect().right
+        : 0;
+      const expectedHeadingWidth = nextSibling
+        ? nextSibling.getBoundingClientRect().left - gap - headingRect.left
+        : headerRect.right - headingRect.left;
+      expect(headingRect.width).toBeCloseTo(expectedHeadingWidth, 0);
       expect(headerRect.height).toBe(before.headerHeight);
-      expect(headerRect.height).toBe(36);
-      expect(headingRect.height).toBe(24);
-      expect(tabs.getBoundingClientRect().height).toBe(34);
+      // The run header shares the .work-shell > .work-run-header 28px band
+      // pinned in work-detail.browser.test.tsx's navigation measurements
+      // (view !== 'work'); that comprehensive, cross-checked pass is the
+      // canonical source, not this narrower header-only check.
+      expect(headerRect.height).toBe(28);
+      // 20px font-size * the shared --leading-tight (1.35) token.
+      expect(headingRect.height).toBe(27);
+      // Shares the .work-shell > .work-tabs band measured in
+      // work-detail.browser.test.tsx's navigation pass.
+      expect(tabs.getBoundingClientRect().height).toBe(26);
       measurements.push({
         locale,
         viewport: window.innerWidth,

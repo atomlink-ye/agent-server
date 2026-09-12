@@ -184,10 +184,10 @@ export class PostgresWorkOrganizationRepository implements WorkOrganizationRepos
                   })),
                   currentColumnId: current.id,
                 })
-              : columns
+              : (columns
                   .filter((column) => isDoneColumn(column))
                   .sort((left, right) => left.position - right.position)[0]
-                  ?.id ?? null;
+                  ?.id ?? null);
           const target = targetColumnId
             ? columns.find((column) => column.id === targetColumnId)
             : undefined;

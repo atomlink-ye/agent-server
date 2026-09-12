@@ -1,5 +1,6 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
+import { MemoryRouter } from 'react-router-dom';
 import { expect, it, vi } from 'vitest';
 
 import {
@@ -166,7 +167,11 @@ it('validates current Definition source against the canonical Worker plan contra
   const root = createRoot(host);
   try {
     await act(async () => {
-      root.render(<WorkDetailPage workId={work.work.id} tab="definition" />);
+      root.render(
+        <MemoryRouter>
+          <WorkDetailPage workId={work.work.id} tab="definition" />
+        </MemoryRouter>,
+      );
       await new Promise((resolve) => setTimeout(resolve, 25));
     });
 
@@ -179,7 +184,7 @@ it('validates current Definition source against the canonical Worker plan contra
     expect(editor).not.toBeNull();
     expect(editor?.value).toContain('kind: collaboration');
     expect(editor?.value).toContain('worker_version_id');
-    expect(host.textContent).toContain('Current Work version');
+    expect(host.textContent).toContain('Current Definition version');
 
     const validate = [
       ...host.querySelectorAll<HTMLButtonElement>('button'),

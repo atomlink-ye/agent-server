@@ -512,7 +512,7 @@ it('renders the exact Product DefinitionVersion used by the selected Run', async
     expect(host.textContent).toContain('Researcher');
     expect(host.textContent).toContain(selectedRun.definition_version_id);
     expect(host.querySelector('.work-run-header')?.textContent).toContain(
-      'WorkRun 1 of 1',
+      'WorkRun #1',
     );
     expect(
       [...host.querySelectorAll('.work-tabs a')].map((a) => a.textContent),
@@ -617,7 +617,7 @@ it('keeps Run tabs and an ordinal breadcrumb separate from the Work tabs', async
       [...host.querySelectorAll('.work-tabs a')].map((a) => a.textContent),
     ).toEqual(['Conversation', 'Output', 'Activity', 'Definition used']);
     expect(host.querySelector('.work-run-header')?.textContent).toContain(
-      'WorkRun 1 of 1',
+      'WorkRun #1',
     );
     expect(host.querySelector('.work-run-header a')?.getAttribute('href')).toBe(
       `/work/${work.work.id}`,
@@ -734,7 +734,14 @@ it('keeps output in WorkRun Result and sends operational inspection to Observe',
 
 it('can read a Work record even when a child Run projection is unavailable', async () => {
   const fetchMock = mockProductReads({
-    runBody: { projection_status: 'not_captured' },
+    runBody: {
+      projection_status: 'not_found',
+      work: null,
+      work_run: null,
+      work_items: [],
+      actors: [],
+      messages: [],
+    },
   });
   const { host, root } = await renderDetail();
   try {
@@ -875,7 +882,7 @@ it('shows historical WorkRun state and navigation without borrowing the latest e
   });
   try {
     const header = host.querySelector('.work-run-header')!;
-    expect(header.querySelector('h1')?.textContent).toBe('WorkRun 1 of 2');
+    expect(header.querySelector('h1')?.textContent).toBe('WorkRun #1');
     expect(
       header
         .querySelector('.work-state-pill')
@@ -1072,7 +1079,7 @@ it('moves started preparation into a selected WorkRun shell and preserves conver
     });
     await expect
       .poll(() => host.querySelector('.work-run-header h1')?.textContent)
-      .toBe('WorkRun 1 of 1');
+      .toBe('WorkRun #1');
     expect(
       host.querySelector('.work-tabs a[aria-current=page]')?.textContent,
     ).toBe('Conversation');

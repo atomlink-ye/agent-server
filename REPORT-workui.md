@@ -50,10 +50,10 @@ view is served from this worktree on temporary port 4173, with the existing
 API still on 3000 and the existing demo Web still on 3001; no existing service
 was restarted. The temporary server was stopped after capture.
 
-| View | Screenshot | Observed result |
-| --- | --- | --- |
-| Before | `.local/workui-transcript-before.png` | Generic `Other activity` / `Read activity` titles repeat and the row lacks elapsed time. |
-| After | `.local/workui-transcript-after.png` | Commands or exact categories are readable, completed status and real elapsed time are visible, and the reader column has no overlap or clipping. |
+| View   | Screenshot                            | Observed result                                                                                                                                  |
+| ------ | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Before | `.local/workui-transcript-before.png` | Generic `Other activity` / `Read activity` titles repeat and the row lacks elapsed time.                                                         |
+| After  | `.local/workui-transcript-after.png`  | Commands or exact categories are readable, completed status and real elapsed time are visible, and the reader column has no overlap or clipping. |
 
 I visually inspected the after image: the 1440px shell, 966px reading column,
 row metadata, wrapping, and tab/layout alignment are intact.

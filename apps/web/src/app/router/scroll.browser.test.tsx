@@ -625,6 +625,14 @@ it.each(cases)(
         await act(async () => {
           await Promise.resolve();
         });
+      // `.execution-transcript` (work-card.css) holds itself `visibility:
+      // hidden` for its first 150ms so a fast read never flashes a loading
+      // state; setInterval/clearInterval are faked above but setTimeout is
+      // real, so this actually waits out that CSS delay before any scroll
+      // probe treats the transcript as visible content.
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      });
       expect(window.innerWidth).toBe(1440);
       expect(host.querySelector('.app-shell')).not.toBeNull();
       expect(
@@ -762,6 +770,25 @@ function verifyRoute(host: HTMLElement, route: string, size: Size) {
     expect(region.getBoundingClientRect().width, selector).toBe(pixels);
     expect(region.scrollWidth, selector).toBe(region.clientWidth);
   };
+  // A sidebar column's available width shifts by the platform's scrollbar
+  // width (macOS overlay scrollbars take no layout space; Linux CI's classic
+  // scrollbar does), so an element that's meant to fill its column can't be
+  // pinned to one exact number on both platforms. Assert the intent instead:
+  // it fills whatever width its own parent actually measures right now.
+  const fillsParent = (selector: string) => {
+    const region = host.querySelector<HTMLElement>(selector)!;
+    const parent = region.parentElement!;
+    const parentStyle = getComputedStyle(parent);
+    const parentContentWidth =
+      parent.clientWidth -
+      parseFloat(parentStyle.paddingLeft) -
+      parseFloat(parentStyle.paddingRight);
+    expect(region.getBoundingClientRect().width, selector).toBeCloseTo(
+      parentContentWidth,
+      0,
+    );
+    expect(region.scrollWidth, selector).toBe(region.clientWidth);
+  };
   if (route === '/' || route.startsWith('/conversations/')) {
     expect(host.textContent).toContain(`Checkpoint ${large ? 2000 : 8}`);
     scroller('.sidebar-section', '.conversation-item');
@@ -815,8 +842,12 @@ function verifyRoute(host: HTMLElement, route: string, size: Size) {
       scroller('.work-main-content', '.transcript__prose p');
     } else if (tab === 'result') {
       expect(host.textContent).toContain(`Checkpoint ${large ? 2000 : 8}`);
+      // The Result view (OverviewPane) dropped its RunJourney/RunTrace/
+      // RunRoleCards sections in #156 in favor of a compact summary plus an
+      // Observe link; `.work-overview__outcome` now owns the only overflow
+      // an oversized report can create, so `.work-main-content` no longer
+      // needs (or is expected) to scroll on its own.
       scroller('.work-overview__outcome', '.assistant-markdown p');
-      scroller('.work-main-content');
     } else if (tab === 'overview') {
       expect(host.querySelector('[data-testid="work-record"]')).not.toBeNull();
     } else if (tab === 'artifacts') {
@@ -828,9 +859,11 @@ function verifyRoute(host: HTMLElement, route: string, size: Size) {
     expect(host.querySelector('[data-testid="observe-detail"]')).not.toBeNull();
     scroller('.observe-pane .work-list', 'li');
     scroller('.work-main-content', '[data-testid="longest-attempt"]');
-    width('.observe-pane .work-list', 307);
+    fillsParent('.observe-pane .work-list');
     width('.observe-pane', 340);
-    width('.observe-filters', 267);
+    // `.observe-filters` is a sibling of `.observe-pane .work-list` inside
+    // the same sidebar, so it fills the same available width.
+    fillsParent('.observe-filters');
     width('.work-main-content', 1028);
   } else if (route === '/agents') {
     expect(host.querySelectorAll('.agents-roster-card')).toHaveLength(
@@ -849,11 +882,9 @@ function verifyRoute(host: HTMLElement, route: string, size: Size) {
       getComputedStyle(host.querySelector('.agents-main')!).overflowY,
     ).toBe('auto');
     const main = host.querySelector<HTMLElement>('.agents-main')!;
-    const list = host.querySelector<HTMLElement>('.agents-list')!;
     expect(main.getBoundingClientRect().width).toBe(1028);
     expect(main.scrollWidth).toBe(main.clientWidth);
-    expect(list.getBoundingClientRect().width).toBe(307);
-    expect(list.scrollWidth).toBe(list.clientWidth);
+    fillsParent('.agents-list');
     expect(
       host.querySelector('.agents-profile-actions')!.getBoundingClientRect()
         .right,
@@ -882,7 +913,7 @@ function verifyRoute(host: HTMLElement, route: string, size: Size) {
     ).toHaveLength(large ? 50 : 3);
     scroller('.work-org-list', '[data-testid="task-list-item"]');
     scroller('.work-org-content', '.work-org-comment');
-    width('.work-org-list', 307);
+    fillsParent('.work-org-list');
     width('.work-org-content', 1028);
   } else if (route === '/whispers') {
     scroller('.whispers-list', 'button');

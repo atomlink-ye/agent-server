@@ -200,7 +200,6 @@ export function WorkDetailPage({
             work={detail.work}
             run={runView ? detail.run : null}
             runOrdinal={runOrdinal}
-            runCount={detail.runs.length}
             originConversationId={originConversationId}
             actions={
               runView ? undefined : (

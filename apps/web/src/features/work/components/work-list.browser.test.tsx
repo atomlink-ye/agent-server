@@ -778,10 +778,15 @@ it.each(['en', 'zh-CN'] as const)(
       expect(rect.top).toBe(96);
       for (const row of rows) {
         expect(row.getBoundingClientRect().height).toBe(49.5);
-        // 307, not 292: `.work-pane-scroll { scrollbar-gutter: stable }`
-        // (63bf7162, landed before this pin) reserves a ~15px scrollbar
-        // gutter that this row width must account for.
-        expect(row.getBoundingClientRect().width).toBe(307);
+        // The sidebar column's available width shifts by the platform's
+        // scrollbar width (macOS overlay scrollbars take no layout space;
+        // Linux CI's classic scrollbar does), so a row that's meant to fill
+        // its column can't be pinned to one exact number on both platforms.
+        // Assert the intent instead: the row fills its list's own width.
+        expect(row.getBoundingClientRect().width).toBeCloseTo(
+          row.parentElement!.clientWidth,
+          0,
+        );
         expect(row.scrollWidth).toBe(row.clientWidth);
       }
       const longRows = rows.filter(

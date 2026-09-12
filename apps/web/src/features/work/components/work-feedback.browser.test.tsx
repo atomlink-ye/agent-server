@@ -229,11 +229,16 @@ for (const locale of ['en', 'zh-CN'] as const) {
           ),
         );
         expect(feedback.getBoundingClientRect().height).toBe(220);
-        // 307, not 292: `.work-pane-scroll { scrollbar-gutter: stable }`
-        // (63bf7162, landed before this pin) reserves a ~15px scrollbar
-        // gutter that this row width must account for — see the identical
-        // fix in work-list.browser.test.tsx.
-        expect(feedback.getBoundingClientRect().width).toBe(307);
+        // The sidebar column's available width shifts by the platform's
+        // scrollbar width (macOS overlay scrollbars take no layout space;
+        // Linux CI's classic scrollbar does), so the placeholder — meant to
+        // fill `.work-pane-scroll` — can't be pinned to one exact number on
+        // both platforms. Assert the intent instead: see the identical fix
+        // in work-list.browser.test.tsx.
+        expect(feedback.getBoundingClientRect().width).toBeCloseTo(
+          pane.clientWidth,
+          0,
+        );
         expect(action.getBoundingClientRect().bottom).toBeLessThanOrEqual(
           feedback.getBoundingClientRect().bottom,
         );

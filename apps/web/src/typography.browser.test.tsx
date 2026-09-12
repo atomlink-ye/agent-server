@@ -210,7 +210,8 @@ for (const locale of ['en', 'zh-CN'] as const) {
       expect(visible).toBe(14);
       expect(bounds.height).toBeCloseTo(788, 1);
       expect(bounds.top).toBeCloseTo(96, 1);
-      expect(scroller.scrollHeight).toBe(2647);
+      // Directory structure removes the native list margins; row density stays fixed.
+      expect(scroller.scrollHeight).toBe(2615);
       const rowStyle = getComputedStyle(rows[0]!);
       expect(rowStyle.paddingTop).toBe('4px');
       expect(rowStyle.paddingBottom).toBe('4px');

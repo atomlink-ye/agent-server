@@ -250,8 +250,10 @@ than relying on the browser's relative-size default.
 
 The Work directory balances its two text lines with 4px vertical row padding
 and a 2px internal gap; `.work-pane-scroll` remains the scroll owner. The
-Chromium typography test pins rendered roles and fully visible rows at
-1440×900 in English and Simplified Chinese. The node typography test rejects
+compact desktop budget is a 49.5px row with 14 fully visible entries at
+1440×900 in English and Simplified Chinese. Directory activity and title
+structure must fit that budget without shrinking text. The Chromium typography
+test pins rendered roles and fully visible rows. The node typography test rejects
 raw CSS font sizes (including shorthand) and local line-height literals.
 
 ### Migrating a surface
@@ -307,3 +309,5 @@ offers Retry. A disabled Work feature is distinct from transient detail readines
 permission failures offer account/access guidance. Loading feedback reserves space
 and waits 150 ms before becoming visible. Empty artifact and transcript surfaces
 link to Runs, while recorded transcripts also offer an explicit refresh action.
+Transcript loading, empty, and error feedback share a 112px minimum height so
+readable explanations do not move the recovery controls when a read completes.

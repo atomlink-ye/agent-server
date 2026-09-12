@@ -764,20 +764,20 @@ it.each(['en', 'zh-CN'] as const)(
         fifteenthBottom: rows[14]!.getBoundingClientRect().bottom,
         scrollerBottom: rect.bottom,
       }).toEqual({
-        scrollerHeight: 794,
-        scrollerTop: 90,
-        firstTop: 94,
-        firstHeight: 48,
-        fifteenthBottom: 884,
+        scrollerHeight: 788,
+        scrollerTop: 96,
+        firstTop: 100,
+        firstHeight: 49.5,
+        fifteenthBottom: 912.5,
         scrollerBottom: 884,
       });
       expect(
         rows.filter((row) => row.getBoundingClientRect().bottom <= rect.bottom),
-      ).toHaveLength(15);
-      expect(rect.height).toBe(794);
-      expect(rect.top).toBe(90);
+      ).toHaveLength(14);
+      expect(rect.height).toBe(788);
+      expect(rect.top).toBe(96);
       for (const row of rows) {
-        expect(row.getBoundingClientRect().height).toBe(48);
+        expect(row.getBoundingClientRect().height).toBe(49.5);
         expect(row.getBoundingClientRect().width).toBe(292);
         expect(row.scrollWidth).toBe(row.clientWidth);
       }
@@ -788,7 +788,7 @@ it.each(['en', 'zh-CN'] as const)(
       expect(longRows).toHaveLength(2);
       for (const row of longRows) {
         const title = row.querySelector('strong')!;
-        expect(title.getBoundingClientRect().height).toBe(18);
+        expect(title.getBoundingClientRect().height).toBe(19.5);
         expect(getComputedStyle(title).fontSize).toBe('13px');
         expect(title.getAttribute('title')).toHaveLength(200);
         const suffix = title.querySelector('.work-scannable-title__suffix')!;
@@ -935,9 +935,13 @@ it.each(['en', 'zh-CN'] as const)(
       ];
       expect(names).toHaveLength(2);
       for (const [index, name] of names.entries()) {
-        expect(name.getBoundingClientRect().height).toBe(21);
+        expect(name.getBoundingClientRect().height).toBe(24);
         expect(name.getBoundingClientRect().width).toBe(
-          locale === 'zh-CN' ? 527.859375 : index === 0 ? 530 : 542.59375,
+          locale === 'zh-CN'
+            ? 521.734375
+            : index === 0
+              ? 520.171875
+              : 535.28125,
         );
         expect(name.getAttribute('title')).toHaveLength(200);
         const suffix = name.querySelector<HTMLElement>(

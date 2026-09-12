@@ -283,8 +283,8 @@
   max-width: 760px;
 }
 .work-section-heading > p:last-child,
-.work-capability-unavailable > p:last-child,
-.work-detail-state > p:last-child {
+.work-capability-unavailable > p:not(.work-shell-kicker),
+.work-detail-state > p:not(.work-shell-kicker) {
   color: var(--ink-500);
   font-size: var(--text-sm);
   line-height: var(--leading-body);
@@ -540,9 +540,10 @@
   font-size: var(--text-sm);
 }
 
+/* Keep navigation inside its compact height budget as labels use readable leading. */
 .work-tabs {
   gap: var(--space-5);
-  padding-top: var(--space-2);
+  padding-top: calc(var(--space-3) / 2);
 }
 .work-tabs a {
   padding-bottom: var(--space-2);

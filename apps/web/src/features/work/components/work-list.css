@@ -305,7 +305,7 @@
 .work-pane .work-directory-row {
   grid-template-columns: 18px minmax(0, 1fr);
   gap: 6px;
-  padding: 6px 8px;
+  padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);
 }
 .work-pane .work-directory-row .work-list-mark {

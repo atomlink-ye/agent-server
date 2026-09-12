@@ -31,7 +31,7 @@
 }
 /* Reserve geometry immediately, but do not flash feedback for fast reads. */
 .work-transcript-panel > .execution-transcript {
-  min-height: 102px;
+  min-height: 112px;
 }
 .work-loading-feedback,
 .work-transcript-panel > .execution-transcript {

@@ -387,3 +387,8 @@
 .work-detail-feedback a {
   color: var(--sky-ink);
 }
+
+/* The embedded missing-Work state shares the 400px feedback shell. */
+.work-shell > .not-found {
+  padding: var(--space-6);
+}

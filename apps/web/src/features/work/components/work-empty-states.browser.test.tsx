@@ -85,7 +85,7 @@ for (const locale of ['en', 'zh-CN'] as const) {
         expect(host.textContent).toContain(
           t(
             state === 'runs'
-              ? 'work.runs.emptyTitle'
+              ? 'work.scope.emptyTitle'
               : state === 'artifacts'
                 ? 'work.artifacts.emptyTitle'
                 : 'work.transcript.emptyTitle',
@@ -96,19 +96,18 @@ for (const locale of ['en', 'zh-CN'] as const) {
           '.work-shell > section',
         )!;
         expect(surface.getBoundingClientRect().height).toBe(
-          state === 'runs' ? 140 : 184,
+          state === 'runs' ? 143.1875 : 169.1875,
         );
         expect(surface.getBoundingClientRect().width).toBe(760);
         expect(action).not.toBeNull();
         expect(action.getBoundingClientRect().right).toBeLessThanOrEqual(1440);
-        if (state === 'runs')
-          expect(
-            host.querySelector<HTMLButtonElement>('button')!.disabled,
-          ).toBe(false);
-        else
-          expect(action.getAttribute('href')).toBe(
-            `/work/${data.work.id}?tab=runs`,
-          );
+        expect(action.getAttribute('href')).toBe(
+          `/work/${data.work.id}?tab=${state === 'runs' ? 'chat' : 'runs'}`,
+        );
+        if (state === 'runs') {
+          expect(action.textContent).toBe(t('work.record.preparation'));
+          expect(host.querySelector('button')).toBeNull();
+        }
       } finally {
         await act(async () => root.unmount());
         host.remove();
@@ -160,7 +159,7 @@ for (const locale of ['en', 'zh-CN'] as const) {
         const transcript = host.querySelector<HTMLElement>(
           '.execution-transcript',
         )!;
-        expect(transcript.getBoundingClientRect().height).toBe(102);
+        expect(transcript.getBoundingClientRect().height).toBe(112);
         expect(
           host.querySelector('.work-shell')!.getBoundingClientRect().height,
         ).toBe(400);

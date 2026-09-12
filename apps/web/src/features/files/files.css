@@ -5,8 +5,10 @@
   gap: var(--space-3);
   min-height: 0;
 }
-.files-main {
+.chat-panel.files-main {
   overflow-y: auto;
+}
+.files-main {
   padding: var(--space-5) var(--space-6);
 }
 .files-scope-list,
@@ -110,6 +112,9 @@
   border-radius: var(--radius-lg);
   background: var(--cloud);
 }
+.files-file-viewer h2 {
+  overflow-wrap: anywhere;
+}
 .files-viewer-toolbar {
   display: flex;
   justify-content: flex-end;
@@ -132,6 +137,7 @@
   color: var(--cloud);
 }
 .files-rendered-markdown {
+  flex-shrink: 0;
   min-height: 0;
   color: var(--ink-700);
   font-size: var(--text-lg);

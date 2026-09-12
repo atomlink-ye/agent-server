@@ -63,6 +63,7 @@
   display: grid;
   flex: 1;
   min-width: 0;
+  overflow-wrap: anywhere;
 }
 .agents-list-copy small {
   font-size: var(--text-xs);
@@ -98,6 +99,8 @@
 }
 .agents-profile-copy {
   flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .agents-profile-header h1 {
   margin: 0;
@@ -771,6 +774,7 @@
   align-items: flex-start;
   gap: var(--space-1);
   min-width: 0;
+  overflow-wrap: anywhere;
 }
 .agents-roster-identity-copy strong {
   color: var(--ink-900);

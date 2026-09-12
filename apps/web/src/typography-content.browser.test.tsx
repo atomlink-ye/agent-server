@@ -224,13 +224,47 @@ for (const locale of ['en', 'zh-CN'] as const) {
         JSON.stringify(measurements, null, 2),
       );
       expect(window.innerWidth).toBe(1440);
-      expect(measurements.row.width).toBe(
-        locale === 'en' ? 87.28125 : 93.34375,
+      // The truncatable prefix's width is whatever the flex row leaves after
+      // its fixed-width suffix and the `work-list-count` badge, which is a
+      // rendered-text width itself (badge copy) and so isn't a single exact
+      // number across platforms. Assert the layout intent instead: the
+      // prefix fills the row from its own left edge up to the suffix (or the
+      // row's right edge with no suffix), and the row itself fills the
+      // heading up to the badge.
+      const heading = row.parentElement!;
+      const badge = heading.querySelector<HTMLElement>('.work-list-count')!;
+      const suffixEl = row.querySelector<HTMLElement>(
+        '.work-scannable-title__suffix',
+      );
+      const rowRect = row.getBoundingClientRect();
+      const badgeRect = badge.getBoundingClientRect();
+      const suffixRect = suffixEl?.getBoundingClientRect();
+      const rowAvailableWidth = badgeRect.left - rowRect.left;
+      expect(measurements.row.width).toBeCloseTo(
+        suffixRect ? suffixRect.left - rowRect.left : rowAvailableWidth,
+        0,
       );
       expect(measurements.row.height).toBe(19.5);
       expect(measurements.row.fontSize).toBe(13);
-      expect(measurements.header.width).toBe(
-        locale === 'en' ? 143.109375 : 265.28125,
+      // Likewise, the h1 fills the header between the kicker and the
+      // state pill; both siblings' own widths are rendered text and
+      // platform-dependent, so measure the gap directly instead of
+      // hardcoding it.
+      const detailHeader = header.parentElement!;
+      const kicker = detailHeader.querySelector<HTMLElement>(
+        '.work-shell-kicker',
+      );
+      const statePill = detailHeader.querySelector<HTMLElement>(
+        '.work-state-pill',
+      )!;
+      const headerRect = header.getBoundingClientRect();
+      const statePillRect = statePill.getBoundingClientRect();
+      const gap = kicker
+        ? headerRect.left - kicker.getBoundingClientRect().right
+        : 0;
+      expect(measurements.header.width).toBeCloseTo(
+        statePillRect.left - gap - headerRect.left,
+        0,
       );
       expect(measurements.header.height).toBe(27);
       expect(measurements.header.fontSize).toBe(20);

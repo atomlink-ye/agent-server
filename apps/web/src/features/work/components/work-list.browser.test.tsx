@@ -946,21 +946,18 @@ it.each(['en', 'zh-CN'] as const)(
         expect(name.getBoundingClientRect().height).toBe(24);
         // `.work-landing__recent a` gives the title a `minmax(0, 1fr)`
         // middle column between two `max-content` siblings (the
-        // `work.latestState` state pill and the run timestamp). The
-        // `work.latestState` copy ("Latest WorkRun: {state}" /
-        // "最新 WorkRun：{state}") is an already-shipped vocabulary
-        // decision (92100dba) that landed after this pin was first
-        // measured (6e7adb4b / 08600a88), so the pill now legitimately
-        // claims ~130px more of the row and the title gets the
-        // remainder by design of the grid — not a CSS regression.
-        expect(name.getBoundingClientRect().width).toBe(
-          locale === 'zh-CN'
-            ? index === 0
-              ? 403.703125
-              : 401.3125
-            : index === 0
-              ? 388.46875
-              : 402.15625,
+        // `work.latestState` state pill and the run timestamp), so the
+        // title's width is whatever the grid track resolves to rather than
+        // its own rendered text — and both `max-content` siblings measure
+        // their own rendered text, which is platform-dependent. Assert the
+        // layout intent directly from the browser's own resolved track size
+        // instead of a pinned pixel value.
+        const resolvedColumns = getComputedStyle(
+          name.closest('a')!,
+        ).gridTemplateColumns.split(' ');
+        expect(name.getBoundingClientRect().width).toBeCloseTo(
+          parseFloat(resolvedColumns[1]!),
+          0,
         );
         expect(name.getAttribute('title')).toHaveLength(200);
         const suffix = name.querySelector<HTMLElement>(

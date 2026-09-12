@@ -119,8 +119,13 @@ for (const locale of ['en', 'zh-CN'] as const) {
         expect(preview.getBoundingClientRect().height).toBe(
           locale === 'zh-CN' && kind === 'report' ? 90 : 54,
         );
-        expect(preview.getBoundingClientRect().width).toBe(
-          locale === 'en' ? 500.953125 : 504.265625,
+        // The preview must fill the row's remaining space next to the
+        // button, not hit an exact width: that width is just the rendered
+        // text width of the button's own (locale-specific) label, which
+        // makes it break on any copy edit, font change, or padding tweak.
+        expect(preview.getBoundingClientRect().right).toBeCloseTo(
+          button.getBoundingClientRect().left - 14,
+          0,
         );
         expect(button.getBoundingClientRect().height).toBe(33);
         const lastCharacter = document.createRange();

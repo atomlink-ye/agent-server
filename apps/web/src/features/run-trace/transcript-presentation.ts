@@ -1,3 +1,5 @@
+import { t } from '@/i18n';
+import { capturedValue } from '@/i18n/captured-value';
 import type { TranscriptEntry } from './transcript-projection';
 
 export type EntryPresentation = {
@@ -44,7 +46,7 @@ export function buildEntryPresentation(
   if (event.kind === 'assistant_text')
     return {
       icon: 'bot',
-      label: options.actorName?.trim() || 'Assistant response',
+      label: options.actorName?.trim() || t('trace.assistantResponse'),
       summary: textSummary(event.text),
       origin: null,
       platformToolName: null,
@@ -57,7 +59,7 @@ export function buildEntryPresentation(
   if (event.kind === 'reasoning_progress')
     return {
       icon: 'brain',
-      label: 'Thinking',
+      label: t('runtimeStatus.thinking'),
       summary: null,
       origin: null,
       platformToolName: null,
@@ -73,7 +75,7 @@ export function buildEntryPresentation(
         icon: 'platform',
         label: humanize(event.tool_name),
         summary: null,
-        origin: 'Agent Server',
+        origin: t('shell.brand'),
         platformToolName: event.tool_name,
         tone:
           event.status === 'failed' || event.status === 'cancelled'
@@ -139,11 +141,11 @@ export function buildEntryPresentation(
     const decision = event.decision
       ? humanize(event.decision)
       : event.status === 'resolved'
-        ? 'Resolved'
-        : 'Not captured / not triggered';
+        ? t('trace.permissionResolved')
+        : t('trace.permissionMissing');
     return {
       icon: 'lock',
-      label: 'Permission check',
+      label: t('trace.permissionCheck'),
       summary: `${decision}${event.summary ? ` · ${event.summary}` : ''}`,
       origin: null,
       platformToolName: null,
@@ -177,19 +179,16 @@ function textSummary(text: string): string | null {
 }
 
 function lifecycleLabel(status: string, actorName?: string | null): string {
-  const prefix = actorName?.trim() ? `${actorName.trim()} · ` : '';
-  switch (status) {
-    case 'started':
-      return `${prefix}Run started`;
-    case 'succeeded':
-      return `${prefix}Run succeeded`;
-    case 'failed':
-      return `${prefix}Run failed`;
-    case 'cancelled':
-      return `${prefix}Run cancelled`;
-    default:
-      return `${prefix}Run ${humanize(status)}`;
-  }
+  const activity =
+    status === 'started' ||
+    status === 'succeeded' ||
+    status === 'failed' ||
+    status === 'cancelled'
+      ? t(`trace.lifecycle.${status}`)
+      : t('trace.lifecycle.other', { status: humanize(status) });
+  return actorName?.trim()
+    ? t('trace.actorActivity', { actor: actorName.trim(), activity })
+    : activity;
 }
 
 function lifecycleIcon(status: string): string {
@@ -222,8 +221,8 @@ function toolDetail(
   const command = commandFromLabel(event.label);
   if (!command) return event.detail_text;
   return event.detail_text
-    ? `Recorded command\n${command}\n\nOutput\n${event.detail_text}`
-    : `Recorded command\n${command}`;
+    ? t('trace.commandOutput', { command, output: event.detail_text })
+    : t('trace.recordedCommand', { command });
 }
 
 function commandFromLabel(label: string | null): string | null {
@@ -238,11 +237,9 @@ function isGenericActivityText(value: string): boolean {
 }
 
 export function humanize(value: string | null | undefined): string {
-  return (
-    value
-      ?.replaceAll('_', ' ')
-      .replace(/\b\w/g, (letter) => letter.toUpperCase()) ?? ''
-  );
+  return value
+    ? capturedValue(value).replace(/\b\w/g, (letter) => letter.toUpperCase())
+    : '';
 }
 
 function iconForTool(category: string): string {

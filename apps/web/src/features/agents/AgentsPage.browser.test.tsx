@@ -3,7 +3,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { expect, it, vi } from 'vitest';
-import { page } from 'vitest/browser';
+import { commands, page } from 'vitest/browser';
 
 import { AgentsPage } from './AgentsPage';
 import type { Coworker } from './contracts';
@@ -11,6 +11,9 @@ import type { CoworkerProfile } from './agents-gateway';
 import { ApiTransportError } from '../../api/transport';
 import { AppShell } from '../../app/shell/AppShell';
 import '../../index.css';
+import { setLocale } from '../../i18n';
+import { copyRegressions } from '../../test-support/copy-regressions';
+import { findCopy, measureCopy } from '../../test-support/copy-measurement';
 
 const loadCoworkers = vi.fn(async () => [] as readonly Coworker[]);
 const loadCoworkerProfile =
@@ -157,6 +160,8 @@ function expectFullyVisible(item: Element, region: HTMLElement): void {
   expect(itemRect.top).toBeGreaterThanOrEqual(regionRect.top - 1);
   expect(itemRect.bottom).toBeLessThanOrEqual(regionRect.bottom + 1);
 }
+
+const copyMeasurements: unknown[] = [];
 
 (
   globalThis as typeof globalThis & {
@@ -489,3 +494,90 @@ it('lands on a card per Coworker instead of redirecting into the first profile',
     host.remove();
   }
 });
+
+it.each(['en', 'zh-CN'] as const)(
+  'fits Definition availability and creation copy in %s at 1440',
+  async (locale) => {
+    await page.viewport(1440, 900);
+    setLocale(locale);
+    loadCoworkerActivity.mockResolvedValue({
+      items: [
+        {
+          id: 'work:1',
+          kind: 'work',
+          title: 'Review',
+          detail: null,
+          state: null,
+          at: '2026-08-15T00:00:00Z',
+          to: '/work/1',
+        },
+      ],
+      work: 'ok',
+      chat: 'ok',
+    } as never);
+    const host = document.createElement('div');
+    host.style.width = '1368px';
+    host.style.height = '900px';
+    document.body.append(host);
+    const root = createRoot(host);
+    try {
+      for (const hasDefinition of [false, true]) {
+        const profile = profileFor('available');
+        loadCoworkers.mockResolvedValue([profile.agent]);
+        loadCoworkerProfile.mockResolvedValue({
+          ...profile,
+          workCatalog: hasDefinition
+            ? [
+                {
+                  definitionId: 'definition',
+                  definitionVersionId: 'version',
+                  name: 'review',
+                  description: 'Review',
+                  inputSchema: {
+                    properties: {},
+                    required: [],
+                    additionalProperties: false,
+                  },
+                },
+              ]
+            : [],
+        });
+        await act(async () =>
+          root.render(
+            <React.Fragment key={String(hasDefinition)}>
+              {routed(`/agents/${AGENT_ID}`)}
+            </React.Fragment>,
+          ),
+        );
+        const keys = hasDefinition
+          ? (['agents.startWork', 'agents.activityWorkHint'] as const)
+          : (['agents.noCapabilities', 'agents.browseWorkCatalog'] as const);
+        for (const key of keys) {
+          const copy = copyRegressions[key][locale];
+          const element = findCopy(host, copy.after);
+          copyMeasurements.push({
+            locale,
+            key,
+            ...measureCopy(element, copy.before),
+          });
+        }
+      }
+    } finally {
+      await act(async () => root.unmount());
+      host.remove();
+      await commands.writeInventory(
+        JSON.stringify({
+          kind: 'profile-copy',
+          measurements: copyMeasurements,
+        }),
+        'canary',
+      );
+      setLocale('en');
+      loadCoworkerActivity.mockResolvedValue({
+        items: [],
+        work: 'skipped',
+        chat: 'ok',
+      });
+    }
+  },
+);

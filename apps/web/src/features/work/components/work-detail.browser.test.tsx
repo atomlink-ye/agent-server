@@ -459,7 +459,7 @@ it('renders a Work record with Work-only tabs through Product reads only', async
       host.querySelector('.work-tabs a[aria-current="page"]')?.textContent,
     ).toBe('WorkRuns');
     expect(host.textContent).not.toContain(
-      'Everything captured during this Run',
+      'Everything captured during this WorkRun',
     );
     expect(host.textContent).toContain('Start WorkRun');
     expect(host.querySelector('[data-testid=work-record]')).not.toBeNull();
@@ -585,7 +585,7 @@ it('does not invent a runnable Work when its current DefinitionVersion is missin
   try {
     expect(host.textContent).toContain(work.work.title);
     expect(host.textContent).not.toContain(
-      'Everything captured during this Run',
+      'Everything captured during this WorkRun',
     );
     expect(host.textContent).toContain(
       'The current Work Definition version could not be loaded, so runnability cannot be determined.',
@@ -719,7 +719,7 @@ it('keeps output in WorkRun Result and sends operational inspection to Observe',
     );
     expect(host.textContent).not.toContain('Key steps');
     expect(host.textContent).not.toContain(
-      'Everything captured during this Run',
+      'Everything captured during this WorkRun',
     );
     expect(
       host.querySelector('a[href^="/observe?"]')?.getAttribute('href'),
@@ -1093,7 +1093,7 @@ it('moves started preparation into a selected WorkRun shell and preserves conver
     expect(
       host.querySelector('.work-chat-pane')?.getAttribute('aria-label'),
     ).toBe('Conversation');
-    expect(host.textContent).toContain('cannot change execution');
+    expect(host.textContent).toContain('cannot access execution history or change execution');
     expect(host.textContent).not.toContain('Run’s Lead');
   } finally {
     await act(async () => root.unmount());

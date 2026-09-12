@@ -1,3 +1,4 @@
+import { t } from '@/i18n';
 import type { ReactNode } from 'react';
 
 import {
@@ -78,11 +79,17 @@ function InspectorOverview({
   return (
     <>
       <InspectorGroup title={t('trace.identity')}>
-        <Fact label={t('trace.workItem')} value={selectedAttempt.workItem.subject} />
+        <Fact
+          label={t('trace.workItem')}
+          value={selectedAttempt.workItem.subject}
+        />
         <Fact label={t('trace.agent')} value={actorName} />
       </InspectorGroup>
       <InspectorGroup title={t('trace.executionFacts')}>
-        <Fact label={t('trace.state')} value={humanize(selectedAttempt.attempt.status)} />
+        <Fact
+          label={t('trace.state')}
+          value={humanize(selectedAttempt.attempt.status)}
+        />
         <Fact
           label={t('trace.attempt')}
           value={`${selectedAttempt.attempt.attemptNo} / ${selectedAttempt.workItem.attempts.length}`}
@@ -100,7 +107,9 @@ function InspectorOverview({
           value={
             selectedAttempt.attempt.durationMs === null
               ? t('trace.notCaptured')
-              : `${(selectedAttempt.attempt.durationMs / 1000).toFixed(1)} seconds`
+              : t('trace.seconds', {
+                  count: (selectedAttempt.attempt.durationMs / 1000).toFixed(1),
+                })
           }
         />
       </InspectorGroup>
@@ -138,9 +147,7 @@ function ConversationDetail({
       data-testid="attempt-conversation"
     >
       <p className="run-trace__detail-disclosure">
-        Product Trace currently captures Agent-to-Agent message summaries, not
-        the full provider transcript. Full execution text is not inferred from
-        technical RuntimeSession or TeamRun APIs.
+        {t('trace.inspector.messageHint')}
       </p>
       {model.messages.length ? (
         model.messages.map(({ edge, message }) => (
@@ -157,19 +164,14 @@ function ConversationDetail({
               <strong>{message?.senderName ?? t('trace.agent')}</strong>
               <span>→ {message?.recipientName ?? t('trace.agent')}</span>
             </header>
-            <p>
-              {message?.summary ??
-                t('trace.messageBodyMissing')}
-            </p>
+            <p>{message?.summary ?? t('trace.messageBodyMissing')}</p>
             <time dateTime={edge.sourceCreatedAt}>
               {formatTimestamp(edge.sourceCreatedAt)}
             </time>
           </article>
         ))
       ) : (
-        <p>
-          No Agent-to-Agent message is associated with this Work Item Attempt.
-        </p>
+        <p>{t('trace.inspector.noMessage')}</p>
       )}
       {selectedAttempt?.attempt.resultSummary ? (
         <article className="run-trace__transcript-result">
@@ -191,8 +193,7 @@ function ActivityDetail({ model }: { readonly model: InspectorModel }) {
       data-testid="attempt-activity"
     >
       <p className="run-trace__detail-disclosure">
-        MCP dispatch/confirmation is safe structured activity. Direct shell,
-        file edit and other non-MCP execution remain outside this trace.
+        {t('trace.inspector.mcpHint')}
       </p>
       {model.activities.length ? (
         model.activities.map((activity, index) => (
@@ -206,7 +207,11 @@ function ActivityDetail({ model }: { readonly model: InspectorModel }) {
             >
               {humanize(activity.status)}
             </span>
-            <p>Result: {captureLabel(activity.resultCaptureStatus)}</p>
+            <p>
+              {t('trace.events.result', {
+                result: captureLabel(activity.resultCaptureStatus),
+              })}
+            </p>
           </article>
         ))
       ) : (

@@ -32,7 +32,7 @@ function describeOpenConversationError(reason: unknown, t: Translate): string {
   ) {
     return t('agents.busyConversation');
   }
-  return reason instanceof Error ? reason.message : String(reason);
+  return t('conversations.createError');
 }
 
 export function AgentsPage() {

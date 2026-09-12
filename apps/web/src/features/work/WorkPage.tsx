@@ -26,7 +26,7 @@ export interface WorkPageProps {
   readonly returnWorkItemId?: string | null;
   readonly selectedWorkId?: string | null;
   readonly workTab?: string | null;
-  readonly selectedRunId?: string | null;
+  readonly selectedWorkRunId?: string | null;
   readonly selectedSessionIndex?: number | null;
 }
 
@@ -35,7 +35,7 @@ export function WorkPage({
   returnWorkItemId = null,
   selectedWorkId = null,
   workTab = null,
-  selectedRunId = null,
+  selectedWorkRunId = null,
   selectedSessionIndex = null,
 }: WorkPageProps) {
   const t = useT();
@@ -174,10 +174,10 @@ export function WorkPage({
           !showNewWork &&
           selectedWorkId ? (
             <WorkDetailPage
-              key={`${selectedWorkId}:${selectedRunId ?? 'latest'}`}
+              key={`${selectedWorkId}:${selectedWorkRunId ?? 'latest'}`}
               workId={selectedWorkId}
               tab={workTab ?? undefined}
-              selectedRunId={selectedRunId ?? undefined}
+              selectedRunId={selectedWorkRunId ?? undefined}
               selectedSessionIndex={selectedSessionIndex ?? undefined}
               originConversationId={returnConversationId}
               onSelectedLatestRunState={setSelectedLatestRunState}
@@ -315,7 +315,7 @@ function RecentWorkRow({
   const t = useT();
   const latestRun = work.latest_run_summary;
   const [transcriptSummary, setTranscriptSummary] = useState<{
-    readonly runId: string;
+    readonly workRunId: string;
     readonly segment: string | null;
   } | null>(null);
 
@@ -330,7 +330,7 @@ function RecentWorkRow({
       .then((transcripts) => {
         if (active)
           setTranscriptSummary({
-            runId: latestRun.id,
+            workRunId: latestRun.id,
             segment: recentWorkRunSummary(transcripts.sessions),
           });
       })
@@ -338,7 +338,7 @@ function RecentWorkRow({
         // The capture label is the safe fallback when transcript data is not
         // available; a raw result_summary may be an incomplete provider chunk.
         if (active)
-          setTranscriptSummary({ runId: latestRun.id, segment: null });
+          setTranscriptSummary({ workRunId: latestRun.id, segment: null });
       });
     return () => {
       active = false;
@@ -348,7 +348,7 @@ function RecentWorkRow({
   const state = productStatePresentation(work.product_state);
   const timestamp = latestRun?.updated_at ?? work.updated_at;
   const matchingTranscript =
-    latestRun && transcriptSummary?.runId === latestRun.id
+    latestRun && transcriptSummary?.workRunId === latestRun.id
       ? transcriptSummary
       : null;
   const transcriptSegment = matchingTranscript?.segment ?? null;
@@ -362,7 +362,7 @@ function RecentWorkRow({
           <span
             className={`work-state-pill work-state-pill--${work.product_state}`}
           >
-            {state.label}
+            {t('work.latestState', { state: state.label })}
           </span>
         ) : (
           <span className="work-landing__no-run">{t('work.noRuns')}</span>

@@ -1,3 +1,4 @@
+import { t } from '@/i18n';
 import type { CSSProperties } from 'react';
 
 import { actorTone, humanize, type MapModel } from './selectors';
@@ -49,11 +50,9 @@ export function MapView({
       <div className="run-trace__map-heading">
         <div>
           <strong>{t('trace.causalMap.title')}</strong>
-          <p>
-            Work Item Attempts are nodes. Duration is deliberately not encoded.
-          </p>
+          <p>{t('trace.mapHint')}</p>
         </div>
-        <span>{model.entries.length} Attempt node(s)</span>
+        <span>{t('trace.mapCount', { count: model.entries.length })}</span>
       </div>
       <div className="run-trace__map-board">
         {model.entries.map((entry) => (
@@ -78,7 +77,7 @@ export function MapView({
             </span>
             <strong>{entry.workItem.subject}</strong>
             <span>
-              Attempt {entry.attempt.attemptNo} ·{' '}
+              {t('work.attempt', { number: entry.attempt.attemptNo })} ·{' '}
               {humanize(entry.attempt.status)}
             </span>
           </button>

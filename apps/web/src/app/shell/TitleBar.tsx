@@ -14,7 +14,7 @@ export function TitleBar({ section, right }: TitleBarProps) {
       className="title-bar"
       aria-label={t('shell.titleBar.workspace', { section })}
     >
-      <span className="title-bar-crumb">Agent Server</span>
+      <span className="title-bar-crumb">{t('shell.brand')}</span>
       <span className="title-bar-divider" aria-hidden="true">
         /
       </span>

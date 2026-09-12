@@ -148,7 +148,7 @@ export function activityStateLabel(state: CoworkerActivityState): string {
     problem: 'activityState.problem',
     not_captured: 'activityState.notCaptured',
   };
-  return t(key[state]);
+  return t('work.latestState', { state: t(key[state]) });
 }
 
 const MINUTE = 60_000;

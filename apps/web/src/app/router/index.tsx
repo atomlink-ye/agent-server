@@ -90,7 +90,7 @@ function WorkspaceRoute() {
       selectedWorkItemId={workItemId ?? null}
       selectedBoardId={boardId ?? null}
       returnWorkItemId={query.get('from_task')}
-      selectedRunId={query.get('run')}
+      selectedWorkRunId={query.get('run')}
       selectedSessionIndex={parseSessionIndex(query.get('session'))}
       selectedWorkId={workId ?? null}
       workTab={query.get('tab')}

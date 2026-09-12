@@ -3,7 +3,13 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter, Route, Routes, useParams } from 'react-router-dom';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { page } from 'vitest/browser';
+import { commands, page } from 'vitest/browser';
+import { setLocale, t } from '../../i18n';
+import { copyRegressions } from '../../test-support/copy-regressions';
+import {
+  measureCopy,
+  measureControlCopy,
+} from '../../test-support/copy-measurement';
 
 import '../../index.css';
 import { AppShell } from '../../app/shell/AppShell';
@@ -1129,3 +1135,71 @@ function shellCommands() {
     },
   };
 }
+
+const copyMeasurements: unknown[] = [];
+it.each(['en', 'zh-CN'] as const)(
+  'fits the selected Doing label in %s at 1440',
+  async (locale) => {
+    await page.viewport(1440, 900);
+    setLocale(locale);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const path = String(input);
+        if (path === '/api/agents') return json({ items: [] });
+        if (path === '/api/boards') return json({ boards: [board()] });
+        if (path === `/api/boards/${boardId}`) return json(snapshot(false));
+        throw new Error(`Unexpected request: ${path}`);
+      }),
+    );
+    const host = document.createElement('div');
+    host.style.width = '1368px';
+    document.body.append(host);
+    const root = createRoot(host);
+    try {
+      await act(async () =>
+        root.render(
+          <MemoryRouter>
+            <BoardsPage selectedBoardId={boardId} />
+          </MemoryRouter>,
+        ),
+      );
+      await act(settle);
+      const section = host.querySelector<HTMLElement>('.title-bar-section')!;
+      expect(section.textContent).toBe(t('boards.title'));
+      copyMeasurements.push({
+        locale,
+        key: 'boards.title',
+        ...measureCopy(section, 'Boards'),
+      });
+      const button = [...host.querySelectorAll('button')].find((button) =>
+        button.textContent?.includes(t('boards.newColumn')),
+      )!;
+      await act(async () => button.click());
+      const select = host.querySelector<HTMLSelectElement>(
+        'form.work-board-column select',
+      )!;
+      expect(select).not.toBeNull();
+      await act(async () => {
+        select.value = 'doing';
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      const copy = copyRegressions['boards.doing'][locale];
+      expect(select.selectedOptions[0]!.textContent).toBe(copy.after);
+      copyMeasurements.push({
+        locale,
+        key: 'boards.doing',
+        ...measureControlCopy(select, copy.before, copy.after),
+      });
+      await commands.writeInventory(
+        JSON.stringify({ kind: 'boards-copy', measurements: copyMeasurements }),
+        'canary',
+      );
+    } finally {
+      await act(async () => root.unmount());
+      host.remove();
+      setLocale('en');
+      vi.unstubAllGlobals();
+    }
+  },
+);

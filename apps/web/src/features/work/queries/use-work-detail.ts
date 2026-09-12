@@ -12,7 +12,7 @@ export type WorkDetailQuery = {
 
 export function useWorkDetail({
   workId,
-  selectedRunId,
+  selectedRunId: selectedWorkRunId,
   preferCurrentDefinition,
   includeTrace,
   includeRun = true,
@@ -44,7 +44,7 @@ export function useWorkDetail({
       try {
         const loaded = await loadWorkDetail(
           workId,
-          selectedRunId,
+          selectedWorkRunId,
           preferCurrentDefinition,
           includeTrace,
           includeRun,
@@ -93,7 +93,7 @@ export function useWorkDetail({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     workId,
-    selectedRunId,
+    selectedWorkRunId,
     preferCurrentDefinition,
     includeTrace,
     includeRun,

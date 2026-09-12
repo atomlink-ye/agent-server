@@ -238,10 +238,10 @@ function ObserveListRow({
 }) {
   const t = useT();
   const stateView = productStatePresentation(entry.product_state);
-  const runId = entry.latest_run_summary!.id;
+  const workRunId = entry.latest_run_summary!.id;
   const next = new URLSearchParams(search);
   next.set('work', entry.id);
-  next.set('run', runId);
+  next.set('run', workRunId);
 
   return (
     <li>

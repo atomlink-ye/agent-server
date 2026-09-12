@@ -1,3 +1,5 @@
+import { capturedValue } from '@/i18n/captured-value';
+import { t } from '@/i18n';
 import {
   capturedTimelineRange,
   timelineGeometry,
@@ -221,8 +223,8 @@ export function selectInspectorModel(
     selectedMessageId,
     actorName: selectedAttempt
       ? (trace.actors.get(selectedAttempt.workItem.actorId ?? '')?.name ??
-        'Name not captured')
-      : 'Name not captured',
+        t('trace.nameNotCaptured'))
+      : t('trace.nameNotCaptured'),
     messages,
     activities,
   };
@@ -270,7 +272,7 @@ export function selectActorRows(trace: NormalizedTrace): readonly ActorRow[] {
   }
   const rows: ActorRow[] = [...trace.actors.values()].map((actor) => ({
     key: actor.id,
-    name: actor.name ?? 'Name not captured',
+    name: actor.name ?? t('trace.nameNotCaptured'),
     note: null,
     rows: groupSpansIntoLaneRows(trace, spansByActorId.get(actor.id) ?? [], {
       actorId: actor.id,
@@ -279,14 +281,14 @@ export function selectActorRows(trace: NormalizedTrace): readonly ActorRow[] {
   if (rootSpans.length)
     rows.push({
       key: 'work-root-run',
-      name: 'Work Run',
-      note: 'The Work Run itself, not an agent',
+      name: t('trace.rootRun'),
+      note: t('trace.rootRunHint'),
       rows: groupSpansIntoLaneRows(trace, rootSpans, { actorId: null }),
     });
   if (uncapturedSpans.length)
     rows.push({
       key: 'uncaptured-actor',
-      name: 'Name not captured',
+      name: t('trace.nameNotCaptured'),
       note: null,
       rows: groupSpansIntoLaneRows(trace, uncapturedSpans, { actorId: null }),
     });
@@ -304,7 +306,7 @@ function selectSingleAgentLanes(
   }
   return [...spansByLaneKey.entries()].map(([key, laneSpans]) => ({
     key,
-    name: 'Agent',
+    name: t('trace.agent'),
     note: null,
     rows: groupSpansIntoLaneRows(null, laneSpans, { actorId: null }),
   }));
@@ -450,16 +452,16 @@ function selectMapRelations(trace: NormalizedTrace): readonly MapRelation[] {
       return [
         {
           key: `dep:${index}`,
-          kind: 'Dependency',
-          text: `${trace.workItems.get(edge.prerequisiteWorkItemId)?.subject ?? 'Work Item'} → ${trace.workItems.get(edge.dependentWorkItemId)?.subject ?? 'Work Item'}`,
+          kind: t('trace.dependency'),
+          text: `${trace.workItems.get(edge.prerequisiteWorkItemId)?.subject ?? t('trace.workItem')} → ${trace.workItems.get(edge.dependentWorkItemId)?.subject ?? t('trace.workItem')}`,
         },
       ];
     if (edge.kind === 'assignment')
       return [
         {
           key: `assign:${index}`,
-          kind: 'Assignment',
-          text: `${trace.actors.get(edge.assigneeActorId)?.name ?? 'Agent'} → ${trace.workItems.get(edge.workItemId)?.subject ?? 'Work Item'}`,
+          kind: t('trace.assignment'),
+          text: `${trace.actors.get(edge.assigneeActorId)?.name ?? t('trace.agent')} → ${trace.workItems.get(edge.workItemId)?.subject ?? t('trace.workItem')}`,
         },
       ];
     if (edge.kind === 'feedback') {
@@ -467,16 +469,16 @@ function selectMapRelations(trace: NormalizedTrace): readonly MapRelation[] {
       return [
         {
           key: `feedback:${index}`,
-          kind: 'Feedback',
-          text: `${edge.reviewerActorId ? (trace.actors.get(edge.reviewerActorId)?.name ?? 'Reviewer') : 'Reviewer'} → ${attempt ? `${trace.workItems.get(attempt.workItemId)?.subject ?? 'Work Item'} / Attempt ${attempt.attemptNo}` : (trace.workItems.get(edge.workItemId)?.subject ?? 'Work Item')}`,
+          kind: t('trace.feedback'),
+          text: `${edge.reviewerActorId ? (trace.actors.get(edge.reviewerActorId)?.name ?? t('trace.reviewer')) : t('trace.reviewer')} → ${attempt ? `${trace.workItems.get(attempt.workItemId)?.subject ?? t('trace.workItem')} / ${t('work.attempt', { number: attempt.attemptNo })}` : (trace.workItems.get(edge.workItemId)?.subject ?? t('trace.workItem'))}`,
         },
       ];
     }
     return [
       {
         key: `message:${edge.messageId}`,
-        kind: 'Message',
-        text: `${edge.senderActorId ? (trace.actors.get(edge.senderActorId)?.name ?? 'Agent') : 'System'} → ${trace.actors.get(edge.recipientActorId)?.name ?? 'Agent'}`,
+        kind: t('composer.field.label'),
+        text: `${edge.senderActorId ? (trace.actors.get(edge.senderActorId)?.name ?? t('trace.agent')) : t('work.chat.role.system')} → ${trace.actors.get(edge.recipientActorId)?.name ?? t('trace.agent')}`,
         messageId: edge.messageId,
       },
     ];
@@ -485,20 +487,20 @@ function selectMapRelations(trace: NormalizedTrace): readonly MapRelation[] {
 
 export function captureLabel(value: string): string {
   return value === 'not_present' || value === 'not_captured'
-    ? 'Not captured'
+    ? t('trace.notCaptured')
     : value === 'redacted'
-      ? 'Captured, content redacted'
+      ? t('trace.capturedRedacted')
       : value === 'captured'
-        ? 'Captured'
+        ? t('trace.captured')
         : humanize(value);
 }
 
 export function humanize(value: string): string {
-  return value.replaceAll('_', ' ');
+  return capturedValue(value);
 }
 
 export function recordedTimestamp(timestamp: string | null): string {
-  return timestamp ?? 'Not captured';
+  return timestamp ?? t('trace.notCaptured');
 }
 
 export function formatTimestamp(value: string): string {

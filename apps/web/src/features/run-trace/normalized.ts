@@ -129,7 +129,7 @@ export type TraceCoverage = {
 };
 
 export type NormalizedTrace = {
-  readonly runId: string;
+  readonly workRunId: string;
   readonly work: TraceWork;
   readonly workRun: TraceWorkRun;
   readonly actors: ReadonlyMap<string, TraceActor>;
@@ -266,7 +266,7 @@ export function normalizeProductRunTrace(
       ? Math.max(...eventCreatedAtValues.map((value) => Date.parse(value)))
       : null;
   return {
-    runId: productTrace.work_run.id,
+    workRunId: productTrace.work_run.id,
     work: { id: productTrace.work.id, title: productTrace.work.title },
     workRun: {
       id: productTrace.work_run.id,

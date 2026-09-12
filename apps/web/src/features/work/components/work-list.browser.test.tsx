@@ -228,10 +228,10 @@ it('renders Work state and run counts without latest Run summaries', async () =>
           `/work/${populatedWorkList.works[index]!.id}`,
       )!;
       expect(card.querySelector('a')?.getAttribute('aria-label')).toContain(
-        'Active',
+        'Unarchived',
       );
-      expect(card.textContent).toContain(`Run: ${stateCases[index]![1]}`);
-      expect(card.textContent).toContain('3 runs');
+      expect(card.textContent).toContain(`WorkRun: ${stateCases[index]![1]}`);
+      expect(card.textContent).toContain('3 WorkRuns');
       // The list row is a navigation index, not a place to read a Run's
       // result: it shows state and a compact timestamp, not result text.
       expect(card.textContent).not.toContain(
@@ -711,7 +711,7 @@ it.each([
       expect(host.querySelector('#work-definition-choice')).not.toBeNull();
       expect(host.querySelector('#work-coworker')).toBeNull();
       expect(host.textContent).toContain(
-        'No published Definitions are available',
+        'Publish a Definition before creating Work',
       );
     } finally {
       await act(async () => root.unmount());

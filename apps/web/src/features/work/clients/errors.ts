@@ -82,14 +82,7 @@ export function isPermanentRunFailure(error: unknown): boolean {
   );
 }
 
-/**
- * Run failures can contain provider or transport detail that is useful to an
- * operator but inappropriate for a browser surface. A `ProductMutationError`
- * carrying one of the bounded, product-owned codes above is safe to show
- * verbatim — it is deliberate product prose, not raw provider/transport
- * detail. Anything else keeps the existing bounded, generic message so an
- * unbounded upstream string never reaches the browser.
- */
+/** Product-owned error codes select localized copy; upstream prose is not localized. */
 export function workRunFailureMessage(
   error: unknown,
   t: Translate = translateCurrent,
@@ -99,7 +92,7 @@ export function workRunFailureMessage(
     error instanceof ProductMutationError &&
     error.code === 'unsupported_runtime_capability'
   )
-    return error.message;
+    return t('work.runFailure.capability');
   // Every code classified permanent needs prose that does not invite a retry.
   // "Try again" beside a disabled control is a contradiction, and the control
   // is disabled precisely because trying again cannot work.

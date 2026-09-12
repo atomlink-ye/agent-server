@@ -77,9 +77,9 @@ export function ConversationsPane({
       const loaded = await commands.loadCoworkers();
       setCoworkers([...loaded].sort(compareCoworkers));
       setCoworkerStatus('ready');
-    } catch (error) {
+    } catch {
       setCoworkerStatus('error');
-      setCreateError(error instanceof Error ? error.message : String(error));
+      setCreateError(t('agents.loadError'));
     }
   };
 
@@ -97,8 +97,8 @@ export function ConversationsPane({
       ]);
       select(conversation.id);
       closeCreate();
-    } catch (error) {
-      setCreateError(error instanceof Error ? error.message : String(error));
+    } catch {
+      setCreateError(t('conversations.createError'));
     } finally {
       setCreateStatus('idle');
     }

@@ -227,12 +227,10 @@ function WorkChatConversation({
           >
             <span className="work-chat-message__avatar" aria-hidden="true">
               {message.role === 'lead'
-                ? workRunId
-                  ? t('work.scope.conversationAssistant').slice(0, 1)
-                  : 'L'
+                ? t('work.chat.role.lead').slice(0, 1)
                 : message.role === 'system'
                   ? '·'
-                  : 'Y'}
+                  : t('work.chat.role.user').slice(0, 1)}
             </span>
             <article
               className="chat-message"

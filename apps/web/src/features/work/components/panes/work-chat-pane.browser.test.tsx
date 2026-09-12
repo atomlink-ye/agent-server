@@ -1,7 +1,14 @@
+import { commands, page } from 'vitest/browser';
+import { setLocale } from '@/i18n';
+import { copyRegressions } from '@/test-support/copy-regressions';
+import {
+  findCopy,
+  measureCopy,
+  measureControlCopy,
+} from '@/test-support/copy-measurement';
 import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
-import { page } from 'vitest/browser';
 import type {
   WorkChatMessageResponse,
   WorkChatMessagesResponse,
@@ -181,16 +188,14 @@ it('shows a single loading action and plain startup guidance', async () => {
 
 it('loads the selected Run conversation instead of preparation', async () => {
   const { host } = await renderChat([]);
-  const runId = '00000000-0000-4000-8000-000000000200';
+  const workRunId = '00000000-0000-4000-8000-000000000200';
   await act(async () => {
-    root!.render(<WorkChatPane workId={workId} workRunId={runId} />);
+    root!.render(<WorkChatPane workId={workId} workRunId={workRunId} />);
   });
-  expect(workClient.chat).toHaveBeenLastCalledWith(workId, runId);
+  expect(workClient.chat).toHaveBeenLastCalledWith(workId, workRunId);
+  expect(host.textContent).toContain('Questions about this WorkRun');
   expect(host.textContent).toContain(
-    'WorkRun conversation · cannot change execution',
-  );
-  expect(host.textContent).toContain(
-    'cannot access execution history, steer, resume, or change this WorkRun',
+    'cannot access execution history or change execution',
   );
   expect(host.textContent).not.toContain('Definition lead');
   expect(host.querySelector('.work-chat-pane')?.textContent).not.toContain(
@@ -200,3 +205,45 @@ it('loads the selected Run conversation instead of preparation', async () => {
     'Send to assistant',
   );
 });
+
+const copyMeasurements: unknown[] = [];
+it.each(['en', 'zh-CN'] as const)(
+  'fits the WorkRun question placeholder in %s at 1440',
+  async (locale) => {
+    await page.viewport(1440, 900);
+    setLocale(locale);
+    try {
+      const { host } = await renderChat([]);
+      await act(async () =>
+        root!.render(
+          <WorkChatPane
+            workId={workId}
+            workRunId="00000000-0000-4000-8000-000000000200"
+          />,
+        ),
+      );
+      const control = host.querySelector<HTMLTextAreaElement>(
+        '.work-chat-composer textarea#message',
+      )!;
+      const heading = copyRegressions['work.chat.runLead'][locale];
+      copyMeasurements.push({
+        locale,
+        key: 'work.chat.runLead',
+        ...measureCopy(findCopy(host, heading.after), heading.before),
+      });
+      const copy = copyRegressions['work.chat.runPlaceholder'][locale];
+      expect(control.placeholder).toBe(copy.after);
+      copyMeasurements.push({
+        locale,
+        key: 'work.chat.runPlaceholder',
+        ...measureControlCopy(control, copy.before, copy.after),
+      });
+      await commands.writeInventory(
+        JSON.stringify({ kind: 'chat-copy', measurements: copyMeasurements }),
+        'canary',
+      );
+    } finally {
+      setLocale('en');
+    }
+  },
+);

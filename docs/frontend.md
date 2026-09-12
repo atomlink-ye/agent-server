@@ -317,3 +317,15 @@ and waits 150 ms before becoming visible. Empty artifact and transcript surfaces
 link to Runs, while recorded transcripts also offer an explicit refresh action.
 Transcript loading, empty, and error feedback share a 112px minimum height so
 readable explanations do not move the recovery controls when a read completes.
+
+## Product vocabulary and locales
+
+Work is the durable product record pinned to a Definition version. Its record state is archived or unarchived; execution state shown beside a Work belongs to its latest WorkRun and must say so. A WorkRun is one product execution; a technical Run is one Task attempt. A Definition selects the Worker or Team indirectly. Preparation chat precedes WorkRun creation; execution chat belongs to the selected WorkRun. The chat protocol's `lead` role does not establish a universal execution lead: its neutral display name is Assistant. Actual Team roles come from captured membership data.
+
+English and Simplified Chinese retain the nouns Work, WorkRun, Run, Definition, Worker, Coworker, and Task. Localize surrounding copy and known captured enum labels through `apps/web/src/i18n`; authored content and identifiers remain data. Catalog tests enforce identical key sets and interpolation placeholders. Technical event Run IDs remain distinct from the normalized trace wrapper's WorkRun ID.
+
+### Bilingual product copy and failure presentation
+
+Work is a durable record, WorkRun is its product execution instance, and Run is one Task attempt. A Definition supplies each WorkRun's Worker or Team; a Work has neither an executor binding nor an execution status. Conversation content is Run-scoped; the null WorkRun bucket is preparation. WorkRun question-panel wording describes the selected context without asserting that WorkRun owns a Conversation.
+
+Both locale catalogs must retain identical key and placeholder sets, and each source key may be declared only once. Component copy, accessible labels, title-bar sections, template fragments, and editable defaults use catalog keys. The source-copy guard includes known-positive samples so a broken scanner cannot silently report an empty result. Gateways retain typed errors for control flow; presentation catches choose localized operation-specific copy instead of displaying raw gateway messages. Structured Definition diagnostics and user/runtime-authored content remain data and are not evidence that frontend copy is untranslated.

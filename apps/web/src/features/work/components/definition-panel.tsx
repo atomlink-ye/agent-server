@@ -1,3 +1,4 @@
+import { t } from '@/i18n';
 import { useEffect, useMemo, useState } from 'react';
 import { stringify } from 'yaml';
 import type { ProductWorkDefinitionVersionResponse } from '@atomlink-ye/agent-server/product-contract';
@@ -73,16 +74,16 @@ export function DefinitionPanel({
         className="work-capability-unavailable"
         data-testid="definition-unavailable"
       >
-        <p className="work-shell-kicker">Definition</p>
-        <h2>The exact Definition version could not be loaded.</h2>
-        <p>The selected Product version reference is:</p>
+        <p className="work-shell-kicker">{t('work.tab.definition')}</p>
+        <h2>{t('definition.unavailable')}</h2>
+        <p>{t('definition.versionRefIntro')}</p>
         <code className="work-definition-ref">{selectedVersionId}</code>
       </section>
     );
 
   const metadata = asRecord(version.source.metadata);
   const spec = asRecord(version.source.spec);
-  const name = stringValue(metadata?.name) ?? 'Work Definition';
+  const name = stringValue(metadata?.name) ?? t('definition.fallback');
   const description = stringValue(metadata?.description);
   const kind = stringValue(spec?.kind) ?? 'not_captured';
   const environment = resourceBinding(
@@ -107,8 +108,8 @@ export function DefinitionPanel({
       setDiagnostics(nextDiagnostics);
       setStatusMessage(
         nextDiagnostics.length
-          ? 'Fix the reported Definition diagnostics before applying.'
-          : 'The Definition could not be validated.',
+          ? t('work.start.fixDiagnostics')
+          : t('work.start.validationFailed'),
       );
       setState('error');
       return null;
@@ -121,15 +122,13 @@ export function DefinitionPanel({
         error instanceof ApiTransportError ? error.payload : undefined,
       );
       setDiagnostics(nextDiagnostics);
-      setStatusMessage(
-        'The Definition validated, but its resource plan failed.',
-      );
+      setStatusMessage(t('definition.planFailed'));
       setState('error');
       return null;
     }
     setPlan(planned);
     setState('valid');
-    setStatusMessage('Definition is valid and its resource plan resolved.');
+    setStatusMessage(t('work.start.valid'));
     return planned;
   }
 
@@ -147,33 +146,23 @@ export function DefinitionPanel({
         ),
       );
       setState('error');
-      setStatusMessage(
-        error instanceof Error
-          ? error.message
-          : 'The Definition was not applied.',
-      );
+      setStatusMessage(t('work.start.applyFailed'));
       return;
     }
     if (applied.definitionId !== workDefinitionId) {
       setState('error');
-      setStatusMessage(
-        'Apply produced a different Definition lineage. Keep metadata.name on the current Work lineage before applying here.',
-      );
+      setStatusMessage(t('definition.lineageMismatch'));
       return;
     }
     try {
       await workDefinitionClient.pinVersion(workId, applied.versionId);
     } catch {
       setState('error');
-      setStatusMessage(
-        'A new immutable version was created, but this Work could not advance to it.',
-      );
+      setStatusMessage(t('definition.pinFailed'));
       return;
     }
     setState('applied');
-    setStatusMessage(
-      'Applied and pinned as the current Work Definition version.',
-    );
+    setStatusMessage(t('definition.applied'));
     window.location.assign(
       workTabHref(workId, 'definition', undefined, originConversationId),
     );
@@ -184,9 +173,9 @@ export function DefinitionPanel({
     setState('running');
     setStatusMessage(null);
     try {
-      const runId = (await workRunClient.start(workId)).work_run.id;
+      const workRunId = (await workRunClient.start(workId)).work_run.id;
       window.location.assign(
-        workTabHref(workId, 'overview', runId, originConversationId),
+        workTabHref(workId, 'overview', workRunId, originConversationId),
       );
     } catch (reason) {
       setState('error');
@@ -199,16 +188,16 @@ export function DefinitionPanel({
     <section className="work-definition" data-testid="definition-viewer">
       <div className="work-section-heading work-definition__heading">
         <div>
-          <p className="work-shell-kicker">Definition</p>
+          <p className="work-shell-kicker">{t('work.tab.definition')}</p>
           <h2>{name}</h2>
           <p>
-            {editable
-              ? 'Edit the source, resolve it through Agent Server, then apply an immutable version.'
-              : 'Historical Definition versions are immutable and remain read-only.'}
+            {editable ? t('definition.editHint') : t('definition.historyHint')}
           </p>
         </div>
         <span className="work-definition__version-chip">
-          {isCurrentVersion ? 'Current Work version' : 'Historical Run version'}
+          {isCurrentVersion
+            ? t('definition.currentVersion')
+            : t('definition.historicalVersion')}
         </span>
       </div>
 
@@ -220,17 +209,17 @@ export function DefinitionPanel({
           <div className="work-definition__editor-column">
             <div className="work-definition__editor-heading">
               <div>
-                <h3>YAML source</h3>
-                <p>
-                  The API currently returns normalized source. It is
-                  re-serialized as YAML here, so original comments and
-                  formatting are not round-tripped.
-                </p>
+                <h3>{t('definition.yaml')}</h3>
+                <p>{t('definition.yamlHint')}</p>
               </div>
-              <span>{source.length.toLocaleString()} chars</span>
+              <span>
+                {t('definition.characters', {
+                  count: source.length.toLocaleString(),
+                })}
+              </span>
             </div>
             <textarea
-              aria-label="Work Definition YAML source"
+              aria-label={t('definition.sourceLabel')}
               className="work-definition__source"
               data-testid="definition-source-editor"
               onChange={(event) => {
@@ -253,7 +242,9 @@ export function DefinitionPanel({
                 onClick={() => void validateAndPlan()}
                 type="button"
               >
-                {state === 'validating' ? 'Validating…' : 'Validate & plan'}
+                {state === 'validating'
+                  ? t('definition.validating')
+                  : t('definition.validate')}
               </button>
               <button
                 className="work-definition__primary-action"
@@ -265,7 +256,9 @@ export function DefinitionPanel({
                 onClick={() => void applyDefinition()}
                 type="button"
               >
-                {state === 'applying' ? 'Applying…' : 'Apply new version'}
+                {state === 'applying'
+                  ? t('definition.applying')
+                  : t('definition.apply')}
               </button>
               <button
                 disabled={
@@ -278,10 +271,10 @@ export function DefinitionPanel({
                 type="button"
               >
                 {state === 'running'
-                  ? 'Starting…'
+                  ? t('work.run.starting')
                   : runBlocked
-                    ? 'Can’t start Run'
-                    : 'Run current version'}
+                    ? t('work.run.cantStart')
+                    : t('definition.runCurrent')}
               </button>
             </div>
             {statusMessage ? (
@@ -317,30 +310,35 @@ export function DefinitionPanel({
       ) : null}
 
       <dl className="work-definition__facts">
-        <Fact label="Status" value={humanize(version.status)} />
-        <Fact label="Composition" value={humanize(kind)} />
-        <Fact label="Version reference" value={version.id} code />
-        <Fact label="Fingerprint" value={version.fingerprint} code />
+        <Fact label={t('definition.status')} value={humanize(version.status)} />
+        <Fact label={t('definition.composition')} value={humanize(kind)} />
+        <Fact label={t('definition.versionRef')} value={version.id} code />
         <Fact
-          label="Resolved manifest"
+          label={t('definition.fingerprint')}
+          value={version.fingerprint}
+          code
+        />
+        <Fact
+          label={t('definition.manifest')}
           value={
-            version.resolved.resource_manifest_fingerprint ?? 'Not captured'
+            version.resolved.resource_manifest_fingerprint ??
+            t('trace.notCaptured')
           }
           code={version.resolved.resource_manifest_fingerprint !== null}
         />
         <Fact
-          label="Description"
-          value={description ?? 'No description captured'}
+          label={t('tasks.descriptionLabel')}
+          value={description ?? t('definition.noDescription')}
         />
         <Fact
-          label="Environment"
+          label={t('definition.environment')}
           value={environment.label}
           code={environment.code}
         />
       </dl>
       {!editable ? (
         <div className="work-definition__agents">
-          <h3>Participants</h3>
+          <h3>{t('authoring.participants')}</h3>
           <ParticipantList participants={participants} />
         </div>
       ) : null}
@@ -372,22 +370,20 @@ function DefinitionPlanPreview({
   return (
     <aside
       className="work-definition__preview"
-      aria-label="Resolved Definition preview"
+      aria-label={t('definition.preview')}
     >
-      <p className="work-shell-kicker">Structured preview</p>
+      <p className="work-shell-kicker">{t('definition.structuredPreview')}</p>
       <h3>{humanize(plan?.resolved.kind ?? fallbackKind)}</h3>
       <p>
-        {plan
-          ? 'Server-resolved preview. This projection never writes back to source.'
-          : 'Validate to resolve exact resource references and runtime capabilities.'}
+        {plan ? t('definition.previewResolved') : t('definition.previewHint')}
       </p>
-      <h4>Workers</h4>
+      <h4>{t('trace.sessions.workerFilter')}</h4>
       <ul>
         {previewParticipants.map((participant) => (
           <li key={`${participant.role}:${participant.name}`}>
             <strong>{participant.name}</strong>
             <span>
-              {humanize(participant.role)} · {participant.source}
+              {humanize(participant.role)} · {humanize(participant.source)}
             </span>
             {participant.workerVersionId ? (
               <code>{participant.workerVersionId}</code>
@@ -397,25 +393,31 @@ function DefinitionPlanPreview({
       </ul>
       {plan ? (
         <>
-          <h4>Environment</h4>
+          <h4>{t('definition.environment')}</h4>
           <p>
             {plan.resolved.environment.environmentVersionId ??
-              `${plan.resolved.environment.source} environment`}
+              t('definition.environmentSource', {
+                source: humanize(plan.resolved.environment.source),
+              })}
           </p>
-          <h4>Runtime</h4>
+          <h4>{t('definition.runtime')}</h4>
           <p>
             {plan.resolved.requiredRuntimeCapabilities.length
               ? plan.resolved.requiredRuntimeCapabilities.join(' · ')
-              : 'No additional runtime capabilities required'}
+              : t('definition.noRuntime')}
           </p>
-          <h4>Platform</h4>
+          <h4>{t('authoring.platform')}</h4>
           <p>
             {plan.resolved.platformCapabilities.length
               ? plan.resolved.platformCapabilities.join(' · ')
-              : 'No platform capability declared'}
+              : t('definition.noPlatform')}
           </p>
-          <h4>Memory</h4>
-          <p>{plan.resolved.memoryVersionIds.length} immutable binding(s)</p>
+          <h4>{t('definition.memory')}</h4>
+          <p>
+            {t('definition.bindings', {
+              count: plan.resolved.memoryVersionIds.length,
+            })}
+          </p>
         </>
       ) : null}
     </aside>
@@ -437,13 +439,13 @@ function ParticipantList({
           {participant.versionId ? (
             <code>{participant.versionId}</code>
           ) : (
-            <span>Inline Worker materialized at apply</span>
+            <span>{t('definition.inlineWorker')}</span>
           )}
         </li>
       ))}
     </ul>
   ) : (
-    <p>Participant details were not captured in this author source.</p>
+    <p>{t('definition.noParticipants')}</p>
   );
 }
 
@@ -478,7 +480,7 @@ function participantsFromSource(
   if (kind === 'single_worker')
     return [
       {
-        name: 'Primary Worker',
+        name: t('definition.primaryWorker'),
         role: 'primary',
         versionId: stringValue(spec.worker_version_id),
       },
@@ -490,7 +492,7 @@ function participantsFromSource(
   const result: ParticipantView[] = [];
   if (lead)
     result.push({
-      name: stringValue(lead.name) ?? 'Lead',
+      name: stringValue(lead.name) ?? t('authoring.lead'),
       role: 'lead',
       versionId: stringValue(lead.worker_version_id),
     });
@@ -498,7 +500,7 @@ function participantsFromSource(
     const member = asRecord(item);
     if (!member) continue;
     result.push({
-      name: stringValue(member.name) ?? 'Member',
+      name: stringValue(member.name) ?? t('definition.member'),
       role: 'member',
       versionId: stringValue(member.worker_version_id),
     });
@@ -511,12 +513,12 @@ function resourceBinding(
   versionKey: string,
   inlineKey: string,
 ): { readonly label: string; readonly code: boolean } {
-  if (!spec) return { label: 'Not captured', code: false };
+  if (!spec) return { label: t('trace.notCaptured'), code: false };
   const versionId = stringValue(spec[versionKey]);
   if (versionId) return { label: versionId, code: true };
   if (asRecord(spec[inlineKey]))
-    return { label: 'Inline resource materialized at apply', code: false };
-  return { label: 'Not captured', code: false };
+    return { label: t('definition.inlineResource'), code: false };
+  return { label: t('trace.notCaptured'), code: false };
 }
 
 export function diagnosticsFrom(value: unknown): DefinitionDiagnostics {

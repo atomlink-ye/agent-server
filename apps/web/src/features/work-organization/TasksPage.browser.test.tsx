@@ -3,7 +3,10 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, expect, it, vi } from 'vitest';
-import { page } from 'vitest/browser';
+import { commands, page } from 'vitest/browser';
+import { setLocale, t } from '../../i18n';
+import { copyRegressions } from '../../test-support/copy-regressions';
+import { findCopy, measureCopy } from '../../test-support/copy-measurement';
 
 import '../../index.css';
 import { AppShell } from '../../app/shell/AppShell';
@@ -689,3 +692,60 @@ function shellCommands() {
     },
   };
 }
+
+const copyMeasurements: unknown[] = [];
+it.each(['en', 'zh-CN'] as const)(
+  'fits the Work creation heading in %s at 1440',
+  async (locale) => {
+    await page.viewport(1440, 900);
+    setLocale(locale);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const path = String(input);
+        if (path === '/api/work-items') return json({ work_items: [task()] });
+        if (path === '/api/agents') return json({ items: [] });
+        if (path === `/api/work-items/${workItemId}/comments`)
+          return json({ comments: [] });
+        if (path === '/api/work-definitions') return json({ items: [] });
+        throw new Error(`Unexpected request: ${path}`);
+      }),
+    );
+    const host = document.createElement('div');
+    host.style.width = '1368px';
+    document.body.append(host);
+    const root = createRoot(host);
+    try {
+      await act(async () =>
+        root.render(
+          <MemoryRouter>
+            <TasksPage selectedWorkItemId={workItemId} />
+          </MemoryRouter>,
+        ),
+      );
+      await act(settle);
+      const section = host.querySelector<HTMLElement>('.title-bar-section')!;
+      expect(section.textContent).toBe(t('tasks.title'));
+      copyMeasurements.push({
+        locale,
+        key: 'tasks.title',
+        ...measureCopy(section, 'Tasks'),
+      });
+      const copy = copyRegressions['tasks.startWork'][locale];
+      copyMeasurements.push({
+        locale,
+        key: 'tasks.startWork',
+        ...measureCopy(findCopy(host, copy.after, 'h2'), copy.before),
+      });
+      await commands.writeInventory(
+        JSON.stringify({ kind: 'tasks-copy', measurements: copyMeasurements }),
+        'canary',
+      );
+    } finally {
+      await act(async () => root.unmount());
+      host.remove();
+      setLocale('en');
+      vi.unstubAllGlobals();
+    }
+  },
+);

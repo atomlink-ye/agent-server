@@ -1,3 +1,4 @@
+import { t } from '@/i18n';
 import type { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import './not-found.css';
@@ -7,10 +8,10 @@ export function NotFoundContent({
   children,
   to,
   linkLabel,
-  eyebrow = 'Route unavailable',
+  eyebrow = t('route.unavailable'),
   as: Container = 'section',
   onRetry,
-  retryLabel = 'Try again',
+  retryLabel = t('work.start.retry'),
   mark = '404',
   variant = 'page',
 }: {
@@ -53,14 +54,11 @@ export function NotFoundPage() {
   return (
     <NotFoundContent
       as="main"
-      title="This workspace view doesn’t exist."
+      title={t('route.missing')}
       to="/"
-      linkLabel="Go to Conversations"
+      linkLabel={t('route.back')}
     >
-      <>
-        <code>{location.pathname}</code> isn’t a page in this Agent Server
-        workspace. Return to Conversations to keep working.
-      </>
+      <>{t('route.missingBody', { path: location.pathname })}</>
     </NotFoundContent>
   );
 }

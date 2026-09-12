@@ -35,7 +35,7 @@ export class WorkDetailRootNotFoundError extends Error {
 
 export async function loadWorkDetail(
   workId: string,
-  selectedRunId: string | undefined,
+  selectedWorkRunId: string | undefined,
   preferCurrentDefinition: boolean,
   includeTrace = true,
   includeRun = true,
@@ -54,10 +54,10 @@ export async function loadWorkDetail(
     throw error;
   }
   const runs = await loadWorkRuns(workId);
-  const selectedSummary = selectedRunId
-    ? runs.find((run) => run.id === selectedRunId)
+  const selectedSummary = selectedWorkRunId
+    ? runs.find((run) => run.id === selectedWorkRunId)
     : runs[0];
-  if (selectedRunId && !selectedSummary) {
+  if (selectedWorkRunId && !selectedSummary) {
     throw new Error('The selected Product WorkRun is not available.');
   }
 
@@ -119,9 +119,9 @@ export async function loadWorkDetail(
 
 export async function loadRunRoleSummaries(
   workId: string,
-  runId: string,
+  workRunId: string,
 ): Promise<readonly AgentSummary[]> {
-  return workRunClient.sessionTranscripts(workId, runId);
+  return workRunClient.sessionTranscripts(workId, workRunId);
 }
 
 export { type AnchoredRun, type NormalizedTrace, type AgentSummary };

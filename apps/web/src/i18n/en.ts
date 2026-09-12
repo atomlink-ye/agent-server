@@ -642,7 +642,6 @@ export const en = {
   'work.roster': 'Roster',
   'work.latestRunStatus': 'Latest WorkRun',
   'work.moreActions': 'More Definition actions',
-  'work.bindCoworker': 'Manage Coworker access to this Definition',
   'work.bindingFailed':
     'This Definition could not be made available. Try again.',
   'work.definitionStartIntro':

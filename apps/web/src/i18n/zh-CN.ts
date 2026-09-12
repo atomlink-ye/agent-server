@@ -602,7 +602,6 @@ export const zhCN: Record<MessageKey, string> = {
   'work.roster': '成员列表',
   'work.latestRunStatus': '最新 WorkRun',
   'work.moreActions': '更多 Definition 操作',
-  'work.bindCoworker': '管理 Definition 访问权限',
   'work.bindingFailed': '无法向该 Coworker 开放这个 Definition，请重试。',
   'work.definitionStartIntro':
     '检查 Definition 和输入，由其 Worker 或 Team 执行 WorkRun。',

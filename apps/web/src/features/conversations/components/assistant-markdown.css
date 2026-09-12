@@ -1,0 +1,23 @@
+/* Browser heading multipliers can shrink H5/H6 below the compact text floor.
+   The renderer owns its heading scale across chat, reports, and transcripts. */
+div.assistant-markdown :is(h1, h2, h3, h4, h5, h6) {
+  line-height: var(--leading-ui);
+}
+div.assistant-markdown h1 {
+  font-size: var(--text-display);
+}
+div.assistant-markdown h2 {
+  font-size: var(--text-title);
+}
+div.assistant-markdown h3 {
+  font-size: var(--text-heading);
+}
+div.assistant-markdown h4 {
+  font-size: var(--text-lg);
+}
+div.assistant-markdown h5 {
+  font-size: var(--text-md);
+}
+div.assistant-markdown h6 {
+  font-size: var(--text-xs);
+}

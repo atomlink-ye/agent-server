@@ -235,7 +235,7 @@ for a person reading English at work and Chinese at home.
 
 ### Typography and reading density
 
-All CSS font sizes in `apps/web/src` use the `--text-*` scale in `index.css`.
+All authored CSS font sizes in `apps/web` use the `--text-*` scale in `index.css`.
 Compact labels, metadata, and small hints share a 12px floor; body and emphasized
 text use 13px and 14px, with 16px, 20px, and 24px heading steps. The same floor
 applies in both locales because user-authored titles and messages can mix scripts.
@@ -246,7 +246,9 @@ Leading also uses tokens: `--leading-tight` (1.35) for short headings,
 `--leading-ui` (1.5) for controls, `--leading-body` (1.6) for prose, and
 `--leading-code` (1.65) for source/transcript reading. Symbol alignment tokens
 are reserved for existing icon controls. Explicitly size `<small>` hints rather
-than relying on the browser's relative-size default.
+than relying on the browser's relative-size default. The shared Markdown renderer
+also explicitly maps H1–H6 to 24/20/16/14/13/12px with UI leading, so nested
+report, transcript, and chat headings cannot inherit sub-floor browser multipliers.
 
 The Work directory balances its two text lines with 4px vertical row padding
 and a 2px internal gap; `.work-pane-scroll` remains the scroll owner. The
@@ -254,7 +256,11 @@ compact desktop budget is a 49.5px row with 14 fully visible entries at
 1440×900 in English and Simplified Chinese. Directory activity and title
 structure must fit that budget without shrinking text. The Chromium typography
 test pins rendered roles and fully visible rows. The node typography test rejects
-raw CSS font sizes (including shorthand) and local line-height literals.
+raw sizes across the complete authored `apps/web` tree, including inline styles
+and HTML/SVG attributes, with positive controls for the inventory and detector.
+It also rejects non-token CSS font shorthands and local line-height literals.
+Browser tests pin Markdown heading geometry and compare long Chinese title
+ellipsis paint against complete-character prefixes at the desktop viewport.
 
 ### Migrating a surface
 

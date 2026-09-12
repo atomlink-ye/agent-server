@@ -251,12 +251,10 @@ for (const locale of ['en', 'zh-CN'] as const) {
       // platform-dependent, so measure the gap directly instead of
       // hardcoding it.
       const detailHeader = header.parentElement!;
-      const kicker = detailHeader.querySelector<HTMLElement>(
-        '.work-shell-kicker',
-      );
-      const statePill = detailHeader.querySelector<HTMLElement>(
-        '.work-state-pill',
-      )!;
+      const kicker =
+        detailHeader.querySelector<HTMLElement>('.work-shell-kicker');
+      const statePill =
+        detailHeader.querySelector<HTMLElement>('.work-state-pill')!;
       const headerRect = header.getBoundingClientRect();
       const statePillRect = statePill.getBoundingClientRect();
       const gap = kicker

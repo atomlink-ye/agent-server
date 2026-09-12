@@ -83,7 +83,8 @@ it('keeps execution vocabulary within the desktop header in both locales', async
       // and the siblings' own widths are rendered text, which is
       // platform-dependent. Assert the layout intent directly: measure the
       // gap from an adjacent sibling and derive the space the heading fills.
-      const previousSibling = heading.previousElementSibling as HTMLElement | null;
+      const previousSibling =
+        heading.previousElementSibling as HTMLElement | null;
       const nextSibling = heading.nextElementSibling as HTMLElement | null;
       const gap = previousSibling
         ? headingRect.left - previousSibling.getBoundingClientRect().right

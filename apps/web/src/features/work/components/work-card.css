@@ -26,7 +26,13 @@
 .work-card h3 {
   line-height: var(--leading-ui);
 }
-.work-card-result {
+/* The component already bounds the preview to 180 characters. Let that
+   preview wrap fully; the card's minimum height must not hide its final lines. */
+.work-card .work-card-result {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+  overflow-wrap: anywhere;
   line-height: var(--leading-ui);
 }
 /* Reserve geometry immediately, but do not flash feedback for fast reads. */

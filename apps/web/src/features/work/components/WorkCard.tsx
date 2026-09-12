@@ -17,8 +17,8 @@ export interface WorkCardProps {
  * The live handle on a Work inside a conversation: what it is, where it stands
  * now, and a way in. It is deliberately not a place to read the Work's output.
  * A result summary is a whole report — rendering it here turned the card into a
- * wall of raw markdown that dwarfed the conversation — so the card shows one
- * condensed line and the full text stays on the Work page, or in the Agent's
+ * wall of raw markdown that dwarfed the conversation — so the card shows a
+ * short preview and the full text stays on the Work page, or in the Agent's
  * own message when the Agent chooses to say it.
  */
 export function WorkCard({ workRef, onOpen }: WorkCardProps) {
@@ -135,8 +135,8 @@ const summaryCharacterLimit = 180;
 /**
  * A Work's result is authored as markdown, so the card was showing the syntax
  * itself — headings, fences, table pipes — as one unbroken paragraph. Flatten
- * it to a single readable line and cut it: this is a glance, not the document.
- * The character limit is the ceiling; CSS clamps to the visible line count.
+ * it to a short readable preview: this is a glance, not the document.
+ * The character limit bounds the preview; CSS wraps all of that bounded text.
  */
 function condense(text: string): string {
   const flat = text

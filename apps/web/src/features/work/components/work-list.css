@@ -372,3 +372,22 @@
   margin: 0;
   padding: 16px 8px;
 }
+
+.work-run-read-error {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--ink-500);
+  font-size: var(--text-xs);
+  line-height: var(--leading-ui);
+}
+.work-run-read-error button {
+  padding: 4px 8px;
+  border: 1px solid var(--ink-200);
+  border-radius: var(--radius-sm);
+  background: var(--cloud);
+  color: var(--sky-ink);
+  font: inherit;
+  cursor: pointer;
+}

@@ -5,6 +5,11 @@ import { zhCN } from './zh-CN';
 // Product records, execution instances, and Definition access have distinct names.
 it.each([
   [
+    'work.chat.runLead',
+    'Questions about this WorkRun · no execution changes',
+    'WorkRun 问答 · 不更改执行',
+  ],
+  [
     'workCard.statusUnavailable',
     'Latest WorkRun unavailable',
     '最新 WorkRun 不可用',

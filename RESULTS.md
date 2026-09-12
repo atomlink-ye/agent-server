@@ -228,3 +228,8 @@ $ tsc -p tsconfig.app.json --noEmit
 ```
 
 The branch is delivered with passing scoped checks and the red full-suite/lint evidence above; it is not a claim of a clean repository-wide gate. All test processes started by this lane have completed. No development server or temporary infrastructure remains to hand off. No PR was opened, and no master rebase or merge was performed.
+
+
+## Round 2 quota convergence
+
+Round 2 is on `wui3/lane-b-r2`; see `RESULTS-R2.md` for complete copy changes and evidence. The deputy required immediate convergence on 2026-09-12. `pnpm test:web`, the final `pnpm web:check:types`, and final `pnpm lint` are **unverified at convergence**: in-flight checks exceeded the two-minute stop window or had no completed final rerun. The earlier 40-test i18n/source/helper subset and the 2-test expanded browser copy fixture passed (34 captured measurements). Additional browser fixtures and exhaustive overflow coverage remain unfinished. No later green result is claimed.

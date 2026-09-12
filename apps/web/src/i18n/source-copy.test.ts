@@ -59,6 +59,11 @@ function untranslatedCopy(text: string): string[] {
           'placeholder',
           'alt',
           'label',
+          'section',
+          'description',
+          'emptyLabel',
+          'heading',
+          'hint',
         ].includes(attribute.name.getText(source));
       const prose = /[A-Za-z]{2,}[ '’]+[A-Za-z]{2,}/u.test(value);
       const directLabel =
@@ -92,7 +97,10 @@ function untranslatedCopy(text: string): string[] {
           'new-password',
         ].includes(value);
       const parent = node.parent;
-      const key = ts.isCallExpression(parent) && parent.arguments[0] === node && parent.expression.getText(source) === 't';
+      const key =
+        ts.isCallExpression(parent) &&
+        parent.arguments[0] === node &&
+        parent.expression.getText(source) === 't';
       const comparison =
         ts.isBinaryExpression(parent) &&
         [
@@ -124,6 +132,7 @@ function untranslatedCopy(text: string): string[] {
 
 it('detects known JSX text, templates, accessibility labels, and editable defaults', () => {
   expect(untranslatedCopy('<p>Hello</p>')).toHaveLength(1);
+  expect(untranslatedCopy('<TitleBar section="Tasks" />')).toHaveLength(1);
   expect(untranslatedCopy("<p>{format('Hello world')}</p>")).toHaveLength(1);
   expect(untranslatedCopy('<p>{`${count} comments`}</p>')).toHaveLength(1);
   expect(untranslatedCopy('<p title="Details" />')).toHaveLength(1);

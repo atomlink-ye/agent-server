@@ -794,7 +794,7 @@ export const en = {
   'work.chat.runEmptyBody':
     'Ask about this WorkRun. Replies cannot access execution history or change execution.',
   'work.chat.runPlaceholder': 'Ask about this WorkRun…',
-  'work.chat.runLead': 'WorkRun conversation · no execution changes',
+  'work.chat.runLead': 'Questions about this WorkRun · no execution changes',
   'work.chat.preparation.collecting': 'Gathering details',
   'work.chat.preparation.ready': 'Ready to start',
   'work.chat.preparation.starting': 'Preparing your WorkRun',

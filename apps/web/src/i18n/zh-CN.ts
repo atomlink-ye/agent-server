@@ -740,7 +740,7 @@ export const zhCN: Record<MessageKey, string> = {
   'work.chat.runEmptyBody':
     '可询问此 WorkRun；回复无法读取执行历史或更改执行。',
   'work.chat.runPlaceholder': '询问此 WorkRun…',
-  'work.chat.runLead': 'WorkRun 对话 · 不更改执行',
+  'work.chat.runLead': 'WorkRun 问答 · 不更改执行',
   'work.chat.preparation.collecting': '收集信息',
   'work.chat.preparation.ready': '可以开始了',
   'work.chat.preparation.starting': '准备 WorkRun',

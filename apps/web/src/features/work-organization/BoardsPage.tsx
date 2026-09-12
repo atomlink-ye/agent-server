@@ -323,7 +323,7 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
       </aside>
 
       <main className="chat-panel work-board-main">
-        <TitleBar section="Boards" />
+        <TitleBar section={t('boards.title')} />
         <section
           className="work-org-content scroll-region"
           aria-label={t('boards.canvas')}

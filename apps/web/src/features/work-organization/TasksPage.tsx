@@ -287,7 +287,7 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
       </aside>
 
       <main className="chat-panel work-org-main">
-        <TitleBar section="Tasks" />
+        <TitleBar section={t('tasks.title')} />
         <section
           className="work-org-content scroll-region"
           aria-label={t('tasks.details')}

@@ -2,10 +2,15 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { ProductSessionTranscriptsResponse } from '@atomlink-ye/agent-server/product-contract';
 import { expect, it, vi } from 'vitest';
+import { commands, page } from 'vitest/browser';
+import { setLocale } from '@/i18n';
+import { measureCopy } from '@/test-support/copy-measurement';
 
 import reworkRecording from '@/test-support/fixtures/product-recordings/rework-once.json';
 import { SessionTranscripts } from './session-transcripts';
 import { parseRecordedTrace } from '@/test-support/run-trace-recording-test-helpers';
+
+const copyMeasurements: unknown[] = [];
 
 (
   globalThis as typeof globalThis & {
@@ -425,3 +430,62 @@ it('renders a single-agent session with no role element shown', async () => {
     vi.unstubAllGlobals();
   }
 });
+
+it.each(['en', 'zh-CN'] as const)(
+  'names a completed Task attempt Run in %s at 1440',
+  async (locale) => {
+    await page.viewport(1440, 900);
+    setLocale(locale);
+    const trace = parseRecordedTrace(reworkRecording);
+    const response = structuredClone(MOCK_RESPONSE);
+    response.work_id = trace.work.id;
+    response.work_run_id = trace.workRun.id;
+    response.sessions[0]!.entries = [
+      {
+        ordinal: 1,
+        kind: 'lifecycle',
+        sequence: 1,
+        created_at: '2026-08-17T09:58:00.000Z',
+        status: 'completed',
+      },
+    ];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, json: async () => response }),
+    );
+    const host = document.createElement('div');
+    host.style.width = '966px';
+    document.body.append(host);
+    const root = createRoot(host);
+    try {
+      await act(async () => root.render(<SessionTranscripts trace={trace} />));
+      const rule = host.querySelector<HTMLElement>('.transcript__rule')!;
+      expect(rule?.textContent).toBe(
+        locale === 'en' ? 'Run completed' : 'Run：已完成',
+      );
+      expect(rule.textContent).not.toContain('WorkRun');
+      const metrics = measureCopy(
+        rule,
+        locale === 'en' ? 'WorkRuncompleted' : 'WorkRun 详情已完成',
+      );
+      expect(metrics.after.width).toBeLessThanOrEqual(966);
+      copyMeasurements.push({
+        locale,
+        key: 'trace.sessions.runState',
+        ...metrics,
+      });
+      await commands.writeInventory(
+        JSON.stringify({
+          kind: 'technical-run-copy',
+          measurements: copyMeasurements,
+        }),
+        'canary',
+      );
+    } finally {
+      await act(async () => root.unmount());
+      host.remove();
+      vi.unstubAllGlobals();
+      setLocale('en');
+    }
+  },
+);

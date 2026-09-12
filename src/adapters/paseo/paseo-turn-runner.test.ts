@@ -207,8 +207,8 @@ describe('PaseoTurnRunner', () => {
 
     // The generic-boundary path must remain unaffected for errors without a
     // structured missing-session code.
-    expect(
-      logs.some((entry) => entry.event === 'runtime.wait.completed'),
-    ).toBe(false);
+    expect(logs.some((entry) => entry.event === 'runtime.wait.completed')).toBe(
+      false,
+    );
   });
 });

@@ -13,7 +13,7 @@ unmet, and a completion hook that wakes whatever was waiting.
 
 A table of that shape already exists: `team_work_item_dependencies`, added by
 migration `0025_agent_team_work_dependencies.sql`. It belongs to `collaboration`
-— the task graph *inside* a single team execution — and nothing in
+— the task graph _inside_ a single team execution — and nothing in
 `domain/work-organization` or `application/work-organization` reads it. The Board
 Tasks a person sees have no dependency concept at all.
 
@@ -33,7 +33,7 @@ has to sign off, and behaves accordingly.
 
 An agent that can read a brief can read "wait until the pricing review lands"
 just as reliably as it can obey a `blocked` flag — and the sentence carries the
-*reason*, which the flag does not. The graph would add a schema, a claim-time
+_reason_, which the flag does not. The graph would add a schema, a claim-time
 guard, a completion hook, and a whole class of states (`blocked`, partially
 satisfied, cycles) whose only job is to re-encode something already writable in
 one line of English.

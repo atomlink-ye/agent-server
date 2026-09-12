@@ -205,6 +205,7 @@ generation 走马灯式重建，`agent_definitions` 才是 Cumora 里 `participa
 ### 改什么
 
 1. **新 migration** `src/infrastructure/postgres/migrations/0072_agent_computers.sql`：
+
    ```sql
    BEGIN;
 
@@ -225,12 +226,14 @@ generation 走马灯式重建，`agent_definitions` 才是 Cumora 里 `participa
 
    COMMIT;
    ```
+
    跟随本仓库既有风格：`tenant_id`/`workspace_id` 为文本软字段（对齐
    `agent_definitions` 自己的写法），用 `updated_after_created` check 约束
    （对齐 0003/0071 的既有约定），不在 migration 里塞种子数据。
    `computer_id` 允许为 NULL——代表"未分配，走默认共享 runtime"，向后兼容现有行。
 
 2. **新领域类型** `src/domain/runtime/computer.ts`：
+
    ```ts
    export type ComputerKind = 'cloud' | 'local' | 'vps';
    export interface Computer {
@@ -244,6 +247,7 @@ generation 走马灯式重建，`agent_definitions` 才是 Cumora 里 `participa
      readonly updatedAt: string;
    }
    ```
+
    `AgentDefinition`（`src/domain/agents/managed-agent-definition.ts:4-12`）
    增加 `readonly computerId: string | null;`。
 
@@ -266,6 +270,7 @@ psql "$DATABASE_URL" -c "\d agent_definitions" | grep computer_id
 psql "$DATABASE_URL" -c "\d computers"
 pnpm vitest run src/application/agents/agent-workspace-cwd.test.ts
 ```
+
 新增一个 `agent-workspace-cwd.test.ts` 用例：断言
 `agentWorkspaceCwd('/root', 'agent-1', 'computer-1') === '/root/computer-1/agent-1'`
 且 `agentWorkspaceCwd('/root', 'agent-1', null) === '/root/default/agent-1'`。
@@ -273,9 +278,10 @@ pnpm vitest run src/application/agents/agent-workspace-cwd.test.ts
 确定性的 pass/fail。
 
 **判据**：这一步做完后，"Computer"从"文档里的概念"变成"schema 里一张真实的表
-+ 一个真实分叉的文件系统路径"，但完全不涉及配对协议、不涉及真实多机、
-不改变任何运行时行为（默认路径行为不变，只是多了一层 `default/` 目录）。
-这是故意的——先把类型形状和挂载点定下来，下一轮再谈真正的放置逻辑。
+
+- 一个真实分叉的文件系统路径"，但完全不涉及配对协议、不涉及真实多机、
+  不改变任何运行时行为（默认路径行为不变，只是多了一层 `default/` 目录）。
+  这是故意的——先把类型形状和挂载点定下来，下一轮再谈真正的放置逻辑。
 
 ## 四、明确的非目标（这一版不做，及原因）
 

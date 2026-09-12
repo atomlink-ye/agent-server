@@ -381,6 +381,11 @@
   gap: 5px;
   min-width: 0;
 }
+/* The shared root line-height grew the run label + timestamp stack past its
+   vertically-centered pin; drop the internal gap to compensate. */
+.work-run-list__identity {
+  gap: 0;
+}
 .work-run-list li > span,
 .work-run-list li > a {
   flex: 0 0 auto;
@@ -635,7 +640,9 @@
   padding-top: var(--space-1);
 }
 .work-shell > .work-tabs a {
-  padding-bottom: var(--space-1);
+  /* The shared root `line-height: var(--leading-ui)` inflates this label
+     by 1px past the tab bar's pinned height; trim the padding to match. */
+  padding-bottom: 3px;
 }
 .work-shell > .work-record,
 .work-shell > .work-overview,

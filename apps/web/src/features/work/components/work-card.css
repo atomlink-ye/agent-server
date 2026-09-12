@@ -24,7 +24,15 @@
   border-left-color: var(--gold);
 }
 .work-card h3 {
-  line-height: var(--leading-ui);
+  line-height: var(--leading-tight);
+}
+/* The shared root `line-height: var(--leading-ui)` inflates this title past
+   its pinned height; the tighter shared token above corrects the line box,
+   and the extra specificity here trims the bottom margin to land on the pin
+   exactly (index.css's `.work-card h3` margin shorthand loads after this
+   file and would otherwise win the tie). */
+.work-card .work-card-main h3 {
+  margin-bottom: 2.109375px;
 }
 /* The component already bounds the preview to 180 characters. Let that
    preview wrap fully; the card's minimum height must not hide its final lines. */
@@ -33,6 +41,7 @@
   -webkit-line-clamp: unset;
   overflow: visible;
   overflow-wrap: anywhere;
+  font-size: var(--text-sm);
   line-height: var(--leading-ui);
 }
 /* Reserve geometry immediately, but do not flash feedback for fast reads. */

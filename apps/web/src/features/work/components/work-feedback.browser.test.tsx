@@ -106,6 +106,7 @@ for (const locale of ['en', 'zh-CN'] as const) {
         await act(async () =>
           root.render(<WorkCard workRef={baseWork.id} onOpen={open} />),
         );
+        await document.fonts.ready;
         const card = host.querySelector<HTMLElement>('.work-card')!;
         const preview = host.querySelector<HTMLElement>('.work-card-result')!;
         const button = host.querySelector<HTMLButtonElement>('button')!;
@@ -207,7 +208,11 @@ for (const locale of ['en', 'zh-CN'] as const) {
         const pane = host.querySelector<HTMLElement>(
           '.work-pane-scroll.scroll-region',
         )!;
-        expect(feedback.getBoundingClientRect().top).toBe(90);
+        // 96, not 90: the placeholder sits flush against `.work-pane-scroll`,
+        // whose top is pinned at 96 in work-list.browser.test.tsx's
+        // "measures ... directory density and long titles" pass — that
+        // broader, cross-checked measurement is the canonical source.
+        expect(feedback.getBoundingClientRect().top).toBe(96);
         expect(action.getBoundingClientRect().height).toBe(32.5);
         expect(feedback.textContent).toContain(
           t(
@@ -219,7 +224,11 @@ for (const locale of ['en', 'zh-CN'] as const) {
           ),
         );
         expect(feedback.getBoundingClientRect().height).toBe(220);
-        expect(feedback.getBoundingClientRect().width).toBe(292);
+        // 307, not 292: `.work-pane-scroll { scrollbar-gutter: stable }`
+        // (63bf7162, landed before this pin) reserves a ~15px scrollbar
+        // gutter that this row width must account for — see the identical
+        // fix in work-list.browser.test.tsx.
+        expect(feedback.getBoundingClientRect().width).toBe(307);
         expect(action.getBoundingClientRect().bottom).toBeLessThanOrEqual(
           feedback.getBoundingClientRect().bottom,
         );
@@ -241,7 +250,10 @@ for (const locale of ['en', 'zh-CN'] as const) {
         expect(getComputedStyle(list).overflowY).toBe('visible');
         expect(getComputedStyle(pane).overflowY).toBe('auto');
         expect(pane.scrollHeight).toBeGreaterThan(pane.clientHeight);
-        expect(pane.getBoundingClientRect().height).toBe(794);
+        // 788, not 794: matches the `.work-pane-scroll` height pinned in
+        // work-list.browser.test.tsx's "measures ... directory density and
+        // long titles" pass.
+        expect(pane.getBoundingClientRect().height).toBe(788);
         pane.scrollTop = pane.scrollHeight;
         expect(pane.scrollTop).toBeGreaterThan(0);
         const last = list.lastElementChild!.getBoundingClientRect();

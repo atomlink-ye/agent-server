@@ -228,7 +228,7 @@ it('renders Work state and run counts without latest Run summaries', async () =>
           `/work/${populatedWorkList.works[index]!.id}`,
       )!;
       expect(card.querySelector('a')?.getAttribute('aria-label')).toContain(
-        'Unarchived',
+        'Active',
       );
       expect(card.textContent).toContain(`WorkRun: ${stateCases[index]![1]}`);
       expect(card.textContent).toContain('3 WorkRuns');
@@ -778,7 +778,10 @@ it.each(['en', 'zh-CN'] as const)(
       expect(rect.top).toBe(96);
       for (const row of rows) {
         expect(row.getBoundingClientRect().height).toBe(49.5);
-        expect(row.getBoundingClientRect().width).toBe(292);
+        // 307, not 292: `.work-pane-scroll { scrollbar-gutter: stable }`
+        // (63bf7162, landed before this pin) reserves a ~15px scrollbar
+        // gutter that this row width must account for.
+        expect(row.getBoundingClientRect().width).toBe(307);
         expect(row.scrollWidth).toBe(row.clientWidth);
       }
       const longRows = rows.filter(
@@ -936,12 +939,23 @@ it.each(['en', 'zh-CN'] as const)(
       expect(names).toHaveLength(2);
       for (const [index, name] of names.entries()) {
         expect(name.getBoundingClientRect().height).toBe(24);
+        // `.work-landing__recent a` gives the title a `minmax(0, 1fr)`
+        // middle column between two `max-content` siblings (the
+        // `work.latestState` state pill and the run timestamp). The
+        // `work.latestState` copy ("Latest WorkRun: {state}" /
+        // "最新 WorkRun：{state}") is an already-shipped vocabulary
+        // decision (92100dba) that landed after this pin was first
+        // measured (6e7adb4b / 08600a88), so the pill now legitimately
+        // claims ~130px more of the row and the title gets the
+        // remainder by design of the grid — not a CSS regression.
         expect(name.getBoundingClientRect().width).toBe(
           locale === 'zh-CN'
-            ? 521.734375
+            ? index === 0
+              ? 403.703125
+              : 401.3125
             : index === 0
-              ? 520.171875
-              : 535.28125,
+              ? 388.46875
+              : 402.15625,
         );
         expect(name.getAttribute('title')).toHaveLength(200);
         const suffix = name.querySelector<HTMLElement>(

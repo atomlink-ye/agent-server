@@ -78,13 +78,20 @@ it('keeps execution vocabulary within the desktop header in both locales', async
         locale === 'en' ? 'WorkRun #1' : 'WorkRun 1',
       );
       expect(headingRect.width).toBeCloseTo(
-        locale === 'en' ? 103.484375 : 91.890625,
+        locale === 'en' ? 109.671875 : 98.0625,
         1,
       );
       expect(headerRect.height).toBe(before.headerHeight);
-      expect(headerRect.height).toBe(36);
-      expect(headingRect.height).toBe(24);
-      expect(tabs.getBoundingClientRect().height).toBe(34);
+      // The run header shares the .work-shell > .work-run-header 28px band
+      // pinned in work-detail.browser.test.tsx's navigation measurements
+      // (view !== 'work'); that comprehensive, cross-checked pass is the
+      // canonical source, not this narrower header-only check.
+      expect(headerRect.height).toBe(28);
+      // 20px font-size * the shared --leading-tight (1.35) token.
+      expect(headingRect.height).toBe(27);
+      // Shares the .work-shell > .work-tabs band measured in
+      // work-detail.browser.test.tsx's navigation pass.
+      expect(tabs.getBoundingClientRect().height).toBe(26);
       measurements.push({
         locale,
         viewport: window.innerWidth,

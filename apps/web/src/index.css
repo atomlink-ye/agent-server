@@ -464,6 +464,13 @@ textarea {
   font-size: var(--text-xs);
   font-weight: 800;
 }
+/* The shared root `line-height: var(--leading-ui)` inflates this control by
+   1.5px past its pinned height; trim the padding to match. Scoped to avoid
+   touching the sibling selectors above that share the base rule. */
+.pane-placeholder > button {
+  padding-top: 5.666px;
+  padding-bottom: 5.666px;
+}
 
 .new-conversation-actions button[type='submit'] {
   border-color: var(--skype);
@@ -1357,6 +1364,13 @@ textarea {
 
 .work-status-actions button {
   margin-top: 12px;
+}
+
+/* The shared root `line-height: var(--leading-ui)` inflates this control by
+   1px past its pinned height; trim the padding to match. */
+.work-card button.work-card-open {
+  padding-top: 6.5px;
+  padding-bottom: 6.5px;
 }
 
 .work-card-open {

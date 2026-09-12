@@ -109,7 +109,7 @@ A Board is a Workspace-scoped coordination projection. A WorkItem can exist with
 | Method   | Path                                     | Success | Semantics                                                                 |
 | -------- | ---------------------------------------- | ------- | ------------------------------------------------------------------------- |
 | `GET`    | `/api/v1/boards`                         | `200`   | Lists owner-scoped Boards.                                                |
-| `POST`   | `/api/v1/boards`                         | `201`   | Creates a Board with Todo/Doing/Done columns and matching kinds.            |
+| `POST`   | `/api/v1/boards`                         | `201`   | Creates a Board with Todo/Doing/Done columns and matching kinds.          |
 | `GET`    | `/api/v1/boards/{id}`                    | `200`   | Returns Board, ordered columns, placements, and the referenced WorkItems. |
 | `PATCH`  | `/api/v1/boards/{id}`                    | `200`   | Updates title/description.                                                |
 | `DELETE` | `/api/v1/boards/{id}`                    | `204`   | Deletes Board projection; WorkItems remain.                               |

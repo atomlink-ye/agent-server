@@ -205,7 +205,10 @@ export async function resolveHostProviderToolchain(
   );
   const missing = resolved
     .filter(([, path]) => !path)
-    .map(([name]) => `${name} (${hostProviderBinaryNames[name as keyof typeof hostProviderBinaryNames]})`);
+    .map(
+      ([name]) =>
+        `${name} (${hostProviderBinaryNames[name as keyof typeof hostProviderBinaryNames]})`,
+    );
   if (missing.length) {
     throw new Error(
       `host provider toolchain incomplete: missing ${missing.join(', ')}. Install the CLI or set the listed environment variable to an executable path.`,

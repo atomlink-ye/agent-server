@@ -9,14 +9,12 @@ export function WorkDetailHeader({
   work,
   run,
   runOrdinal,
-  runCount,
   originConversationId = null,
   actions,
 }: {
   readonly work: WorkResponse;
   readonly run: AnchoredRun | null;
   readonly runOrdinal?: number;
-  readonly runCount?: number;
   readonly originConversationId?: string | null;
   readonly actions?: ReactNode;
 }) {
@@ -28,12 +26,7 @@ export function WorkDetailHeader({
           {t('work.run.backToWork', { title: work.title })}
         </a>
         <span aria-hidden="true">›</span>
-        <h1>
-          {t('work.scope.selected', {
-            number: runOrdinal,
-            count: runCount ?? runOrdinal,
-          })}
-        </h1>
+        <h1>{t('work.scope.number', { number: runOrdinal })}</h1>
         <span
           className={`work-state-pill work-state-pill--${run.work_run.product_state}`}
         >

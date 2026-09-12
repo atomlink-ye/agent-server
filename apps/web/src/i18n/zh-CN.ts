@@ -622,7 +622,7 @@ export const zhCN: Record<MessageKey, string> = {
   'work.notCapturedHint':
     '这次 WorkRun 的状态没有记录下来。查看它已记录的活动。',
   'work.activeHint': '在这里跟进这次 WorkRun 的结果和进度。',
-  'work.record.active': '未归档',
+  'work.record.active': '活跃',
   'work.scope.state.running':
     '此 WorkRun 正在进行中，可在活动记录中查看执行进展。',
   'work.scope.state.needs_you': '此 WorkRun 需要你处理，请在对话中回应。',
@@ -633,8 +633,7 @@ export const zhCN: Record<MessageKey, string> = {
     '此 WorkRun 的状态暂不可用。已记录的输出并不代表执行已完成。',
   'work.scope.history': 'WorkRun 记录',
   'work.scope.runSections': '所选 WorkRun 页面',
-  'work.scope.number': '第 {number} 次 WorkRun',
-  'work.scope.selected': 'WorkRun {number} / {count}',
+  'work.scope.number': 'WorkRun {number}',
   'work.scope.all': '全部 WorkRun',
   'work.scope.activity': '活动记录',
   'work.scope.pinnedDefinition': '此 WorkRun 使用的 Definition',
@@ -671,8 +670,6 @@ export const zhCN: Record<MessageKey, string> = {
   'work.run.conversation': '对话',
   'work.run.trace': '执行记录',
   'work.run.result': '结果',
-  'work.run.number': 'WorkRun {number}',
-  'work.run.breadcrumb': 'WorkRun {number}',
   'work.run.backToWork': '← Work：{title}',
   'work.run.conversationPending': '此 WorkRun 的对话将在这里提供。',
   'work.run.open': '打开',

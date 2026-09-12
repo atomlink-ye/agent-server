@@ -127,7 +127,7 @@ it('reserves the unavailable wording for a status the server could not read', as
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(host.textContent).toContain('Status unavailable');
+    expect(host.textContent).toContain('Latest WorkRun unavailable');
   } finally {
     await act(async () => root.unmount());
     host.remove();

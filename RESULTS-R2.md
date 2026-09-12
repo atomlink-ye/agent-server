@@ -1,6 +1,6 @@
 # Round 2 scroll audit
 
-**Status: implementation and browser verification in progress; no complete-system pass claim.**
+**Status: stopped at the Deputy’s quota-convergence ruling. Complete source enumeration is delivered; complete runtime verification is unfinished. No complete-system pass claim.**
 
 The branch is `wui3/lane-a-r2`, based on frozen round-1 commit `9c7963bc`. Round 1 has not been rebased, merged, or pushed again. No tracked changes were pending at round-2 entry. The source-enumeration checkpoint is `eea67b33`.
 
@@ -166,4 +166,69 @@ Still-required runtime states: invalid-link detail; Agent authoring/source previ
 
 The user prohibits editing other lanes’ files; original ownership briefs assign most product CSS to lane-c/lane-d/ia-a. Scope clarification was requested asynchronously. No other lane’s product files have been modified in round 2.
 
-Generated logs and JSON measurements are under ignored `.local/`; this requested report is the committed summary. Final evidence and any fixes will replace this progress status.
+Generated logs and JSON measurements are under ignored `.local/`; this requested report is the committed summary. Work stopped at the explicit quota-convergence ruling. The remaining verification is not claimed complete.
+
+## Convergence handoff
+
+The Deputy ordered immediate convergence to preserve fleet quota. No further investigation, test, or product fix was started after that ruling. All current implementation is committed on `wui3/lane-a-r2`; round 1 remains frozen. No product CSS changed in round 2.
+
+The final working diff adds a browser-parsed source inventory, a geometry probe, Boards/Whispers fixtures, and additional real form/disclosure/Markdown states. The expanded matrix now declares 108 cases. **Those 108 cases have not passed a completed run.** The new probe asserts maximum scroll movement, one content owner, unchanged ancestor offsets, and unclipped endpoints. It distinguishes native-control viewport rectangles from text-glyph rectangles; it does not claim DOM glyph rectangles for native textarea contents.
+
+The completed 78-case diagnostic was red. It exposed two probe errors: Board DOM order chose the top-aligned Add column control as the vertical endpoint, and Observe selected a 1×1px accessibility/hover label’s hidden text. The probe was revised to select geometric endpoints and exclude deliberate truncation/accessibility hiding. **These revisions and the additional UI-state fixtures are unverified at convergence.** No claim is made that all remaining failures have been resolved.
+
+| Check | Clean base | Concurrent run | Isolated run |
+|---|---|---|---|
+| Source positive control | New test, absent | Initial assertion red: expected 2 declarations, received 3 | Corrected test: 1 passed; 55.95s total, 9.31s imports |
+| Route geometry diagnostic, 78 cases | New probe, absent; base not rerun | 8 failed / 70 passed; 915.59s total, 802.11s tests | Whispers: 2 passed / 76 skipped; 108.21s total, 9.15s tests |
+| Observe endpoint assertion | Same product CSS as round-1 HEAD; clean base not rerun | Three Observe cases failed; two also timed out | Realistic English: 1 failed / 107 skipped; 114.74s total, 25.20s tests. Failure confirms the selected hidden label; this was before the final probe correction |
+| Latest probe/state corrections | Not run | Unverified at convergence | Unverified at convergence |
+| Web types | Not rerun on base | Two checks exited 0 during implementation | Latest endpoint/fixture refinements were made afterward; final state unverified at convergence |
+| Lint | Existing unrelated formatting failures documented in RESULTS.md | Not run in round 2 | Unverified at convergence |
+
+Commands actually completed:
+
+```sh
+pnpm test:web src/test-support/scroll-inventory.browser.test.ts --browser.screenshotFailures=false
+pnpm test:web src/app/router/scroll.browser.test.tsx -t 'oversized.*en.*whispers' --browser.screenshotFailures=false
+pnpm test:web src/app/router/scroll.browser.test.tsx --browser.screenshotFailures=false
+pnpm test:web src/app/router/scroll.browser.test.tsx -t "'realistic' 'en'.*/observe" --browser.screenshotFailures false
+pnpm web:check:types
+```
+
+Verbatim red then green source-control output:
+
+```text
+AssertionError: expected [ { file: 'control.css', …(5) }, …(2) ] to have a length of 2 but got 3
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  23:20:45
+   Duration  69.67s (transform 0ms, setup 0ms, import 10.14s, tests 5.65s, environment 0ms)
+```
+
+```text
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  23:22:59
+   Duration  55.95s (transform 0ms, setup 0ms, import 9.31s, tests 765ms, environment 0ms)
+```
+
+Verbatim completed broad diagnostic tail:
+
+```text
+ Test Files  1 failed (1)
+      Tests  8 failed | 70 passed (78)
+   Start at  23:42:02
+   Duration  915.59s (transform 0ms, setup 0ms, import 62.38s, tests 802.11s, environment 0ms)
+```
+
+The check in flight at convergence is **unverified at convergence**, with this exact command:
+
+```sh
+pnpm test:web src/app/router/scroll.browser.test.tsx -t "extended=true|'realistic' 'en'.*/observe|'oversized'.*/boards" --browser.screenshotFailures false
+```
+
+Reason: the explicit quota ruling permits no continued long-running verification. It had not produced a completed result. Its log is `.local/scroll-states-check.log`. No green outcome is inferred.
+
+Remaining work: complete the expanded state run, resolve any actual failures, pin/measure every still-unverified source-table region, finish final web types and lint, and replace the pending table entries with actual before/after verdicts. Source rows 59 and 61 require cascade context: Work lists delegate to the wrapper while Observe/Conversation lists scroll; Agents/Files override the generic chat-panel clip. Source-site rows 26/33/38 are desktop-hidden native pickers. The events-scroll class is not itself a scrolling owner. Bounded Agent activity/home-file sections, hover details, and coverage of every native shared-control context are not fully verified. This report intentionally retains unverified entries rather than turning source classification into runtime success.
+
+Raw artifacts remain ignored: `.local/scroll-source-red.log`, `.local/scroll-source-test.log`, `.local/scroll-whispers-before.json`, `.local/scroll-regions-before.json`, `.local/scroll-full-before.log`, `.local/scroll-observe-red.json`, `.local/scroll-observe-isolated.log`, and `.local/scroll-types-r2.log`.

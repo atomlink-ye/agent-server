@@ -24,6 +24,11 @@ import {
   expectNoVerticalTraps,
   expectScrollReachable,
 } from '../../test-support/scroll-assertions';
+import {
+  expectMeasuredScrollRegions,
+  probeScrollRegions,
+} from '../../test-support/scroll-probe';
+import { exerciseScrollStates } from '../../test-support/scroll-state-exercises';
 
 (
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -38,6 +43,7 @@ const runId = recordedTrace.work_run.id;
 const uuid = (n: number) =>
   `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const taskId = uuid(700);
+const boardId = uuid(3000);
 const date = '2026-08-21T00:00:00.000Z';
 const lines = (n: number) =>
   Array.from(
@@ -46,13 +52,33 @@ const lines = (n: number) =>
   ).join('\n\n');
 
 type Size = 'realistic' | 'oversized';
-function fixtures(size: Size, locale: 'en' | 'zh-CN', preparation: boolean) {
+function fixtures(
+  size: Size,
+  locale: 'en' | 'zh-CN',
+  preparation: boolean,
+  extended = false,
+) {
   const large = size === 'oversized';
   const count = large ? 50 : 3;
   const title = large
     ? (locale === 'en' ? 'Research' : '研究').repeat(100).slice(0, 200)
     : 'Supplier research';
-  const prose = lines(large ? 2000 : 8);
+  const wideTable =
+    '| ' +
+    Array.from({ length: 24 }, (_, i) => `Column ${i}`).join(' | ') +
+    ' |\n| ' +
+    Array.from({ length: 24 }, () => '---').join(' | ') +
+    ' |\n| ' +
+    Array.from({ length: 24 }, (_, i) => `Value ${i}`).join(' | ') +
+    ' |';
+  const prose =
+    lines(large ? 2000 : 8) +
+    (extended
+      ? '\n\n```text\n' +
+        'Wide code '.repeat(100) +
+        '\nfinal code line\n```\n\n' +
+        wideTable
+      : '');
   const paragraphs = prose.split('\n\n');
   const chunks = Array.from(
     { length: Math.ceil(paragraphs.length / 10) },
@@ -108,7 +134,7 @@ function fixtures(size: Size, locale: 'en' | 'zh-CN', preparation: boolean) {
         authorType: 'agent_definition',
         authorId: coworkers[0]!.id,
         body: prose,
-        workRef: null,
+        workRef: extended ? workId : null,
         createdAt: date,
       },
     ],
@@ -141,6 +167,24 @@ function fixtures(size: Size, locale: 'en' | 'zh-CN', preparation: boolean) {
       updated_at: date,
     },
     linked_work: null,
+  }));
+  const boards = Array.from({ length: count }, (_, i) => ({
+    id: uuid(3000 + i),
+    workspace_id: uuid(900),
+    title: `Board ${i}`,
+    description: null,
+    created_by: 'principal-1',
+    created_at: date,
+    updated_at: date,
+  }));
+  const columns = Array.from({ length: large ? 8 : 2 }, (_, i) => ({
+    id: uuid(3100 + i),
+    board_id: boardId,
+    title: `Column ${i}`,
+    position: i,
+    kind: null,
+    created_at: date,
+    updated_at: date,
   }));
   const definition = {
     id: work.definition_version_id,
@@ -192,6 +236,14 @@ function fixtures(size: Size, locale: 'en' | 'zh-CN', preparation: boolean) {
     if (path === '/api/auth/me')
       body = { user_id: 'reader', username: 'reader', display_name: 'Reader' };
     else if (path === '/api/agents') body = { items: coworkers };
+    else if (path === '/api/skills') body = { skills: [] };
+    else if (path === '/api/work-definitions/validate')
+      body = {
+        valid: true,
+        fingerprint: `sha256:${'a'.repeat(64)}`,
+        metadata: { normalized_name: 'scroll-capability' },
+        diagnostics: [],
+      };
     else if (path.endsWith('/profile'))
       body = {
         agent: { ...coworkers[0], summary: prose },
@@ -204,7 +256,63 @@ function fixtures(size: Size, locale: 'en' | 'zh-CN', preparation: boolean) {
         work_catalog: [],
       };
     else if (path === '/api/conversations') body = { conversations: [] };
+    else if (path === '/api/whispers')
+      body = {
+        whispers: Array.from({ length: count }, (_, i) => ({
+          whisper_channel_id: `whisper-${i}`,
+          topic: `Coordination ${i}`,
+          members: ['Researcher', `Reviewer ${i}`],
+          initiated_by: 'Researcher',
+          origin: {
+            conversation_id: uuid(500),
+            trigger_message_id: null,
+            work_ref: null,
+          },
+          created_at: date,
+          updated_at: date,
+        })),
+      };
+    else if (path.startsWith('/api/whispers/'))
+      body = {
+        messages: chunks.map((body, i) => ({
+          message_id: `message-${i}`,
+          whisper_channel_id: 'whisper-0',
+          sequence: i + 1,
+          author_agent_id: 'Researcher',
+          body,
+          created_at: date,
+        })),
+      };
+    else if (path === '/api/boards') body = { boards };
+    else if (path === `/api/boards/${boardId}`)
+      body = {
+        board: boards[0],
+        columns,
+        work_items: tasks.map(({ work_item }) => ({
+          ...work_item,
+          description: 'Card description',
+        })),
+        placements: tasks.map(({ work_item }, i) => ({
+          board_id: boardId,
+          column_id: columns[i < columns.length ? i : 0]!.id,
+          work_item_id: work_item.id,
+          position: i,
+          created_at: date,
+          updated_at: date,
+        })),
+      };
     else if (path === '/api/works') body = { works, next_cursor: null };
+    else if (path === `/api/works/${workId}/chat-card`)
+      body = {
+        workId,
+        workRef: workId,
+        title,
+        productState: 'complete',
+        problemKind: null,
+        attentionReason: null,
+        resultSummary: prose,
+        resultCaptureStatus: 'present',
+      };
     else if (path === '/api/work-definitions')
       body = { items: [], next_cursor: null };
     else if (path.startsWith('/api/work-definition-versions/'))
@@ -318,6 +426,7 @@ function fixtures(size: Size, locale: 'en' | 'zh-CN', preparation: boolean) {
       };
     else if (path.startsWith('/api/works/')) body = { work };
     else if (path === '/api/work-items') body = { work_items: tasks };
+    else if (path === `/api/work-items/${taskId}`) body = tasks[0];
     else if (path.endsWith('/comments'))
       body = {
         comments: Array.from({ length: count }, (_, i) => ({
@@ -334,6 +443,29 @@ function fixtures(size: Size, locale: 'en' | 'zh-CN', preparation: boolean) {
     else if (path === '/api/context/file')
       body = { entry: { ...entries.at(-1), content: prose } };
     else throw new Error(`Unexpected scroll fixture request: ${path}`);
+    if (extended && path.endsWith('/session-transcripts')) {
+      const response = body as {
+        sessions: Array<{
+          label: { name: string };
+          summary: { entry_count: number };
+          entries: unknown[];
+        }>;
+      };
+      const session = response.sessions[0]!;
+      session.entries.push({
+        ordinal: chunks.length + 1,
+        sequence: chunks.length + 1,
+        created_at: date,
+        kind: 'reasoning_progress',
+        status: 'completed',
+        text: 'Reasoning checkpoint\n'.repeat(500),
+      });
+      session.summary.entry_count = session.entries.length;
+      response.sessions = Array.from({ length: 12 }, (_, i) => ({
+        ...session,
+        label: { ...session.label, name: `Worker ${i}` },
+      }));
+    }
     if (path.endsWith('/session-transcripts'))
       ProductSessionTranscriptsResponseSchema.parse(body);
     if (path.endsWith('/chat')) WorkChatMessagesResponseSchema.parse(body);
@@ -372,14 +504,32 @@ function measurements(host: HTMLElement) {
 }
 
 const inventory: unknown[] = [];
+const regionInventory: unknown[] = [];
+function recordRegions(
+  host: HTMLElement,
+  route: string,
+  size: Size,
+  locale: string,
+) {
+  const result = probeScrollRegions(host);
+  regionInventory.push({ route, size, locale, ...result });
+  expectMeasuredScrollRegions(result);
+  expectNoVerticalTraps(host);
+}
 afterAll(async () => {
   await commands.writeFile(
     '../../.local/browser/scroll-inventory.json',
     JSON.stringify(inventory, null, 2),
   );
+  await commands.writeFile(
+    '../../.local/browser/scroll-region-inventory.json',
+    JSON.stringify(regionInventory, null, 2),
+  );
 });
 
 const routes = [
+  '/whispers',
+  `/boards/${boardId}`,
   '/files',
   '/agents',
   `/agents/${uuid(300)}`,
@@ -412,17 +562,48 @@ const cases = routes.flatMap((route) =>
       ['oversized', 'en'],
       ['oversized', 'zh-CN'],
     ] as const
-  ).map(([size, locale]) => ({ route, size, locale })),
+  ).map(([size, locale]) => ({ route, size, locale, extended: false })),
+);
+cases.push(
+  ...[
+    '/files',
+    '/agents',
+    `/agents/${uuid(300)}`,
+    `/tasks/${taskId}`,
+    `/boards/${boardId}`,
+    '/',
+    '/work?new=1',
+    '/work/not-a-uuid',
+    '/agents/not-a-uuid',
+    '/tasks/not-a-uuid',
+    '/boards/not-a-uuid',
+    `/work/${workId}?tab=transcript&run=${runId}`,
+    `/work/${workId}?tab=result&run=${runId}`,
+    `/work/${workId}?tab=chat&run=${runId}`,
+    `/observe?work=${workId}&run=${runId}`,
+  ].flatMap((route) =>
+    (['en', 'zh-CN'] as const).map((locale) => ({
+      route,
+      locale,
+      size: 'oversized' as const,
+      extended: true,
+    })),
+  ),
 );
 it.each(cases)(
-  'keeps $size $locale content reachable at 1440 on $route',
-  async ({ route, size, locale }) => {
+  'keeps $size $locale content reachable at 1440 on $route (extended=$extended)',
+  async ({ route, size, locale, extended }) => {
+    await commands.writeFile(
+      '../../.local/browser/scroll-progress.json',
+      JSON.stringify({ route, size, locale, stage: 'started' }),
+    );
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
     setLocale(locale);
     const fixture = fixtures(
       size,
       locale,
       route === `/work/${workId}?tab=chat`,
+      extended,
     );
     vi.stubGlobal('fetch', fixture.fetch);
     const host = document.createElement('div');
@@ -449,7 +630,12 @@ it.each(cases)(
       expect(
         host.querySelector('.app-shell')!.getBoundingClientRect().height,
       ).toBe(900);
+      await commands.writeFile(
+        '../../.local/browser/scroll-progress.json',
+        JSON.stringify({ route, size, locale, stage: 'rendered' }),
+      );
       if (route === '/files') {
+        recordRegions(host, route + ' (list)', size, locale);
         inventory.push({
           route: route + ' (list)',
           size,
@@ -481,7 +667,18 @@ it.each(cases)(
         measurements: measurements(host),
       });
       expectNoVerticalTraps(host);
-      verifyRoute(host, route, size);
+      recordRegions(host, route, size, locale);
+      await commands.writeFile(
+        '../../.local/browser/scroll-progress.json',
+        JSON.stringify({
+          route,
+          size,
+          locale,
+          stage: 'measured',
+          latest: regionInventory.at(-1),
+        }),
+      );
+      if (!extended) verifyRoute(host, route, size);
       if (route === '/files') {
         inventory.push({
           route: route + ' (scrolled)',
@@ -508,6 +705,7 @@ it.each(cases)(
           locale,
           measurements: measurements(host),
         });
+        recordRegions(host, route + ' (source)', size, locale);
       }
       if (route.startsWith('/observe')) {
         for (const index of [1, 2]) {
@@ -531,8 +729,18 @@ it.each(cases)(
             locale,
             measurements: measurements(host),
           });
+          recordRegions(
+            host,
+            route + (index === 1 ? ' (map)' : ' (events)'),
+            size,
+            locale,
+          );
         }
       }
+      if (extended)
+        await exerciseScrollStates(host, route, (state) =>
+          recordRegions(host, route + ' (' + state + ')', size, locale),
+        );
     } finally {
       await act(async () => root.unmount());
       host.remove();
@@ -676,5 +884,18 @@ function verifyRoute(host: HTMLElement, route: string, size: Size) {
     scroller('.work-org-content', '.work-org-comment');
     width('.work-org-list', 307);
     width('.work-org-content', 1028);
+  } else if (route === '/whispers') {
+    scroller('.whispers-list', 'button');
+    scroller('.whisper-message-log', '.whisper-message');
+  } else if (route.startsWith('/boards/')) {
+    scroller('.work-org-list', '.work-org-list-item');
+    scroller('.work-org-content');
+    const canvas = host.querySelector<HTMLElement>('.work-board-canvas')!;
+    expect(canvas).not.toBeNull();
+    if (large) {
+      expect(canvas.scrollWidth).toBeGreaterThan(canvas.clientWidth);
+      canvas.scrollLeft = canvas.scrollWidth;
+      expect(canvas.scrollLeft).toBe(canvas.scrollWidth - canvas.clientWidth);
+    }
   }
 }

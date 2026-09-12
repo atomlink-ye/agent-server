@@ -161,3 +161,13 @@ run include that refinement. Changed files were formatted with Prettier.
   temporary infrastructure is handed off. BASELINE.md and BRIEF.md remain
   untracked manager inputs. RESULTS.md is committed because it was explicitly
   requested despite the repository's general rule against one-run reports.
+
+## Round 2 convergence notice
+
+Round 2 stopped at the Deputy’s explicit quota ceiling. Its complete source inventory and unfinished runtime-verification handoff are in [RESULTS-R2.md](RESULTS-R2.md). The latest expanded check is **unverified at convergence**:
+
+```sh
+pnpm test:web src/app/router/scroll.browser.test.tsx -t "extended=true|'realistic' 'en'.*/observe|'oversized'.*/boards" --browser.screenshotFailures false
+```
+
+It had no completed result when convergence was ordered. The preceding broad diagnostic was 8 failed / 70 passed; the endpoint-probe corrections and added UI states have no completed green rerun. Final types and lint are also unverified at convergence. No complete scroll-system pass is claimed. Round 1 remains frozen; round-2 delivery is on `wui3/lane-a-r2`.

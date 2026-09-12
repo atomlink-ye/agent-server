@@ -1,3 +1,5 @@
+@import '../surface-tokens.css';
+
 .observe-pane-subhead {
   margin: 0 0 var(--space-3);
   color: var(--ink-500);
@@ -236,8 +238,4 @@
 .observe-pane .work-list-item {
   padding: var(--space-2) var(--space-3);
   gap: var(--space-3);
-}
-
-.observe-pane + .work-main > .title-bar {
-  padding-inline: var(--space-6);
 }

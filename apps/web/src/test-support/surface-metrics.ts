@@ -1,3 +1,4 @@
+import { assertSurfaceContract, type Surface } from './surface-contract';
 import { act } from 'react';
 import { expect } from 'vitest';
 import { getLocale, setLocale } from '../i18n';
@@ -10,47 +11,39 @@ import '../index.css';
 const heights: Record<string, Record<string, Record<string, number>>> = {
   agents: {
     en: {
-      '.title-bar': 44,
       '.agents-profile-header': 97.796875,
       '.agents-list-item': 60,
     },
     'zh-CN': {
-      '.title-bar': 44,
       '.agents-profile-header': 97.796875,
       '.agents-list-item': 60,
     },
   },
   'agents-roster': {
     en: {
-      '.title-bar': 44,
       '.agents-roster-header': 62.78125,
     },
     'zh-CN': {
-      '.title-bar': 44,
       '.agents-roster-header': 62.78125,
     },
   },
   files: {
     en: {
-      '.title-bar': 44,
       '.files-files-header': 64,
       '.files-file-list button': 57.5,
     },
     'zh-CN': {
-      '.title-bar': 44,
       '.files-files-header': 64,
       '.files-file-list button': 57.5,
     },
   },
   observe: {
     en: {
-      '.title-bar': 44,
       '.observe-detail-header': 65,
       '.work-list-item': 102,
       '.observe-filters': 79,
     },
     'zh-CN': {
-      '.title-bar': 44,
       '.observe-detail-header': 65,
       '.work-list-item': 84,
       '.observe-filters': 79,
@@ -58,51 +51,41 @@ const heights: Record<string, Record<string, Record<string, number>>> = {
   },
   tasks: {
     en: {
-      '.title-bar': 44,
       '.work-org-detail-header': 88,
       '.work-org-list-item': 97.1875,
     },
     'zh-CN': {
-      '.title-bar': 44,
       '.work-org-detail-header': 88,
       '.work-org-list-item': 97.1875,
     },
   },
   boards: {
     en: {
-      '.title-bar': 44,
       '.work-board-toolbar': 64,
       '.work-org-list-item': 73,
     },
     'zh-CN': {
-      '.title-bar': 44,
       '.work-board-toolbar': 64,
       '.work-org-list-item': 73,
     },
   },
   whispers: {
     en: {
-      '.title-bar': 44,
-      'header.whisper-observer-badge': 30,
       '.whispers-list button': 60,
     },
     'zh-CN': {
-      '.title-bar': 44,
-      'header.whisper-observer-badge': 30,
       '.whispers-list button': 60,
     },
   },
   'run-trace-parallel': {
-    en: { '.run-trace__header': 69, '.run-trace__item-row': 116 },
-    'zh-CN': { '.run-trace__header': 69, '.run-trace__item-row': 116 },
+    en: { '.run-trace__item-row': 116 },
+    'zh-CN': { '.run-trace__item-row': 116 },
   },
   'run-trace': {
     en: {
-      '.run-trace__header': 69,
       '.run-trace__item-row': 174,
     },
     'zh-CN': {
-      '.run-trace__header': 69,
       '.run-trace__item-row': 174,
     },
   },
@@ -129,121 +112,39 @@ const heights: Record<string, Record<string, Record<string, number>>> = {
     },
   },
 };
+// Content rows and section headings are distinct from the shared surface
+// roles. Only these fixture-specific details remain here; the cross-surface
+// geometry and tokens have one authority in surface-contract.ts.
 const styles: Record<string, Record<string, string>> = {
-  '.title-bar': {
-    'padding-inline-start': '--space-6',
-  },
   '.work-list-item': {
     'padding-block-start': '--space-2',
     'padding-inline-start': '--space-3',
     gap: '--space-3',
   },
-  '.work-org-list-item': {
-    padding: '--space-3',
-  },
-  '.agents-profile-header': {
-    gap: '--space-4',
-    'padding-bottom': '--space-4',
-  },
-  '.agents-card': {
-    padding: '--space-4',
-    'border-radius': '--radius-lg',
-  },
-  '.agents-roster-card': {
-    padding: '--space-4',
-    'border-radius': '--radius-lg',
-  },
+  '.work-org-list-item': { padding: '--space-3' },
+  '.agents-profile-header': { gap: '--space-4', 'padding-bottom': '--space-4' },
   '.agents-list-item': {
     'padding-block-start': '--space-2',
     'padding-inline-start': '--space-3',
-  },
-  '.agents-main': {
-    'padding-inline-start': '--space-6',
-  },
-  '.agents-first-screen': {
-    gap: '--space-4',
-  },
-  '.files-file-viewer': {
-    padding: '--space-4',
-    'border-radius': '--radius-lg',
   },
   '.files-file-list button': {
     'padding-block-start': '--space-2',
     'padding-inline-start': '--space-3',
   },
-  '.files-main': {
-    'padding-inline-start': '--space-6',
-  },
-  '.files-files-grid': {
-    gap: '--space-4',
-  },
-  '.observe-detail': {
-    padding: '--space-6',
-  },
-  '.observe-metric-card': {
-    padding: '--space-4',
-    'border-radius': '--radius-lg',
-  },
-  '.observe-metric-cards': {
-    gap: '--space-4',
-  },
   '.observe-filters': {
     'margin-inline-start': '0px',
     'margin-inline-end': '0px',
-  },
-  '.work-org-card': {
-    padding: '--space-4',
-    'border-radius': '--radius-lg',
-  },
-  '.work-board-card': {
-    padding: '--space-4',
-    'border-radius': '--radius-lg',
-  },
-  '.work-org-content': {
-    padding: '--space-6',
-  },
-  '.work-org-detail-grid': {
-    gap: '--space-4',
-  },
-  '.work-board-canvas': {
-    gap: '--space-4',
-  },
-  '.whisper-message': {
-    padding: '--space-4',
-    'border-radius': '--radius-md',
-  },
-  '.whisper-message-log': {
-    padding: '--space-6',
   },
   '.whispers-list button': {
     'padding-block-start': '--space-2',
     'padding-inline-start': '--space-3',
   },
-  '.run-trace__header': {
-    'padding-inline-start': '--space-4',
-  },
   '.run-trace__item-name small': {
     'font-size': '--text-xs',
-  },
-  '.run-trace__canvas': {
-    padding: '--space-4',
-  },
-  '.execution-transcript__summary': {
-    padding: '--space-4',
-  },
-  '.execution-transcript__detail': {
-    padding: '--space-4',
   },
   '.transcript__row > summary': {
     'padding-block-start': '--space-2',
     'padding-inline-start': '--space-3',
-  },
-  '.transcript__detail': {
-    padding: '--space-3',
-  },
-  '.dispatch-card': {
-    padding: '--space-4',
-    'border-radius': '--radius-lg',
   },
   '.dispatch-card__details': {
     'margin-top': '--space-3',
@@ -262,6 +163,13 @@ export async function surfaceMetrics(
   try {
     for (const locale of ['en', 'zh-CN'] as const) {
       await act(async () => setLocale(locale));
+      const names: Surface[] =
+        surface === 'execution-transcript'
+          ? ['sessions', 'stream']
+          : surface.startsWith('run-trace')
+            ? ['trace']
+            : [surface as Surface];
+      for (const name of names) await assertSurfaceContract(host, name, locale);
       for (const selector of selectors) {
         const element = host.querySelector<HTMLElement>(selector);
         expect(element, `${surface}: ${selector}`).not.toBeNull();

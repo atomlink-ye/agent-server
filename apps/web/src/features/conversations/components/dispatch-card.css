@@ -1,3 +1,5 @@
+@import '../../surface-tokens.css';
+
 .dispatch-card {
   width: min(100%, 620px);
   align-self: flex-start;

@@ -1,3 +1,5 @@
+@import '../surface-tokens.css';
+
 .work-org-pane {
   min-width: 300px;
 }
@@ -219,7 +221,7 @@
 
 .work-org-comments {
   display: grid;
-  gap: var(--space-2);
+  gap: var(--space-4);
   margin: var(--space-3) 0;
 }
 
@@ -233,8 +235,8 @@
 }
 
 .work-org-comment {
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
   background: var(--paper);
 }
 
@@ -279,7 +281,7 @@
   border: 1px solid var(--ink-100);
   border-radius: var(--radius-lg);
   background: var(--cloud);
-  padding: var(--space-3);
+  padding: var(--space-4);
 }
 
 .work-board-column[data-drag-over='true'] {
@@ -307,7 +309,7 @@
 
 .work-board-cards {
   display: grid;
-  gap: var(--space-2);
+  gap: var(--space-4);
 }
 
 .work-board-card {
@@ -830,9 +832,4 @@
   flex: none;
   width: auto;
   max-width: 50%;
-}
-
-.work-org-main > .title-bar,
-.work-board-main > .title-bar {
-  padding-inline: var(--space-6);
 }

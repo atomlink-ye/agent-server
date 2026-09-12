@@ -1,3 +1,5 @@
+@import '../surface-tokens.css';
+
 .run-trace {
   --trace-ink: var(--ink-900);
   --trace-muted: var(--ink-500);
@@ -30,14 +32,18 @@
   border-top: 1px solid var(--trace-line);
   display: flex;
   justify-content: space-between;
-  min-height: calc(var(--space-8) * 2);
-  padding: var(--space-3) var(--space-4);
+  min-height: var(--surface-title-height);
+  padding: 0 var(--space-6);
 }
 .run-trace__eyebrow {
   color: var(--trace-muted);
   font-size: var(--text-eyebrow);
   font-weight: 650;
   margin: 0 0 calc(var(--space-1) / 2);
+}
+/* Fit the two readable text lines and border inside the shared title band. */
+.run-trace__header .run-trace__eyebrow {
+  margin-bottom: calc(var(--space-1) / 4);
 }
 .run-trace__header h2 {
   font-size: var(--text-heading);
@@ -130,11 +136,12 @@
 .run-trace__body--with-inspector {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+  gap: var(--space-4);
 }
 .run-trace__canvas {
   min-width: 0;
   overflow: auto;
-  padding: var(--space-4);
+  padding: var(--space-6);
 }
 .run-trace__timeline {
   min-width: 0;
@@ -590,6 +597,7 @@
 }
 
 .run-trace__inspector {
+  border-radius: var(--radius-lg);
   border-left: 1px solid var(--trace-line);
   min-width: 0;
   padding: var(--space-4) var(--space-4);
@@ -660,8 +668,8 @@
 }
 .run-trace__detail-disclosure {
   background: var(--trace-wash);
-  border-radius: var(--radius-sm);
-  padding: var(--space-2);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
 }
 .run-trace__transcript,
 .run-trace__activity-detail {

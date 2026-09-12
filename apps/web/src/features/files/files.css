@@ -1,3 +1,5 @@
+@import '../surface-tokens.css';
+
 .files-main,
 .files-pane {
   display: flex;
@@ -232,7 +234,6 @@
 .files-main > .title-bar {
   flex-shrink: 0;
   margin: calc(-1 * var(--space-5)) calc(-1 * var(--space-6)) 0;
-  padding-inline: var(--space-6);
 }
 .files-files-header h1 {
   margin: var(--space-1) 0 0;

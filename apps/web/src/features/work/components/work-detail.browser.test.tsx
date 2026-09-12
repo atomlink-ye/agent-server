@@ -1093,7 +1093,9 @@ it('moves started preparation into a selected WorkRun shell and preserves conver
     expect(
       host.querySelector('.work-chat-pane')?.getAttribute('aria-label'),
     ).toBe('Conversation');
-    expect(host.textContent).toContain('cannot access execution history or change execution');
+    expect(host.textContent).toContain(
+      'cannot access execution history or change execution',
+    );
     expect(host.textContent).not.toContain('Run’s Lead');
   } finally {
     await act(async () => root.unmount());

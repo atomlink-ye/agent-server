@@ -739,10 +739,14 @@ export function FilesPage() {
                     }
                     onClick={() => openFile(entry.path)}
                   >
-                    <span className="files-scope-title">{entry.path}</span>
+                    <span className="files-scope-title" title={entry.path}>
+                      {basename(entry.path)}
+                    </span>
                     <span className="files-scope-meta">
-                      {t('files.version', { version: entry.currentVersion })} ·{' '}
-                      {shortHash(entry.contentSha256)}
+                      {t('files.updated', {
+                        date: formatFileDate(entry.updatedAt),
+                      })}{' '}
+                      · {t('files.version', { version: entry.currentVersion })}
                     </span>
                   </button>
                 ))}
@@ -889,6 +893,15 @@ export function FilesPage() {
       </main>
     </>
   );
+}
+
+function formatFileDate(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return new Intl.DateTimeFormat(document.documentElement.lang || 'en', {
+    month: 'short',
+    day: 'numeric',
+  }).format(date);
 }
 
 function basename(path: string): string {

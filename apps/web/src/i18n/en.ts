@@ -1253,6 +1253,7 @@ export const en = {
   'work.noExecution': 'No WorkRun yet',
   'files.unavailableScope': '{name} is not available in this {scope}.',
   'files.version': 'v{version}',
+  'files.updated': 'Updated {date}',
   'authoring.runtimeClaude': 'Claude · deepseek-v4-flash',
   'authoring.runtimeCodex': 'Codex · deepseek-v4-flash',
   'shell.brand': 'Agent Server',

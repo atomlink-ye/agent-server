@@ -1159,6 +1159,7 @@ export const zhCN: Record<MessageKey, string> = {
   'work.noExecution': '暂无 WorkRun',
   'files.unavailableScope': '{scope}中无法使用 {name}。',
   'files.version': '版本 {version}',
+  'files.updated': '更新于 {date}',
   'authoring.runtimeClaude': 'Claude · deepseek-v4-flash',
   'authoring.runtimeCodex': 'Codex · deepseek-v4-flash',
   'shell.brand': 'Agent Server',

@@ -226,6 +226,19 @@ function mergeAdjacentReasoning(rows: readonly MutableRow[]): MutableRow[] {
 function mergeAssistantText(previous: string, next: string): string {
   if (next.startsWith(previous)) return next;
   if (previous.startsWith(next)) return previous;
+  // A provider can restart its cumulative snapshot part-way through a turn:
+  // the next event republishes only the tail it is still growing, so it is
+  // neither an extension of the whole accumulated text nor a fresh chunk.
+  // Appending it would repeat that tail once per snapshot, which is why one
+  // turn could render the same paragraph many times with a growing suffix.
+  // Splicing on the longest overlap keeps the restarted snapshot replacing
+  // the tail it repeats. With no overlap this stays a plain append, which is
+  // the correct handling of genuinely incremental chunks.
+  const overlap = Math.min(previous.length, next.length);
+  for (let size = overlap; size > 0; size -= 1) {
+    if (previous.endsWith(next.slice(0, size)))
+      return `${previous}${next.slice(size)}`;
+  }
   return `${previous}${next}`;
 }
 

@@ -305,7 +305,7 @@ for (const locale of ['en', 'zh-CN'] as const) {
         ),
       );
       const row = host.querySelector<HTMLElement>('.work-run-list > li')!;
-      expect(row.getBoundingClientRect().height).toBe(78);
+      expect(row.getBoundingClientRect().height).toBe(124);
       expect(row.getBoundingClientRect().width).toBe(964);
       expect(row.textContent).toContain(t('work.run.stateError'));
       const before = row.getBoundingClientRect();

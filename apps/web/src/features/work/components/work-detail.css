@@ -571,10 +571,9 @@
 .work-run-list > .work-run-list__latest {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 2px var(--space-5);
-  height: 78px;
-  min-height: 78px;
-  padding: var(--space-2) var(--space-4);
+  gap: var(--space-3) var(--space-5);
+  min-height: 116px;
+  padding: var(--space-5);
   border: 1px solid var(--sky-200);
   border-radius: var(--radius-md);
   background: linear-gradient(135deg, var(--sky-50), var(--paper));
@@ -605,7 +604,7 @@
   align-items: center;
 }
 .work-run-list__actions .work-run-list__primary {
-  padding: 6px var(--space-3);
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-sm);
   background: var(--sky-ink);
   color: var(--paper);

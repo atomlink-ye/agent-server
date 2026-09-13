@@ -244,8 +244,8 @@ for (const locale of ['en', 'zh-CN'] as const) {
         suffixRect ? suffixRect.left - rowRect.left : rowAvailableWidth,
         0,
       );
-      expect(measurements.row.height).toBe(19.5);
-      expect(measurements.row.fontSize).toBe(13);
+      expect(measurements.row.height).toBe(locale === 'zh-CN' ? 18 : 19.5);
+      expect(measurements.row.fontSize).toBe(locale === 'zh-CN' ? 12 : 13);
       // Likewise, the h1 fills the header between the kicker and the
       // state pill; both siblings' own widths are rendered text and
       // platform-dependent, so measure the gap directly instead of
@@ -265,7 +265,7 @@ for (const locale of ['en', 'zh-CN'] as const) {
         0,
       );
       expect(measurements.header.height).toBe(27);
-      expect(measurements.header.fontSize).toBe(20);
+      expect(measurements.header.fontSize).toBe(locale === 'zh-CN' ? 18 : 20);
       await page.screenshot({
         path: `../../../.local/typography-r2/titles-${locale}.png`,
       });

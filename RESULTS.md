@@ -25,13 +25,14 @@ Measurements below come from `getBoundingClientRect()` in real Chromium at a 144
 - `CI=true pnpm test:web apps/web/src/features/files/FilesPage.browser.test.tsx`: passed.
 - `CI=true pnpm test:web apps/web/src/features/work-organization/BoardsPage.browser.test.tsx apps/web/src/features/work-organization/TasksPage.browser.test.tsx`: passed.
 - `pnpm lint`: passed.
+- `pnpm web:check:types`: passed.
 - Full `CI=true pnpm test:web`: the in-scope Files baseline failure is fixed. The two documented router baseline failures remain. One unrelated pre-existing Work feedback height pin also failed (`expected 133`, rendered `124`) and reproduces in isolation; none of this lane's CSS selectors apply to that component.
 
 Verbatim full-suite summary:
 
 ```text
  Test Files  2 failed | 70 passed (72)
-      Tests  3 failed | 550 passed (553)
+      Tests  3 failed | 551 passed (554)
 ```
 
 ## Delivery

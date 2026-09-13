@@ -118,8 +118,13 @@ export function projectTranscript(
       ) {
         previous.event = {
           ...entry,
-          text: mergeAssistantText(previous.event.text, entry.text),
+          text: mergeAssistantText(
+            previous.event.text,
+            previous.lastAssistantText ?? previous.event.text,
+            entry.text,
+          ),
         };
+        previous.lastAssistantText = entry.text;
         previous.sourceOrdinals.push(entry.ordinal);
       } else {
         rows.push(makeRow(entry, runSegment, runKey));
@@ -142,6 +147,7 @@ type MutableRow = {
   sourceOrdinals: number[];
   runSegment: number;
   runKey: string;
+  lastAssistantText?: string;
   children?: MutableRow[];
 };
 type ReasoningEntry = Extract<
@@ -162,6 +168,9 @@ function makeRow(
     sourceOrdinals: [event.ordinal],
     runSegment,
     runKey,
+    ...(event.kind === 'assistant_text'
+      ? { lastAssistantText: event.text }
+      : {}),
   };
 }
 
@@ -223,10 +232,15 @@ function mergeAdjacentReasoning(rows: readonly MutableRow[]): MutableRow[] {
   return merged;
 }
 
-function mergeAssistantText(previous: string, next: string): string {
-  if (next.startsWith(previous)) return next;
-  if (previous.startsWith(next)) return previous;
-  return `${previous}${next}`;
+function mergeAssistantText(
+  merged: string,
+  previousSnapshot: string,
+  next: string,
+): string {
+  if (next.startsWith(previousSnapshot))
+    return `${merged.slice(0, -previousSnapshot.length)}${next}`;
+  if (previousSnapshot.startsWith(next)) return merged;
+  return `${merged}${next}`;
 }
 
 function mergeReasoningText(

@@ -392,6 +392,42 @@ it('still keeps only the latest cumulative-snapshot assistant_text (no regressio
   expect(output[0].sourceOrdinals).toEqual([1, 2, 3]);
 });
 
+it('replaces cumulative snapshots after an independent assistant text segment', () => {
+  const input = [
+    at(1, {
+      kind: 'assistant_text',
+      text: 'The linked finding is ',
+      sequence: 1,
+      created_at: timestamp,
+    }),
+    at(2, {
+      kind: 'assistant_text',
+      text: '.com/article',
+      sequence: 2,
+      created_at: timestamp,
+    }),
+    at(3, {
+      kind: 'assistant_text',
+      text: '.com/article Recommendation',
+      sequence: 3,
+      created_at: timestamp,
+    }),
+    at(4, {
+      kind: 'assistant_text',
+      text: '.com/article Recommendation: show milestones.',
+      sequence: 4,
+      created_at: timestamp,
+    }),
+  ];
+  const output = projectTranscript(input);
+  expect(output).toHaveLength(1);
+  expect(
+    (output[0].event as Extract<TranscriptEntry, { kind: 'assistant_text' }>)
+      .text,
+  ).toBe('The linked finding is .com/article Recommendation: show milestones.');
+  expect(output[0].sourceOrdinals).toEqual([1, 2, 3, 4]);
+});
+
 it('does not merge two real assistant_text turns separated by a tool call', () => {
   const input = [
     at(1, {

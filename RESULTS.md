@@ -74,3 +74,22 @@ Recording verification:
  Test Files  2 passed (2)
       Tests  29 passed (29)
 ```
+
+## GIF critique follow-up
+
+The five visual-weight issues found in the walkthrough were corrected and measured at 1440×900 in real Chromium. English and Simplified Chinese produced the same structural measurements; text hierarchy assertions use computed size/weight and parent-relative geometry rather than platform-sensitive text widths.
+
+| Area                  | Before                                                                                                                       | After (en and zh-CN)                                                                                                                                                                                                                                                                        |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Files idle preview    | The bordered viewer filled the `644×748px` preview region around one centered hint.                                          | The quiet idle viewer is `644×194px` and top-aligned; selecting a file restores the full `644×748px` viewer.                                                                                                                                                                                |
+| Files list rows       | Two-line rows were approximately `57.5px` tall and repeated version plus truncated hash.                                     | Filename-only rows use a deliberate `38px` minimum; the full list still scrolls to its final row. Hash remains available in the selected-file header.                                                                                                                                       |
+| Files coworker scopes | Two bordered pill controls visually competed with each coworker name.                                                        | Scope choices are one quiet segmented text row. Coworker names render at `13px`, controls at `12px`; name weight is at least the control weight and the control row is less than `1.5×` the name line height.                                                                               |
+| Tasks list rows       | Homogeneous fixtures rendered approximately `97.1875px` rows with repeated To do and Unassigned signals.                     | Homogeneous rows use a deliberate `73px` target and omit both repeated signals. Mixed lists retain status and assignee chips, including Unassigned where it contrasts with assigned rows.                                                                                                   |
+| Tasks right column    | The empty Formal execution card appeared above Comments; a long Comments card measured roughly `4792px` with no visible end. | Comments appear first in a `313.3125px` column; the card measured `480px`, with history bounded to `280px` and independently scrollable while composer/action remain visible. Ready-with-zero-Definitions Formal execution is compact and removes redundant prose plus the disabled action. |
+
+Final focused verification:
+
+```text
+ Test Files  2 passed (2)
+      Tests  18 passed (18)
+```

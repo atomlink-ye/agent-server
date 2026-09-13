@@ -63,9 +63,7 @@ export function WorkPane({
   }, [works, onWorksChange]);
 
   const controlsDisabled = status === 'unavailable' || status === 'denied';
-  const orderedWorks = [...works].sort((a, b) =>
-    activityTime(b).localeCompare(activityTime(a)),
-  );
+  const orderedWorks = [...works].sort(compareWorkPriority);
 
   return (
     <aside className="sidebar work-pane" aria-label={t('work.navigation')}>
@@ -305,6 +303,19 @@ function WorkListRow({
 function activityTime(work: WorkListItem): string {
   const runTime = work.latest_run_summary?.updated_at;
   return runTime && runTime > work.updated_at ? runTime : work.updated_at;
+}
+
+function compareWorkPriority(left: WorkListItem, right: WorkListItem): number {
+  const attentionRank = (work: WorkListItem) =>
+    work.product_state === 'needs_you'
+      ? 0
+      : work.product_state === 'problem'
+        ? 1
+        : 2;
+  return (
+    attentionRank(left) - attentionRank(right) ||
+    activityTime(right).localeCompare(activityTime(left))
+  );
 }
 
 export default WorkPane;

@@ -879,7 +879,7 @@ it('shows a stale-data warning after a failed refresh and recovers on retry', as
   }
 });
 
-it('orders by Work or latest Run activity and distinguishes attention without reading titles', async () => {
+it('puts Work needing action before activity ordering without reading titles', async () => {
   const works = populatedWorkList.works.slice(0, 3).map((work, index) => ({
     ...work,
     product_state:
@@ -909,7 +909,7 @@ it('orders by Work or latest Run activity and distinguishes attention without re
       ),
     ];
     expect(links.map((link) => link.getAttribute('href'))).toEqual(
-      [works[1], works[2], works[0]].map((work) => `/work/${work!.id}`),
+      [works[1], works[0], works[2]].map((work) => `/work/${work!.id}`),
     );
     const problem = host.querySelector<HTMLElement>(
       '[data-run-state="problem"] .work-list-mark',

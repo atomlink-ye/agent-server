@@ -1046,6 +1046,35 @@ it('keeps Output neutral while captured text is hydrating', async () => {
   }
 });
 
+it('keeps Output neutral when a running WorkRun has no transcript yet', async () => {
+  mockProductReads({
+    states: { [selectedRun.id]: 'running' },
+    sessionTranscripts: {
+      work_id: work.work.id,
+      work_run_id: selectedRun.id,
+      capture_scope: 'safe_run_events',
+      sessions: [],
+    },
+  });
+  const { host, root } = await renderDetail({
+    workId: work.work.id,
+    tab: 'result',
+    selectedRunId: selectedRun.id,
+  });
+  try {
+    expect(
+      host.querySelector('[data-testid=outcome-summary] h2')?.textContent,
+    ).toBe('Loading captured output…');
+    expect(host.textContent).not.toContain(
+      'Captured assistant text is unavailable.',
+    );
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
 it('labels the current Work Definition and keeps its editor outside historical execution scope', async () => {
   mockProductReads();
   const { host, root } = await renderDetail({

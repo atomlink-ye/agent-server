@@ -51,19 +51,34 @@ function OverviewContent({
   const [outcome, setOutcome] = useState<string | null | undefined>(undefined);
   useEffect(() => {
     let active = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     setOutcome(undefined);
-    void loadSessionTranscripts(data.work.id, run.work_run.id)
-      .then((transcripts) => {
-        if (active)
-          setOutcome(latestAssistantSegmentFromSessions(transcripts.sessions));
-      })
-      .catch(() => {
-        if (active) setOutcome(null);
-      });
+    const load = () => {
+      void loadSessionTranscripts(data.work.id, run.work_run.id)
+        .then((transcripts) => {
+          if (!active) return;
+          const next = latestAssistantSegmentFromSessions(transcripts.sessions);
+          if (next === null && run.work_run.product_state === 'running') {
+            timer = setTimeout(load, 2_000);
+            return;
+          }
+          setOutcome(next);
+        })
+        .catch(() => {
+          if (!active) return;
+          if (run.work_run.product_state === 'running') {
+            timer = setTimeout(load, 2_000);
+            return;
+          }
+          setOutcome(null);
+        });
+    };
+    load();
     return () => {
       active = false;
+      if (timer) clearTimeout(timer);
     };
-  }, [data.work.id, run.work_run.id]);
+  }, [data.work.id, run.work_run.id, run.work_run.product_state]);
   const outcomeDocument = outcome ? outcomeBody(outcome) : '';
   const outcomeLoading = outcome === undefined;
   const stateView = productStatePresentation(run.work_run.product_state);

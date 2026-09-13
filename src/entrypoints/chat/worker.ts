@@ -28,6 +28,8 @@ export interface ChatDeliveryWorkerDeadLetter {
   readonly dispatchId: string;
   readonly tenantId: string;
   readonly conversationId: string;
+  readonly agentDefinitionId: string;
+  readonly throughSequence: number;
   readonly attemptCount: number;
   readonly reason: ChatDeliveryDeadLetterReason;
   readonly errorName: string;
@@ -47,7 +49,9 @@ export type ChatDeliveryWorkerOptions = {
   readonly retryPolicy?: ChatDeliveryRetryPolicy;
   readonly onError?: (failure: ChatDeliveryWorkerFailure) => void;
   /** A parked activation must be observable, never a silent stall. */
-  readonly onDeadLetter?: (event: ChatDeliveryWorkerDeadLetter) => void;
+  readonly onDeadLetter?: (
+    event: ChatDeliveryWorkerDeadLetter,
+  ) => void | Promise<void>;
   readonly onCircuitState?: (event: ChatDeliveryWorkerCircuitState) => void;
   readonly now?: () => number;
 };
@@ -206,10 +210,12 @@ export class ChatDeliveryWorker implements StepWorker {
 
     if (decision.planeUnavailable) this.openCircuit(errorName);
     if (decision.kind === 'dead_letter') {
-      this.notifyDeadLetter({
+      await this.notifyDeadLetter({
         dispatchId: dispatch.id,
         tenantId: dispatch.tenantId,
         conversationId: dispatch.conversationId,
+        agentDefinitionId: dispatch.agentDefinitionId,
+        throughSequence: dispatch.throughSequence,
         attemptCount: decision.attemptCount,
         reason: decision.reason,
         errorName,
@@ -281,11 +287,13 @@ export class ChatDeliveryWorker implements StepWorker {
     }
   }
 
-  private notifyDeadLetter(event: ChatDeliveryWorkerDeadLetter): void {
+  private async notifyDeadLetter(
+    event: ChatDeliveryWorkerDeadLetter,
+  ): Promise<void> {
     try {
-      this.#options.onDeadLetter?.(event);
-    } catch {
-      /* safe reporting */
+      await this.#options.onDeadLetter?.(event);
+    } catch (error: unknown) {
+      this.report('complete', error, { dispatchId: event.dispatchId });
     }
   }
 

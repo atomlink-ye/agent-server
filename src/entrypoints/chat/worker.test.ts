@@ -126,7 +126,9 @@ function harness(
         ...policyOptions,
       }),
       onError: (failure) => failures.push(failure),
-      onDeadLetter: (event) => deadLetters.push(event),
+      onDeadLetter: (event) => {
+        deadLetters.push(event);
+      },
       onCircuitState: (event) => circuit.push(event),
     },
   );
@@ -204,6 +206,8 @@ describe('ChatDeliveryWorker retry pacing', () => {
         dispatchId: 'dispatch-1',
         tenantId: 'tenant-a',
         conversationId: 'conversation-a',
+        agentDefinitionId: 'agent-a',
+        throughSequence: 1,
         attemptCount: 5,
         reason: 'attempt_limit_exhausted',
         errorName: 'Error',

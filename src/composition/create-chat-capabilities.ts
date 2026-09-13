@@ -5,6 +5,7 @@ import { MockChatTurnProvider } from '../adapters/chat/mock-chat-turn-provider.j
 import { ListAgentHomeEntries } from '../application/agents/agent-home.js';
 import { ChatBrainResolver } from '../application/chat/chat-brain-resolver.js';
 import { ChatDeliveryReconciler } from '../application/chat/chat-delivery-reconciler.js';
+import { materializeChatDeliveryFailure } from '../application/chat/materialize-chat-delivery-failure.js';
 import type { EnsureDesiredRuntimeSpec } from '../application/ports/ensure-desired-runtime-spec.js';
 import type { ExecuteRuntimeTurn } from '../application/runtime/execute-runtime-turn.js';
 import type { AgentResolutionApi } from '../application/ports/agent-resolution-api.js';
@@ -131,7 +132,7 @@ export function createChatCapabilities(
           worker_id: `${options.workerId}:chat`,
         });
       },
-      onDeadLetter: (event) => {
+      onDeadLetter: async (event) => {
         options.logger.log('error', 'chat.delivery_worker.dead_letter', {
           dispatch_id: event.dispatchId,
           tenant_id: event.tenantId,
@@ -142,6 +143,9 @@ export function createChatCapabilities(
           parked: event.parked,
           worker_id: `${options.workerId}:chat`,
         });
+        if (event.parked) {
+          await materializeChatDeliveryFailure(options.conversations, event);
+        }
       },
       onCircuitState: (event) => {
         options.logger.log('warn', 'chat.delivery_worker.circuit_breaker', {

@@ -571,9 +571,8 @@ export const zhCN: Record<MessageKey, string> = {
   'work.start.title': '创建 Work',
   'work.start.body': '设定目标并选择执行配置，准备好后启动 WorkRun。',
   'work.create': '创建 Work',
-  'work.continue.title': '选择要继续的 Work',
-  'work.continue.body':
-    '打开最近的 Work，查看其 WorkRun、Trace、对话记录或 Definition。',
+  'work.continue.title': '选择一个 Work 或创建新的',
+  'work.continue.body': '从列表中选择 Work，或创建新的 Work 开始。',
   'work.recent': '最近的 Work',
   'work.noRuns': '还没有 WorkRun',
   'work.reviewSetup': '打开 Work 查看它的设置。',

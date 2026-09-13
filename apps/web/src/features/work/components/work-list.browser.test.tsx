@@ -256,7 +256,7 @@ it('renders Work state and run counts without latest Run summaries', async () =>
   }
 });
 
-it('starts catalog Definitions without Coworker binding or initiator controls', async () => {
+it('keeps the Definition catalog behind a closed disclosure', async () => {
   const catalogItems = [
     {
       definitionId: catalogDefinitionId,
@@ -376,6 +376,16 @@ it('starts catalog Definitions without Coworker binding or initiator controls', 
       '[data-testid="work-definition-catalog"]',
     );
     expect(catalog).not.toBeNull();
+    const disclosure = host.querySelector<HTMLDetailsElement>(
+      '[data-testid="work-definition-catalog-disclosure"]',
+    )!;
+    expect(disclosure.open).toBe(false);
+    expect(catalog!.getBoundingClientRect().height).toBe(0);
+    await act(async () => {
+      disclosure.querySelector<HTMLElement>('summary')!.click();
+    });
+    expect(disclosure.open).toBe(true);
+    expect(catalog!.getBoundingClientRect().height).toBeGreaterThan(0);
     const cards = [...catalog!.querySelectorAll<HTMLElement>(':scope > li')];
     expect(cards).toHaveLength(2);
     const description = cards[0]!.querySelector<HTMLElement>(
@@ -587,6 +597,14 @@ it('scrolls the Work list and catalog together while its heading stays fixed', a
       '[data-testid="work-definition-catalog"]',
     )!;
     expect(catalog).not.toBeNull();
+    const disclosure = pane.querySelector<HTMLDetailsElement>(
+      '[data-testid="work-definition-catalog-disclosure"]',
+    )!;
+    expect(disclosure.open).toBe(false);
+    await act(async () => {
+      disclosure.querySelector<HTMLElement>('summary')!.click();
+    });
+    expect(disclosure.open).toBe(true);
     expect(scroller).not.toBeNull();
     expect(scroller!.scrollHeight).toBeGreaterThan(scroller!.clientHeight);
     expect(list.scrollHeight).toBe(list.clientHeight);
@@ -676,7 +694,7 @@ it('distinguishes loading, empty, and real network error without fabricating Wor
 });
 
 it.each([
-  ['recent Work landing', '.work-landing__intro button', populatedWorkList],
+  ['Work landing', '.work-landing button', populatedWorkList],
   ['empty Work landing', '.work-main-empty--first button', emptyWorkList],
   [
     'empty Work directory',
@@ -914,66 +932,3 @@ it('orders by Work or latest Run activity and distinguishes attention without re
     vi.unstubAllGlobals();
   }
 });
-
-it.each(['en', 'zh-CN'] as const)(
-  'keeps distinguishing suffixes visible in %s recent Work names',
-  async (locale) => {
-    await page.viewport(1440, 900);
-    setLocale(locale);
-    const works = populatedWorkList.works.slice(0, 2).map((work, index) => ({
-      ...work,
-      title: index === 0 ? 'A'.repeat(199) + 'B' : '中'.repeat(199) + '文',
-    }));
-    vi.stubGlobal('fetch', workPaneFetch({ works, next_cursor: null }));
-    const host = document.createElement('div');
-    host.className = 'app-shell';
-    document.body.append(host);
-    const root = createRoot(host);
-    try {
-      await act(async () => {
-        root.render(
-          <MemoryRouter>
-            <div />
-            <WorkPage />
-          </MemoryRouter>,
-        );
-      });
-      const names = [
-        ...host.querySelectorAll<HTMLElement>('.work-landing__recent strong'),
-      ];
-      expect(names).toHaveLength(2);
-      for (const [index, name] of names.entries()) {
-        expect(name.getBoundingClientRect().height).toBe(24);
-        // `.work-landing__recent a` gives the title a `minmax(0, 1fr)`
-        // middle column between two `max-content` siblings (the
-        // `work.latestState` state pill and the run timestamp), so the
-        // title's width is whatever the grid track resolves to rather than
-        // its own rendered text — and both `max-content` siblings measure
-        // their own rendered text, which is platform-dependent. Assert the
-        // layout intent directly from the browser's own resolved track size
-        // instead of a pinned pixel value.
-        const resolvedColumns = getComputedStyle(
-          name.closest('a')!,
-        ).gridTemplateColumns.split(' ');
-        expect(name.getBoundingClientRect().width).toBeCloseTo(
-          parseFloat(resolvedColumns[1]!),
-          0,
-        );
-        expect(name.getAttribute('title')).toHaveLength(200);
-        const suffix = name.querySelector<HTMLElement>(
-          '.work-scannable-title__suffix',
-        )!;
-        expect(suffix.textContent).toBe(name.getAttribute('title')!.slice(-8));
-        expect(suffix.getBoundingClientRect().right).toBeLessThanOrEqual(
-          name.getBoundingClientRect().right,
-        );
-        expect(suffix.getBoundingClientRect().width).toBeGreaterThan(0);
-      }
-    } finally {
-      await act(async () => root.unmount());
-      host.remove();
-      vi.unstubAllGlobals();
-      setLocale('en');
-    }
-  },
-);

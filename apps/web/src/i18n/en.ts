@@ -610,9 +610,9 @@ export const en = {
   'work.start.body':
     'Define an objective, choose its execution setup, then start a WorkRun when it is ready.',
   'work.create': 'Create Work',
-  'work.continue.title': 'Choose where to continue',
+  'work.continue.title': 'Select a Work or create one',
   'work.continue.body':
-    'Open a recent objective to review its WorkRun, trace, transcript, or definition.',
+    'Choose a Work from the list, or create a new Work to begin.',
   'work.recent': 'Recent Work',
   'work.noRuns': 'No WorkRuns yet',
   'work.reviewSetup': 'Open Work to review its setup.',

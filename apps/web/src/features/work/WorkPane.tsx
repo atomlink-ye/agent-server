@@ -250,6 +250,13 @@ function WorkListRow({
           count: runCount,
         });
   const timestamp = activityTime(work);
+  const stateLabel = work.archived_at
+    ? t('work.record.archived')
+    : work.latest_run_summary
+      ? t('work.latestRunState', {
+          state: productStatePresentation(state).label,
+        })
+      : t('work.noRuns');
   return (
     <li>
       <Link
@@ -273,28 +280,22 @@ function WorkListRow({
         <span className="work-list-copy">
           <span className="work-directory-heading">
             <WorkTitle title={work.title} />
-            <span className="work-list-count" title={count}>
-              {count}
-            </span>
           </span>
           <span className="work-list-meta">
-            <span>
-              {work.archived_at
-                ? t('work.record.archived')
-                : work.latest_run_summary
-                  ? t('work.latestRunState', {
-                      state: productStatePresentation(state).label,
-                    })
-                  : t('work.noRuns')}
+            <span className="work-directory-state">{stateLabel}</span>
+            <span className="work-list-reference">
+              <span className="work-list-count" title={count}>
+                {count}
+              </span>
+              <time
+                dateTime={timestamp}
+                title={t('work.updatedAt', {
+                  time: formatWorkListTime(timestamp),
+                })}
+              >
+                {formatWorkListTime(timestamp)}
+              </time>
             </span>
-            <time
-              dateTime={timestamp}
-              title={t('work.updatedAt', {
-                time: formatWorkListTime(timestamp),
-              })}
-            >
-              {formatWorkListTime(timestamp)}
-            </time>
           </span>
         </span>
       </Link>
@@ -344,11 +345,20 @@ function WorkCatalog() {
 
   if (catalog.length === 0) return null;
   return (
-    <section className="work-catalog" aria-label={t('work.catalog')}>
-      <div className="pane-section-heading">
-        <span className="eyebrow">{t('work.catalog')}</span>
-        <strong>{t('work.definitions')}</strong>
-      </div>
+    <details
+      className="work-catalog"
+      aria-label={t('work.catalog')}
+      data-testid="work-definition-catalog-disclosure"
+    >
+      <summary className="pane-section-heading">
+        <span className="work-catalog-heading-copy">
+          <span className="eyebrow">{t('work.catalog')}</span>
+          <strong>{t('work.definitions')}</strong>
+        </span>
+        <span className="work-catalog-disclosure-icon" aria-hidden="true">
+          ▾
+        </span>
+      </summary>
       <ul
         className="work-list work-catalog-list"
         data-testid="work-definition-catalog"
@@ -396,6 +406,6 @@ function WorkCatalog() {
           );
         })}
       </ul>
-    </section>
+    </details>
   );
 }

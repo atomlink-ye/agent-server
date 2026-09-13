@@ -3,13 +3,6 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import type { WorkListItem } from '@atomlink-ye/agent-server/product-contract';
 
 import { NewWork } from './components/new-work';
-import {
-  formatWorkListTime,
-  productStatePresentation,
-  resultCaptureLabel,
-} from './components/work-presentation';
-import { recentWorkRunSummary } from './components/run-outcome';
-import { loadSessionTranscripts } from '@/features/run-trace/run-trace-gateway';
 import { WorkDetailPage } from './pages/WorkDetailPage';
 import type { WorkListQuery } from './queries/use-work-list';
 import { workPath, workRootPath } from '../../app/routes';
@@ -222,7 +215,6 @@ export function WorkPage({
             <WorkLanding
               works={works}
               status={workListStatus}
-              originConversationId={returnConversationId}
               onCreate={openNewWork}
             />
           ) : null}
@@ -235,12 +227,10 @@ export function WorkPage({
 function WorkLanding({
   works,
   status,
-  originConversationId,
   onCreate,
 }: {
   readonly works: readonly WorkListItem[];
   readonly status: WorkListQuery['status'];
-  readonly originConversationId: string | null;
   readonly onCreate: () => void;
 }) {
   const t = useT();
@@ -274,108 +264,13 @@ function WorkLanding({
     );
 
   return (
-    <div className="work-landing">
-      <div className="work-landing__intro">
-        <p className="eyebrow">{t('work.title')}</p>
-        <h1>{t('work.continue.title')}</h1>
-        <p>{t('work.continue.body')}</p>
-        <button type="button" onClick={onCreate}>
-          {t('work.create')}
-        </button>
-      </div>
-      <ol className="work-landing__recent" aria-label={t('work.recent')}>
-        {[...works]
-          .sort((left, right) => {
-            const leftTime =
-              left.latest_run_summary?.updated_at ?? left.updated_at;
-            const rightTime =
-              right.latest_run_summary?.updated_at ?? right.updated_at;
-            return rightTime.localeCompare(leftTime);
-          })
-          .slice(0, 4)
-          .map((work) => (
-            <RecentWorkRow
-              key={work.id}
-              work={work}
-              originConversationId={originConversationId}
-            />
-          ))}
-      </ol>
+    <div className="work-landing" data-testid="work-landing">
+      <h1>{t('work.continue.title')}</h1>
+      <p>{t('work.continue.body')}</p>
+      <button type="button" onClick={onCreate}>
+        {t('work.create')}
+      </button>
     </div>
-  );
-}
-
-function RecentWorkRow({
-  work,
-  originConversationId,
-}: {
-  readonly work: WorkListItem;
-  readonly originConversationId: string | null;
-}) {
-  const t = useT();
-  const latestRun = work.latest_run_summary;
-  const [transcriptSummary, setTranscriptSummary] = useState<{
-    readonly workRunId: string;
-    readonly segment: string | null;
-  } | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    setTranscriptSummary(null);
-    if (!latestRun)
-      return () => {
-        active = false;
-      };
-    void loadSessionTranscripts(work.id, latestRun.id)
-      .then((transcripts) => {
-        if (active)
-          setTranscriptSummary({
-            workRunId: latestRun.id,
-            segment: recentWorkRunSummary(transcripts.sessions),
-          });
-      })
-      .catch(() => {
-        // The capture label is the safe fallback when transcript data is not
-        // available; a raw result_summary may be an incomplete provider chunk.
-        if (active)
-          setTranscriptSummary({ workRunId: latestRun.id, segment: null });
-      });
-    return () => {
-      active = false;
-    };
-  }, [latestRun?.id, work.id]);
-
-  const state = productStatePresentation(work.product_state);
-  const timestamp = latestRun?.updated_at ?? work.updated_at;
-  const matchingTranscript =
-    latestRun && transcriptSummary?.workRunId === latestRun.id
-      ? transcriptSummary
-      : null;
-  const transcriptSegment = matchingTranscript?.segment ?? null;
-  const summary = latestRun
-    ? (transcriptSegment ?? resultCaptureLabel(latestRun.result_capture_status))
-    : t('work.reviewSetup');
-  return (
-    <li>
-      <a href={workPath(work.id, originConversationId)}>
-        {latestRun ? (
-          <span
-            className={`work-state-pill work-state-pill--${work.product_state}`}
-          >
-            {t('work.latestState', { state: state.label })}
-          </span>
-        ) : (
-          <span className="work-landing__no-run">{t('work.noRuns')}</span>
-        )}
-        <WorkTitle title={work.title} />
-        <span className="work-landing__summary">{summary}</span>
-        <time dateTime={timestamp}>
-          {latestRun
-            ? t('work.runAt', { time: formatWorkListTime(timestamp) })
-            : t('work.updatedAt', { time: formatWorkListTime(timestamp) })}
-        </time>
-      </a>
-    </li>
   );
 }
 

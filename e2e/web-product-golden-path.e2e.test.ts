@@ -88,13 +88,9 @@ describe('web Product Golden Path', () => {
       await page.getByRole('button', { name: 'Create account' }).click();
       expect((await registerResponse).status()).toBe(201);
       await page.waitForURL(
-        (url) => url.origin === browserOrigin && url.pathname === '/',
+        (url) => url.origin === browserOrigin && url.pathname === '/agents',
         { timeout: 60_000 },
       );
-      await page.goto('/agents', {
-        waitUntil: 'domcontentloaded',
-        timeout: 60_000,
-      });
       await page
         .getByText('No Coworkers yet.', { exact: true })
         .waitFor({ state: 'visible', timeout: 60_000 });

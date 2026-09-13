@@ -215,6 +215,74 @@ it('does not let a slow poll erase a message that just posted', async () => {
   expect(host.textContent).toContain('Keep this successful send');
 });
 
+it('admits only one request for rapid duplicate submits', async () => {
+  const { host } = await renderChat([]);
+  let resolveSend!: (value: WorkChatMessageResponse) => void;
+  const post = vi.spyOn(workClient, 'postChat').mockReturnValue(
+    new Promise((resolve) => {
+      resolveSend = resolve;
+    }),
+  );
+  const textarea = host.querySelector<HTMLTextAreaElement>('textarea')!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(
+      HTMLTextAreaElement.prototype,
+      'value',
+    )!.set!.call(textarea, 'Send once');
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  const form = host.querySelector<HTMLFormElement>('form.composer')!;
+  await act(async () => {
+    form.dispatchEvent(
+      new Event('submit', { bubbles: true, cancelable: true }),
+    );
+    form.dispatchEvent(
+      new Event('submit', { bubbles: true, cancelable: true }),
+    );
+    await Promise.resolve();
+  });
+  expect(post).toHaveBeenCalledTimes(1);
+  await act(async () => {
+    resolveSend({ ...message(8, 'user'), body: 'Send once' });
+    await Promise.resolve();
+  });
+});
+
+it('uses a new idempotency key after the user edits a failed send', async () => {
+  const { host } = await renderChat([]);
+  const requestIds: string[] = [];
+  vi.spyOn(workClient, 'postChat').mockImplementation(
+    async (_workId, body, requestId) => {
+      requestIds.push(requestId!);
+      if (requestIds.length === 1) throw new Error('temporary');
+      return { ...message(9, 'user'), body };
+    },
+  );
+  const textarea = host.querySelector<HTMLTextAreaElement>('textarea')!;
+  const write = async (value: string) => {
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(
+        HTMLTextAreaElement.prototype,
+        'value',
+      )!.set!.call(textarea, value);
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  };
+  await write('Original failed body');
+  await act(async () => {
+    host.querySelector<HTMLButtonElement>('.send-button')!.click();
+    await Promise.resolve();
+  });
+  expect(textarea.value).toBe('Original failed body');
+  await write('Edited body');
+  await act(async () => {
+    host.querySelector<HTMLButtonElement>('.send-button')!.click();
+    await Promise.resolve();
+  });
+  expect(requestIds).toHaveLength(2);
+  expect(requestIds[1]).not.toBe(requestIds[0]);
+});
+
 it.each(['en', 'zh-CN'] as const)(
   'contains long user, code, and CJK content without widening the history in %s',
   async (locale) => {
@@ -329,6 +397,73 @@ it('replaces the transcript when the selected Run changes', async () => {
   expect(chat).toHaveBeenLastCalledWith(workId, secondRunId);
   expect(host.textContent).toContain('Second Run transcript');
   expect(host.textContent).not.toContain('First Run transcript');
+});
+
+it('ignores an old Run response that finishes after switching Runs', async () => {
+  const firstRunId = '00000000-0000-4000-8000-000000000200';
+  const secondRunId = '00000000-0000-4000-8000-000000000201';
+  let resolveFirst!: (value: WorkChatMessagesResponse) => void;
+  vi.spyOn(workClient, 'chat').mockImplementation((_workId, runId) => {
+    if (runId === firstRunId)
+      return new Promise((resolve) => {
+        resolveFirst = resolve;
+      });
+    return Promise.resolve(
+      response([{ ...message(2, 'lead'), body: 'Current Run response' }]),
+    );
+  });
+  const host = document.createElement('div');
+  document.body.append(host);
+  root = createRoot(host);
+  await act(async () => {
+    root!.render(<WorkChatPane workId={workId} workRunId={firstRunId} />);
+  });
+  await act(async () => {
+    root!.render(<WorkChatPane workId={workId} workRunId={secondRunId} />);
+    await Promise.resolve();
+  });
+  expect(host.textContent).toContain('Current Run response');
+
+  await act(async () => {
+    resolveFirst(
+      response([{ ...message(1, 'lead'), body: 'Stale first Run response' }]),
+    );
+    await Promise.resolve();
+  });
+  expect(host.textContent).toContain('Current Run response');
+  expect(host.textContent).not.toContain('Stale first Run response');
+});
+
+it('recovers a processing agent reply after navigating away and back', async () => {
+  const workRunId = '00000000-0000-4000-8000-000000000200';
+  const processing = {
+    ...message(1, 'user'),
+    body: 'Long-running request',
+    status: 'processing' as const,
+  };
+  const replied = { ...processing, status: 'replied' as const };
+  const assistant = { ...message(2, 'lead'), body: 'Durable final response' };
+  const chat = vi
+    .spyOn(workClient, 'chat')
+    .mockResolvedValueOnce(response([processing]))
+    .mockResolvedValue(response([replied, assistant]));
+  const host = document.createElement('div');
+  document.body.append(host);
+  root = createRoot(host);
+
+  await act(async () => {
+    root!.render(<WorkChatPane workId={workId} workRunId={workRunId} />);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  });
+  expect(host.textContent).toContain('Assistant is replying');
+  await act(async () => root!.render(<div>Other surface</div>));
+  await act(async () => {
+    root!.render(<WorkChatPane workId={workId} workRunId={workRunId} />);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  });
+  expect(chat).toHaveBeenCalledTimes(2);
+  expect(host.textContent).toContain('Durable final response');
+  expect(host.textContent).not.toContain('Assistant is replying');
 });
 
 const copyMeasurements: unknown[] = [];

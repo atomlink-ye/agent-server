@@ -77,6 +77,8 @@ function WorkChatConversation({
   const preparationRef = useRef(preparation);
   const loadingRef = useRef(true);
   const mutationVersionRef = useRef(0);
+  const sendingRef = useRef(false);
+  const failedBodyRef = useRef<string | null>(null);
   useEffect(() => {
     let active = true;
     let refreshInFlight = false;
@@ -146,7 +148,8 @@ function WorkChatConversation({
   }
   async function send() {
     const next = body.trim();
-    if (!next || sending) return;
+    if (!next || sendingRef.current) return;
+    sendingRef.current = true;
     setSending(true);
     setSendError(false);
     setBody('');
@@ -166,10 +169,13 @@ function WorkChatConversation({
         return updated;
       });
       setPendingRequestId(null);
+      failedBodyRef.current = null;
     } catch {
+      failedBodyRef.current = next;
       setSendError(true);
       setBody(next);
     } finally {
+      sendingRef.current = false;
       setSending(false);
     }
   }
@@ -374,7 +380,17 @@ function WorkChatConversation({
           )}
           sendingLabel={t('work.chat.sending')}
           hint={t('composer.hint')}
-          onDraftChange={setBody}
+          onDraftChange={(nextBody) => {
+            if (
+              failedBodyRef.current !== null &&
+              nextBody.trim() !== failedBodyRef.current
+            ) {
+              failedBodyRef.current = null;
+              setPendingRequestId(null);
+              setSendError(false);
+            }
+            setBody(nextBody);
+          }}
           onSend={() => void send()}
           onRetry={() => void send()}
         />

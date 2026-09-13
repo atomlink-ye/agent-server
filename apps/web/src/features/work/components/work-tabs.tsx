@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom';
+
 import { useT } from '../../../i18n';
 import {
   RUN_TABS,
@@ -35,10 +37,10 @@ export function WorkTabs({
       }
     >
       {tabs.map((tab) => (
-        <a
+        <Link
           key={tab}
           aria-current={activeTab === tab ? 'page' : undefined}
-          href={workTabHref(workId, tab, runId, originConversationId)}
+          to={workTabHref(workId, tab, runId, originConversationId)}
         >
           {tab === 'chat'
             ? t(runId ? 'work.run.conversation' : 'work.record.preparation')
@@ -55,7 +57,7 @@ export function WorkTabs({
                           : 'work.record.definition',
                       )
                     : t('work.scope.filesUnavailable')}
-        </a>
+        </Link>
       ))}
     </nav>
   );

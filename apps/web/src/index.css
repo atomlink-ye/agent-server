@@ -98,7 +98,8 @@
 /* CJK glyphs fill more of the em square than Latin glyphs. Keep compact
    metadata at the 12px accessibility floor, step larger roles down, and give
    continuous Chinese text more air without changing component geometry. */
-:root:lang(zh-CN) {
+:root:lang(zh-CN) .work-pane,
+:root:lang(zh-CN) .work-main {
   --text-md: 12px;
   --text-lg: 13px;
   --text-heading: 15px;

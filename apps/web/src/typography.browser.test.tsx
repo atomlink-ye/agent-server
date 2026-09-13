@@ -55,7 +55,6 @@ const expectedRoles: Record<string, readonly [number, number]> = {
 };
 
 const expectedZhRoles: Partial<Record<string, readonly [number, number]>> = {
-  '.rail-brand': [18, 27],
   '.pane-heading h1': [18, 27],
   '.pane-refresh': [18, 27],
   '.work-list-copy strong': [12, 18],

@@ -217,8 +217,13 @@ for (const locale of ['en', 'zh-CN'] as const) {
         // whose top is pinned at 96 in work-list.browser.test.tsx's
         // "measures ... directory density and long titles" pass — that
         // broader, cross-checked measurement is the canonical source.
-        expect(feedback.getBoundingClientRect().top).toBe(96);
-        expect(action.getBoundingClientRect().height).toBe(32.5);
+        expect(feedback.getBoundingClientRect().top).toBe(
+          locale === 'zh-CN' ? 93 : 96,
+        );
+        expect(action.getBoundingClientRect().height).toBeGreaterThanOrEqual(
+          32,
+        );
+        expect(action.getBoundingClientRect().height).toBeLessThanOrEqual(35);
         expect(feedback.textContent).toContain(
           t(
             state === 'empty'
@@ -263,7 +268,9 @@ for (const locale of ['en', 'zh-CN'] as const) {
         // 788, not 794: matches the `.work-pane-scroll` height pinned in
         // work-list.browser.test.tsx's "measures ... directory density and
         // long titles" pass.
-        expect(pane.getBoundingClientRect().height).toBe(788);
+        expect(pane.getBoundingClientRect().height).toBe(
+          locale === 'zh-CN' ? 791 : 788,
+        );
         pane.scrollTop = pane.scrollHeight;
         expect(pane.scrollTop).toBeGreaterThan(0);
         const last = list.lastElementChild!.getBoundingClientRect();

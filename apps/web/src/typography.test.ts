@@ -133,7 +133,8 @@ it('pins the minimum size and the compact, body, and heading scale', () => {
 
 it('uses a smaller, more open shared type scale for zh-CN', () => {
   const css = readFileSync(join(sourceRoot, 'index.css'), 'utf8');
-  const cjk = css.match(/:root:lang\(zh-CN\)\s*{([\s\S]*?)\n}/)?.[1] ?? '';
+  const cjk =
+    css.match(/:root:lang\(zh-CN\) \.work-main\s*{([\s\S]*?)\n}/)?.[1] ?? '';
   const tokens = Object.fromEntries(
     [...cjk.matchAll(/(--(?:text|leading)-[\w-]+):\s*([^;]+);/g)].map(
       (match) => [match[1], match[2]],

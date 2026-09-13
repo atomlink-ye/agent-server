@@ -57,9 +57,18 @@ The three failures were:
 
 ## Work-focused follow-up
 
-The Work directory now carries the user's next decision before reference detail: work that `needs_you` is listed first, then work in `problem`, with the remaining work ordered by recent activity. Within each row the name and state remain primary; the item count and timestamp are deliberately quieter reference metadata. The existing Work-to-Run information model was retained: Work presents durable identity and aggregate progress, while a selected Run presents attempt-specific state, result, activity, and definition. That distinction already matched the user's path from choosing work, to resolving attention, to inspecting evidence.
+When a person opens Work, they are trying to triage an ongoing portfolio: identify what needs their decision or has gone wrong, choose the right Work, then inspect a particular WorkRun's conversation, output, activity, or definition to decide whether to intervene, retry, or accept the result. They do not need counts, timestamps, or execution provenance to compete with that first decision.
 
-Simplified Chinese no longer inherits English all-caps tracking on Work kickers and state pills. This removes artificial spacing without shrinking text or increasing row density. The deliberate 49.5px directory row, 26px tab, and 624px card pins remain unchanged.
+The Work directory now carries that decision first: work that `needs_you` is listed first, then work in `problem`, with the remaining work ordered by recent activity. Within each row the name and state remain primary; the item count and timestamp are deliberately quieter reference metadata. Before, recent activity alone could place healthy work above an item waiting on the user. The existing Work-to-Run information model was retained: Work presents durable identity and aggregate progress, while a selected Run presents attempt-specific state, result, activity, and definition. That distinction supports the path from choosing work, to resolving attention, to inspecting evidence.
+
+Simplified Chinese needed a locale-specific correction that English did not: uppercase tracking provides useful separation for short Latin labels, but Chinese has no uppercase form and extra spacing visually fragments compact ideographic words. Work kickers and state pills therefore retain their tracking in English while zh-CN uses normal tracking. This removes artificial visual noise without shrinking Chinese text, tightening its line boxes, or increasing row density. The deliberate 49.5px directory row, 26px tab, and 624px card pins remain unchanged.
+
+### 1440px headless evidence
+
+Captured through the repository's real Chromium Playwright/Vitest harness at a 1440 x 900 viewport. The directory views contain multiple `needs_you`, `problem`, and unknown-state runs; the detail views show a selected WorkRun and its Conversation, Output, Activity, and Definition-used tabs.
+
+- Work directory: [English](docs/ux/r3/work-list-en.png) / [Simplified Chinese](docs/ux/r3/work-list-zh-CN.png)
+- WorkRun detail: [English](docs/ux/r3/work-run-detail-en.png) / [Simplified Chinese](docs/ux/r3/work-run-detail-zh-CN.png)
 
 ### Work geometry at 1440px (`getBoundingClientRect()`)
 

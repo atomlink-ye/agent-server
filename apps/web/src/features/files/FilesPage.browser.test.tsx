@@ -52,7 +52,13 @@ it('scrolls the real Files list to its final file on desktop', async () => {
         throw new Error(`unexpected Files request method: ${method}`);
 
       let body: unknown;
-      if (url.pathname === '/api/context/files') {
+      if (url.pathname === '/api/auth/me') {
+        body = {
+          user_id: 'reader',
+          username: 'reader',
+          display_name: 'Reader',
+        };
+      } else if (url.pathname === '/api/context/files') {
         expect(url.searchParams.get('scope')).toBe('workspace');
         body = { access: 'read_write', scope: {}, entries };
       } else if (url.pathname === '/api/context/file') {

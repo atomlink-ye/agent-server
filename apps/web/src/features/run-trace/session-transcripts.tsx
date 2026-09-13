@@ -1,5 +1,6 @@
 import { capturedValue } from '@/i18n/captured-value';
 import { t } from '@/i18n';
+import { useRichT } from '@/i18n/rich';
 import { useEffect, useState } from 'react';
 
 import { AssistantMarkdown } from '@/features/conversations/components/assistant-markdown';
@@ -569,6 +570,8 @@ function SessionSummaryBlock({
   readonly summary: SessionSummary;
   readonly platformToolCount: number;
 }) {
+  const richT = useRichT();
+
   return (
     <div
       className="execution-transcript__summary"
@@ -604,18 +607,22 @@ function SessionSummaryBlock({
         <aside className="execution-transcript__last-meaningful">
           <strong>{t('trace.latestSummary')}</strong>
           {summary.last_meaningful.action ? (
-            <p>
-              {t('trace.sessions.action', {
-                action: summary.last_meaningful.action,
+            <div>
+              {richT('trace.sessions.action', {
+                action: (
+                  <AssistantMarkdown text={summary.last_meaningful.action} />
+                ),
               })}
-            </p>
+            </div>
           ) : null}
           {summary.last_meaningful.result ? (
-            <p>
-              {t('trace.events.result', {
-                result: summary.last_meaningful.result,
+            <div>
+              {richT('trace.events.result', {
+                result: (
+                  <AssistantMarkdown text={summary.last_meaningful.result} />
+                ),
               })}
-            </p>
+            </div>
           ) : null}
           <details>
             <summary>{t('trace.aboutSummary')}</summary>

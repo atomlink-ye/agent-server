@@ -58,7 +58,7 @@ export function RunTrigger({
     try {
       const workRunId = (await workRunClient.start(workId)).work_run.id;
       window.location.assign(
-        workTabHref(workId, 'chat', workRunId, originConversationId),
+        workTabHref(workId, 'transcript', workRunId, originConversationId),
       );
     } catch (reason) {
       // A permanent failure (e.g. the Work requires a runtime capability

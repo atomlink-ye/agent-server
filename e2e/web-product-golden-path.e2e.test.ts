@@ -365,6 +365,7 @@ describe('web Product Golden Path', () => {
           url.origin === browserOrigin &&
           url.pathname === `/work/${createdWorkId}` &&
           url.searchParams.get('from_conversation') === conversationId &&
+          url.searchParams.get('tab') === 'transcript' &&
           canonicalUuid.test(url.searchParams.get('run') ?? ''),
         { timeout: 60_000 },
       );

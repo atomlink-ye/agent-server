@@ -52,7 +52,7 @@ export function WorkDetailPage({
   const navigate = useNavigate();
   const openStartedWorkRun = useCallback(
     (id: string) => {
-      navigate(workTabHref(workId, 'chat', id, originConversationId));
+      navigate(workTabHref(workId, 'transcript', id, originConversationId));
     },
     [navigate, workId, originConversationId],
   );

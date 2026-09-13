@@ -441,6 +441,56 @@ it('renders a single-agent session with no role element shown', async () => {
   }
 });
 
+it('renders latest action and result Markdown links while stripping unsafe HTML', async () => {
+  const trace = parseRecordedTrace(reworkRecording);
+  const response = structuredClone(MOCK_RESPONSE);
+  response.work_id = trace.work.id;
+  response.work_run_id = trace.workRun.id;
+  response.sessions[0]!.summary.last_meaningful = {
+    kind: 'tool_status',
+    timestamp: '2026-08-17T10:00:00.000Z',
+    action: '[Review report](https://example.com/report)',
+    result:
+      '[All checks passed](https://example.com/result) <strong>unsafe HTML</strong> <img src=x onerror="window.__unsafe = true"> <script></script>',
+  };
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue({ ok: true, json: async () => response }),
+  );
+
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => root.render(<SessionTranscripts trace={trace} />));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+
+    const summary = host.querySelector('[data-testid="session-summary"]');
+    expect(summary).not.toBeNull();
+    expect(summary?.textContent).toContain('Action:');
+    expect(summary?.textContent).toContain('Result:');
+    expect(summary?.textContent).not.toContain('[Review report](');
+    expect(summary?.textContent).not.toContain('[All checks passed](');
+    expect(summary?.querySelectorAll('a')).toHaveLength(2);
+    expect(
+      summary?.querySelector('a[href="https://example.com/report"]'),
+    ).not.toBeNull();
+    expect(
+      summary?.querySelector('a[href="https://example.com/result"]'),
+    ).not.toBeNull();
+    expect(summary?.querySelector('script')).toBeNull();
+    expect(summary?.querySelector('img')).toBeNull();
+    expect(summary?.querySelector('[onerror]')).toBeNull();
+    expect(summary?.querySelectorAll('strong')).toHaveLength(1);
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
 it.each(['en', 'zh-CN'] as const)(
   'names a completed Task attempt Run in %s at 1440',
   async (locale) => {

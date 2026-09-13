@@ -1,7 +1,7 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 
 import { AppProviders } from '../providers';
 import { AppRouter } from './index';
@@ -30,6 +30,27 @@ async function renderAt(path: string): Promise<{
   readonly text: string;
   readonly cleanup: () => void;
 }> {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL) => {
+      const request =
+        typeof input === 'object' && input !== null && 'url' in input
+          ? (input as Request)
+          : null;
+      const url = new URL(request?.url ?? String(input), window.location.href);
+      if (url.pathname !== '/api/auth/me')
+        throw new Error(`unexpected router request URL: ${url.pathname}`);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          user_id: 'browser-test-user',
+          username: 'browser-test',
+          display_name: 'Browser Test',
+        }),
+      } as Response;
+    }),
+  );
   const host = document.createElement('div');
   document.body.append(host);
   const root = createRoot(host);

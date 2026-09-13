@@ -335,10 +335,28 @@ async function bootstrapWorkDefinition(workerVersionId, environmentVersionId) {
 kind: WorkDefinition
 metadata:
   name: research-brief
+  description: Research a topic for a specific audience and return the requested brief format.
 spec:
   kind: single_worker
   worker_version_id: ${workerVersionId}
-  environment_version_id: ${environmentVersionId}`;
+  environment_version_id: ${environmentVersionId}
+  input_schema:
+    type: object
+    properties:
+      topic:
+        type: string
+        min_length: 1
+        max_length: 1000
+      audience:
+        type: string
+        min_length: 1
+        max_length: 500
+      format:
+        type: string
+        min_length: 1
+        max_length: 500
+    required: [topic, audience, format]
+    additional_properties: false`;
 
   // Only the fetch itself (a network-level failure) belongs in this try/catch.
   // A `fail()` call for an unexpected status must not be caught here too,
@@ -351,7 +369,7 @@ spec:
       headers: {
         authorization: `Bearer ${token}`,
         'content-type': 'application/json',
-        'idempotency-key': 'web-bootstrap-single-worker-work-tools-apply-v1',
+        'idempotency-key': 'web-bootstrap-research-brief-inputs-apply-v2',
       },
       body: JSON.stringify({ source: workDefinitionSource }),
       signal: AbortSignal.timeout(15_000),

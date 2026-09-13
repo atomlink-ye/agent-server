@@ -71,3 +71,65 @@ The 46px increase is deliberate information capacity for the state explanation a
    Test Files  1 passed (1)
         Tests  2 passed | 106 skipped (108)
   ```
+
+## zh-CN typography and density follow-up
+
+### Audit and decision
+
+At baseline, English and zh-CN inherited exactly the same type scale: 12px metadata, 13px list/body text, 20px pane titles, and 24px display titles. Their line-height ratios were also identical: 1.35 tight, 1.5 UI, and 1.6 body. That preserves mechanical equality but not optical equality: Chinese glyphs fill more of the em square, so the larger roles read heavier and more crowded at the same size.
+
+The fix is centralized in shared `:root:lang(zh-CN) [data-work-surface]` tokens. The explicit surface marker keeps the optical adjustment within the Work page instead of leaking through legacy class names shared by Observe and other pages. It keeps the 12px metadata floor, reduces larger CJK roles by 1–2px (`md 13→12`, `lg 14→13`, `heading 16→15`, `title 20→18`, `display 24→22`), raises body leading from 1.6 to 1.75, and raises tight leading from 1.35 to 1.5. Compact UI leading stays 1.5 so the deliberate 49.5px Work row and 26px tab remain stable. Work metadata timestamps now use the shared `--ink-metadata` role backed by `--ink-500`, matching the value/status tier instead of the faint `--ink-300` previously used.
+
+### Before/after at 1440×900
+
+Measured with CSSOM and `getBoundingClientRect()` in real Chromium:
+
+| Metric                          |            en before |            en after |         zh-CN before |         zh-CN after |
+| ------------------------------- | -------------------: | ------------------: | -------------------: | ------------------: |
+| Work list title size / line box |        13px / 19.5px |       13px / 19.5px |        13px / 19.5px |         12px / 18px |
+| Metadata size / line box        |          12px / 18px |         12px / 18px |          12px / 18px |         12px / 18px |
+| Pane title size / line box      |          20px / 30px |         20px / 30px |          20px / 30px |         18px / 27px |
+| Landing title size / line box   |          24px / 36px |         24px / 36px |          24px / 36px |         22px / 33px |
+| Landing body size / line box    |        13px / 20.8px |       13px / 20.8px |        13px / 20.8px |         12px / 21px |
+| Work row height                 |               49.5px |              49.5px |               49.5px |              49.5px |
+| Fully visible Work items        |                   14 |                  14 |                   14 |                  14 |
+| Work list viewport              |                788px |               788px |                788px |               791px |
+| Metadata timestamp color        | `rgb(148, 168, 188)` | `rgb(91, 113, 134)` | `rgb(148, 168, 188)` | `rgb(91, 113, 134)` |
+
+The 3px zh-CN viewport gain comes from the smaller pane heading; it does not alter the deliberately pinned row height or above-fold item count. The 624px Work card and 26px Work tabs are unchanged.
+
+### Follow-up verification
+
+```text
+typography.browser.test.tsx
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+
+typography.test.ts
+ Test Files  1 passed (1)
+      Tests  6 passed (6)
+
+work-list.browser.test.tsx
+ Test Files  1 passed (1)
+      Tests  14 passed (14)
+
+work-detail.browser.test.tsx
+ Test Files  1 passed (1)
+      Tests  26 passed (26)
+
+work-vocabulary.browser.test.tsx
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+
+CI=true pnpm test:web
+ Test Files  4 failed | 68 passed (72)
+      Tests  5 failed | 549 passed (554)
+```
+
+The complete web run retained the three declared baseline failures (two Conversations router tests and the Files scroll test), plus the independently reproduced `en` Work-card pin (`expected 133`, measured `124`). Its fifth failure was the known intermittent 30-second `/observe` concurrency timeout; the targeted rerun result is recorded below.
+
+```text
+CI=true pnpm test:web apps/web/src/app/router/scroll.browser.test.tsx -t "keeps 'oversized' 'en' content reachable at 1440 on '/observe"
+ Test Files  1 passed (1)
+      Tests  2 passed | 106 skipped (108)
+```

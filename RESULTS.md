@@ -21,12 +21,53 @@ The planned change will preserve `?run=` and `/observe?work=&run=`. It will prio
 
 ## Implementation
 
-Pending.
+- Preserved the existing Work → WorkRun scope split and every `?run=` URL.
+- Turned the newest history row into a visually distinct latest-Run summary. It names the latest Run, keeps its Product state visible, explains the state in user terms, and promotes one next action: Output when complete, Conversation when the Run needs the user, and Activity for running/problem/uncaptured states.
+- Kept all three direct destinations available, with older Runs remaining compact history rather than repeating the summary treatment.
+- Reordered selected-Run navigation to `Output → Activity → Conversation → Definition used`, aligning the first three choices with the jobs of retrieving work, diagnosing/monitoring it, and responding. Definition remains available as audit context.
+- Added English and zh-CN action copy, browser assertions for state-sensitive routing and geometry, and updated `docs/frontend.md` to record the current IA.
+- Did not add a retry/handoff workflow the Product API cannot support, a new status, a new Run route, or a competing trace surface.
 
 ## Measurements at 1440px
 
-Pending in English and zh-CN.
+All values below were taken with `getBoundingClientRect()` in real Chromium at a 1440×900 viewport. The before values were re-measured from the specified `origin/master` base (`dc63a056`) in a detached worktree; the after values were measured from this branch.
+
+| Locale | Element                                  |      Before |  After |
+| ------ | ---------------------------------------- | ----------: | -----: |
+| en     | Work content width / latest row width    |       964px |  964px |
+| en     | Latest row height                        |        78px |  124px |
+| en     | Latest guidance max rendered width       | not present |  620px |
+| en     | First Work content offset from shell top |      99.5px | 99.5px |
+| zh-CN  | Work content width / latest row width    |       964px |  964px |
+| zh-CN  | Latest row height                        |        78px |  124px |
+| zh-CN  | Latest guidance max rendered width       | not present |  620px |
+| zh-CN  | First Work content offset from shell top |      99.5px | 99.5px |
+
+The 46px increase is deliberate information capacity for the state explanation and primary action. Width and initial content position remain unchanged in both locales, so the task summary adds no horizontal overflow and does not push the first content lower.
 
 ## Verification
 
-Pending.
+- `CI=true pnpm test:web apps/web/src/features/work/components/work-detail.browser.test.tsx --reporter=verbose` — pass:
+
+  ```text
+   Test Files  1 passed (1)
+        Tests  26 passed (26)
+  ```
+
+- `CI=true pnpm lint` — exit 0; output included `All matched files use Prettier code style!` and both root/Web TypeScript checks completed.
+- `CI=true pnpm web:check:types` — exit 0.
+- `CI=true pnpm test:web` — completed with these verbatim final lines:
+
+  ```text
+   Test Files  4 failed | 68 passed (72)
+        Tests  5 failed | 548 passed (553)
+  ```
+
+  Three failures are the exact declared master reds (two Conversation router tests and the Files scroll test). The full run also reported an unrelated `/observe` oversized-scroll timeout and `work-feedback.browser.test.tsx > en long card report...` height mismatch. The latter was reproduced unchanged on `origin/master` at `dc63a056` (`expected 133`, `received 124`), so it is not introduced by this lane. The `/observe` timeout is outside the Work detail code changed here; the focused Work detail suite passed all 26 tests. No lane-owned failure remains in the focused surface.
+
+- The timed-out Observe case passed on immediate focused rerun:
+
+  ```text
+   Test Files  1 passed (1)
+        Tests  2 passed | 106 skipped (108)
+  ```

@@ -104,6 +104,63 @@ it('leaves a principal message as the text they actually typed', async () => {
   expect(host.textContent).toContain('**exactly**');
 });
 
+it('keeps the reply indicator until every queued user turn has an Agent reply', async () => {
+  const queuedTurns = [
+    message({
+      id: '10000000-0000-4000-8000-000000000001',
+      sequence: 1,
+      authorType: 'principal',
+      body: 'Start a long answer.',
+    }),
+    message({
+      id: '10000000-0000-4000-8000-000000000002',
+      sequence: 2,
+      authorType: 'principal',
+      body: 'Queued follow-up.',
+    }),
+    message({
+      id: '10000000-0000-4000-8000-000000000003',
+      sequence: 3,
+      authorType: 'agent_definition',
+      body: 'The long answer is complete.',
+    }),
+  ];
+  const host = await render(queuedTurns);
+  expect(host.querySelector('.chat-awaiting-reply')).not.toBeNull();
+
+  const root = roots.at(-1)!;
+  await act(async () => {
+    root.render(
+      <MemoryRouter>
+        <main className="chat-panel" style={{ height: '900px' }}>
+          <ChatTranscript
+            conversationId={conversationId}
+            hasConversations
+            state={
+              {
+                status: 'ready',
+                messages: [
+                  ...queuedTurns,
+                  message({
+                    id: '10000000-0000-4000-8000-000000000004',
+                    sequence: 4,
+                    authorType: 'agent_definition',
+                    body: 'The follow-up is complete.',
+                  }),
+                ],
+                error: null,
+              } as unknown as ConversationMessagesState
+            }
+            onRetry={() => undefined}
+            onOpenWork={() => undefined}
+          />
+        </main>
+      </MemoryRouter>,
+    );
+  });
+  expect(host.querySelector('.chat-awaiting-reply')).toBeNull();
+});
+
 it('pins new Conversation messages unless the reader has scrolled away', async () => {
   const initial = Array.from({ length: 48 }, (_, index) =>
     message({

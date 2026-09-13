@@ -383,8 +383,11 @@ export function ChatTranscript({
     return <StateMessage>{t('transcript.noMessages')}</StateMessage>;
   }
 
-  const lastMessage = state.messages[state.messages.length - 1];
-  const awaitingReply = lastMessage?.authorType === 'principal';
+  const outstandingReplies = state.messages.reduce(
+    (count, message) =>
+      message.authorType === 'principal' ? count + 1 : Math.max(0, count - 1),
+    0,
+  );
   const cardAnchorByWork = new Map<string, number>();
   for (const message of state.messages) {
     if (message.workRef && !cardAnchorByWork.has(message.workRef))
@@ -419,7 +422,7 @@ export function ChatTranscript({
           fallbackRecipientLabel={fallbackRecipientLabel}
         />
       ))}
-      {awaitingReply ? (
+      {outstandingReplies > 0 ? (
         <p className="chat-awaiting-reply" role="status">
           <span aria-hidden="true" className="chat-awaiting-dots">
             <span />

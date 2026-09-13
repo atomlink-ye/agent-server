@@ -43,3 +43,34 @@ Commits were created incrementally and pushed to `origin/r3/lane-b`. Earlier att
 To https://github.com/atomlink-ye/agent-server.git
  * [new branch]      HEAD -> r3/lane-b
 ```
+
+## Headless walkthrough observations
+
+Evidence was captured at 1440×900 through the repository's headless Playwright/Vitest browser harness:
+
+- [Files walkthrough](docs/ux/r3/files-walkthrough.gif)
+- [Workspace walkthrough](docs/ux/r3/workspace-walkthrough.gif)
+
+Files observations:
+
+- The long Files list scrolls to its final row without stalling. The selected final file opens and its long preview scrolls to the final heading.
+- Scroll ownership is visually consistent with the implementation: the file list scrolls independently until a file is opened; long preview content then scrolls in the main Files pane.
+- No horizontal layout break or visible path overflow was observed. Long paths remain single-line and ellipsized in the list; the full selected path wraps in the preview heading.
+- A normal Workspace-scope file preview has no Back action. Because selection stays in the split list/preview layout, returning means selecting another file or scope. The explicit Back action exists only for routed Work-result files. This is the one point where the requested “go back” flow has no direct UI control.
+
+Workspace observations (implemented as the Tasks and Boards surfaces; there is no `/workspace` route):
+
+- Tasks list scrolling and detail/comment scrolling both reach their final entries without stalling. The `+ New Task` primary action opens its in-app authoring state.
+- Boards list, vertical Board content, and horizontal Board canvas each reach their final entries. The `+ New Board` and `+ New Task` Board actions open in-app authoring states and remain inside the 1440 layout.
+- No clipped controls, horizontal text overflow, or broken card/column layout was observed during these flows.
+- Repeated 1440 geometry checks in `en` and `zh-CN` showed no visible Chinese size/density mismatch on Files, Tasks, or Boards. Simplified Chinese uses the same 12px minimum metadata and shared body/control scale as English; localized heading actions wrap within their existing bounds.
+
+Recording verification:
+
+```text
+ Test Files  3 passed (3)
+      Tests  30 passed (30)
+
+ Test Files  2 passed (2)
+      Tests  29 passed (29)
+```

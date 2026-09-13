@@ -99,12 +99,15 @@ function WorkChatConversation({
               onRunStarted(response.preparation.work_run_id);
               return;
             }
-            if (
-              mutationVersion === mutationVersionRef.current &&
-              !sameMessages(messagesRef.current, response.messages)
-            ) {
-              messagesRef.current = response.messages;
-              setMessages(response.messages);
+            if (mutationVersion === mutationVersionRef.current) {
+              const merged = mergeMessages(
+                messagesRef.current,
+                response.messages,
+              );
+              if (!sameMessages(messagesRef.current, merged)) {
+                messagesRef.current = merged;
+                setMessages(merged);
+              }
             }
             const nextPreparation = response.preparation ?? null;
             if (!samePreparation(preparationRef.current, nextPreparation)) {
@@ -164,7 +167,7 @@ function WorkChatConversation({
       );
       mutationVersionRef.current += 1;
       setMessages((current) => {
-        const updated = [...current, message];
+        const updated = mergeMessages(current, [message]);
         messagesRef.current = updated;
         return updated;
       });
@@ -414,6 +417,18 @@ function sameMessages(
         message.body === candidate.body
       );
     })
+  );
+}
+
+function mergeMessages(
+  current: WorkChatMessagesResponse['messages'],
+  incoming: WorkChatMessagesResponse['messages'],
+): WorkChatMessagesResponse['messages'] {
+  const byId = new Map(current.map((message) => [message.id, message]));
+  for (const message of incoming) byId.set(message.id, message);
+  return [...byId.values()].sort(
+    (left, right) =>
+      left.sequence - right.sequence || left.id.localeCompare(right.id),
   );
 }
 

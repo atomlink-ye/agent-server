@@ -146,13 +146,15 @@ it('pins new Conversation messages unless the reader has scrolled away', async (
     transcript.scrollHeight - transcript.clientHeight - transcript.scrollTop,
   ).toBeLessThanOrEqual(2);
 
-  const pinnedArrival = message({
-    id: '33333333-3333-4333-8333-333333333333',
-    sequence: 49,
-    authorType: 'agent_definition',
-    body: 'Arrived while pinned',
-  });
-  await rerender([...initial, pinnedArrival]);
+  const pinnedBurst = Array.from({ length: 8 }, (_, index) =>
+    message({
+      id: `33333333-3333-4333-8333-${String(index).padStart(12, '0')}`,
+      sequence: 49 + index,
+      authorType: index % 2 ? 'principal' : 'agent_definition',
+      body: `Pinned burst ${index}`,
+    }),
+  );
+  await rerender([...initial, ...pinnedBurst]);
   expect(
     transcript.scrollHeight - transcript.clientHeight - transcript.scrollTop,
   ).toBeLessThanOrEqual(2);
@@ -160,20 +162,19 @@ it('pins new Conversation messages unless the reader has scrolled away', async (
   transcript.scrollTop = 0;
   transcript.dispatchEvent(new Event('scroll'));
   const readerPosition = transcript.scrollTop;
-  await rerender([
-    ...initial,
-    pinnedArrival,
+  const readerBurst = Array.from({ length: 12 }, (_, index) =>
     message({
-      id: '44444444-4444-4444-8444-444444444444',
-      sequence: 50,
-      authorType: 'agent_definition',
-      body: 'Arrived while reading history',
+      id: `44444444-4444-4444-8444-${String(index).padStart(12, '0')}`,
+      sequence: 57 + index,
+      authorType: index % 2 ? 'agent_definition' : 'principal',
+      body: `Reader burst ${index}`,
     }),
-  ]);
+  );
+  await rerender([...initial, ...pinnedBurst, ...readerBurst]);
   expect(transcript.scrollTop).toBe(readerPosition);
 
   const finalMessage = [...transcript.querySelectorAll('article')].at(-1)!;
-  expect(finalMessage.textContent).toContain('Arrived while reading history');
+  expect(finalMessage.textContent).toContain('Reader burst 11');
   await page.screenshot({
     path: '../../../../../.local/conversations-scroll-desktop.png',
   });

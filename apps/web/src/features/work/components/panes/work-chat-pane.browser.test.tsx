@@ -116,25 +116,31 @@ it('auto-scrolls on arrival only while the reader is near the bottom', async () 
     history.scrollHeight - history.clientHeight - history.scrollTop;
   expect(atBottom()).toBeLessThanOrEqual(2);
 
-  // The server retains new messages across every subsequent poll.
-  chat.mockResolvedValue(response([...initial, message(33, 'lead')]));
+  // The server retains burst arrivals across every subsequent poll.
+  const pinnedBurst = Array.from({ length: 8 }, (_, index) =>
+    message(33 + index, index % 2 ? 'user' : 'lead'),
+  );
+  chat.mockResolvedValue(response([...initial, ...pinnedBurst]));
   await act(async () => new Promise((resolve) => setTimeout(resolve, 1_050)));
-  expect(history.textContent).toContain('Conversation message 33');
+  expect(history.textContent).toContain('Conversation message 40');
   expect(atBottom()).toBeLessThanOrEqual(2);
 
   history.scrollTop = 0;
   history.dispatchEvent(new Event('scroll'));
   const readerPosition = history.scrollTop;
+  const readerBurst = Array.from({ length: 12 }, (_, index) =>
+    message(41 + index, index % 2 ? 'lead' : 'user'),
+  );
   chat.mockResolvedValue(
-    response([...initial, message(33, 'lead'), message(34, 'user')]),
+    response([...initial, ...pinnedBurst, ...readerBurst]),
   );
   await act(async () => new Promise((resolve) => setTimeout(resolve, 1_050)));
-  expect(history.textContent).toContain('Conversation message 34');
+  expect(history.textContent).toContain('Conversation message 52');
   expect(history.scrollTop).toBe(readerPosition);
   expect(history.scrollHeight - history.clientHeight).toBeGreaterThan(80);
   // A further poll must preserve both the arrived message and reader position.
   await act(async () => new Promise((resolve) => setTimeout(resolve, 1100)));
-  expect(history.textContent).toContain('Conversation message 34');
+  expect(history.textContent).toContain('Conversation message 52');
   expect(history.scrollTop).toBe(readerPosition);
 });
 
@@ -213,6 +219,65 @@ it('does not let a slow poll erase a message that just posted', async () => {
     await Promise.resolve();
   });
   expect(host.textContent).toContain('Keep this successful send');
+});
+
+it('deduplicates a sent message that polling observes before POST resolves', async () => {
+  const { host } = await renderChat([]);
+  const persisted = { ...message(7, 'user'), body: 'Persisted once' };
+  let resolveSend!: (value: WorkChatMessageResponse) => void;
+  vi.spyOn(workClient, 'postChat').mockReturnValue(
+    new Promise((resolve) => {
+      resolveSend = resolve;
+    }),
+  );
+  const textarea = host.querySelector<HTMLTextAreaElement>('textarea')!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(
+      HTMLTextAreaElement.prototype,
+      'value',
+    )!.set!.call(textarea, persisted.body);
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await act(async () => {
+    host.querySelector<HTMLButtonElement>('.send-button')!.click();
+    await Promise.resolve();
+  });
+  vi.mocked(workClient.chat).mockResolvedValue(response([persisted]));
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 1_050)));
+  expect(host.textContent).toContain(persisted.body);
+
+  await act(async () => {
+    resolveSend(persisted);
+    await Promise.resolve();
+  });
+  expect(
+    [...host.querySelectorAll('.work-chat-message')].filter((entry) =>
+      entry.textContent?.includes(persisted.body),
+    ),
+  ).toHaveLength(1);
+});
+
+it('retains loaded history when the server latest-message window advances', async () => {
+  const initial = Array.from({ length: 200 }, (_, index) => message(index + 1));
+  const chat = vi
+    .spyOn(workClient, 'chat')
+    .mockResolvedValue(response(initial));
+  const { host, history } = await renderChat(initial);
+  history.scrollTop = Math.floor(history.scrollHeight / 2);
+  history.dispatchEvent(new Event('scroll'));
+  const sentinel = [
+    ...host.querySelectorAll<HTMLElement>('.work-chat-message'),
+  ].find((entry) => entry.textContent?.includes('Conversation message 100'))!;
+  const sentinelTop = sentinel.getBoundingClientRect().top;
+  const advanced = Array.from({ length: 200 }, (_, index) =>
+    message(index + 11),
+  );
+  chat.mockResolvedValue(response(advanced));
+
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 1_050)));
+  expect(host.textContent).toContain('Conversation message 1');
+  expect(host.textContent).toContain('Conversation message 210');
+  expect(sentinel.getBoundingClientRect().top).toBeCloseTo(sentinelTop, 0);
 });
 
 it('admits only one request for rapid duplicate submits', async () => {

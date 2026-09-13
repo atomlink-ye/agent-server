@@ -182,7 +182,7 @@
   gap: var(--space-3);
   margin: var(--space-2) 0 0 36px;
   max-width: 760px;
-  padding: var(--space-5);
+  padding: calc(var(--space-5) - 0.5px) var(--space-5) var(--space-5);
   border: 1px solid var(--sky-200);
   border-radius: var(--radius-lg);
   background: linear-gradient(135deg, var(--sky-50), var(--cloud));
@@ -567,6 +567,48 @@
 }
 .work-run-list > li {
   grid-template-columns: minmax(0, 1fr) auto auto;
+}
+.work-run-list > .work-run-list__latest {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-3) var(--space-5);
+  min-height: 116px;
+  padding: var(--space-5);
+  border: 1px solid var(--sky-200);
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, var(--sky-50), var(--paper));
+}
+.work-run-list__identity strong small {
+  margin-left: var(--space-2);
+  color: var(--sky-ink);
+  font-size: var(--text-eyebrow);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.work-run-list__latest .work-run-list__identity {
+  position: relative;
+  top: -0.5px;
+}
+.work-run-list__guidance {
+  grid-column: 1;
+  margin: 0;
+  max-width: 620px;
+  color: var(--ink-600);
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+}
+.work-run-list__latest .work-run-list__actions {
+  grid-column: 2;
+  grid-row: 2;
+  align-items: center;
+}
+.work-run-list__actions .work-run-list__primary {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--sky-ink);
+  color: var(--paper);
+  text-decoration: none;
 }
 .work-record h2 {
   margin: 0;

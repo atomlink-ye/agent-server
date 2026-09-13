@@ -468,15 +468,17 @@ it('renders a Work record with Work-only tabs through Product reads only', async
     ).toBe('Active');
     const row = host.querySelector('.work-record .work-run-list > li')!;
     expect(row).not.toBeNull();
-    expect([...row.querySelectorAll('a')].map((a) => a.textContent)).toEqual([
-      'Conversation',
-      'Output',
-      'Activity',
-    ]);
-    for (const [index, tab] of ['chat', 'result', 'transcript'].entries())
-      expect(row.querySelectorAll('a')[index]?.getAttribute('href')).toBe(
-        `/work/${work.work.id}?tab=${tab}&run=${selectedRun.id}`,
-      );
+    expect(row.classList.contains('work-run-list__latest')).toBe(true);
+    expect(row.textContent).toContain('Latest WorkRun');
+    expect(row.textContent).toContain(
+      'The status of this WorkRun is unavailable. Captured output does not establish completion.',
+    );
+    expect(row.querySelector('.work-run-list__primary')?.textContent).toBe(
+      'Follow progress',
+    );
+    expect(
+      row.querySelector('.work-run-list__primary')?.getAttribute('href'),
+    ).toBe(`/work/${work.work.id}?tab=transcript&run=${selectedRun.id}`);
     expect(
       host.querySelector<HTMLDetailsElement>('.work-record-metadata')?.open,
     ).toBe(false);
@@ -516,7 +518,7 @@ it('renders the exact Product DefinitionVersion used by the selected Run', async
     );
     expect(
       [...host.querySelectorAll('.work-tabs a')].map((a) => a.textContent),
-    ).toEqual(['Conversation', 'Output', 'Activity', 'Definition used']);
+    ).toEqual(['Output', 'Activity', 'Conversation', 'Definition used']);
   } finally {
     await act(async () => root.unmount());
     host.remove();
@@ -615,7 +617,7 @@ it('keeps Run tabs and an ordinal breadcrumb separate from the Work tabs', async
   try {
     expect(
       [...host.querySelectorAll('.work-tabs a')].map((a) => a.textContent),
-    ).toEqual(['Conversation', 'Output', 'Activity', 'Definition used']);
+    ).toEqual(['Output', 'Activity', 'Conversation', 'Definition used']);
     expect(host.querySelector('.work-run-header')?.textContent).toContain(
       'WorkRun #1',
     );
@@ -652,11 +654,11 @@ it('lists Runs newest first with ordinal identities and opens their conversation
   try {
     const rows = [...host.querySelectorAll('.work-run-list > li')];
     expect(rows.map((row) => row.querySelector('strong')?.textContent)).toEqual(
-      ['WorkRun #2', 'WorkRun #1'],
+      ['WorkRun #2Latest WorkRun', 'WorkRun #1'],
     );
-    expect(rows[0]?.querySelector('a')?.getAttribute('href')).toContain(
-      `tab=chat&run=${selectedRun.id}`,
-    );
+    expect(
+      rows[0]?.querySelector('.work-run-list__primary')?.getAttribute('href'),
+    ).toContain(`run=${selectedRun.id}`);
   } finally {
     await act(async () => root.unmount());
     host.remove();

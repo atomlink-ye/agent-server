@@ -17,7 +17,7 @@ export type WorkTab =
   | 'result';
 
 export const WORK_TABS = ['overview', 'definition'] as const;
-export const RUN_TABS = ['chat', 'result', 'transcript', 'definition'] as const;
+export const RUN_TABS = ['result', 'transcript', 'chat', 'definition'] as const;
 
 export function normalizeWorkTab(
   value: string | undefined,

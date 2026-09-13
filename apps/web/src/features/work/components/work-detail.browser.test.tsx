@@ -834,6 +834,22 @@ it.each(
       firstPaneOffset:
         tabs.nextElementSibling!.getBoundingClientRect().top -
         shell.getBoundingClientRect().top,
+      latestRun:
+        view === 'work'
+          ? (() => {
+              const latest = shell.querySelector(
+                '.work-run-list__latest',
+              ) as HTMLElement;
+              const guidance = latest.querySelector(
+                '.work-run-list__guidance',
+              ) as HTMLElement;
+              return {
+                width: latest.getBoundingClientRect().width,
+                height: latest.getBoundingClientRect().height,
+                guidanceWidth: guidance.getBoundingClientRect().width,
+              };
+            })()
+          : null,
     };
     console.info(`Work navigation measurement: ${JSON.stringify(measurement)}`);
     expect.soft(measurement.header).toBe(view === 'work' ? 36 : 28);
@@ -857,6 +873,12 @@ it.each(
         header.getBoundingClientRect().right + 1,
       );
     expect(tabs.scrollWidth).toBeLessThanOrEqual(tabs.clientWidth);
+    if (measurement.latestRun) {
+      expect(measurement.latestRun.height).toBeGreaterThanOrEqual(116);
+      expect(measurement.latestRun.guidanceWidth).toBeLessThanOrEqual(
+        measurement.latestRun.width,
+      );
+    }
   } finally {
     await act(async () => root.unmount());
     host.remove();

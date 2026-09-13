@@ -34,7 +34,11 @@ export default defineConfig({
     browser: {
       enabled: true,
       headless: true,
-      provider: playwright(),
+      provider: playwright({
+        launchOptions: {
+          args: ['--no-zygote', '--single-process'],
+        },
+      }),
       viewport: { width: 1440, height: 900 },
       instances: [{ browser: 'chromium' }],
     },

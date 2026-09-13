@@ -157,3 +157,19 @@ An empty Description now renders as three rows instead of six; once it contains 
 | zh-CN  |                    6→3 | under 100px tall      | yes                            |                            12→0 |
 
 Focused result: `TasksPage.browser.test.tsx` passed 14/14 tests; the density-only bilingual rerun passed 2/2 with 12 skipped.
+
+## Work Chat loss-prevention follow-up
+
+### Send rejection after route unmount
+
+Lane A's proposed ownership boundary was correct, but retaining fields alone would not close the race: the send promise itself must settle into state that outlives the route component. Work Chat mutation state now lives in the application provider, keyed by the exact `(Work, WorkRun | preparation)` scope. The store owns the request promise, frozen submitted body, and `client_request_id`.
+
+If the user leaves while a send is pending and it later fails, returning to that same conversation restores the exact text and Retry affordance. Retry reuses the same body and request identity, allowing the server's existing idempotency contract to converge a committed request whose response was lost. Editing a failed body deliberately clears that attempt identity so changed text becomes a new mutation; state never crosses between preparation, Runs, or Works. Nothing is written to browser storage.
+
+The focused regression reproduces the original race by submitting, unmounting the chat route before rejection, rejecting while absent, and remounting. It then verifies the exact draft returns and the retry POST uses the original request ID and body.
+
+```text
+CI=true pnpm test:web apps/web/src/features/work/components/panes/work-chat-pane.browser.test.tsx
+ Test Files  1 passed (1)
+      Tests  8 passed (8)
+```

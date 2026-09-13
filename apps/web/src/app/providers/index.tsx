@@ -15,12 +15,17 @@ import {
   createMessagesStore,
   type MessagesStore,
 } from '../../features/conversations/stores/messages';
+import {
+  createWorkChatMutationStore,
+  type WorkChatMutationStore,
+} from '../../features/work/stores/work-chat-mutations';
 
 export interface AppRuntime {
   readonly commands: ChatCommands;
   readonly appStore: AppStore;
   readonly conversationsStore: ConversationsStore;
   readonly messagesStore: MessagesStore;
+  readonly workChatMutationStore: WorkChatMutationStore;
 }
 
 const AppRuntimeContext = createContext<AppRuntime | null>(null);
@@ -38,9 +43,25 @@ export function AppProviders({
     [appStore],
   );
   const messagesStore = useMemo(() => createMessagesStore(), []);
+  const workChatMutationStore = useMemo(
+    () => createWorkChatMutationStore(),
+    [],
+  );
   const runtime = useMemo(
-    () => ({ commands, appStore, conversationsStore, messagesStore }),
-    [appStore, commands, conversationsStore, messagesStore],
+    () => ({
+      commands,
+      appStore,
+      conversationsStore,
+      messagesStore,
+      workChatMutationStore,
+    }),
+    [
+      appStore,
+      commands,
+      conversationsStore,
+      messagesStore,
+      workChatMutationStore,
+    ],
   );
   return (
     <AppRuntimeContext.Provider value={runtime}>

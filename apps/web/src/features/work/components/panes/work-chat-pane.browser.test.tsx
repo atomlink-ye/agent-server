@@ -18,6 +18,7 @@ import '../../../../index.css';
 import '../work-detail.css';
 import { workClient } from '../../clients/work-client';
 import { WorkChatPane } from './work-chat-pane';
+import { AppProviders } from '../../../../app/providers';
 
 (
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -46,6 +47,14 @@ function response(
 
 let root: Root | null = null;
 
+function providedPane(props: { workId: string; workRunId?: string }) {
+  return (
+    <AppProviders>
+      <WorkChatPane {...props} />
+    </AppProviders>
+  );
+}
+
 async function renderChat(messages: readonly WorkChatMessageResponse[]) {
   vi.spyOn(workClient, 'chat').mockResolvedValue(response(messages));
   const host = document.createElement('div');
@@ -54,7 +63,7 @@ async function renderChat(messages: readonly WorkChatMessageResponse[]) {
   document.body.append(host);
   root = createRoot(host);
   await act(async () => {
-    root!.render(<WorkChatPane workId={workId} />);
+    root!.render(providedPane({ workId }));
     await new Promise((resolve) => setTimeout(resolve, 20));
   });
   return {
@@ -108,7 +117,7 @@ it('auto-scrolls on arrival only while the reader is near the bottom', async () 
   const mountedRoot = createRoot(host);
   root = mountedRoot;
   await act(async () => {
-    mountedRoot.render(<WorkChatPane workId={workId} />);
+    mountedRoot.render(providedPane({ workId }));
     await new Promise((resolve) => setTimeout(resolve, 20));
   });
   const history = host.querySelector<HTMLElement>('.work-chat-history')!;
@@ -136,6 +145,73 @@ it('auto-scrolls on arrival only while the reader is near the bottom', async () 
   await act(async () => new Promise((resolve) => setTimeout(resolve, 1100)));
   expect(history.textContent).toContain('Conversation message 34');
   expect(history.scrollTop).toBe(readerPosition);
+});
+
+it('restores a failed send and its retry identity after the chat route unmounts', async () => {
+  vi.spyOn(workClient, 'chat').mockResolvedValue(response([]));
+  let rejectSend!: (reason?: unknown) => void;
+  const post = vi
+    .spyOn(workClient, 'postChat')
+    .mockImplementationOnce(
+      () =>
+        new Promise((_, reject) => {
+          rejectSend = reject;
+        }),
+    )
+    .mockResolvedValueOnce(message(50, 'user'));
+  const host = document.createElement('div');
+  document.body.append(host);
+  root = createRoot(host);
+  await act(async () => {
+    root!.render(providedPane({ workId }));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  });
+
+  const draft = 'Keep this exact question after navigation';
+  const textarea = host.querySelector<HTMLTextAreaElement>('textarea')!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(
+      HTMLTextAreaElement.prototype,
+      'value',
+    )!.set!.call(textarea, draft);
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await act(async () => {
+    host.querySelector<HTMLFormElement>('.composer')!.requestSubmit();
+  });
+  expect(post).toHaveBeenCalledTimes(1);
+  const requestId = post.mock.calls[0]![2];
+
+  await act(async () => {
+    root!.render(
+      <AppProviders>
+        <p>Another route</p>
+      </AppProviders>,
+    );
+  });
+  await act(async () => {
+    rejectSend(new Error('late rejection'));
+    await Promise.resolve();
+  });
+  await act(async () => {
+    root!.render(providedPane({ workId }));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  });
+
+  expect(host.querySelector<HTMLTextAreaElement>('textarea')?.value).toBe(
+    draft,
+  );
+  const retry = [...host.querySelectorAll('button')].find(
+    (button) => button.textContent === 'Retry',
+  );
+  expect(retry).toBeDefined();
+  await act(async () => {
+    retry!.click();
+    await Promise.resolve();
+  });
+  expect(post).toHaveBeenCalledTimes(2);
+  expect(post.mock.calls[1]![1]).toBe(draft);
+  expect(post.mock.calls[1]![2]).toBe(requestId);
 });
 
 it('captures the empty and short conversational states', async () => {
@@ -190,7 +266,7 @@ it('loads the selected Run conversation instead of preparation', async () => {
   const { host } = await renderChat([]);
   const workRunId = '00000000-0000-4000-8000-000000000200';
   await act(async () => {
-    root!.render(<WorkChatPane workId={workId} workRunId={workRunId} />);
+    root!.render(providedPane({ workId, workRunId }));
   });
   expect(workClient.chat).toHaveBeenLastCalledWith(workId, workRunId);
   expect(host.textContent).toContain('Questions about this WorkRun');
@@ -216,10 +292,10 @@ it.each(['en', 'zh-CN'] as const)(
       const { host } = await renderChat([]);
       await act(async () =>
         root!.render(
-          <WorkChatPane
-            workId={workId}
-            workRunId="00000000-0000-4000-8000-000000000200"
-          />,
+          providedPane({
+            workId,
+            workRunId: '00000000-0000-4000-8000-000000000200',
+          }),
         ),
       );
       const control = host.querySelector<HTMLTextAreaElement>(

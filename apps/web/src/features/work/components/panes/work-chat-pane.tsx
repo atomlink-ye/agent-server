@@ -4,6 +4,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  useSyncExternalStore,
 } from 'react';
 import { useT } from '../../../../i18n';
 import { IChat } from '../../../../components/icons';
@@ -11,6 +12,8 @@ import { ChatComposer } from '../../../conversations/components/ChatComposer';
 import { AssistantMarkdown } from '../../../conversations/components/assistant-markdown';
 import { workClient } from '../../clients/work-client';
 import { ProductMutationError } from '../../clients/errors';
+import { useAppRuntime } from '../../../../app/providers';
+import { workChatScope } from '../../stores/work-chat-mutations';
 import type {
   WorkChatMessagesResponse,
   WorkPreparationResponse,
@@ -61,11 +64,16 @@ function WorkChatConversation({
   const [messages, setMessages] = useState<
     WorkChatMessagesResponse['messages']
   >([]);
-  const [body, setBody] = useState('');
   const [loading, setLoading] = useState(true);
-  const [sending, setSending] = useState(false);
   const [error, setError] = useState(false);
-  const [pendingRequestId, setPendingRequestId] = useState<string | null>(null);
+  const { workChatMutationStore } = useAppRuntime();
+  const mutationScope = workChatScope(workId, workRunId);
+  const mutationSnapshot = useSyncExternalStore(
+    workChatMutationStore.subscribe,
+    workChatMutationStore.getSnapshot,
+  );
+  const mutation =
+    mutationSnapshot[mutationScope] ?? workChatMutationStore.get(mutationScope);
   const [preparation, setPreparation] =
     useState<WorkPreparationResponse | null>(null);
   const [confirming, setConfirming] = useState(false);
@@ -75,6 +83,13 @@ function WorkChatConversation({
   const messagesRef = useRef(messages);
   const preparationRef = useRef(preparation);
   const loadingRef = useRef(true);
+  const mountedRef = useRef(true);
+  useEffect(
+    () => () => {
+      mountedRef.current = false;
+    },
+    [],
+  );
   useEffect(() => {
     let active = true;
     const refresh = () =>
@@ -133,31 +148,22 @@ function WorkChatConversation({
     stickToBottomRef.current = distanceFromBottom <= 80;
   }
   async function send() {
-    const next = body.trim();
-    if (!next || sending) return;
-    setSending(true);
     setError(false);
-    setBody('');
-    const requestId = pendingRequestId ?? crypto.randomUUID();
-    setPendingRequestId(requestId);
     try {
-      const message = await workClient.postChat(
-        workId,
-        next,
-        requestId,
-        workRunId,
+      const message = await workChatMutationStore.send(
+        mutationScope,
+        (body, requestId) =>
+          workClient.postChat(workId, body, requestId, workRunId),
       );
+      if (!message) return;
+      if (!mountedRef.current) return;
       setMessages((current) => {
         const updated = [...current, message];
         messagesRef.current = updated;
         return updated;
       });
-      setPendingRequestId(null);
     } catch {
-      setError(true);
-      setBody(next);
-    } finally {
-      setSending(false);
+      if (mountedRef.current) setError(true);
     }
   }
   async function confirmPreparation() {
@@ -347,11 +353,13 @@ function WorkChatConversation({
       </div>
       <div className="work-chat-composer">
         <ChatComposer
-          draft={body}
-          sending={sending}
+          draft={mutation.draft}
+          sending={mutation.status === 'sending'}
           disabled={false}
-          sendError={error ? t('work.chat.sendError') : null}
-          canRetry={Boolean(body.trim())}
+          sendError={
+            mutation.status === 'failed' ? t('work.chat.sendError') : null
+          }
+          canRetry={mutation.status === 'failed'}
           fieldLabel={t('composer.field.label')}
           placeholder={t(
             workRunId ? 'work.chat.runPlaceholder' : 'work.chat.placeholder',
@@ -361,7 +369,9 @@ function WorkChatConversation({
           )}
           sendingLabel={t('work.chat.sending')}
           hint={t('composer.hint')}
-          onDraftChange={setBody}
+          onDraftChange={(draft) =>
+            workChatMutationStore.setDraft(mutationScope, draft)
+          }
           onSend={() => void send()}
           onRetry={() => void send()}
         />

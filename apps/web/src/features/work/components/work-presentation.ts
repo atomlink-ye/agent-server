@@ -54,6 +54,19 @@ export function workTabHref(
 }
 
 /**
+ * A newly started Run should open on observable execution activity. The
+ * Conversation tab is intentionally unable to read execution history, so it
+ * cannot reassure a user who is waiting for their new Run to make progress.
+ */
+export function startedWorkRunHref(
+  workId: string,
+  workRunId: string,
+  originConversationId?: string | null,
+) {
+  return workTabHref(workId, 'transcript', workRunId, originConversationId);
+}
+
+/**
  * Presentation of the latest WorkRun, plus pre-execution/loading states.
  * This is not a Work lifecycle: Work itself only has archived_at.
  */

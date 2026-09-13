@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import { diagnosticsFrom } from '@/features/work/components/definition-panel';
-import { workTabHref } from '@/features/work/components/work-presentation';
+import {
+  startedWorkRunHref,
+  workTabHref,
+} from '@/features/work/components/work-presentation';
 import {
   type DefinitionDiagnostics,
   type DefinitionPlan,
@@ -220,7 +223,7 @@ export function NewWork({
         buildInput(capability!, values),
       );
       window.location.assign(
-        workTabHref(workId, 'overview', run.work_run.id, originConversationId),
+        startedWorkRunHref(workId, run.work_run.id, originConversationId),
       );
     } catch (reason) {
       setState('error');

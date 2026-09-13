@@ -93,3 +93,49 @@ Computed tracking changed only where language called for it: the 12px state pill
 - Work hierarchy and bilingual typography: `Test Files  2 passed (2)` / `Tests  15 passed (15)`.
 - Attention-first directory ordering: `Test Files  1 passed (1)` / `Tests  14 passed (14)`.
 - Work measurement cases: `Test Files  2 passed (2)` / `Tests  10 passed | 18 skipped (28)`.
+
+## Real PostgreSQL + Paseo journey
+
+This follow-up used the running product rather than rendered fixtures: PostgreSQL 15 at the supplied `agent_server` database, the repository's `dev:runtime` host-native launcher, the shared Paseo daemon, and a real Codex `gpt-5.6-luna` execution. The browser viewport was 1440 x 900. All 78 durable migrations were already applied.
+
+### Evidence
+
+- [Create a real Coworker and arrive in Chat](docs/ux/r3/real/create-coworker.gif)
+- [Create input-complete Work, watch its real WorkRun, and inspect the result](docs/ux/r3/real/run-research-work.gif)
+
+The GIFs were assembled from the already-captured headless Playwright frames after the manager's stop-browser instruction; no fixture responses were used. They are reduced to 720 x 450 for repository size, while the source interaction viewport was 1440 x 900.
+
+### Honest user experience
+
+- **Coworker creation was understandable.** “Name,” “Role,” help, and working style matched how a person describes a teammate, and `Create & Chat` delivered exactly what it promised by opening a conversation with the new Coworker.
+- **Coworker-to-Work continuity was unclear.** After creating the Coworker, Work offered published Definitions rather than the Coworker just created. The copy explains that a Definition selects a Worker or Team, but there is no visible route from a Coworker to creating or selecting that executable Worker/Definition. I could proceed only by choosing the pre-published Research Brief. This remains an owned product-navigation gap; resolving the Coworker/Worker relationship is larger than a safe exploratory styling change.
+- **The original Research Brief left the user stranded.** Its creator explicitly said “This Definition needs no input,” the real run completed, and its only output asked the user to provide a topic, audience, and format. `Complete` therefore described runtime termination, not completion of the user's objective. The bootstrap Definition now requires those three fields before starting. A second real run received them and returned the requested three-finding brief.
+- **Running felt quiet.** The selected Run displayed `Running`, but Conversation explained that it cannot access execution history and showed no live activity. The useful search/tool progress appeared under Activity only after navigation and eventual completion. A user watching the default tab does not know whether work is advancing beyond the status pill. This remains the clearest next UX change: surface recent execution activity or explicitly direct the user to Activity while a Run is active.
+- **The completed result was initially unreadable.** Real Codex output arrived as several independent assistant segments, each followed by cumulative snapshots. The transcript projector compared each snapshot with the entire already-merged message, so after the second segment it appended every larger snapshot and produced a repeated output wall. It now tracks the last raw snapshot separately and replaces only that suffix. Reopening the same persisted real Run produced one coherent brief in both Output and Activity.
+- **Some tab loads were visibly slow under extreme concurrent host load.** Short 1.5-second captures caught blank or `Loading Work…` states; settled reloads completed correctly. Given the manager-reported 3-core load and hundreds of Chromium processes, this is recorded as environmental evidence rather than treated as a geometry or state regression.
+
+### Focused verification for real-flow fixes
+
+Research Brief input contract:
+
+```text
+ Test Files  1 passed (1)
+      Tests  7 passed (7)
+```
+
+Real-provider cumulative stream normalization:
+
+```text
+ Test Files  2 passed (2)
+      Tests  13 passed (13)
+```
+
+The final non-browser lint/type gate for the stream fix exited successfully:
+
+```text
+All matched files use Prettier code style!
+> pnpm typecheck
+$ tsc -p tsconfig.json --noEmit && pnpm web:check:types
+$ pnpm --filter @atomlink-ye/agent-server-web check:types
+$ tsc -p tsconfig.app.json --noEmit
+```

@@ -834,6 +834,10 @@ export const en = {
   'work.chat.queued': 'Queued · waiting for a reply',
   'work.chat.processing': 'Assistant is replying',
   'work.chat.failed': 'Reply failed · retry',
+  'work.chat.loadEarlier': 'Load earlier messages',
+  'work.chat.loadingEarlier': 'Loading earlier messages…',
+  'work.chat.loadEarlierError':
+    'Earlier messages could not be loaded. Try again.',
   'work.chat.loadError': 'Unable to load this conversation.',
   'work.chat.sendError': 'Unable to send this message.',
   'work.chat.runEmptyTitle': 'Talk about this WorkRun.',

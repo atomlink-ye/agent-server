@@ -191,3 +191,11 @@ CI=true pnpm test:unit src/infrastructure/postgres/postgres-work-chat-repository
 ```
 
 The first focused PGlite invocation reached its default 30-second ceiling during database startup. The same file passed in 22.19 seconds when rerun with the repository test's explicit 60-second PGlite allowance; this was test-harness startup headroom, not a pagination assertion failure.
+
+The browser now exposes `Load earlier messages` / `加载更早的消息` at the top when `next_cursor` is present. Older pages merge by message ID and sequence, polling cannot discard already-loaded history, and the reader's viewport anchor is preserved within 1px while rows are prepended. A page-load failure leaves the current transcript and composer intact with a local retryable error.
+
+```text
+CI=true pnpm test:web apps/web/src/features/work/components/panes/work-chat-pane.browser.test.tsx apps/web/src/features/work/clients/work-client.test.ts
+ Test Files  2 passed (2)
+      Tests  12 passed (12)
+```

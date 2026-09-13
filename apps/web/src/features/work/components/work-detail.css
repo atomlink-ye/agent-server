@@ -64,6 +64,23 @@
   padding: var(--space-3) var(--space-2) var(--space-5) 0;
   scrollbar-gutter: stable;
 }
+.work-chat-earlier {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-1);
+}
+.work-chat-earlier button {
+  border: 1px solid var(--ink-100);
+  background: var(--cloud);
+  padding: var(--space-2) var(--space-3);
+  color: var(--ink-500);
+  font-size: var(--text-sm);
+}
+.work-chat-earlier p {
+  margin: 0;
+  color: var(--coral-deep);
+  font-size: var(--text-sm);
+}
 .work-chat-message {
   align-items: flex-start;
   display: flex;

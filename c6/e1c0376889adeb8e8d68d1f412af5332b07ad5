@@ -1,0 +1,29 @@
+apps/web/src/features/work/components/work-detail.css
+  ca52225163492319 189-238
+apps/web/src/features/run-trace/transcript-projection.ts
+  ca52225163492319 229-241
+apps/web/src/features/run-trace/transcript-projection.test.ts
+  ca52225163492319 449-484
+apps/web/src/features/work/components/panes/work-chat-pane.tsx
+  ca52225163492319 301-316,327-328,330-337,340-347,349-365
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2-bit.10+672fbf0",
+  "base_commit_sha": "c6e1c0376889adeb8e8d68d1f412af5332b07ad5",
+  "prompts": {
+    "ca52225163492319": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ca036948-500f-437c-bc12-1c902750be05",
+        "model": "claude-opus-5"
+      },
+      "human_author": "link.ye",
+      "messages": [],
+      "total_additions": 15273,
+      "total_deletions": 393,
+      "accepted_lines": 14927,
+      "overriden_lines": 0
+    }
+  }
+}

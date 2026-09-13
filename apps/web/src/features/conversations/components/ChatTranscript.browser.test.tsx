@@ -125,10 +125,35 @@ it('keeps the reply indicator until every queued user turn has an Agent reply', 
       body: 'The long answer is complete.',
     }),
   ];
-  const host = await render(queuedTurns);
+  const host = await render(queuedTurns.slice(0, 2));
   expect(host.querySelector('.chat-awaiting-reply')).not.toBeNull();
+  expect(host.textContent).toContain('Waiting for 2 replies');
+  expect(host.textContent).toContain('elapsed');
 
   const root = roots.at(-1)!;
+  await act(async () => {
+    root.render(
+      <MemoryRouter>
+        <main className="chat-panel" style={{ height: '900px' }}>
+          <ChatTranscript
+            conversationId={conversationId}
+            hasConversations
+            state={
+              {
+                status: 'ready',
+                messages: queuedTurns,
+                error: null,
+              } as unknown as ConversationMessagesState
+            }
+            onRetry={() => undefined}
+            onOpenWork={() => undefined}
+          />
+        </main>
+      </MemoryRouter>,
+    );
+  });
+  expect(host.textContent).toContain('Waiting for a reply');
+
   await act(async () => {
     root.render(
       <MemoryRouter>

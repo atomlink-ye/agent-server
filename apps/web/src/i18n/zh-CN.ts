@@ -115,6 +115,8 @@ export const zhCN: Record<MessageKey, string> = {
   'transcript.loadError': '无法加载消息。',
   'transcript.noMessages': '这个对话里还没有消息。',
   'transcript.awaitingReply': '等回复',
+  'transcript.awaitingReplies': '等待 {count} 条回复',
+  'transcript.awaitingElapsed': '已等待 {seconds} 秒',
 
   // --- Transcript: create a Task from a message ----------------------------
   'transcript.task.action': '创建Task',

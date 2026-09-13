@@ -43,6 +43,42 @@ function StateMessage({ children }: { readonly children: ReactNode }) {
   );
 }
 
+function AwaitingReplies({
+  count,
+  since,
+}: {
+  readonly count: number;
+  readonly since: string;
+}) {
+  const t = useT();
+  const startedAt = Date.parse(since);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const intervalId = window.setInterval(() => setNow(Date.now()), 5_000);
+    return () => window.clearInterval(intervalId);
+  }, [since]);
+  const elapsedSeconds = Number.isFinite(startedAt)
+    ? Math.max(0, Math.floor((now - startedAt) / 1_000))
+    : 0;
+
+  return (
+    <p className="chat-awaiting-reply" role="status">
+      <span aria-hidden="true" className="chat-awaiting-dots">
+        <span />
+        <span />
+        <span />
+      </span>
+      {count === 1
+        ? t('transcript.awaitingReply')
+        : t('transcript.awaitingReplies', { count })}
+      <span aria-hidden="true">
+        {' · '}
+        {t('transcript.awaitingElapsed', { seconds: elapsedSeconds })}
+      </span>
+    </p>
+  );
+}
+
 function Message({
   message,
   showWorkCard,
@@ -383,11 +419,12 @@ export function ChatTranscript({
     return <StateMessage>{t('transcript.noMessages')}</StateMessage>;
   }
 
-  const outstandingReplies = state.messages.reduce(
-    (count, message) =>
-      message.authorType === 'principal' ? count + 1 : Math.max(0, count - 1),
-    0,
-  );
+  const unmatchedPrincipalTurns: ChatMessage[] = [];
+  for (const message of state.messages) {
+    if (message.authorType === 'principal')
+      unmatchedPrincipalTurns.push(message);
+    else unmatchedPrincipalTurns.shift();
+  }
   const cardAnchorByWork = new Map<string, number>();
   for (const message of state.messages) {
     if (message.workRef && !cardAnchorByWork.has(message.workRef))
@@ -422,15 +459,11 @@ export function ChatTranscript({
           fallbackRecipientLabel={fallbackRecipientLabel}
         />
       ))}
-      {outstandingReplies > 0 ? (
-        <p className="chat-awaiting-reply" role="status">
-          <span aria-hidden="true" className="chat-awaiting-dots">
-            <span />
-            <span />
-            <span />
-          </span>
-          {t('transcript.awaitingReply')}
-        </p>
+      {unmatchedPrincipalTurns[0] ? (
+        <AwaitingReplies
+          count={unmatchedPrincipalTurns.length}
+          since={unmatchedPrincipalTurns[0].createdAt}
+        />
       ) : null}
     </div>
   );

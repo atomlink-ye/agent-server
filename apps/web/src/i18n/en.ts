@@ -112,6 +112,8 @@ export const en = {
   'transcript.loadError': 'Unable to load messages.',
   'transcript.noMessages': 'No messages in this conversation yet.',
   'transcript.awaitingReply': 'Waiting for a reply',
+  'transcript.awaitingReplies': 'Waiting for {count} replies',
+  'transcript.awaitingElapsed': '{seconds}s elapsed',
 
   // --- Transcript: create a Task from a message ----------------------------
   'transcript.task.action': 'Create task',

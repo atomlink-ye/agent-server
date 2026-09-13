@@ -133,3 +133,27 @@ CI=true pnpm test:web apps/web/src/app/router/scroll.browser.test.tsx -t "keeps 
  Test Files  1 passed (1)
       Tests  2 passed | 106 skipped (108)
 ```
+
+## Files and Tasks scan-density follow-up
+
+### Files at 1440×900
+
+The middle column now promotes the basename (`0.md`) instead of repeating the same directory prefix (`notes/0.md`) on every row. The full path remains available as the title. The former version/hash technical line is replaced by localized modified date plus version, which carries a scan-relevant age signal without increasing row height.
+
+| Locale | Repeated `notes/` prefixes (48-row fixture) | Useful secondary line    | Row height | Minimum rows visible |
+| ------ | ------------------------------------------: | ------------------------ | ---------: | -------------------: |
+| en     |                                        48→0 | `Updated Jan 1 · v1`     |     57.5px |                   12 |
+| zh-CN  |                                        48→0 | `更新于 1月1日 · 版本 1` |     57.5px |                   12 |
+
+Focused result: `FilesPage.visual.browser.test.tsx` passed 2/2 tests.
+
+### Tasks at 1440×900
+
+An empty Description now renders as three rows instead of six; once it contains text it expands back to the six-row editing size. This keeps Assignee and Save above the centre-column fold in both locales. List dates are shown when they distinguish rows, but suppressed when all visible Tasks format to the same date.
+
+| Locale | Empty Description rows | Empty textarea intent | Save visible without scrolling | Repeated dates (12-row fixture) |
+| ------ | ---------------------: | --------------------- | ------------------------------ | ------------------------------: |
+| en     |                    6→3 | under 100px tall      | yes                            |                            12→0 |
+| zh-CN  |                    6→3 | under 100px tall      | yes                            |                            12→0 |
+
+Focused result: `TasksPage.browser.test.tsx` passed 14/14 tests; the density-only bilingual rerun passed 2/2 with 12 skipped.

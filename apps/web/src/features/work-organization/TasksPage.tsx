@@ -175,6 +175,11 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
         : items.filter((entry) => entry.work_item.status === filter),
     [filter, items],
   );
+  const showListDates =
+    visibleItems.length <= 1 ||
+    new Set(
+      visibleItems.map((entry) => formatWorkTime(entry.work_item.updated_at)),
+    ).size > 1;
   const selected = selectedWorkItemId
     ? (items.find((entry) => entry.work_item.id === selectedWorkItemId) ?? null)
     : null;
@@ -276,6 +281,7 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
                   key={entry.work_item.id}
                   detail={entry}
                   participants={participants}
+                  showUpdatedAt={showListDates}
                   active={selectedWorkItemId === entry.work_item.id}
                   onOpen={() =>
                     navigate(`/tasks/${encodeURIComponent(entry.work_item.id)}`)
@@ -467,11 +473,13 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
 function TaskListItem({
   detail,
   participants,
+  showUpdatedAt,
   active,
   onOpen,
 }: {
   readonly detail: WorkItemDetailDto;
   readonly participants: readonly Participant[];
+  readonly showUpdatedAt: boolean;
   readonly active: boolean;
   readonly onOpen: () => void;
 }) {
@@ -488,9 +496,11 @@ function TaskListItem({
     >
       <span className="work-org-list-item-top">
         <StatusBadge status={item.status} />
-        <small className="work-org-muted">
-          {formatWorkTime(item.updated_at)}
-        </small>
+        {showUpdatedAt ? (
+          <small className="work-org-muted">
+            {formatWorkTime(item.updated_at)}
+          </small>
+        ) : null}
       </span>
       <strong>
         <MentionedText text={item.title} participants={participants} />
@@ -797,7 +807,7 @@ function TaskDetail({
           onChange={setDescription}
           participants={participants}
           multiline
-          rows={6}
+          rows={description.trim() ? 6 : 3}
           hint={
             <small className="work-org-muted">{t('tasks.mentionHint')}</small>
           }

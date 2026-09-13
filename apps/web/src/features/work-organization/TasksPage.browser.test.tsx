@@ -124,6 +124,92 @@ it('scrolls real Tasks list and detail content to their final entries on desktop
   }
 });
 
+it.each(['en', 'zh-CN'] as const)(
+  'keeps empty Task details action-first and removes repeated list dates in %s at 1440',
+  async (locale) => {
+    await page.viewport(1440, 900);
+    setLocale(locale);
+    const items = Array.from({ length: 12 }, (_, index) =>
+      taskFor(
+        `00000000-0000-4000-8000-${String(index + 700).padStart(12, '0')}`,
+        locale === 'en'
+          ? `Planning task ${index + 1}`
+          : `规划任务 ${index + 1}`,
+      ),
+    );
+    const selectedTaskId = items[0]!.work_item.id;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const request =
+          typeof input === 'object' && input !== null && 'url' in input
+            ? (input as Request)
+            : null;
+        const path = new URL(
+          request?.url ?? String(input),
+          window.location.href,
+        ).pathname;
+        if (path === '/api/work-items') return json({ work_items: items });
+        if (path === '/api/agents') return json({ items: [] });
+        if (path === `/api/work-items/${selectedTaskId}/comments`)
+          return json({ comments: [] });
+        if (path === '/api/work-definitions') return json({ items: [] });
+        throw new Error(`Unexpected browser request: ${path}`);
+      }),
+    );
+
+    const host = document.createElement('div');
+    host.style.height = '900px';
+    document.body.append(host);
+    const root = createRoot(host);
+    try {
+      await act(async () => {
+        root.render(
+          <MemoryRouter initialEntries={[`/tasks/${selectedTaskId}`]}>
+            <AppShell
+              commands={shellCommands()}
+              selectedWorkItemId={selectedTaskId}
+            />
+          </MemoryRouter>,
+        );
+      });
+      await act(settle);
+      await act(settle);
+
+      const listRows = [
+        ...host.querySelectorAll<HTMLElement>('[data-testid="task-list-item"]'),
+      ];
+      expect(listRows).toHaveLength(12);
+      expect(
+        listRows.every((row) => !row.textContent?.includes('Aug 26')),
+      ).toBe(true);
+      const description = [...host.querySelectorAll('textarea')].find((field) =>
+        field.labels?.[0]?.textContent?.includes(t('tasks.descriptionLabel')),
+      );
+      const assignee = [...host.querySelectorAll('select')].find((field) =>
+        field.labels?.[0]?.textContent?.includes(t('tasks.assignee')),
+      );
+      const save = [...host.querySelectorAll('button')].find(
+        (button) => button.textContent === t('tasks.save'),
+      );
+      const content = host.querySelector<HTMLElement>('.work-org-content');
+      expect(description).toBeDefined();
+      expect(description!.rows).toBe(3);
+      expect(description!.getBoundingClientRect().height).toBeLessThan(100);
+      expect(assignee).toBeDefined();
+      expect(save).toBeDefined();
+      expect(save!.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+        content!.getBoundingClientRect().bottom,
+      );
+    } finally {
+      await act(async () => root.unmount());
+      host.remove();
+      setLocale('en');
+      vi.unstubAllGlobals();
+    }
+  },
+);
+
 it('selects a published Definition and coworker by display-safe labels while promoting canonical IDs', async () => {
   let promotionBody: unknown = null;
   vi.stubGlobal(

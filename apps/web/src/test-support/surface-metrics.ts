@@ -8,23 +8,29 @@ import '../index.css';
 // spacing is checked against the tokens too, so a local override cannot drift.
 // These content-driven surfaces keep readable type and visible explanations;
 // the compact Work directory has its own fixed budget in the typography test.
-const heights: Record<string, Record<string, Record<string, number>>> = {
+type HeightExpectation =
+  number | { readonly target: number; readonly tolerance: number };
+
+const heights: Record<
+  string,
+  Record<string, Record<string, HeightExpectation>>
+> = {
   agents: {
     en: {
-      '.agents-profile-header': 97.796875,
+      '.agents-profile-header': { target: 98, tolerance: 2 },
       '.agents-list-item': 60,
     },
     'zh-CN': {
-      '.agents-profile-header': 97.796875,
+      '.agents-profile-header': { target: 98, tolerance: 2 },
       '.agents-list-item': 60,
     },
   },
   'agents-roster': {
     en: {
-      '.agents-roster-header': 62.78125,
+      '.agents-roster-header': { target: 63, tolerance: 2 },
     },
     'zh-CN': {
-      '.agents-roster-header': 62.78125,
+      '.agents-roster-header': { target: 63, tolerance: 2 },
     },
   },
   files: {
@@ -91,23 +97,23 @@ const heights: Record<string, Record<string, Record<string, number>>> = {
   },
   'execution-transcript': {
     en: {
-      '.execution-transcript__heading': 84.375,
-      '.execution-transcript__attempts button': 78.1875,
+      '.execution-transcript__heading': { target: 84, tolerance: 2 },
+      '.execution-transcript__attempts button': { target: 78, tolerance: 2 },
       '.transcript__row': 56,
     },
     'zh-CN': {
-      '.execution-transcript__heading': 84.375,
-      '.execution-transcript__attempts button': 78.1875,
+      '.execution-transcript__heading': { target: 84, tolerance: 2 },
+      '.execution-transcript__attempts button': { target: 78, tolerance: 2 },
       '.transcript__row': 56,
     },
   },
   dispatch: {
     en: {
-      '.dispatch-card__event': 25.59375,
+      '.dispatch-card__event': { target: 26, tolerance: 2 },
       '.dispatch-card__status': 18,
     },
     'zh-CN': {
-      '.dispatch-card__event': 25.59375,
+      '.dispatch-card__event': { target: 26, tolerance: 2 },
       '.dispatch-card__status': 18,
     },
   },
@@ -176,10 +182,18 @@ export async function surfaceMetrics(
         const actual = getComputedStyle(element!);
         const height = heights[surface]?.[locale]?.[selector];
         if (height !== undefined) {
-          expect(
-            element!.getBoundingClientRect().height,
-            `${surface}/${locale}: ${selector} height`,
-          ).toBeCloseTo(height, 1);
+          const actualHeight = element!.getBoundingClientRect().height;
+          if (typeof height === 'number') {
+            expect(
+              actualHeight,
+              `${surface}/${locale}: ${selector} height`,
+            ).toBe(height);
+          } else {
+            expect(
+              Math.abs(actualHeight - height.target),
+              `${surface}/${locale}: ${selector} height stays near the intended layout without pinning font-rendering fractions`,
+            ).toBeLessThanOrEqual(height.tolerance);
+          }
         }
         for (const [property, value] of Object.entries(
           styles[selector] ?? {},

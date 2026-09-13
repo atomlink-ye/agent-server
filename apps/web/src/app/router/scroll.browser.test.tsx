@@ -865,6 +865,8 @@ function verifyRoute(host: HTMLElement, route: string, size: Size) {
     // the same sidebar, so it fills the same available width.
     fillsParent('.observe-filters');
     width('.work-main-content', 1028);
+    const main = host.querySelector<HTMLElement>('.work-main-content')!;
+    expect(main.scrollWidth).toBe(main.clientWidth);
   } else if (route === '/agents') {
     expect(host.querySelectorAll('.agents-roster-card')).toHaveLength(
       large ? 50 : 3,

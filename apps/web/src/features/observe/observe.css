@@ -56,7 +56,26 @@
 .observe-detail {
   display: flex;
   flex-direction: column;
+  min-width: 0;
   gap: var(--space-3);
+}
+
+/* Result Markdown owns wide source and table scrolling. Letting those children
+   enlarge the page scroller creates a second, full-surface horizontal axis. */
+.observe-detail-result {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.observe-detail-result .assistant-markdown {
+  min-width: 0;
+}
+
+.observe-detail-result .assistant-markdown pre,
+.observe-detail-result .assistant-markdown table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
 }
 
 .observe-detail-header {

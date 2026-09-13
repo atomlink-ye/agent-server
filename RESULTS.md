@@ -66,3 +66,38 @@ Coworker mixed chat:  Test Files  1 passed (1)
 Coworker store races: Test Files  1 passed (1)
                       Tests  2 passed (2)
 ```
+
+## Real PostgreSQL + Paseo conversation
+
+The real-product record is in [`docs/ux/r3/real/`](docs/ux/r3/real/README.md).
+It used the host-native `dev:runtime` entrypoint, PostgreSQL 15, the authenticated
+Codex provider (`gpt-5.6-luna`), and a 1440×900 headless Chromium viewport.
+
+- Coworker creation through **Create & Chat** completed successfully.
+- A short real provider reply completed in about 8 seconds.
+- A 700-word request was accepted promptly, but its completed 9,151-character
+  reply appeared as one jump 39.8 seconds later. No partial provider text reached
+  the browser, so the experience is acknowledged polling rather than streaming.
+- A follow-up submitted during that run was accepted and executed next. Before
+  the fix, the first reply hid the waiting indicator for 8.9 seconds while this
+  follow-up was still running. `d80f5c2` now tracks unmatched user turns and
+  keeps the indicator present until all queued replies arrive.
+- Scrolling up was stable: the follow-up increased transcript height from 4187
+  to 4448px while the reader's `scrollTop` stayed exactly 1396px.
+- True partial streaming remains a server/browser-contract gap. The durable
+  message API exposes completed replies, not partial revisions or token events;
+  implementing it safely requires stable partial-message identity, reconnect,
+  terminal/failure semantics, and cancellation rather than a client-only patch.
+
+Real-stack startup also uncovered a shared-host defect: `with-paseo` discarded
+custom runtime-MCP listener settings, forcing every lane onto port 39117.
+`4cc7670` forwards the configured listen host, advertised host, and port.
+
+Focused checks completed before the browser-suite stop notice:
+
+```text
+Runtime environment forwarding: Test Files  1 passed (1)
+                                Tests  14 passed (14)
+Queued reply indicator:         Test Files  1 passed (1)
+                                Tests  9 passed (9)
+```

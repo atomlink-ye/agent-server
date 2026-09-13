@@ -271,7 +271,9 @@ it('applies and creates Work in order after Definition validation and planning',
     await act(async () => {
       root.render(<NewWork />);
     });
-    const title = host.querySelector<HTMLInputElement>('#work-title');
+    const title = host.querySelector<HTMLInputElement>(
+      '#work-definition-title',
+    );
     const source = host.querySelector<HTMLTextAreaElement>('#work-definition');
     const submit = host.querySelector<HTMLButtonElement>(
       '[data-testid="new-work-submit"]',

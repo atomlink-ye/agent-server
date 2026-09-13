@@ -450,6 +450,8 @@ it('starts catalog Definitions without Coworker binding or initiator controls', 
     expect(host.querySelector<HTMLInputElement>('#work-title')?.value).toBe(
       'Unbound Planning Workflow',
     );
+    expect(host.querySelectorAll('#work-title')).toHaveLength(1);
+    expect(host.querySelector('#work-definition-title')).not.toBeNull();
     await page.screenshot({
       path: '../../../../__screenshots__/ux-review/catalog-entry.png',
     });

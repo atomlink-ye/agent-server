@@ -120,7 +120,10 @@ function RunListItem({
           ? t('work.run.inspectProblem')
           : t('work.run.followProgress');
   return (
-    <li className={latest ? 'work-run-list__latest' : undefined}>
+    <li
+      className={latest && current ? 'work-run-list__latest' : undefined}
+      data-latest={latest || undefined}
+    >
       <div className="work-run-list__identity">
         <strong>
           {t('work.scope.number', { number: ordinal })}

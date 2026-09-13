@@ -874,7 +874,7 @@ it.each(
       );
     expect(tabs.scrollWidth).toBeLessThanOrEqual(tabs.clientWidth);
     if (measurement.latestRun) {
-      expect(measurement.latestRun.height).toBeGreaterThanOrEqual(116);
+      expect(measurement.latestRun.height).toBe(78);
       expect(measurement.latestRun.guidanceWidth).toBeLessThanOrEqual(
         measurement.latestRun.width,
       );

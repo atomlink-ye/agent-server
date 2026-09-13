@@ -131,6 +131,34 @@ async function runFilesGeometry(locale: 'en' | 'zh-CN'): Promise<void> {
     expect(idleViewer.getBoundingClientRect().height).toBeLessThan(
       grid.getBoundingClientRect().height / 2,
     );
+    const coworkerGroup =
+      host.querySelector<HTMLElement>('.files-scope-agent')!;
+    const coworkerName =
+      coworkerGroup.querySelector<HTMLElement>('.files-scope-title')!;
+    const scopeTabs = coworkerGroup.querySelector<HTMLElement>(
+      '.files-scope-agent-tabs',
+    )!;
+    const scopeControls = [
+      ...scopeTabs.querySelectorAll<HTMLButtonElement>('button'),
+    ];
+    expect(scopeTabs.getAttribute('role')).toBe('group');
+    expect(scopeTabs.getAttribute('aria-label')).toBeTruthy();
+    expect(scopeControls).toHaveLength(2);
+    const scopeControl = scopeControls[0]!;
+    const nameStyle = getComputedStyle(coworkerName);
+    const scopeStyle = getComputedStyle(scopeControl);
+    expect(Number.parseFloat(nameStyle.fontSize)).toBeGreaterThan(
+      Number.parseFloat(scopeStyle.fontSize),
+    );
+    expect(Number.parseInt(nameStyle.fontWeight, 10)).toBeGreaterThanOrEqual(
+      Number.parseInt(scopeStyle.fontWeight, 10),
+    );
+    expect(scopeControl.getBoundingClientRect().height).toBeLessThan(
+      coworkerName.getBoundingClientRect().height * 1.5,
+    );
+    expect(scopeTabs.getBoundingClientRect().right).toBeLessThanOrEqual(
+      coworkerGroup.getBoundingClientRect().right + 1,
+    );
     await surfaceMetrics(host, 'files', [
       '.title-bar',
       '.files-files-header',

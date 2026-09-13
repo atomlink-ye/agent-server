@@ -42,7 +42,12 @@ function message(index: number, role?: WorkChatMessageResponse['role']) {
 function response(
   messages: readonly WorkChatMessageResponse[],
 ): WorkChatMessagesResponse {
-  return { work_id: workId, messages: [...messages], preparation: null };
+  return {
+    work_id: workId,
+    messages: [...messages],
+    next_cursor: null,
+    preparation: null,
+  };
 }
 
 let root: Root | null = null;

@@ -173,3 +173,21 @@ CI=true pnpm test:web apps/web/src/features/work/components/panes/work-chat-pane
  Test Files  1 passed (1)
       Tests  8 passed (8)
 ```
+
+### Work Chat history pagination contract
+
+The fixed latest-200 read was a real data-access loss and could not be repaired honestly in the browser alone. Both preparation and Run chat GETs now accept a bounded `limit` (1–200, default 200) and an opaque cursor bound to the exact Work and conversation scope. Responses expose nullable `next_cursor`. Repository reads seek backward by durable sequence, fetch one extra row to establish whether another page exists, and return each page in chronological display order.
+
+The PGlite regression inserts 205 messages. The initial page returns sequences 6–205 and a cursor; the next read returns 1–5, with no duplicate or gap and a null terminal cursor. Route tests verify limit forwarding and cursor decoding. A cursor encodes no prompt, message body, credential, or owner identity, and cannot be replayed against another Work/Run bucket.
+
+```text
+CI=true pnpm test:unit src/entrypoints/api/routes/product-work.test.ts src/entrypoints/api/routes/browser-web.test.ts src/application/work-chat/work-chat-service.test.ts
+ Test Files  3 passed (3)
+      Tests  26 passed (26)
+
+CI=true pnpm test:unit src/infrastructure/postgres/postgres-work-chat-repository.test.ts
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+```
+
+The first focused PGlite invocation reached its default 30-second ceiling during database startup. The same file passed in 22.19 seconds when rerun with the repository test's explicit 60-second PGlite allowance; this was test-harness startup headroom, not a pagination assertion failure.

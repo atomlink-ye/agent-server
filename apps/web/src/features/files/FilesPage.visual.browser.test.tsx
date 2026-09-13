@@ -141,9 +141,15 @@ async function runFilesGeometry(locale: 'en' | 'zh-CN'): Promise<void> {
     ]);
     const list = host.querySelector<HTMLElement>('.files-file-list')!;
     expect(list.scrollHeight).toBeGreaterThan(list.clientHeight);
+    const rows = [...list.querySelectorAll<HTMLElement>('button')];
+    expect(rows.length).toBe(48);
+    expect(rows[0]!.getBoundingClientRect().height).toBeLessThan(
+      list.getBoundingClientRect().height / 10,
+    );
+    expect(rows[0]!.querySelector('.files-scope-meta')).toBeNull();
     list.scrollTop = list.scrollHeight;
     expect(list.scrollTop).toBeGreaterThan(0);
-    const finalRow = [...list.querySelectorAll<HTMLElement>('button')].at(-1)!;
+    const finalRow = rows.at(-1)!;
     const listRect = list.getBoundingClientRect();
     const rowRect = finalRow.getBoundingClientRect();
     expect(rowRect.bottom).toBeLessThanOrEqual(listRect.bottom + 1);

@@ -30,11 +30,11 @@ const heights: Record<string, Record<string, Record<string, number>>> = {
   files: {
     en: {
       '.files-files-header': 64,
-      '.files-file-list button': 57.5,
+      '.files-file-list button': 38,
     },
     'zh-CN': {
       '.files-files-header': 64,
-      '.files-file-list button': 57.5,
+      '.files-file-list button': 38,
     },
   },
   observe: {

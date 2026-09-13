@@ -740,10 +740,6 @@ export function FilesPage() {
                     onClick={() => openFile(entry.path)}
                   >
                     <span className="files-scope-title">{entry.path}</span>
-                    <span className="files-scope-meta">
-                      {t('files.version', { version: entry.currentVersion })} ·{' '}
-                      {shortHash(entry.contentSha256)}
-                    </span>
                   </button>
                 ))}
               </div>

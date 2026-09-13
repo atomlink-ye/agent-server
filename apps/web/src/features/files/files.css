@@ -37,6 +37,9 @@
   padding: var(--space-2) var(--space-3);
   text-align: left;
 }
+.files-file-list button {
+  min-height: 38px;
+}
 .files-scope-list button:hover:not([data-active='true']),
 .files-file-list button:hover:not([data-active='true']) {
   background: var(--sky-50);

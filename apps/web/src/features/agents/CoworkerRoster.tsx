@@ -40,6 +40,11 @@ export function CoworkerRoster({
     ? agents.filter((agent) => agent.runtimeStatus === statusFilter)
     : agents;
   const empty = agents.length === 0;
+  const showingStarterSample =
+    agents.length === 1 &&
+    agents[0]?.displayName === 'Maya' &&
+    agents[0].roleLabel === 'Research Analyst' &&
+    agents[0].summary === 'Researches markets and writes concise briefs.';
 
   return (
     <section className="agents-roster" aria-label={t('agents.roster')}>
@@ -63,6 +68,12 @@ export function CoworkerRoster({
           {t('agents.newCoworker')}
         </button>
       </header>
+
+      {showingStarterSample ? (
+        <p className="agents-roster-sample" role="note">
+          {t('agents.sampleIntro')}
+        </p>
+      ) : null}
 
       {empty ? null : (
         <div

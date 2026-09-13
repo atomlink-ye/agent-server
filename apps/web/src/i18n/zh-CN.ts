@@ -354,6 +354,8 @@ export const zhCN: Record<MessageKey, string> = {
   'agents.emptyIntro': '添加第一位 Coworker 后，这里会成为他们协作的空间。',
   'agents.teamIntro':
     'Coworkers 各自工作，也彼此协作；需要你做决定时，他们会找你。',
+  'agents.sampleIntro':
+    'Maya 是供你试用的示例 Coworker。你可以保留她，也可以添加自己的队友。',
   'agents.filter': '按状态筛选 Coworkers',
   'agents.loading': '加载 Coworkers…',
   'agents.empty': '还没有 Coworkers。',

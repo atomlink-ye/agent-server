@@ -495,6 +495,34 @@ it('lands on a card per Coworker instead of redirecting into the first profile',
   }
 });
 
+it('explains the starter Maya on a new account roster', async () => {
+  loadCoworkers.mockReset();
+  loadCoworkers.mockResolvedValue([
+    {
+      ...profileFor('available').agent,
+      displayName: 'Maya',
+      roleLabel: 'Research Analyst',
+      summary: 'Researches markets and writes concise briefs.',
+    },
+  ]);
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  await act(async () => {
+    root.render(routed('/agents'));
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  try {
+    expect(host.querySelector('[role="note"]')?.textContent).toContain(
+      'Maya is a sample Coworker',
+    );
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+  }
+});
+
 it.each(['en', 'zh-CN'] as const)(
   'fits Definition availability and creation copy in %s at 1440',
   async (locale) => {

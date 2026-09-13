@@ -25,6 +25,7 @@ if (!parsedBaseUrl.hostname.endsWith('.localhost'))
     'WEB_E2E_BASE_URL must use a trustworthy .localhost hostname for the Golden Path browser canary.',
   );
 const baseUrl = configuredBaseUrl.replace(/\/$/u, '');
+const videoDirectory = process.env.WEB_E2E_VIDEO_DIR?.trim();
 const canonicalUuid =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const chatObservationTimeoutMs = 5 * 60 * 1000;
@@ -47,6 +48,7 @@ describe('web Product Golden Path', () => {
     'creates a Coworker, teaches a Capability, and starts Work through the UI',
     async () => {
       const suffix = randomUUID().slice(0, 8);
+      const username = `golden-path-${suffix}`;
       const coworkerName = `Golden Path ${suffix}`;
       const capabilityName = `Bounded Brief ${suffix}`;
       const companyValue = `Acme-${suffix}`;
@@ -54,9 +56,39 @@ describe('web Product Golden Path', () => {
       const browserOrigin = new URL(baseUrl!).origin;
       browser = await chromium.launch({ headless: true });
       const page = await (
-        await browser.newContext({ baseURL: baseUrl! })
+        await browser.newContext({
+          baseURL: baseUrl!,
+          viewport: { width: 1440, height: 900 },
+          ...(videoDirectory
+            ? {
+                recordVideo: {
+                  dir: videoDirectory,
+                  size: { width: 1440, height: 900 },
+                },
+              }
+            : {}),
+        })
       ).newPage();
 
+      await page.goto('/agents', {
+        waitUntil: 'domcontentloaded',
+        timeout: 60_000,
+      });
+      await page.getByRole('button', { name: 'Create an account' }).click();
+      await page.getByLabel('Username').fill(username);
+      await page.getByLabel('Password').fill(`Golden-path-${suffix}!`);
+      const registerResponse = page.waitForResponse(
+        (response) =>
+          response.request().method() === 'POST' &&
+          new URL(response.url()).origin === browserOrigin &&
+          new URL(response.url()).pathname === '/api/auth/register',
+      );
+      await page.getByRole('button', { name: 'Create account' }).click();
+      expect((await registerResponse).status()).toBe(201);
+      await page.waitForURL(
+        (url) => url.origin === browserOrigin && url.pathname === '/',
+        { timeout: 60_000 },
+      );
       await page.goto('/agents', {
         waitUntil: 'domcontentloaded',
         timeout: 60_000,

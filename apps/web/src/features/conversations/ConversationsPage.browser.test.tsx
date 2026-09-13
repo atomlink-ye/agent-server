@@ -22,6 +22,7 @@ import type {
 import { createAppStore } from './stores/app';
 import { createConversationsStore } from './stores/conversations';
 import { createMessagesStore } from './stores/messages';
+import { setLocale } from '../../i18n';
 import '../../index.css';
 
 (
@@ -185,6 +186,23 @@ it('scrolls the real Conversations shell list and transcript at desktop size', a
         await new Promise((resolve) => setTimeout(resolve, 0));
     });
 
+    for (const locale of ['en', 'zh-CN'] as const) {
+      await act(async () => setLocale(locale));
+      expect(host.querySelectorAll('[data-typography-surface]')).toHaveLength(
+        2,
+      );
+      const paneHeading = host.querySelector<HTMLElement>('.pane-heading h1');
+      expect(paneHeading).not.toBeNull();
+      expect(parseFloat(getComputedStyle(paneHeading!).fontSize)).toBe(
+        locale === 'zh-CN' ? 18 : 20,
+      );
+      const metadata = host.querySelector<HTMLElement>('.eyebrow');
+      expect(metadata).not.toBeNull();
+      expect(
+        parseFloat(getComputedStyle(metadata!).fontSize),
+      ).toBeGreaterThanOrEqual(12);
+    }
+
     const listRegion = host.querySelector<HTMLElement>('.sidebar-section');
     expect(listRegion).not.toBeNull();
     expectScrollable(listRegion!);
@@ -209,6 +227,7 @@ it('scrolls the real Conversations shell list and transcript at desktop size', a
   } finally {
     await act(async () => root.unmount());
     host.remove();
+    setLocale('en');
   }
 });
 

@@ -64,7 +64,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-4);
-  min-height: calc(var(--space-8) * 2);
+  min-height: 65px;
 }
 
 .observe-detail-header h2 {

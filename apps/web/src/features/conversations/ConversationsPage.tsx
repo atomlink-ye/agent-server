@@ -364,7 +364,7 @@ export function ConversationsPage({
         selectedConversationMissing={selectedConversationMissing}
       />
 
-      <main className="chat-panel">
+      <main className="chat-panel" data-typography-surface>
         <TitleBar section={t('conversations.title')} />
         <header className="chat-header">
           <div className="chat-header-title">

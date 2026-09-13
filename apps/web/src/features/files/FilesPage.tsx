@@ -555,7 +555,11 @@ export function FilesPage() {
 
   return (
     <>
-      <aside className="sidebar files-pane" aria-label={t('files.navigation')}>
+      <aside
+        className="sidebar files-pane"
+        aria-label={t('files.navigation')}
+        data-typography-surface
+      >
         <div className="pane-heading">
           <div>
             <span className="eyebrow">{t('files.eyebrow')}</span>
@@ -628,7 +632,10 @@ export function FilesPage() {
         </div>
       </aside>
 
-      <main className="chat-panel files-main scroll-region">
+      <main
+        className="chat-panel files-main scroll-region"
+        data-typography-surface
+      >
         <TitleBar section={t('files.title')} />
         {pendingCoworkerRoute ? (
           <section className="files-files files-route-state" aria-live="polite">

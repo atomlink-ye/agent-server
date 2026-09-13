@@ -248,6 +248,7 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
       <aside
         className="sidebar work-org-pane"
         aria-label={t('boards.navigation')}
+        data-typography-surface
       >
         <div className="pane-heading work-org-heading">
           <div>
@@ -322,7 +323,7 @@ export function BoardsPage({ selectedBoardId = null }: BoardsPageProps) {
         </div>
       </aside>
 
-      <main className="chat-panel work-board-main">
+      <main className="chat-panel work-board-main" data-typography-surface>
         <TitleBar section={t('boards.title')} />
         <section
           className="work-org-content scroll-region"

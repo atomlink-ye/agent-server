@@ -132,7 +132,11 @@ export function ConversationsPane({
   };
 
   return (
-    <aside className="sidebar" aria-label={t('conversations.nav.label')}>
+    <aside
+      className="sidebar"
+      aria-label={t('conversations.nav.label')}
+      data-typography-surface
+    >
       <div className="pane-heading">
         <div>
           <span className="eyebrow">

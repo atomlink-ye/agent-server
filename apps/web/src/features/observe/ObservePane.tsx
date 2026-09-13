@@ -86,6 +86,7 @@ export function ObservePane({
     <aside
       className="sidebar observe-pane"
       aria-label={t('observe.navigation')}
+      data-typography-surface
     >
       <div className="pane-heading">
         <div>

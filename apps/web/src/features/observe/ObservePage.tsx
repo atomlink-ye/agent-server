@@ -29,7 +29,7 @@ export function ObservePage() {
   return (
     <>
       <ObservePane onAggregateChange={handleAggregateChange} />
-      <main className="chat-panel work-main">
+      <main className="chat-panel work-main" data-typography-surface>
         <TitleBar section={t('observe.title')} />
         <section
           aria-label={t('observe.detail')}

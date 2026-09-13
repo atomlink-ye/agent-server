@@ -163,6 +163,24 @@ export async function surfaceMetrics(
   try {
     for (const locale of ['en', 'zh-CN'] as const) {
       await act(async () => setLocale(locale));
+      if (['files', 'tasks', 'boards', 'observe'].includes(surface)) {
+        const roots = host.querySelectorAll('[data-typography-surface]');
+        expect(
+          roots.length,
+          `${surface}/${locale}: typography surface roots`,
+        ).toBeGreaterThanOrEqual(2);
+        const heading = host.querySelector<HTMLElement>('.pane-heading h1');
+        expect(heading, `${surface}/${locale}: pane heading`).not.toBeNull();
+        const headingStyle = getComputedStyle(heading!);
+        expect(parseFloat(headingStyle.fontSize)).toBe(
+          locale === 'zh-CN' ? 18 : 20,
+        );
+        const metadata = host.querySelector<HTMLElement>('.eyebrow');
+        expect(metadata, `${surface}/${locale}: metadata role`).not.toBeNull();
+        expect(
+          parseFloat(getComputedStyle(metadata!).fontSize),
+        ).toBeGreaterThanOrEqual(12);
+      }
       const names: Surface[] =
         surface === 'execution-transcript'
           ? ['sessions', 'stream']

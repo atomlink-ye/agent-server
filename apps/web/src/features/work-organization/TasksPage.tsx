@@ -214,6 +214,7 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
       <aside
         className="sidebar work-org-pane"
         aria-label={t('tasks.navigation')}
+        data-typography-surface
       >
         <div className="pane-heading work-org-heading">
           <div>
@@ -286,7 +287,7 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
         </div>
       </aside>
 
-      <main className="chat-panel work-org-main">
+      <main className="chat-panel work-org-main" data-typography-surface>
         <TitleBar section={t('tasks.title')} />
         <section
           className="work-org-content scroll-region"

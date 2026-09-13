@@ -51,6 +51,7 @@
 
 .work-pane .work-list-copy strong {
   font-size: var(--text-md);
+  line-height: var(--leading-ui);
 }
 
 .work-pane .work-list-meta {

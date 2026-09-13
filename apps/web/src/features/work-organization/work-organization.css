@@ -52,6 +52,7 @@
   border-radius: var(--radius-lg);
   background: transparent;
   overflow-wrap: anywhere;
+  min-height: 73px;
 }
 
 .work-org-list-item:hover,
@@ -206,7 +207,7 @@
   align-items: start;
   justify-content: space-between;
   gap: var(--space-4);
-  min-height: calc(var(--space-8) * 2);
+  min-height: 88px;
 }
 
 .work-org-detail-header h1,
@@ -487,6 +488,7 @@
 
 .work-org-list-item--rich {
   gap: var(--space-1);
+  height: 97.1875px;
 }
 
 .work-org-list-item-top,

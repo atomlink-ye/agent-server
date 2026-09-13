@@ -72,6 +72,7 @@ export function WorkPane({
       className="sidebar work-pane"
       aria-label={t('work.navigation')}
       data-work-surface
+      data-typography-surface
     >
       <div className="pane-heading">
         <div>

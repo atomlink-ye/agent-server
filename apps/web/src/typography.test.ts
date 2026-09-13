@@ -135,7 +135,7 @@ it('uses a smaller, more open shared type scale for zh-CN', () => {
   const css = readFileSync(join(sourceRoot, 'index.css'), 'utf8');
   const cjk =
     css.match(
-      /:root:lang\(zh-CN\) \[data-work-surface\]\s*{([\s\S]*?)\n}/,
+      /:root:lang\(zh-CN\) \[data-work-surface\],\s*:root:lang\(zh-CN\) \[data-typography-surface\]\s*{([\s\S]*?)\n}/,
     )?.[1] ?? '';
   const tokens = Object.fromEntries(
     [...cjk.matchAll(/(--(?:text|leading)-[\w-]+):\s*([^;]+);/g)].map(
@@ -149,8 +149,27 @@ it('uses a smaller, more open shared type scale for zh-CN', () => {
     '--text-title': '18px',
     '--text-display': '22px',
     '--leading-tight': '1.5',
+    '--leading-ui': '1.625',
     '--leading-body': '1.75',
   });
+});
+
+it('marks every non-Work browser surface with the shared typography scope', () => {
+  const surfaces = {
+    'features/files/FilesPage.tsx': 2,
+    'features/work-organization/TasksPage.tsx': 2,
+    'features/work-organization/BoardsPage.tsx': 2,
+    'features/conversations/ConversationsPane.tsx': 1,
+    'features/conversations/ConversationsPage.tsx': 1,
+    'features/observe/ObservePane.tsx': 1,
+    'features/observe/ObservePage.tsx': 1,
+  } as const;
+  for (const [surface, expectedRoots] of Object.entries(surfaces)) {
+    const source = readFileSync(join(sourceRoot, surface), 'utf8');
+    expect(source.match(/data-typography-surface/g)?.length ?? 0, surface).toBe(
+      expectedRoots,
+    );
+  }
 });
 
 it('centralizes leading so dense CJK text cannot regain a local cramped line height', () => {

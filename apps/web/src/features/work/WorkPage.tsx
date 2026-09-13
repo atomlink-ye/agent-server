@@ -116,7 +116,11 @@ export function WorkPage({
         onWorksChange={setWorks}
         selectedLatestRunState={selectedLatestRunState}
       />
-      <main className="chat-panel work-main" data-work-surface>
+      <main
+        className="chat-panel work-main"
+        data-work-surface
+        data-typography-surface
+      >
         <TitleBar section={t('work.title')} />
         <section
           aria-label={t('work.overview')}

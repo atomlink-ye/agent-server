@@ -24,6 +24,9 @@ describe('createApplicationEnvironment', () => {
       environment: {
         PASEO_SESSION_RPC_TIMEOUT_MS: '120000',
         PASEO_RUNTIME_ROOT: '/workspace/.local/runtime-browser/runtime',
+        RUNTIME_MCP_LISTEN_HOST: '127.0.0.2',
+        RUNTIME_MCP_ADVERTISED_HOST: 'runtime-mcp.local',
+        RUNTIME_MCP_PORT: '39217',
       },
       paseoWsUrl: 'ws://127.0.0.1:6767/ws',
       agentWorkspace: '/workspace/.local/agent-workspace',
@@ -32,6 +35,9 @@ describe('createApplicationEnvironment', () => {
     expect(environment).toMatchObject({
       PASEO_SESSION_RPC_TIMEOUT_MS: '120000',
       PASEO_RUNTIME_ROOT: '/workspace/.local/runtime-browser/runtime',
+      RUNTIME_MCP_LISTEN_HOST: '127.0.0.2',
+      RUNTIME_MCP_ADVERTISED_HOST: 'runtime-mcp.local',
+      RUNTIME_MCP_PORT: '39217',
       PASEO_WS_URL: 'ws://127.0.0.1:6767/ws',
       PASEO_AGENT_CWD: '/workspace/.local/agent-workspace',
     });

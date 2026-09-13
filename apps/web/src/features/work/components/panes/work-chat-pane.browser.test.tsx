@@ -221,7 +221,7 @@ it.each(['en', 'zh-CN'] as const)(
     await page.viewport(1440, 900);
     setLocale(locale);
     try {
-      const longToken = '超'.repeat(500);
+      const longToken = `${'A'.repeat(500)}${'超'.repeat(500)}`;
       const code = `\`\`\`text\n${'code'.repeat(300)}\n\`\`\``;
       const { host, history } = await renderChat([
         { ...message(1, 'user'), body: longToken },

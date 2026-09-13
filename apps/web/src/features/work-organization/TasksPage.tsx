@@ -175,6 +175,11 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
         : items.filter((entry) => entry.work_item.status === filter),
     [filter, items],
   );
+  const showListStatus =
+    new Set(visibleItems.map((entry) => entry.work_item.status)).size > 1;
+  const showListAssignee = visibleItems.some(
+    (entry) => entry.work_item.assignee_id !== null,
+  );
   const selected = selectedWorkItemId
     ? (items.find((entry) => entry.work_item.id === selectedWorkItemId) ?? null)
     : null;
@@ -277,6 +282,8 @@ export function TasksPage({ selectedWorkItemId = null }: TasksPageProps) {
                   detail={entry}
                   participants={participants}
                   active={selectedWorkItemId === entry.work_item.id}
+                  showStatus={showListStatus}
+                  showAssignee={showListAssignee}
                   onOpen={() =>
                     navigate(`/tasks/${encodeURIComponent(entry.work_item.id)}`)
                   }
@@ -468,11 +475,15 @@ function TaskListItem({
   detail,
   participants,
   active,
+  showStatus,
+  showAssignee,
   onOpen,
 }: {
   readonly detail: WorkItemDetailDto;
   readonly participants: readonly Participant[];
   readonly active: boolean;
+  readonly showStatus: boolean;
+  readonly showAssignee: boolean;
   readonly onOpen: () => void;
 }) {
   const t = useT();
@@ -487,7 +498,7 @@ function TaskListItem({
       onClick={onOpen}
     >
       <span className="work-org-list-item-top">
-        <StatusBadge status={item.status} />
+        {showStatus ? <StatusBadge status={item.status} /> : null}
         <small className="work-org-muted">
           {formatWorkTime(item.updated_at)}
         </small>
@@ -502,7 +513,9 @@ function TaskListItem({
       ) : null}
       <MentionRow ids={readMentionIds(item)} participants={participants} />
       <span className="work-org-list-item-footer">
-        <ParticipantChip participants={participants} id={item.assignee_id} />
+        {showAssignee ? (
+          <ParticipantChip participants={participants} id={item.assignee_id} />
+        ) : null}
         <CommentCount count={readCommentCount(item)} />
         {detail.linked_work ? (
           <span className="work-org-chip">

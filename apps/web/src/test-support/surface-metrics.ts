@@ -52,11 +52,11 @@ const heights: Record<string, Record<string, Record<string, number>>> = {
   tasks: {
     en: {
       '.work-org-detail-header': 88,
-      '.work-org-list-item': 97.1875,
+      '.work-org-list-item': 73,
     },
     'zh-CN': {
       '.work-org-detail-header': 88,
-      '.work-org-list-item': 97.1875,
+      '.work-org-list-item': 73,
     },
   },
   boards: {

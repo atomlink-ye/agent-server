@@ -625,6 +625,110 @@ it('discards late comments from an older Task selection', async () => {
   }
 });
 
+it.each(['en', 'zh-CN'] as const)(
+  'shows Task list metadata only when it differentiates rows in %s at 1440',
+  async (locale) => {
+    await page.viewport(1440, 900);
+    setLocale(locale);
+
+    async function renderList(items: unknown[]) {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: RequestInfo | URL) => {
+          const path = String(input);
+          if (path === '/api/work-items') return json({ work_items: items });
+          if (path === '/api/agents')
+            return json({
+              items: [
+                {
+                  id: 'coworker-1',
+                  display_name: 'Ari Analyst',
+                  role_label: 'Analyst',
+                  summary: 'Research partner',
+                  active_agent_version_id: 'agent-version-1',
+                  runtime_status: 'available',
+                },
+              ],
+            });
+          throw new Error(`Unexpected request: ${path}`);
+        }),
+      );
+      const host = document.createElement('div');
+      host.style.width = '1368px';
+      host.style.height = '900px';
+      document.body.append(host);
+      const root = createRoot(host);
+      await act(async () => {
+        root.render(
+          <MemoryRouter>
+            <TasksPage />
+          </MemoryRouter>,
+        );
+      });
+      await act(settle);
+      return { host, root };
+    }
+
+    const homogeneous = [
+      taskFor('00000000-0000-4000-8000-000000000111', 'First task'),
+      taskFor('00000000-0000-4000-8000-000000000112', 'Second task'),
+    ];
+    const first = await renderList(homogeneous);
+    const homogeneousRows = [
+      ...first.host.querySelectorAll<HTMLElement>(
+        '[data-testid="task-list-item"]',
+      ),
+    ];
+    expect(homogeneousRows).toHaveLength(2);
+    expect(first.host.querySelector('.work-org-status')).toBeNull();
+    expect(first.host.querySelector('.work-org-assignee--empty')).toBeNull();
+    const homogeneousHeight =
+      homogeneousRows[0]!.getBoundingClientRect().height;
+    await act(async () => first.root.unmount());
+    first.host.remove();
+    vi.unstubAllGlobals();
+
+    const assigned = taskFor(
+      '00000000-0000-4000-8000-000000000114',
+      'Assigned task',
+    );
+    const mixed = [
+      taskFor('00000000-0000-4000-8000-000000000113', 'Unassigned task'),
+      {
+        ...assigned,
+        work_item: {
+          ...assigned.work_item,
+          status: 'in_progress',
+          assignee_id: 'coworker-1',
+        },
+      },
+    ];
+    const second = await renderList(mixed);
+    try {
+      const mixedRows = [
+        ...second.host.querySelectorAll<HTMLElement>(
+          '[data-testid="task-list-item"]',
+        ),
+      ];
+      expect(second.host.querySelectorAll('.work-org-status')).toHaveLength(2);
+      expect(second.host.querySelectorAll('.work-org-assignee')).toHaveLength(
+        2,
+      );
+      expect(
+        second.host.querySelector('.work-org-assignee--empty'),
+      ).not.toBeNull();
+      expect(mixedRows[0]!.getBoundingClientRect().height).toBeGreaterThan(
+        homogeneousHeight,
+      );
+    } finally {
+      await act(async () => second.root.unmount());
+      second.host.remove();
+      setLocale('en');
+      vi.unstubAllGlobals();
+    }
+  },
+);
+
 function task() {
   return taskFor(workItemId, 'Prepare brief');
 }

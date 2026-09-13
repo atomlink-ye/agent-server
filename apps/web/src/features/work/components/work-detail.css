@@ -75,6 +75,8 @@
 .work-chat-message .chat-message {
   box-sizing: border-box;
   margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .work-chat-message--user .chat-message {
   border-color: var(--sky-200);

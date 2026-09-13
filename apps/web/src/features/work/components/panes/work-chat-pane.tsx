@@ -64,7 +64,8 @@ function WorkChatConversation({
   const [body, setBody] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
-  const [error, setError] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [sendError, setSendError] = useState(false);
   const [pendingRequestId, setPendingRequestId] = useState<string | null>(null);
   const [preparation, setPreparation] =
     useState<WorkPreparationResponse | null>(null);
@@ -82,6 +83,7 @@ function WorkChatConversation({
         .chat(workId, workRunId)
         .then((response) => {
           if (active) {
+            setLoadError(false);
             if (
               !workRunId &&
               response.preparation?.status === 'started' &&
@@ -102,7 +104,7 @@ function WorkChatConversation({
           }
         })
         .catch(() => {
-          if (active) setError(true);
+          if (active) setLoadError(true);
         })
         .finally(() => {
           if (active && loadingRef.current) {
@@ -123,7 +125,7 @@ function WorkChatConversation({
     const history = historyRef.current;
     if (!history || !stickToBottomRef.current) return;
     history.scrollTop = history.scrollHeight;
-  }, [messages, preparation, loading, error]);
+  }, [messages, preparation, loading, loadError]);
 
   function rememberScrollPosition() {
     const history = historyRef.current;
@@ -136,7 +138,7 @@ function WorkChatConversation({
     const next = body.trim();
     if (!next || sending) return;
     setSending(true);
-    setError(false);
+    setSendError(false);
     setBody('');
     const requestId = pendingRequestId ?? crypto.randomUUID();
     setPendingRequestId(requestId);
@@ -154,7 +156,7 @@ function WorkChatConversation({
       });
       setPendingRequestId(null);
     } catch {
-      setError(true);
+      setSendError(true);
       setBody(next);
     } finally {
       setSending(false);
@@ -163,7 +165,7 @@ function WorkChatConversation({
   async function confirmPreparation() {
     if (!preparation || preparation.status !== 'ready' || confirming) return;
     setConfirming(true);
-    setError(false);
+    setSendError(false);
     try {
       const confirmed = await workClient.confirmPreparation(
         workId,
@@ -181,7 +183,7 @@ function WorkChatConversation({
       ) {
         setPreparationError(t('work.chat.versionMismatch'));
       } else {
-        setError(true);
+        setSendError(true);
       }
     } finally {
       setConfirming(false);
@@ -204,7 +206,7 @@ function WorkChatConversation({
         onScroll={rememberScrollPosition}
       >
         {loading ? <p>{t('work.detail.loading')}</p> : null}
-        {error ? <p role="alert">{t('work.chat.loadError')}</p> : null}
+        {loadError ? <p role="alert">{t('work.chat.loadError')}</p> : null}
         {!loading && !messages.length ? (
           <div className="work-chat-empty-state">
             <div className="work-chat-empty-state__icon" aria-hidden="true">
@@ -288,7 +290,7 @@ function WorkChatConversation({
                               setMessages(response.messages);
                             }),
                         )
-                        .catch(() => setError(true))
+                        .catch(() => setLoadError(true))
                     }
                   >
                     {t('common.retry')}
@@ -350,7 +352,7 @@ function WorkChatConversation({
           draft={body}
           sending={sending}
           disabled={false}
-          sendError={error ? t('work.chat.sendError') : null}
+          sendError={sendError ? t('work.chat.sendError') : null}
           canRetry={Boolean(body.trim())}
           fieldLabel={t('composer.field.label')}
           placeholder={t(

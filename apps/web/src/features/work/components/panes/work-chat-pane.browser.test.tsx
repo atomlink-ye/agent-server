@@ -154,6 +154,54 @@ it('captures the empty and short conversational states', async () => {
   });
 });
 
+it('clears a transient load failure after polling recovers', async () => {
+  const chat = vi
+    .spyOn(workClient, 'chat')
+    .mockRejectedValueOnce(new Error('temporary'))
+    .mockResolvedValue(response([message(1, 'lead')]));
+  const host = document.createElement('div');
+  document.body.append(host);
+  root = createRoot(host);
+  await act(async () => {
+    root!.render(<WorkChatPane workId={workId} />);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  });
+  expect(host.querySelector('[role="alert"]')?.textContent).toContain(
+    'Unable to load',
+  );
+
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 1_050)));
+  expect(chat).toHaveBeenCalledTimes(2);
+  expect(host.querySelector('[role="alert"]')).toBeNull();
+  expect(host.textContent).toContain('Conversation message 1');
+});
+
+it.each(['en', 'zh-CN'] as const)(
+  'contains long user, code, and CJK content without widening the history in %s',
+  async (locale) => {
+    await page.viewport(1440, 900);
+    setLocale(locale);
+    try {
+      const longToken = '超'.repeat(500);
+      const code = `\`\`\`text\n${'code'.repeat(300)}\n\`\`\``;
+      const { host, history } = await renderChat([
+        { ...message(1, 'user'), body: longToken },
+        { ...message(2, 'lead'), body: code },
+      ]);
+      const bubble = host.querySelector<HTMLElement>(
+        '.work-chat-message--user .chat-message',
+      )!;
+      const pre = host.querySelector<HTMLElement>('pre')!;
+
+      expect(history.scrollWidth).toBeLessThanOrEqual(history.clientWidth + 1);
+      expect(bubble.scrollWidth).toBeLessThanOrEqual(bubble.clientWidth + 1);
+      expect(pre.scrollWidth).toBeGreaterThan(pre.clientWidth);
+    } finally {
+      setLocale('en');
+    }
+  },
+);
+
 it('shows a single loading action and plain startup guidance', async () => {
   const { host } = await renderChat([]);
   vi.mocked(workClient.chat).mockResolvedValue({

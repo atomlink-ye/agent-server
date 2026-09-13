@@ -20,10 +20,18 @@ export const WorkChatMessagesResponseSchema = z
     work_id: z.uuid(),
     work_run_id: z.uuid().nullable().optional(),
     messages: z.array(WorkChatMessageSchema).max(500),
+    next_cursor: z.string().min(1).nullable().default(null),
     preparation: z
       .lazy(() => WorkPreparationResponseSchema)
       .nullable()
       .optional(),
+  })
+  .strict();
+
+export const WorkChatMessagesQuerySchema = z
+  .object({
+    cursor: z.string().trim().min(1).max(1_024).optional(),
+    limit: z.coerce.number().int().min(1).max(200).default(200),
   })
   .strict();
 

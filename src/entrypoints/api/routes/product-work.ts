@@ -36,6 +36,7 @@ import {
   PostWorkChatMessageResponseSchema,
   RetryWorkChatMessageResponseSchema,
   WorkChatMessagesResponseSchema,
+  WorkChatMessagesQuerySchema,
   ConfirmWorkPreparationRequestSchema,
   ConfirmWorkPreparationResponseSchema,
 } from '../../../contracts/work-chat.js';
@@ -68,6 +69,21 @@ export function registerProductWorkRoutes(
       if (workRunId !== undefined && !z.uuid().safeParse(workRunId).success)
         return invalidPath(context);
       if (!z.uuid().safeParse(workId).success) return invalidPath(context);
+      const parsedQuery = WorkChatMessagesQuerySchema.safeParse({
+        ...(context.req.query('cursor')
+          ? { cursor: context.req.query('cursor') }
+          : {}),
+        ...(context.req.query('limit')
+          ? { limit: context.req.query('limit') }
+          : {}),
+      });
+      if (!parsedQuery.success) return invalidPath(context);
+      const cursorSequence = parsedQuery.data.cursor
+        ? decodeChatCursor(parsedQuery.data.cursor, workId, workRunId)
+        : undefined;
+      if (parsedQuery.data.cursor && cursorSequence === null)
+        return invalidPath(context);
+      const beforeSequence = cursorSequence ?? undefined;
       if (!dependencies.workChat)
         return context.json(
           {
@@ -94,7 +110,7 @@ export function registerProductWorkRoutes(
             workId,
           });
         }
-        const messages = await dependencies.workChat.list({
+        const page = await dependencies.workChat.listPage({
           owner: {
             tenantId: access.tenantId,
             workspaceId: access.workspaceId,
@@ -103,6 +119,8 @@ export function registerProductWorkRoutes(
           },
           workId,
           workRunId,
+          limit: parsedQuery.data.limit,
+          beforeSequence,
         });
         const preparation =
           !workRunId && dependencies.workPreparation
@@ -118,7 +136,11 @@ export function registerProductWorkRoutes(
           WorkChatMessagesResponseSchema.parse({
             work_id: workId,
             work_run_id: workRunId ?? null,
-            messages: messages.map(toWorkChatResponse),
+            messages: page.messages.map(toWorkChatResponse),
+            next_cursor:
+              page.nextBeforeSequence === null
+                ? null
+                : encodeChatCursor(workId, workRunId, page.nextBeforeSequence),
             preparation: preparation
               ? toPreparationResponse(preparation)
               : null,
@@ -517,6 +539,47 @@ function parsePath(workId: string, workRunId: string) {
   )
     return null;
   return { workId, workRunId };
+}
+
+function encodeChatCursor(
+  workId: string,
+  workRunId: string | undefined,
+  beforeSequence: number,
+): string {
+  return Buffer.from(
+    JSON.stringify({
+      v: 1,
+      workId,
+      workRunId: workRunId ?? null,
+      beforeSequence,
+    }),
+  ).toString('base64url');
+}
+
+function decodeChatCursor(
+  cursor: string,
+  workId: string,
+  workRunId: string | undefined,
+): number | null {
+  try {
+    const value = JSON.parse(
+      Buffer.from(cursor, 'base64url').toString('utf8'),
+    ) as {
+      v?: unknown;
+      workId?: unknown;
+      workRunId?: unknown;
+      beforeSequence?: unknown;
+    };
+    return value.v === 1 &&
+      value.workId === workId &&
+      value.workRunId === (workRunId ?? null) &&
+      Number.isSafeInteger(value.beforeSequence) &&
+      Number(value.beforeSequence) > 0
+      ? Number(value.beforeSequence)
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 function invalidPath(context: Context<ApiEnvironment>) {

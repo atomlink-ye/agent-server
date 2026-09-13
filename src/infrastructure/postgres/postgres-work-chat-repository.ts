@@ -66,12 +66,14 @@ export class PostgresWorkChatRepository implements WorkChatRepository {
     workId: string;
     workRunId?: string | undefined;
     limit?: number;
+    beforeSequence?: number | undefined;
   }) {
     const result = await this.database.query<Row>(
       `SELECT * FROM (
          SELECT ${COLUMNS} FROM work_chat_messages
           WHERE tenant_id=$1 AND workspace_id=$2 AND work_id=$3
             AND work_run_id IS NOT DISTINCT FROM $5::uuid
+            AND ($6::bigint IS NULL OR sequence < $6)
           ORDER BY sequence DESC LIMIT $4
        ) latest ORDER BY sequence ASC`,
       [
@@ -80,6 +82,7 @@ export class PostgresWorkChatRepository implements WorkChatRepository {
         input.workId,
         Math.min(input.limit ?? 200, 500),
         input.workRunId ?? null,
+        input.beforeSequence ?? null,
       ],
     );
     return (result.rows ?? []).map(mapRow);

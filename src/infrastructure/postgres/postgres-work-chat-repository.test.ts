@@ -6,6 +6,52 @@ import { seedWorkspace } from '../../../tests/harness/seed/workspace.js';
 import { PostgresWorkChatRepository } from './postgres-work-chat-repository.js';
 import { WorkChatService } from '../../application/work-chat/work-chat-service.js';
 
+it('pages backward beyond the latest 200 messages without gaps or duplicates', async () => {
+  const { db, dispose } = await createPgliteTestDatabase();
+  try {
+    const owner = await seedWorkspace(db);
+    const workId = randomUUID();
+    const now = '2026-09-10T00:00:00.000Z';
+    await db.query(
+      `INSERT INTO works (id,tenant_id,workspace_id,definition_id,current_definition_version_id,title,created_at,updated_at)
+       VALUES ($1,$2,$3,$4,$4,'Long chat',$5,$5)`,
+      [workId, owner.tenantId, owner.workspaceId, randomUUID(), now],
+    );
+    await db.query(
+      `INSERT INTO work_chat_messages
+        (id,tenant_id,workspace_id,work_id,sequence,kind,body,status,created_at,updated_at)
+       SELECT (lpad(to_hex(i),32,'0'))::uuid,$1,$2,$3,i,'system','message '||i,'replied',$4,$4
+         FROM generate_series(1,205) AS i`,
+      [owner.tenantId, owner.workspaceId, workId, now],
+    );
+    const repository = new PostgresWorkChatRepository({
+      query: async <R extends Record<string, unknown>>(
+        sql: string,
+        values?: readonly unknown[],
+      ) => db.query<R>(sql, values ? [...values] : undefined),
+    });
+    const service = new WorkChatService(repository);
+    const latest = await service.listPage({ owner, workId, limit: 200 });
+    expect(latest.messages).toHaveLength(200);
+    expect(latest.messages[0]?.sequence).toBe(6);
+    expect(latest.messages.at(-1)?.sequence).toBe(205);
+    expect(latest.nextBeforeSequence).toBe(6);
+
+    const older = await service.listPage({
+      owner,
+      workId,
+      limit: 200,
+      beforeSequence: latest.nextBeforeSequence!,
+    });
+    expect(older.messages.map((message) => message.sequence)).toEqual([
+      1, 2, 3, 4, 5,
+    ]);
+    expect(older.nextBeforeSequence).toBeNull();
+  } finally {
+    await dispose();
+  }
+}, 60_000);
+
 it('isolates preparation, two Runs, replies and retries under the real schema', async () => {
   const { db, dispose } = await createPgliteTestDatabase();
   try {

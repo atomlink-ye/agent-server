@@ -18,6 +18,7 @@ export interface WorkChatRepository {
     readonly workId: string;
     readonly workRunId?: string | undefined;
     readonly limit?: number;
+    readonly beforeSequence?: number | undefined;
   }): Promise<readonly WorkChatMessage[]>;
   enqueue(input: {
     readonly owner: WorkChatOwner;

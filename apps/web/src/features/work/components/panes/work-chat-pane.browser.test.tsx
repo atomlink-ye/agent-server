@@ -40,8 +40,14 @@ function message(index: number, role?: WorkChatMessageResponse['role']) {
 
 function response(
   messages: readonly WorkChatMessageResponse[],
+  nextCursor: string | null = null,
 ): WorkChatMessagesResponse {
-  return { work_id: workId, messages: [...messages], preparation: null };
+  return {
+    work_id: workId,
+    messages: [...messages],
+    next_cursor: nextCursor,
+    preparation: null,
+  };
 }
 
 let root: Root | null = null;
@@ -137,6 +143,62 @@ it('auto-scrolls on arrival only while the reader is near the bottom', async () 
   expect(history.textContent).toContain('Conversation message 34');
   expect(history.scrollTop).toBe(readerPosition);
 });
+
+it.each(['en', 'zh-CN'] as const)(
+  'loads older Work chat history without losing the reader anchor in %s',
+  async (locale) => {
+    setLocale(locale);
+    const latest = Array.from({ length: 36 }, (_, index) =>
+      message(index + 201),
+    );
+    const older = Array.from({ length: 10 }, (_, index) =>
+      message(index + 191),
+    );
+    const chat = vi
+      .spyOn(workClient, 'chat')
+      .mockResolvedValueOnce(response(latest, 'older-page'))
+      .mockResolvedValueOnce(response(older));
+    const host = document.createElement('div');
+    host.style.cssText =
+      'height: 900px; width: 100%; padding: 70px 180px; box-sizing: border-box;';
+    document.body.append(host);
+    root = createRoot(host);
+    await act(async () => {
+      root!.render(<WorkChatPane workId={workId} />);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    const history = host.querySelector<HTMLElement>('.work-chat-history')!;
+    history.scrollTop = 0;
+    history.dispatchEvent(new Event('scroll'));
+    const firstLatest = [...host.querySelectorAll('.work-chat-message')].find(
+      (element) => element.textContent?.includes('Conversation message 201.'),
+    )!;
+    const anchorTop = firstLatest.getBoundingClientRect().top;
+    const load = [...host.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes(
+        locale === 'en' ? 'Load earlier messages' : '加载更早的消息',
+      ),
+    );
+    expect(load).toBeDefined();
+    await act(async () => {
+      load!.click();
+      await Promise.resolve();
+    });
+
+    expect(chat).toHaveBeenNthCalledWith(2, workId, undefined, 'older-page');
+    expect(host.querySelectorAll('.work-chat-message')).toHaveLength(46);
+    expect(host.textContent).toContain('Conversation message 191.');
+    expect(
+      Math.abs(firstLatest.getBoundingClientRect().top - anchorTop),
+    ).toBeLessThanOrEqual(1);
+    expect(
+      [...host.querySelectorAll('.work-chat-message')].filter((element) =>
+        element.textContent?.includes('Conversation message 201.'),
+      ),
+    ).toHaveLength(1);
+    setLocale('en');
+  },
+);
 
 it('captures the empty and short conversational states', async () => {
   const { host } = await renderChat([]);

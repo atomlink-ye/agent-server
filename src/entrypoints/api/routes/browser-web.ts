@@ -30,6 +30,7 @@ import {
   PostWorkChatMessageResponseSchema,
   RetryWorkChatMessageResponseSchema,
   WorkChatMessagesResponseSchema,
+  WorkChatMessagesQuerySchema,
   ConfirmWorkPreparationRequestSchema,
   ConfirmWorkPreparationResponseSchema,
 } from '../../../contracts/work-chat.js';
@@ -285,11 +286,20 @@ export function registerBrowserWebRoutes(
       const runId = c.req.param('runId');
       if (runId !== undefined && !isUuid(runId)) return invalidProductRequest();
       if (!isUuid(workId)) return invalidProductRequest();
+      const parsedQuery = WorkChatMessagesQuerySchema.safeParse({
+        ...(c.req.query('cursor') ? { cursor: c.req.query('cursor') } : {}),
+        ...(c.req.query('limit') ? { limit: c.req.query('limit') } : {}),
+      });
+      if (!parsedQuery.success) return invalidProductRequest();
+      const query = new URLSearchParams({
+        limit: String(parsedQuery.data.limit),
+        ...(parsedQuery.data.cursor ? { cursor: parsedQuery.data.cursor } : {}),
+      });
       return readProductJson(
         c,
         config,
         logger,
-        `/api/v1/works/${encodeURIComponent(workId)}${runId ? `/runs/${encodeURIComponent(runId)}` : ''}/chat`,
+        `/api/v1/works/${encodeURIComponent(workId)}${runId ? `/runs/${encodeURIComponent(runId)}` : ''}/chat?${query}`,
         WorkChatMessagesResponseSchema,
       );
     },

@@ -16,6 +16,23 @@ export class WorkChatService {
     return this.repository.list(input);
   }
 
+  public async listPage(
+    input: Omit<Parameters<WorkChatRepository['list']>[0], 'limit'> & {
+      readonly limit: number;
+    },
+  ) {
+    const rows = await this.repository.list({
+      ...input,
+      limit: input.limit + 1,
+    });
+    const hasMore = rows.length > input.limit;
+    const messages = hasMore ? rows.slice(1) : rows;
+    return {
+      messages,
+      nextBeforeSequence: hasMore ? messages[0]!.sequence : null,
+    };
+  }
+
   public async post(input: {
     readonly owner: WorkChatOwner;
     readonly workId: string;

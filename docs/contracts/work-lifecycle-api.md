@@ -561,10 +561,20 @@ The authenticated owner and Work/Run relationship are checked before any Run
 chat operation. Retry can affect only a failed user message in the selected
 conversation. Browser clients use the matching `/api/works/...` facade.
 
+Chat reads accept `limit` from 1 through 200 (default 200) and an opaque
+`cursor`. The first page contains the latest messages in chronological order.
+When older messages exist, the response includes a non-null `next_cursor`;
+passing it back returns the next older page, also in chronological order.
+`next_cursor` is null at the beginning of history. Cursors are bound to the
+Work and exact preparation/Run bucket and are invalid in another scope. Seek
+pagination uses the durable message sequence, so messages arriving after the
+first read neither shift nor duplicate older pages.
+
 POST accepts the same strict `{body, client_request_id}` request for both
 families; scope comes from the URL, never from the body. Responses expose
 nullable `work_run_id` on messages and the chat list envelope. Preparation
-metadata is returned only for preparation reads. Client request keys retain
+metadata is returned only for preparation reads. The list envelope always
+includes nullable `next_cursor`. Client request keys retain
 the existing Work-wide uniqueness: a key reused in another conversation or
 with different text returns `409 idempotency_conflict`, without returning the
 other conversation's message. Use a fresh key for each new message.

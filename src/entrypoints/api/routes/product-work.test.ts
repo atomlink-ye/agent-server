@@ -104,7 +104,9 @@ it('routes each Run chat operation through owner-scoped Run validation', async (
       : context.json({ error: { code: 'unexpected' } }, 500),
   );
   const getWorkRun = vi.fn().mockResolvedValue({});
-  const list = vi.fn().mockResolvedValue([]);
+  const list = vi
+    .fn()
+    .mockResolvedValue({ messages: [], nextBeforeSequence: null });
   const message = {
     id: workRunId,
     workRunId,
@@ -135,7 +137,7 @@ it('routes each Run chat operation through owner-scoped Run validation', async (
       getWork: vi.fn(),
       getWorkRun,
     } as unknown as ProductProjectionApi,
-    workChat: { list, post, retry } as any,
+    workChat: { listPage: list, post, retry } as any,
   });
   const base = `/api/v1/works/${workId}/runs/${workRunId}/chat`;
   for (const [path, method] of [
@@ -165,6 +167,25 @@ it('routes each Run chat operation through owner-scoped Run validation', async (
     expect(method).toHaveBeenCalledWith(
       expect.objectContaining({ workId, workRunId }),
     );
+  list.mockResolvedValueOnce({ messages: [message], nextBeforeSequence: 1 });
+  const firstPage = await app.request(`${base}?limit=25`, {
+    headers: { authorization: 'Bearer token' },
+  });
+  expect(firstPage.status).toBe(200);
+  const firstPageBody = (await firstPage.json()) as {
+    next_cursor: string | null;
+  };
+  expect(firstPageBody.next_cursor).toEqual(expect.any(String));
+  expect(list).toHaveBeenLastCalledWith(
+    expect.objectContaining({ limit: 25, beforeSequence: undefined }),
+  );
+  await app.request(
+    `${base}?cursor=${encodeURIComponent(firstPageBody.next_cursor!)}`,
+    { headers: { authorization: 'Bearer token' } },
+  );
+  expect(list).toHaveBeenLastCalledWith(
+    expect.objectContaining({ limit: 200, beforeSequence: 1 }),
+  );
   list.mockClear();
   getWorkRun.mockRejectedValueOnce(new ProductProjectionNotFoundError());
   expect(

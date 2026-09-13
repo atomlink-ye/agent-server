@@ -64,6 +64,9 @@ function WorkChatConversation({
   const [body, setBody] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingEarlier, setLoadingEarlier] = useState(false);
+  const [earlierError, setEarlierError] = useState(false);
   const [error, setError] = useState(false);
   const [pendingRequestId, setPendingRequestId] = useState<string | null>(null);
   const [preparation, setPreparation] =
@@ -71,6 +74,11 @@ function WorkChatConversation({
   const [confirming, setConfirming] = useState(false);
   const [preparationError, setPreparationError] = useState<string | null>(null);
   const historyRef = useRef<HTMLDivElement>(null);
+  const prependAnchorRef = useRef<{
+    scrollHeight: number;
+    scrollTop: number;
+  } | null>(null);
+  const paginationStartedRef = useRef(false);
   const stickToBottomRef = useRef(true);
   const messagesRef = useRef(messages);
   const preparationRef = useRef(preparation);
@@ -90,10 +98,16 @@ function WorkChatConversation({
               onRunStarted(response.preparation.work_run_id);
               return;
             }
-            if (!sameMessages(messagesRef.current, response.messages)) {
-              messagesRef.current = response.messages;
-              setMessages(response.messages);
+            const merged = mergeMessages(
+              messagesRef.current,
+              response.messages,
+            );
+            if (!sameMessages(messagesRef.current, merged)) {
+              messagesRef.current = merged;
+              setMessages(merged);
             }
+            if (!paginationStartedRef.current)
+              setNextCursor(response.next_cursor);
             const nextPreparation = response.preparation ?? null;
             if (!samePreparation(preparationRef.current, nextPreparation)) {
               preparationRef.current = nextPreparation;
@@ -121,7 +135,15 @@ function WorkChatConversation({
   }, [workId, workRunId, onRunStarted]);
   useLayoutEffect(() => {
     const history = historyRef.current;
-    if (!history || !stickToBottomRef.current) return;
+    if (!history) return;
+    if (prependAnchorRef.current) {
+      const anchor = prependAnchorRef.current;
+      prependAnchorRef.current = null;
+      history.scrollTop =
+        anchor.scrollTop + (history.scrollHeight - anchor.scrollHeight);
+      return;
+    }
+    if (!stickToBottomRef.current) return;
     history.scrollTop = history.scrollHeight;
   }, [messages, preparation, loading, error]);
 
@@ -158,6 +180,30 @@ function WorkChatConversation({
       setBody(next);
     } finally {
       setSending(false);
+    }
+  }
+  async function loadEarlier() {
+    const history = historyRef.current;
+    if (!history || !nextCursor || loadingEarlier) return;
+    setLoadingEarlier(true);
+    setEarlierError(false);
+    stickToBottomRef.current = false;
+    prependAnchorRef.current = {
+      scrollHeight: history.scrollHeight,
+      scrollTop: history.scrollTop,
+    };
+    try {
+      const response = await workClient.chat(workId, workRunId, nextCursor);
+      paginationStartedRef.current = true;
+      const merged = mergeMessages(messagesRef.current, response.messages);
+      messagesRef.current = merged;
+      setMessages(merged);
+      setNextCursor(response.next_cursor);
+    } catch {
+      prependAnchorRef.current = null;
+      setEarlierError(true);
+    } finally {
+      setLoadingEarlier(false);
     }
   }
   async function confirmPreparation() {
@@ -203,6 +249,25 @@ function WorkChatConversation({
         ref={historyRef}
         onScroll={rememberScrollPosition}
       >
+        {nextCursor ? (
+          <div className="work-chat-earlier">
+            <button
+              type="button"
+              disabled={loadingEarlier}
+              aria-busy={loadingEarlier}
+              onClick={() => void loadEarlier()}
+            >
+              {t(
+                loadingEarlier
+                  ? 'work.chat.loadingEarlier'
+                  : 'work.chat.loadEarlier',
+              )}
+            </button>
+            {earlierError ? (
+              <p role="alert">{t('work.chat.loadEarlierError')}</p>
+            ) : null}
+          </div>
+        ) : null}
         {loading ? <p>{t('work.detail.loading')}</p> : null}
         {error ? <p role="alert">{t('work.chat.loadError')}</p> : null}
         {!loading && !messages.length ? (
@@ -284,8 +349,12 @@ function WorkChatConversation({
                           workClient
                             .chat(workId, workRunId)
                             .then((response) => {
-                              messagesRef.current = response.messages;
-                              setMessages(response.messages);
+                              const merged = mergeMessages(
+                                messagesRef.current,
+                                response.messages,
+                              );
+                              messagesRef.current = merged;
+                              setMessages(merged);
                             }),
                         )
                         .catch(() => setError(true))
@@ -385,6 +454,18 @@ function sameMessages(
         message.body === candidate.body
       );
     })
+  );
+}
+
+function mergeMessages(
+  current: WorkChatMessagesResponse['messages'],
+  incoming: WorkChatMessagesResponse['messages'],
+): WorkChatMessagesResponse['messages'] {
+  const byId = new Map(current.map((message) => [message.id, message]));
+  incoming.forEach((message) => byId.set(message.id, message));
+  return [...byId.values()].sort(
+    (left, right) =>
+      left.sequence - right.sequence || left.id.localeCompare(right.id),
   );
 }
 

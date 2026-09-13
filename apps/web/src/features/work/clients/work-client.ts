@@ -82,10 +82,11 @@ export class WorkClient {
   async chat(
     workId: string,
     workRunId?: string,
+    cursor?: string,
   ): Promise<WorkChatMessagesResponse> {
     return parseProduct(
       WorkChatMessagesResponseSchema,
-      await readProductJson(chatPath(workId, workRunId), {
+      await readProductJson(chatReadPath(workId, workRunId, cursor), {
         method: 'GET',
         cache: 'no-store',
       }),
@@ -168,4 +169,13 @@ export const workClient = new WorkClient();
 
 function chatPath(workId: string, workRunId?: string): string {
   return `/api/works/${encodeURIComponent(workId)}${workRunId ? `/runs/${encodeURIComponent(workRunId)}` : ''}/chat`;
+}
+
+function chatReadPath(
+  workId: string,
+  workRunId?: string,
+  cursor?: string,
+): string {
+  const path = chatPath(workId, workRunId);
+  return cursor ? `${path}?cursor=${encodeURIComponent(cursor)}` : path;
 }

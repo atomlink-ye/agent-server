@@ -16,6 +16,19 @@ const message = {
   created_at: '2026-09-10T00:00:00.000Z',
 };
 afterEach(() => vi.restoreAllMocks());
+it('encodes the opaque cursor when loading older Run chat', async () => {
+  const request = vi.spyOn(apiTransport, 'request').mockResolvedValue({
+    work_id: workId,
+    work_run_id: workRunId,
+    messages: [],
+    next_cursor: null,
+    preparation: null,
+  });
+  await new WorkClient().chat(workId, workRunId, 'older/page+1');
+  expect(request.mock.calls[0]?.[0]).toBe(
+    `/api/works/${workId}/runs/${workRunId}/chat?cursor=older%2Fpage%2B1`,
+  );
+});
 it('uses the Run-scoped browser routes for reads, writes, and retries', async () => {
   const request = vi.spyOn(apiTransport, 'request');
   const client = new WorkClient();

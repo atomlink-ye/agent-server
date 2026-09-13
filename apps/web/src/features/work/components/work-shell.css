@@ -23,6 +23,11 @@
   text-transform: uppercase;
 }
 
+:lang(zh-CN) .work-shell-kicker {
+  letter-spacing: 0;
+  text-transform: none;
+}
+
 .work-shell-breadcrumb {
   margin: 0 0 var(--space-5);
   color: var(--ink-500);

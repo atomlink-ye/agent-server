@@ -789,6 +789,20 @@ it.each(['en', 'zh-CN'] as const)(
         );
         expect(row.scrollWidth).toBe(row.clientWidth);
       }
+      const firstRow = rows[0]!;
+      const titleColor = getComputedStyle(
+        firstRow.querySelector('.work-scannable-title')!,
+      ).color;
+      const stateColor = getComputedStyle(
+        firstRow.querySelector('.work-list-meta > span')!,
+      ).color;
+      const countColor = getComputedStyle(
+        firstRow.querySelector('.work-list-count')!,
+      ).color;
+      const timeColor = getComputedStyle(firstRow.querySelector('time')!).color;
+      expect(stateColor).not.toBe(titleColor);
+      expect(countColor).not.toBe(stateColor);
+      expect(timeColor).toBe(countColor);
       const longRows = rows.filter(
         (row) =>
           row.querySelector('strong')?.getAttribute('title')?.length === 200,

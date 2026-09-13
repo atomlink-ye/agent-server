@@ -59,6 +59,7 @@ it('keeps execution vocabulary within the desktop header in both locales', async
       const header = host.querySelector<HTMLElement>('.work-run-header')!;
       const heading = header.querySelector('h1')!;
       const tabs = host.querySelector<HTMLElement>('.work-tabs')!;
+      const state = header.querySelector<HTMLElement>('.work-state-pill')!;
       // Replay baseline copy in the real production components; CSS is unchanged.
       const currentHeading = heading.textContent!;
       heading.textContent = locale === 'en' ? 'RUN #1' : 'RUN 第 1 次';
@@ -104,6 +105,11 @@ it('keeps execution vocabulary within the desktop header in both locales', async
       // Shares the .work-shell > .work-tabs band measured in
       // work-detail.browser.test.tsx's navigation pass.
       expect(tabs.getBoundingClientRect().height).toBe(26);
+      if (locale === 'zh-CN')
+        expect(['normal', '0px']).toContain(
+          getComputedStyle(state).letterSpacing,
+        );
+      else expect(getComputedStyle(state).letterSpacing).not.toBe('normal');
       measurements.push({
         locale,
         viewport: window.innerWidth,

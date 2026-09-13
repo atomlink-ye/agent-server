@@ -354,7 +354,7 @@
   white-space: nowrap;
   font-size: var(--text-xs);
   line-height: var(--leading-ui);
-  color: var(--ink-500);
+  color: var(--ink-300);
 }
 .work-pane .work-directory-row .work-list-meta {
   justify-content: space-between;
@@ -363,8 +363,16 @@
   gap: 4px;
 }
 .work-pane .work-directory-row .work-list-meta time {
-  color: var(--ink-500);
+  color: var(--ink-300);
   font-size: var(--text-xs);
+}
+
+/* Uppercase tracking is useful hierarchy in Latin text but inserts visual
+ * gaps between CJK glyphs. Chinese keeps the same size and row geometry. */
+:lang(zh-CN) .work-pane .eyebrow,
+:lang(zh-CN) .work-state-pill {
+  letter-spacing: 0;
+  text-transform: none;
 }
 .work-pane-scroll > .pane-placeholder {
   box-sizing: border-box;

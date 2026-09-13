@@ -90,6 +90,23 @@ The five visual-weight issues found in the walkthrough were corrected and measur
 Final focused verification:
 
 ```text
- Test Files  2 passed (2)
-      Tests  18 passed (18)
+ Test Files  6 passed (6)
+      Tests  50 passed (50)
 ```
+
+`pnpm lint` and `pnpm web:check:types` both exited `0` after the refreshed recordings and documentation update.
+
+### Post-fix GIF visual proof
+
+Both walkthrough GIFs were re-recorded from the updated UI at 1440×900. Compared with the original evidence:
+
+1. **Files idle preview:** the empty preview is now a short, quiet panel at the top of the preview column. It no longer fills the column with a large outlined void; the full-height viewer appears only after opening a file.
+2. **Files row information:** the meaningless `v1 · aaaaa…` line is gone. The file column is visibly calmer and fits substantially more filename rows, while the selected file still exposes its hash in the preview.
+3. **Files coworker hierarchy:** coworker names now read as the primary row labels. `Agent` and `You + Agent` appear as a compact, low-contrast text toggle beneath each name instead of two dominant pills.
+4. **Tasks repeated signals:** the homogeneous walkthrough list no longer repeats `To do` and `Unassigned` on every row. Titles and dates form the scan path; status and assignee signals still appear when a mixed list needs them to distinguish rows.
+5. **Tasks right-column balance:** Comments now occupies the first, bounded card with a visible composer and action. The empty Formal execution state sits below as a compact secondary card instead of taking the prime position with explanatory prose and a disabled button.
+
+Updated evidence:
+
+- [Files walkthrough](docs/ux/r3/files-walkthrough.gif)
+- [Workspace walkthrough](docs/ux/r3/workspace-walkthrough.gif)

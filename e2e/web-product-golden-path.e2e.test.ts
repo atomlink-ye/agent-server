@@ -74,7 +74,9 @@ describe('web Product Golden Path', () => {
         waitUntil: 'domcontentloaded',
         timeout: 60_000,
       });
-      await page.getByRole('button', { name: 'Create an account' }).click();
+      await page
+        .getByRole('button', { name: 'Need an account? Create one' })
+        .click();
       await page.getByLabel('Username').fill(username);
       await page.getByLabel('Password').fill(`Golden-path-${suffix}!`);
       const registerResponse = page.waitForResponse(

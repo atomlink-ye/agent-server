@@ -102,18 +102,23 @@ it('scrolls real Tasks list and detail content to their final entries on desktop
     const content = host.querySelector<HTMLElement>('.work-org-content');
     expect(content).not.toBeNull();
     expect(host.textContent).toContain('Final real Task comment');
-    expect(content!.scrollHeight).toBeGreaterThan(content!.clientHeight);
-    content!.scrollTop = content!.scrollHeight;
-    expect(content!.scrollTop).toBeGreaterThan(0);
+    const commentsList = content!.querySelector<HTMLElement>(
+      '.work-org-comments-list',
+    )!;
+    expect(commentsList.scrollHeight).toBeGreaterThan(
+      commentsList.clientHeight,
+    );
+    commentsList.scrollTop = commentsList.scrollHeight;
+    expect(commentsList.scrollTop).toBeGreaterThan(0);
     const finalComment = [
-      ...content!.querySelectorAll<HTMLElement>('.work-org-comment'),
+      ...commentsList.querySelectorAll<HTMLElement>('.work-org-comment'),
     ].at(-1)!;
     expect(finalComment.textContent).toContain('Final real Task comment');
     expect(finalComment.getBoundingClientRect().top).toBeGreaterThanOrEqual(
-      content!.getBoundingClientRect().top - 1,
+      commentsList.getBoundingClientRect().top - 1,
     );
     expect(finalComment.getBoundingClientRect().bottom).toBeLessThanOrEqual(
-      content!.getBoundingClientRect().bottom + 1,
+      commentsList.getBoundingClientRect().bottom + 1,
     );
     await page.screenshot({
       path: '../../../../../.local/tasks-scroll-desktop.png',
@@ -783,6 +788,98 @@ async function settle(): Promise<void> {
   }
 }
 
+it.each(['en', 'zh-CN'] as const)(
+  'keeps long comments reachable and populated Work promotion functional in %s at 1440',
+  async (locale) => {
+    await page.viewport(1440, 900);
+    setLocale(locale);
+    const comments = Array.from({ length: 24 }, (_, index) =>
+      commentFor(
+        workItemId,
+        `Comment ${index + 1}`,
+        String(index + 300).padStart(12, '0'),
+      ),
+    );
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const path = String(input);
+        if (path === '/api/work-items') return json({ work_items: [task()] });
+        if (path === '/api/agents') return json({ items: [] });
+        if (path === `/api/work-items/${workItemId}/comments`)
+          return json({ comments });
+        if (path === '/api/work-definitions')
+          return json({
+            items: [
+              {
+                definitionId,
+                displayName: 'Research workflow',
+                currentPublishedVersionId: versionId,
+              },
+            ],
+          });
+        throw new Error(`Unexpected request: ${path}`);
+      }),
+    );
+    const host = document.createElement('div');
+    host.style.width = '1368px';
+    host.style.height = '900px';
+    document.body.append(host);
+    const root = createRoot(host);
+    try {
+      await act(async () => {
+        root.render(
+          <MemoryRouter>
+            <TasksPage selectedWorkItemId={workItemId} />
+          </MemoryRouter>,
+        );
+      });
+      await act(settle);
+      await act(settle);
+      const card = host.querySelector<HTMLElement>('.work-org-comments-card')!;
+      const list = card.querySelector<HTMLElement>('.work-org-comments-list')!;
+      expect(list.scrollHeight).toBeGreaterThan(list.clientHeight);
+      list.scrollTop = list.scrollHeight;
+      expect(list.scrollTop).toBeGreaterThan(0);
+      const finalComment = [
+        ...list.querySelectorAll<HTMLElement>('.work-org-comment'),
+      ].at(-1)!;
+      expect(finalComment.textContent).toContain('Comment 24');
+      expect(finalComment.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+        list.getBoundingClientRect().bottom + 1,
+      );
+      const composer = card.querySelector<HTMLTextAreaElement>('textarea')!;
+      const commentAction = [
+        ...card.querySelectorAll<HTMLButtonElement>('button'),
+      ].at(-1)!;
+      expect(composer.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+        card.getBoundingClientRect().bottom + 1,
+      );
+      expect(commentAction.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+        card.getBoundingClientRect().bottom + 1,
+      );
+      const definition = host.querySelector<HTMLSelectElement>(
+        `select[aria-label="${t('tasks.publishedWorkDefinition')}"]`,
+      )!;
+      const createWork = [
+        ...host.querySelectorAll<HTMLButtonElement>('button'),
+      ].find((button) => button.textContent === t('tasks.createWork'))!;
+      expect(definition).not.toBeNull();
+      expect(createWork.disabled).toBe(true);
+      await act(async () => {
+        definition.value = definitionId;
+        definition.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      expect(createWork.disabled).toBe(false);
+    } finally {
+      await act(async () => root.unmount());
+      host.remove();
+      setLocale('en');
+      vi.unstubAllGlobals();
+    }
+  },
+);
+
 function shellCommands() {
   return {
     loadCoworkers: async () => [],
@@ -828,6 +925,21 @@ it.each(['en', 'zh-CN'] as const)(
         ),
       );
       await act(settle);
+      await act(settle);
+      const commentsCard = host.querySelector<HTMLElement>(
+        '.work-org-comments-card',
+      )!;
+      const formalCard = host.querySelector<HTMLElement>(
+        '.work-org-formal-card--empty',
+      )!;
+      expect(commentsCard).not.toBeNull();
+      expect(formalCard).not.toBeNull();
+      expect(commentsCard.getBoundingClientRect().top).toBeLessThan(
+        formalCard.getBoundingClientRect().top,
+      );
+      expect(formalCard.getBoundingClientRect().height).toBeLessThan(
+        commentsCard.getBoundingClientRect().height,
+      );
       const heading = host.querySelector<HTMLElement>('.work-org-heading')!;
       const headingAction =
         heading.querySelector<HTMLElement>('.work-org-primary')!;

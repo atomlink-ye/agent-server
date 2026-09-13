@@ -231,10 +231,22 @@
   gap: var(--space-4);
 }
 
-.work-org-comments {
+.work-org-comments-list {
   display: grid;
   gap: var(--space-4);
   margin: var(--space-3) 0;
+  max-height: 280px;
+  overflow-y: auto;
+  padding-right: var(--space-1);
+}
+
+.work-org-formal-card--empty {
+  gap: var(--space-1);
+}
+
+.work-org-formal-card--empty h2,
+.work-org-formal-card--empty p {
+  margin-block: 0;
 }
 
 .work-org-review-card {

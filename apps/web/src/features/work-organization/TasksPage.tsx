@@ -755,6 +755,11 @@ function TaskDetail({
     }
   }
 
+  const compactFormalExecution =
+    !detail.linked_work &&
+    definitionsState === 'ready' &&
+    definitions.length === 0;
+
   return (
     <div className="work-org-detail-grid">
       <article className="work-org-card work-org-form">
@@ -845,103 +850,9 @@ function TaskDetail({
       </article>
 
       <aside className="work-org-stack">
-        <article className="work-org-card">
-          <span className="eyebrow">{t('tasks.formalExecution')}</span>
-          {detail.linked_work ? (
-            <>
-              <h2>{detail.linked_work.title}</h2>
-              <p className="work-org-muted">
-                {productStateLabel(detail.linked_work.product_state)}
-              </p>
-              {detail.linked_work.result_summary ? (
-                <p>{detail.linked_work.result_summary}</p>
-              ) : null}
-              <button
-                type="button"
-                className="work-org-primary"
-                onClick={() =>
-                  navigate(
-                    `/work/${encodeURIComponent(detail.linked_work!.work_id)}?from_task=${encodeURIComponent(item.id)}`,
-                  )
-                }
-              >
-                {t('tasks.openWork')}
-              </button>
-            </>
-          ) : (
-            <>
-              <h2>{t('tasks.startWork')}</h2>
-              <p className="work-org-muted">
-                {t('tasks.startWorkDescription')}
-              </p>
-              <PublishedDefinitionField
-                definitions={definitions}
-                state={definitionsState}
-                value={selectedDefinitionId}
-                onChange={setSelectedDefinitionId}
-                onRetry={() => void loadDefinitions()}
-              />
-              <button
-                type="button"
-                className="work-org-primary"
-                disabled={
-                  saving ||
-                  definitionsState !== 'ready' ||
-                  !selectedDefinitionId
-                }
-                onClick={() => void promote()}
-              >
-                {t('tasks.createWork')}
-              </button>
-            </>
-          )}
-        </article>
-
-        {item.status === 'in_review' ? (
-          <article className="work-org-card work-org-review-card">
-            <span className="eyebrow">{t('tasks.humanReview')}</span>
-            <h2>{t('tasks.decisionNeeded')}</h2>
-            <p className="work-org-muted">{t('tasks.reviewDescription')}</p>
-            <div className="work-org-actions">
-              <button
-                type="button"
-                className="work-org-primary"
-                disabled={saving}
-                onClick={() => void update({ status: 'done' })}
-              >
-                {t('tasks.markComplete')}
-              </button>
-              {detail.linked_work ? (
-                <button
-                  type="button"
-                  onClick={() =>
-                    navigate(
-                      `/work/${encodeURIComponent(detail.linked_work!.work_id)}?from_task=${encodeURIComponent(item.id)}`,
-                    )
-                  }
-                >
-                  {t('tasks.reviewWork')}
-                </button>
-              ) : null}
-              {item.source_conversation_id ? (
-                <button
-                  type="button"
-                  onClick={() =>
-                    navigate(
-                      `/conversations/${encodeURIComponent(item.source_conversation_id!)}`,
-                    )
-                  }
-                >
-                  {t('tasks.openConversation')}
-                </button>
-              ) : null}
-            </div>
-          </article>
-        ) : null}
-
-        <article className="work-org-card">
+        <article className="work-org-card work-org-comments-card">
           <span className="eyebrow">{t('tasks.comments')}</span>
-          <div className="work-org-comments">
+          <div className="work-org-comments-list">
             {comments.length === 0 ? (
               <p className="work-org-muted">{t('tasks.noComments')}</p>
             ) : null}
@@ -989,6 +900,108 @@ function TaskDetail({
             {t('tasks.comment')}
           </button>
         </article>
+
+        <article
+          className={`work-org-card work-org-formal-card${
+            compactFormalExecution ? ' work-org-formal-card--empty' : ''
+          }`}
+        >
+          <span className="eyebrow">{t('tasks.formalExecution')}</span>
+          {detail.linked_work ? (
+            <>
+              <h2>{detail.linked_work.title}</h2>
+              <p className="work-org-muted">
+                {productStateLabel(detail.linked_work.product_state)}
+              </p>
+              {detail.linked_work.result_summary ? (
+                <p>{detail.linked_work.result_summary}</p>
+              ) : null}
+              <button
+                type="button"
+                className="work-org-primary"
+                onClick={() =>
+                  navigate(
+                    `/work/${encodeURIComponent(detail.linked_work!.work_id)}?from_task=${encodeURIComponent(item.id)}`,
+                  )
+                }
+              >
+                {t('tasks.openWork')}
+              </button>
+            </>
+          ) : (
+            <>
+              <h2>{t('tasks.startWork')}</h2>
+              {!compactFormalExecution ? (
+                <p className="work-org-muted">
+                  {t('tasks.startWorkDescription')}
+                </p>
+              ) : null}
+              <PublishedDefinitionField
+                definitions={definitions}
+                state={definitionsState}
+                value={selectedDefinitionId}
+                onChange={setSelectedDefinitionId}
+                onRetry={() => void loadDefinitions()}
+              />
+              {!compactFormalExecution ? (
+                <button
+                  type="button"
+                  className="work-org-primary"
+                  disabled={
+                    saving ||
+                    definitionsState !== 'ready' ||
+                    !selectedDefinitionId
+                  }
+                  onClick={() => void promote()}
+                >
+                  {t('tasks.createWork')}
+                </button>
+              ) : null}
+            </>
+          )}
+        </article>
+
+        {item.status === 'in_review' ? (
+          <article className="work-org-card work-org-review-card">
+            <span className="eyebrow">{t('tasks.humanReview')}</span>
+            <h2>{t('tasks.decisionNeeded')}</h2>
+            <p className="work-org-muted">{t('tasks.reviewDescription')}</p>
+            <div className="work-org-actions">
+              <button
+                type="button"
+                className="work-org-primary"
+                disabled={saving}
+                onClick={() => void update({ status: 'done' })}
+              >
+                {t('tasks.markComplete')}
+              </button>
+              {detail.linked_work ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigate(
+                      `/work/${encodeURIComponent(detail.linked_work!.work_id)}?from_task=${encodeURIComponent(item.id)}`,
+                    )
+                  }
+                >
+                  {t('tasks.reviewWork')}
+                </button>
+              ) : null}
+              {item.source_conversation_id ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigate(
+                      `/conversations/${encodeURIComponent(item.source_conversation_id!)}`,
+                    )
+                  }
+                >
+                  {t('tasks.openConversation')}
+                </button>
+              ) : null}
+            </div>
+          </article>
+        ) : null}
       </aside>
     </div>
   );

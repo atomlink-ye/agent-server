@@ -369,6 +369,8 @@ export const en = {
     'Add the first Coworker and this becomes the room they work in.',
   'agents.teamIntro':
     'Coworkers work on their own and with each other. They’ll loop you in when they need a call.',
+  'agents.sampleIntro':
+    'Maya is a sample Coworker, ready for you to try. Keep her or add your own teammate.',
   'agents.filter': 'Filter Coworkers by status',
   'agents.loading': 'Loading Coworkers…',
   'agents.empty': 'No Coworkers yet.',

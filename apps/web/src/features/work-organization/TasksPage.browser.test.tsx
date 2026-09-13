@@ -724,6 +724,16 @@ it.each(['en', 'zh-CN'] as const)(
         ),
       );
       await act(settle);
+      const heading = host.querySelector<HTMLElement>('.work-org-heading')!;
+      const headingAction =
+        heading.querySelector<HTMLElement>('.work-org-primary')!;
+      const headingRect = heading.getBoundingClientRect();
+      const actionRect = headingAction.getBoundingClientRect();
+      expect(actionRect.left).toBeGreaterThanOrEqual(headingRect.left - 1);
+      expect(actionRect.right).toBeLessThanOrEqual(headingRect.right + 1);
+      expect(headingAction.scrollWidth).toBeLessThanOrEqual(
+        headingAction.clientWidth + 1,
+      );
       const section = host.querySelector<HTMLElement>('.title-bar-section')!;
       expect(section.textContent).toBe(t('tasks.title'));
       copyMeasurements.push({

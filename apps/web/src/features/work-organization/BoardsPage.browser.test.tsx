@@ -1148,7 +1148,14 @@ it.each(['en', 'zh-CN'] as const)(
         const path = String(input);
         if (path === '/api/agents') return json({ items: [] });
         if (path === '/api/boards') return json({ boards: [board()] });
-        if (path === `/api/boards/${boardId}`) return json(snapshot(false));
+        if (path === `/api/boards/${boardId}`) {
+          const body = snapshot(true);
+          body.work_items[0]!.title =
+            locale === 'zh-CN'
+              ? '这是一个用于验证看板卡片标题可以在固定宽度内换行的超长中文标题'
+              : 'AnExtremelyLongUnbrokenBoardCardTitleThatMustRemainInsideItsFixedWidthColumn';
+          return json(body);
+        }
         throw new Error(`Unexpected request: ${path}`);
       }),
     );
@@ -1165,6 +1172,24 @@ it.each(['en', 'zh-CN'] as const)(
         ),
       );
       await act(settle);
+      const heading = host.querySelector<HTMLElement>('.work-org-heading')!;
+      const headingAction =
+        heading.querySelector<HTMLElement>('.work-org-primary')!;
+      const headingRect = heading.getBoundingClientRect();
+      const actionRect = headingAction.getBoundingClientRect();
+      expect(actionRect.left).toBeGreaterThanOrEqual(headingRect.left - 1);
+      expect(actionRect.right).toBeLessThanOrEqual(headingRect.right + 1);
+      expect(headingAction.scrollWidth).toBeLessThanOrEqual(
+        headingAction.clientWidth + 1,
+      );
+      const card = host.querySelector<HTMLElement>('.work-board-card')!;
+      const cardTitle = card.querySelector<HTMLElement>('strong')!;
+      expect(cardTitle.getBoundingClientRect().right).toBeLessThanOrEqual(
+        card.getBoundingClientRect().right + 1,
+      );
+      expect(cardTitle.scrollWidth).toBeLessThanOrEqual(
+        cardTitle.clientWidth + 1,
+      );
       const section = host.querySelector<HTMLElement>('.title-bar-section')!;
       expect(section.textContent).toBe(t('boards.title'));
       copyMeasurements.push({

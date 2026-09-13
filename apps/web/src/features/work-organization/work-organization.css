@@ -8,6 +8,17 @@
   gap: var(--space-3);
 }
 
+.work-org-heading > div {
+  min-width: 0;
+}
+
+.work-org-heading > .work-org-primary {
+  flex: 0 1 auto;
+  max-width: 55%;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
 .work-org-primary {
   background: var(--skype-deep);
   color: var(--cloud);
@@ -327,7 +338,9 @@
   cursor: grabbing;
 }
 .work-board-card strong {
+  min-width: 0;
   font-size: var(--text-md);
+  overflow-wrap: anywhere;
   white-space: pre-line;
 }
 .work-board-card small {
@@ -584,6 +597,11 @@
 
 .work-board-card-top {
   justify-content: space-between;
+}
+
+.work-board-card-top > :first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .work-board-card-footer {

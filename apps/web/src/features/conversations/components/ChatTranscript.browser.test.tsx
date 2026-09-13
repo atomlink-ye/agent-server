@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
+import { setLocale } from '@/i18n';
 
 import '../../../index.css';
 
@@ -31,6 +32,7 @@ const roots: ReturnType<typeof createRoot>[] = [];
 afterEach(async () => {
   for (const root of roots.splice(0)) await act(async () => root.unmount());
   vi.restoreAllMocks();
+  setLocale('en');
   document.body.replaceChildren();
 });
 
@@ -177,28 +179,44 @@ it('pins new Conversation messages unless the reader has scrolled away', async (
   });
 });
 
-it('contains long principal and Agent content inside the transcript', async () => {
-  const host = await render([
-    message({ authorType: 'principal', body: '界'.repeat(500) }),
-    message({
-      id: '33333333-3333-4333-8333-333333333333',
-      sequence: 2,
-      authorType: 'agent_definition',
-      body: `\`\`\`text\n${'code'.repeat(300)}\n\`\`\``,
-    }),
-  ]);
-  const transcript = host.querySelector<HTMLElement>('.chat-transcript')!;
-  const principal = host.querySelector<HTMLElement>(
-    '.chat-message[data-author-type="principal"]',
-  )!;
-  expect(transcript.scrollWidth).toBeLessThanOrEqual(
-    transcript.clientWidth + 1,
-  );
-  expect(principal.scrollWidth).toBeLessThanOrEqual(principal.clientWidth + 1);
-  expect(host.querySelector<HTMLElement>('pre')!.scrollWidth).toBeGreaterThan(
-    host.querySelector<HTMLElement>('pre')!.clientWidth,
-  );
-});
+it.each(['en', 'zh-CN'] as const)(
+  'contains mixed Chinese/English and code inside the transcript in %s',
+  async (locale) => {
+    await page.viewport(1440, 900);
+    setLocale(locale);
+    const host = await render([
+      message({
+        authorType: 'principal',
+        body: `${'UnbrokenToken'.repeat(80)} 请继续检查 this mixed transcript。`,
+      }),
+      message({
+        id: '33333333-3333-4333-8333-333333333333',
+        sequence: 2,
+        authorType: 'agent_definition',
+        body: `处理中 / processing\n\n\`\`\`text\n${'code'.repeat(300)}\n\`\`\``,
+      }),
+    ]);
+    const transcript = host.querySelector<HTMLElement>('.chat-transcript')!;
+    const principal = host.querySelector<HTMLElement>(
+      '.chat-message[data-author-type="principal"]',
+    )!;
+    const transcriptRect = transcript.getBoundingClientRect();
+    expect(principal.getBoundingClientRect().right).toBeLessThanOrEqual(
+      transcriptRect.right + 1,
+    );
+    expect(transcript.scrollWidth).toBeLessThanOrEqual(
+      transcript.clientWidth + 1,
+    );
+    expect(principal.scrollWidth).toBeLessThanOrEqual(
+      principal.clientWidth + 1,
+    );
+    expect(host.textContent).toContain('请继续检查');
+    expect(host.textContent).toContain('processing');
+    expect(host.querySelector<HTMLElement>('pre')!.scrollWidth).toBeGreaterThan(
+      host.querySelector<HTMLElement>('pre')!.clientWidth,
+    );
+  },
+);
 
 it('refuses raw HTML in an Agent reply', async () => {
   const host = await render([

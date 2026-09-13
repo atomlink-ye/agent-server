@@ -32,3 +32,11 @@ it('preserves a successful send when a stale initial load finishes later', async
 
   expect(store.getConversation(conversationId).messages).toEqual([sent]);
 });
+
+it('serializes rapid sends until the active request completes', () => {
+  const store = createMessagesStore();
+  expect(store.beginSend(conversationId, 'first')).toBe(true);
+  expect(store.beginSend(conversationId, 'duplicate')).toBe(false);
+  store.completeSend(conversationId);
+  expect(store.beginSend(conversationId, 'second')).toBe(true);
+});

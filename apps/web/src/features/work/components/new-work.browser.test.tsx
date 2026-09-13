@@ -342,6 +342,8 @@ it('offers Definitions at the generic start entry without requiring a Coworker',
     });
     expect(host.querySelector('#work-coworker')).toBeNull();
     expect(host.querySelector('#work-definition-choice')).not.toBeNull();
+    expect(host.querySelectorAll('#work-title')).toHaveLength(0);
+    expect(host.querySelectorAll('#advanced-work-title')).toHaveLength(1);
     expect(host.textContent).toContain('Competitor Research');
     expect(host.textContent).not.toContain('Create a Coworker');
     await act(async () => {
@@ -352,6 +354,8 @@ it('offers Definitions at the generic start entry without requiring a Coworker',
       select.dispatchEvent(new Event('change', { bubbles: true }));
       await settle();
     });
+    expect(host.querySelectorAll('#work-title')).toHaveLength(1);
+    expect(host.querySelectorAll('#advanced-work-title')).toHaveLength(1);
     expect(host.querySelector('#work-input-include_private')).not.toBeNull();
     await page.screenshot({
       path: '../../../../__screenshots__/ux-review/generic-inputs.png',

@@ -797,9 +797,9 @@ function AdvancedDefinitionAuthoring({
     <div className="new-work-form__advanced-editor">
       <p>{t('work.start.advancedIntro')}</p>
       <div className="new-work-form__field">
-        <label htmlFor="work-title">{t('work.start.workTitle')}</label>
+        <label htmlFor="advanced-work-title">{t('work.start.workTitle')}</label>
         <input
-          id="work-title"
+          id="advanced-work-title"
           value={title}
           onChange={(event) => setTitle(event.target.value)}
         />

@@ -176,6 +176,45 @@ it('clears a transient load failure after polling recovers', async () => {
   expect(host.textContent).toContain('Conversation message 1');
 });
 
+it('does not let a slow poll erase a message that just posted', async () => {
+  let resolvePoll!: (value: WorkChatMessagesResponse) => void;
+  vi.spyOn(workClient, 'chat').mockReturnValue(
+    new Promise((resolve) => {
+      resolvePoll = resolve;
+    }),
+  );
+  vi.spyOn(workClient, 'postChat').mockResolvedValue({
+    ...message(7, 'user'),
+    body: 'Keep this successful send',
+  });
+  const host = document.createElement('div');
+  document.body.append(host);
+  root = createRoot(host);
+  await act(async () => {
+    root!.render(<WorkChatPane workId={workId} />);
+  });
+  const textarea = host.querySelector<HTMLTextAreaElement>('textarea')!;
+  await act(async () => {
+    const valueSetter = Object.getOwnPropertyDescriptor(
+      HTMLTextAreaElement.prototype,
+      'value',
+    )!.set!;
+    valueSetter.call(textarea, 'Keep this successful send');
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await act(async () => {
+    host.querySelector<HTMLButtonElement>('.send-button')!.click();
+    await Promise.resolve();
+  });
+  expect(host.textContent).toContain('Keep this successful send');
+
+  await act(async () => {
+    resolvePoll(response([]));
+    await Promise.resolve();
+  });
+  expect(host.textContent).toContain('Keep this successful send');
+});
+
 it.each(['en', 'zh-CN'] as const)(
   'contains long user, code, and CJK content without widening the history in %s',
   async (locale) => {

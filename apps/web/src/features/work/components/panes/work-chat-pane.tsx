@@ -76,10 +76,15 @@ function WorkChatConversation({
   const messagesRef = useRef(messages);
   const preparationRef = useRef(preparation);
   const loadingRef = useRef(true);
+  const mutationVersionRef = useRef(0);
   useEffect(() => {
     let active = true;
-    const refresh = () =>
-      workClient
+    let refreshInFlight = false;
+    const refresh = () => {
+      if (refreshInFlight) return Promise.resolve();
+      refreshInFlight = true;
+      const mutationVersion = mutationVersionRef.current;
+      return workClient
         .chat(workId, workRunId)
         .then((response) => {
           if (active) {
@@ -92,7 +97,10 @@ function WorkChatConversation({
               onRunStarted(response.preparation.work_run_id);
               return;
             }
-            if (!sameMessages(messagesRef.current, response.messages)) {
+            if (
+              mutationVersion === mutationVersionRef.current &&
+              !sameMessages(messagesRef.current, response.messages)
+            ) {
               messagesRef.current = response.messages;
               setMessages(response.messages);
             }
@@ -107,11 +115,13 @@ function WorkChatConversation({
           if (active) setLoadError(true);
         })
         .finally(() => {
+          refreshInFlight = false;
           if (active && loadingRef.current) {
             loadingRef.current = false;
             setLoading(false);
           }
         });
+    };
     void refresh();
     const timer = window.setInterval(() => {
       void refresh();
@@ -149,6 +159,7 @@ function WorkChatConversation({
         requestId,
         workRunId,
       );
+      mutationVersionRef.current += 1;
       setMessages((current) => {
         const updated = [...current, message];
         messagesRef.current = updated;

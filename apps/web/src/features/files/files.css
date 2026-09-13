@@ -78,6 +78,7 @@
 }
 .files-files {
   display: flex;
+  flex: 1;
   flex-direction: column;
   gap: var(--space-3);
   min-height: 0;

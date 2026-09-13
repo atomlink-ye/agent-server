@@ -1,4 +1,10 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import type { WorkItemStatus } from '@atomlink-ye/agent-server/product-contract';
 import { Link, useNavigate } from 'react-router-dom';
 import type {
@@ -325,6 +331,19 @@ export function ChatTranscript({
 }: ChatTranscriptProps) {
   const t = useT();
   const navigate = useNavigate();
+  const transcriptRef = useRef<HTMLDivElement>(null);
+  const stickToBottomRef = useRef(true);
+  const messageCount = state?.status === 'ready' ? state.messages.length : 0;
+
+  useEffect(() => {
+    stickToBottomRef.current = true;
+  }, [conversationId]);
+
+  useLayoutEffect(() => {
+    const transcript = transcriptRef.current;
+    if (!transcript || !stickToBottomRef.current) return;
+    transcript.scrollTop = transcript.scrollHeight;
+  }, [conversationId, messageCount]);
 
   if (!hasConversations) {
     return (
@@ -377,6 +396,16 @@ export function ChatTranscript({
       className="chat-transcript scroll-region"
       aria-live="polite"
       aria-label={t('transcript.label')}
+      ref={transcriptRef}
+      onScroll={() => {
+        const transcript = transcriptRef.current;
+        if (!transcript) return;
+        const distanceFromBottom =
+          transcript.scrollHeight -
+          transcript.clientHeight -
+          transcript.scrollTop;
+        stickToBottomRef.current = distanceFromBottom <= 80;
+      }}
     >
       {state.messages.map((message) => (
         <Message

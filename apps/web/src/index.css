@@ -913,6 +913,7 @@ textarea {
 
 .chat-message p {
   margin: 0;
+  overflow-wrap: anywhere;
 }
 
 /* A bubble is a narrow, fixed-width container, so rendered markdown has to be

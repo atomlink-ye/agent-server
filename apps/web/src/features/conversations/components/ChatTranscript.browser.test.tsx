@@ -102,29 +102,102 @@ it('leaves a principal message as the text they actually typed', async () => {
   expect(host.textContent).toContain('**exactly**');
 });
 
-it('scrolls the real Conversation transcript to its final message', async () => {
-  const host = await render(
-    Array.from({ length: 48 }, (_, index) =>
-      message({
-        id: `22222222-2222-4222-8222-${String(index).padStart(12, '0')}`,
-        sequence: index,
-        authorType: 'agent_definition',
-        body:
-          index === 47 ? 'Final real conversation message' : `Message ${index}`,
-      }),
-    ),
+it('pins new Conversation messages unless the reader has scrolled away', async () => {
+  const initial = Array.from({ length: 48 }, (_, index) =>
+    message({
+      id: `22222222-2222-4222-8222-${String(index).padStart(12, '0')}`,
+      sequence: index,
+      authorType: 'agent_definition',
+      body:
+        index === 47 ? 'Final real conversation message' : `Message ${index}`,
+    }),
   );
+  const host = await render(initial);
   const transcript = host.querySelector<HTMLElement>('.chat-transcript')!;
+  const root = roots.at(-1)!;
+  const rerender = async (messages: readonly ChatMessage[]) => {
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <main className="chat-panel" style={{ height: '900px' }}>
+            <ChatTranscript
+              conversationId={conversationId}
+              hasConversations
+              state={
+                {
+                  status: 'ready',
+                  messages,
+                  error: null,
+                } as unknown as ConversationMessagesState
+              }
+              onRetry={() => undefined}
+              onOpenWork={() => undefined}
+            />
+          </main>
+        </MemoryRouter>,
+      );
+    });
+  };
+
   expect(transcript.scrollHeight).toBeGreaterThan(transcript.clientHeight);
-  transcript.scrollTop = transcript.scrollHeight;
-  expect(transcript.scrollTop).toBeGreaterThan(0);
+  expect(
+    transcript.scrollHeight - transcript.clientHeight - transcript.scrollTop,
+  ).toBeLessThanOrEqual(2);
+
+  const pinnedArrival = message({
+    id: '33333333-3333-4333-8333-333333333333',
+    sequence: 49,
+    authorType: 'agent_definition',
+    body: 'Arrived while pinned',
+  });
+  await rerender([...initial, pinnedArrival]);
+  expect(
+    transcript.scrollHeight - transcript.clientHeight - transcript.scrollTop,
+  ).toBeLessThanOrEqual(2);
+
+  transcript.scrollTop = 0;
+  transcript.dispatchEvent(new Event('scroll'));
+  const readerPosition = transcript.scrollTop;
+  await rerender([
+    ...initial,
+    pinnedArrival,
+    message({
+      id: '44444444-4444-4444-8444-444444444444',
+      sequence: 50,
+      authorType: 'agent_definition',
+      body: 'Arrived while reading history',
+    }),
+  ]);
+  expect(transcript.scrollTop).toBe(readerPosition);
+
   const finalMessage = [...transcript.querySelectorAll('article')].at(-1)!;
-  expect(finalMessage.getBoundingClientRect().bottom).toBeLessThanOrEqual(
-    transcript.getBoundingClientRect().bottom + 1,
-  );
+  expect(finalMessage.textContent).toContain('Arrived while reading history');
   await page.screenshot({
     path: '../../../../../.local/conversations-scroll-desktop.png',
   });
+});
+
+it('contains long principal and Agent content inside the transcript', async () => {
+  const host = await render([
+    message({ authorType: 'principal', body: '界'.repeat(500) }),
+    message({
+      id: '33333333-3333-4333-8333-333333333333',
+      sequence: 2,
+      authorType: 'agent_definition',
+      body: `\`\`\`text\n${'code'.repeat(300)}\n\`\`\``,
+    }),
+  ]);
+  const transcript = host.querySelector<HTMLElement>('.chat-transcript')!;
+  const principal = host.querySelector<HTMLElement>(
+    '.chat-message[data-author-type="principal"]',
+  )!;
+  expect(transcript.scrollWidth).toBeLessThanOrEqual(
+    transcript.clientWidth + 1,
+  );
+  expect(principal.scrollWidth).toBeLessThanOrEqual(principal.clientWidth + 1);
+  expect(host.querySelector<HTMLElement>('pre')!.scrollWidth).toBeGreaterThan(
+    host.querySelector<HTMLElement>('pre')!.clientWidth,
+  );
 });
 
 it('refuses raw HTML in an Agent reply', async () => {

@@ -45,10 +45,13 @@ function OverviewContent({
 }) {
   const t = useT();
   const run = data.run;
-  const [outcome, setOutcome] = useState<string | null>(null);
+  // `undefined` means the transcript request is still in flight; `null` is a
+  // completed read with no captured assistant text. Keeping those states
+  // separate prevents a false "unavailable" message flashing during hydration.
+  const [outcome, setOutcome] = useState<string | null | undefined>(undefined);
   useEffect(() => {
     let active = true;
-    setOutcome(null);
+    setOutcome(undefined);
     void loadSessionTranscripts(data.work.id, run.work_run.id)
       .then((transcripts) => {
         if (active)
@@ -62,6 +65,7 @@ function OverviewContent({
     };
   }, [data.work.id, run.work_run.id]);
   const outcomeDocument = outcome ? outcomeBody(outcome) : '';
+  const outcomeLoading = outcome === undefined;
   const stateView = productStatePresentation(run.work_run.product_state);
   const live = run.work_run.product_state === 'running';
   // `complete` is the Product projection for an execution whose runs all
@@ -80,9 +84,11 @@ function OverviewContent({
         <div data-testid="outcome-summary">
           <p className="work-shell-kicker">{t('work.scope.output')}</p>
           <h2>
-            {outcome
-              ? t('work.scope.capturedOutput')
-              : t('work.scope.outputUnavailable')}
+            {outcomeLoading
+              ? t('work.scope.outputLoading')
+              : outcome
+                ? t('work.scope.capturedOutput')
+                : t('work.scope.outputUnavailable')}
           </h2>
           {outcome ? <p>{t('work.scope.outputSource')}</p> : null}
           <p data-testid="attention-basis">

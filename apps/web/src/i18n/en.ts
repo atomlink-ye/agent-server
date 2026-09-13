@@ -688,6 +688,7 @@ export const en = {
   'work.scope.currentDefinition': 'Current Work Definition',
   'work.scope.output': 'Output',
   'work.scope.outputUnavailable': 'Captured assistant text is unavailable.',
+  'work.scope.outputLoading': 'Loading captured output…',
   'work.scope.outputSource':
     'Latest assistant message across this WorkRun’s captured sessions; it may be a worker progress update.',
   'work.scope.outputSnapshot':

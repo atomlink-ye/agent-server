@@ -155,7 +155,9 @@ function mockProductReads(
     >;
     readonly definition?: ReturnType<typeof productDefinitionVersion>;
     readonly currentDefinitionMissing?: boolean;
-    readonly sessionTranscripts?: ProductSessionTranscriptsResponse;
+    readonly sessionTranscripts?:
+      | ProductSessionTranscriptsResponse
+      | Promise<ProductSessionTranscriptsResponse>;
     readonly chatMessages?: readonly unknown[];
     readonly preparationMessages?: readonly unknown[];
     readonly preparation?: unknown;
@@ -1005,6 +1007,42 @@ it('offers the completed WorkRun result file without inferring a file for a runn
       host.remove();
       vi.unstubAllGlobals();
     }
+  }
+});
+
+it('keeps Output neutral while captured text is hydrating', async () => {
+  let resolveTranscripts!: (value: ProductSessionTranscriptsResponse) => void;
+  const transcripts = new Promise<ProductSessionTranscriptsResponse>(
+    (resolve) => {
+      resolveTranscripts = resolve;
+    },
+  );
+  mockProductReads({ sessionTranscripts: transcripts });
+  const { host, root } = await renderDetail({
+    workId: work.work.id,
+    tab: 'result',
+    selectedRunId: selectedRun.id,
+  });
+  try {
+    expect(
+      host.querySelector('[data-testid=outcome-summary] h2')?.textContent,
+    ).toBe('Loading captured output…');
+    expect(host.textContent).not.toContain(
+      'Captured assistant text is unavailable.',
+    );
+
+    await act(async () => {
+      resolveTranscripts(longTranscript);
+      await transcripts;
+      await Promise.resolve();
+    });
+    expect(
+      host.querySelector('[data-testid=outcome-summary] h2')?.textContent,
+    ).toBe('Latest captured assistant message');
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
   }
 });
 

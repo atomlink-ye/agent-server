@@ -64,15 +64,18 @@ The Work tab preserves the useful Work product capabilities that existed before 
 Work and WorkRun use different presentation levels within `/work/:workId`.
 Without a selected WorkRun, the Work header shows the title, Active/Archived
 record state, and the existing start action. The default WorkRuns pane lists
-executions newest first, each with its own status and direct Conversation,
-Result, and Activity links. Work record metadata is disclosed below that history;
+executions newest first. Its latest execution is visually distinguished and
+pairs the current Product state explanation with a task-oriented primary link:
+Output for completion, Conversation when attention is needed, and Activity for
+running, problem, or uncaptured state. Each row retains direct Output, Activity,
+and Conversation links. Work record metadata is disclosed below that history;
 the current Work Definition has its own Work-level tab. The old `tab=runs` link
 opens this same history. The unavailable Files placeholder remains reachable
 through old links but is not advertised as a primary destination.
 
 Selecting `?run=:workRunId` opens a distinct WorkRun surface with a breadcrumb
 back to Work, a chronological ordinal/total, its own execution state, and a link
-to all WorkRuns. Conversation, Result, Activity (session transcripts), and
+to all WorkRuns. Output, Activity (session transcripts), Conversation, and
 Definition used all belong to that selected WorkRun. Definition used remains
 read-only and pins the exact historical version; the Work-level Definition is
 current and editable. Result displays captured output and the existing successful

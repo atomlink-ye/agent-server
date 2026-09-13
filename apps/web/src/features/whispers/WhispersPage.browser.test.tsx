@@ -8,6 +8,7 @@ import '../../index.css';
 
 import { MemoryRouter } from 'react-router-dom';
 import { AppShell } from '../../app/shell/AppShell';
+import { setLocale, t } from '../../i18n';
 
 (
   globalThis as typeof globalThis & {
@@ -58,7 +59,31 @@ afterEach(async () => {
   for (const root of roots.splice(0)) await act(async () => root.unmount());
   vi.unstubAllGlobals();
   document.body.innerHTML = '';
+  setLocale('en');
 });
+
+it.each(['en', 'zh-CN'] as const)(
+  'replaces the channel loading state with the localized error in %s',
+  async (locale) => {
+    setLocale(locale);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => Promise.reject(new Error('offline'))),
+    );
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    await renderPage(host);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain(
+      t('whispers.loadError'),
+    );
+    expect(host.textContent).not.toContain(t('whispers.loading'));
+  },
+);
 
 it('shows the nudge copy when there are no whisper channels', async () => {
   vi.stubGlobal(

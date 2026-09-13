@@ -37,6 +37,7 @@ export function WhispersPage() {
       },
       () => {
         if (!active) return;
+        setChannels([]);
         setError(t('whispers.loadError'));
       },
     );
@@ -56,6 +57,7 @@ export function WhispersPage() {
       (next) => active && setMessages(next),
       () => {
         if (!active) return;
+        setMessages([]);
         setError(t('whispers.messagesError'));
       },
     );

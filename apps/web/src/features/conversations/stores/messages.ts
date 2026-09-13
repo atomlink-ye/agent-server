@@ -130,7 +130,10 @@ export function createMessagesStore(): MessagesStore {
         update(conversationId, () => ({
           ...current,
           status: 'ready',
-          messages: normalizeMessages(conversationId, messages),
+          messages: normalizeMessages(conversationId, [
+            ...current.messages,
+            ...messages,
+          ]),
           error: null,
         }));
       } catch (reason) {

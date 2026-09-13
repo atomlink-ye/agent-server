@@ -446,6 +446,42 @@ it('does not merge two real assistant_text turns separated by a tool call', () =
   ).toBe('The file looks fine.');
 });
 
+it('splices a cumulative snapshot that restarts part-way through a turn', () => {
+  // Shape recorded from a real Claude WorkRun: the provider grows a cumulative
+  // snapshot, then restarts it from a mid-sentence base and keeps growing that
+  // tail. Appending each restarted snapshot repeated the tail once per event,
+  // so a 1k-character answer rendered as 15k characters of repeated paragraphs.
+  const input = [
+    at(1, {
+      kind: 'assistant_text',
+      text: 'CPU 未饱和，但因无流量，此结论不能证',
+      sequence: 1,
+      created_at: timestamp,
+    }),
+    at(2, {
+      kind: 'assistant_text',
+      text: '论不能证明容量健康。瓶颈与容量：',
+      sequence: 2,
+      created_at: timestamp,
+    }),
+    at(3, {
+      kind: 'assistant_text',
+      text: '论不能证明容量健康。瓶颈与容量：窗口内实测 TPS = 0。',
+      sequence: 3,
+      created_at: timestamp,
+    }),
+  ];
+  const output = projectTranscript(input);
+  expect(output).toHaveLength(1);
+  expect(
+    (output[0].event as Extract<TranscriptEntry, { kind: 'assistant_text' }>)
+      .text,
+  ).toBe(
+    'CPU 未饱和，但因无流量，此结论不能证明容量健康。瓶颈与容量：窗口内实测 TPS = 0。',
+  );
+  expect(output[0].sourceOrdinals).toEqual([1, 2, 3]);
+});
+
 it('does not merge assistant_text across a runSegment (sequence rollback) boundary', () => {
   const input = [
     at(1, {

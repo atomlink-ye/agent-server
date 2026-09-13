@@ -298,15 +298,22 @@ function WorkChatConversation({
             </article>
           </div>
         ))}
-        {!workRunId && preparation ? (
-          <aside className="work-preparation-card" aria-live="polite">
-            <p className="work-shell-kicker">
-              {t('work.chat.preparationTitle')}
-            </p>
-            <p role="status">
-              {t(`work.chat.preparation.${preparation.status}`)}
-            </p>
-            <p>{t(`work.chat.next.${preparation.status}`)}</p>
+      </div>
+      {/* The preparation card stays outside the scrolling history: as the last
+          child inside it, a tall card pushed the Lead's newest reply — the one
+          naming what is still missing — above the fold, and the confirm button
+          drifted further away with every message. */}
+      {!workRunId && preparation ? (
+        <aside className="work-preparation-card" aria-live="polite">
+          <p className="work-shell-kicker">{t('work.chat.preparationTitle')}</p>
+          <p role="status">
+            {t(`work.chat.preparation.${preparation.status}`)}
+          </p>
+          <p>{t(`work.chat.next.${preparation.status}`)}</p>
+          {/* Only the collected detail scrolls, so a Definition with many
+              inputs or a Lead with several open questions cannot push the
+              confirm button out of the card. */}
+          <div className="work-preparation-card__body">
             <dl>
               {Object.entries(preparation.candidate_input).map(
                 ([key, value]) => (
@@ -317,34 +324,45 @@ function WorkChatConversation({
                 ),
               )}
             </dl>
+            {/* One item per line: an ambiguity is a full sentence, so joining
+                them with commas read as one run-on sentence. */}
             {preparation.missing.length ? (
-              <p>
-                {t('work.chat.missing')}: {preparation.missing.join(', ')}
-              </p>
+              <div className="work-preparation-card__open">
+                <p>{t('work.chat.missing')}</p>
+                <ul>
+                  {preparation.missing.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </div>
             ) : null}
             {preparation.ambiguities.length ? (
-              <p>
-                {t('work.chat.ambiguities')}:{' '}
-                {preparation.ambiguities.join(', ')}
-              </p>
+              <div className="work-preparation-card__open">
+                <p>{t('work.chat.ambiguities')}</p>
+                <ul>
+                  {preparation.ambiguities.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </div>
             ) : null}
-            {preparation.status === 'ready' ||
-            preparation.status === 'starting' ? (
-              <button
-                type="button"
-                onClick={() => void confirmPreparation()}
-                disabled={confirming || preparation.status === 'starting'}
-                aria-busy={confirming || preparation.status === 'starting'}
-              >
-                {confirming || preparation.status === 'starting'
-                  ? t('work.chat.starting')
-                  : t('work.chat.confirmStart')}
-              </button>
-            ) : null}
-            {preparationError ? <p role="alert">{preparationError}</p> : null}
-          </aside>
-        ) : null}
-      </div>
+          </div>
+          {preparation.status === 'ready' ||
+          preparation.status === 'starting' ? (
+            <button
+              type="button"
+              onClick={() => void confirmPreparation()}
+              disabled={confirming || preparation.status === 'starting'}
+              aria-busy={confirming || preparation.status === 'starting'}
+            >
+              {confirming || preparation.status === 'starting'
+                ? t('work.chat.starting')
+                : t('work.chat.confirmStart')}
+            </button>
+          ) : null}
+          {preparationError ? <p role="alert">{preparationError}</p> : null}
+        </aside>
+      ) : null}
       <div className="work-chat-composer">
         <ChatComposer
           draft={body}

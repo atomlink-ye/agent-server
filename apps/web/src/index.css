@@ -1116,6 +1116,36 @@ textarea {
   font-size: var(--text-eyebrow);
 }
 
+.composer-progress {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 8px 0 0;
+  color: var(--ink-500);
+  font-size: var(--text-sm);
+}
+
+.composer-progress span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--skype);
+  animation: composer-progress-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes composer-progress-pulse {
+  50% {
+    opacity: 0.35;
+    transform: scale(0.75);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .composer-progress span {
+    animation: none;
+  }
+}
+
 .work-list {
   display: grid;
   align-content: start;

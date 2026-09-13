@@ -37,6 +37,35 @@ it('does not expose an attachment control without an attachment action', async (
   }
 });
 
+it('shows visible progress while waiting for a Coworker reply', async () => {
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  await act(async () => {
+    root.render(
+      <ChatComposer
+        draft="Submitted prompt"
+        sending
+        disabled={false}
+        sendError={null}
+        canRetry={false}
+        onDraftChange={() => {}}
+        onSend={() => {}}
+        onRetry={() => {}}
+      />,
+    );
+  });
+  try {
+    const progress = host.querySelector('[role="status"]');
+    expect(progress?.textContent).toBe('Waiting for Coworker…');
+    expect(progress?.classList.contains('composer-progress')).toBe(true);
+    expect(host.querySelector('.composer-hint')).toBeNull();
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+  }
+});
+
 it('keeps an IME composition Enter from submitting the draft', async () => {
   const onSend = vi.fn();
   const host = document.createElement('div');

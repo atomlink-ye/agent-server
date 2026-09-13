@@ -95,7 +95,14 @@ export function ChatComposer({
           </button>
         </div>
       </form>
-      <p className="composer-hint">{hint ?? t('composer.hint')}</p>
+      {sending ? (
+        <p className="composer-progress" role="status" aria-live="polite">
+          <span aria-hidden="true" />
+          {sendingLabel ?? t('composer.sending')}
+        </p>
+      ) : (
+        <p className="composer-hint">{hint ?? t('composer.hint')}</p>
+      )}
     </>
   );
 }

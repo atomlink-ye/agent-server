@@ -97,7 +97,7 @@ export const en = {
   'composer.field.label': 'Message',
   'composer.field.placeholder': 'Write a message...',
   'composer.send': 'Send message',
-  'composer.sending': 'Sending message',
+  'composer.sending': 'Waiting for Coworker…',
   'composer.hint': 'Press Enter to send · Shift + Enter for a new line',
 
   // --- Transcript -----------------------------------------------------------

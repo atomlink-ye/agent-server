@@ -101,7 +101,7 @@ export const zhCN: Record<MessageKey, string> = {
   'composer.field.label': '消息',
   'composer.field.placeholder': '写点什么…',
   'composer.send': '发送消息',
-  'composer.sending': '发送',
+  'composer.sending': '正在等待 Coworker 回复…',
   'composer.hint': '回车发送 · Shift + 回车换行',
 
   // --- Transcript -----------------------------------------------------------

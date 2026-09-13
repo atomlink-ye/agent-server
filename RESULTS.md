@@ -63,6 +63,7 @@ These recordings come from the running product at 1440×900, not mocked browser 
 - A newly registered account arrived at “Your team of 1” with Maya already present. The bootstrap is useful, but it was surprising because no onboarding copy explained that the product had created a sample Coworker.
 - Coworker creation itself was direct: role and help text were understandable, and “Create & Chat” accurately described the destination. The real create request took about 1.8 seconds without leaving the form stranded.
 - The first real chat answer took about 21 seconds from Send to the captured result. The send control showed an in-progress state, but there was no meaningful progress between submission and the eventual short response; most captured streaming frames were visually unchanged.
+- The composer now replaces its keyboard hint with a visible, polite progress row while a turn is outstanding: “Waiting for Coworker…” in English and “正在等待 Coworker 回复…” in Simplified Chinese. A reduced-motion rule removes the indicator pulse when requested. Re-recording is pending the manager's browser-run hold.
 - Clicking the global Agents rail item from chat returned to the roster. I initially expected it to open the current Coworker profile; opening the Coworker card was required before the capability/Worker action became discoverable.
 - Capability authoring exposed a real accessibility defect: the guided Work title and collapsed raw-definition title both used `id="work-title"`. They now have unique IDs, so labels and focus target the intended field. This is structural in both locales: duplicate `#work-title` count changed from `2` to `1` at 1440×900.
 - Starting Work navigated to a selected WorkRun with no tab query, which normalized to Conversation. That pane contained only “Talk about this WorkRun” while the run completed, so the status/output existed but the primary result was hidden. The run URL now explicitly selects `tab=result`; the post-fix capture lands on Output with the Complete state, real two-sentence provider result, result-file link, and Observe link.
@@ -86,6 +87,8 @@ Result-first WorkRun landing:
 ```
 
 `pnpm lint` exited `0` after the result-first change. One earlier lint attempt was terminated by the shared sandbox with exit `137` during TypeScript compilation; rerunning after stopping this lane's real stack passed.
+
+The first focused composer run exited normally but its new test incorrectly asserted global CSS in an isolated component harness (`1 failed, 2 passed`). The semantic assertion was corrected; it was not rerun because the manager paused all browser work immediately afterward.
 
 Files observations:
 

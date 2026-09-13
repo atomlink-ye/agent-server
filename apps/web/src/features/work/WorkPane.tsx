@@ -68,7 +68,11 @@ export function WorkPane({
   );
 
   return (
-    <aside className="sidebar work-pane" aria-label={t('work.navigation')}>
+    <aside
+      className="sidebar work-pane"
+      aria-label={t('work.navigation')}
+      data-work-surface
+    >
       <div className="pane-heading">
         <div>
           <span className="eyebrow">{t('work.workspace')}</span>

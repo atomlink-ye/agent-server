@@ -115,6 +115,11 @@
   border-radius: var(--radius-lg);
   background: var(--cloud);
 }
+.files-file-viewer--idle {
+  align-self: start;
+  width: 100%;
+  box-sizing: border-box;
+}
 .files-file-viewer h2 {
   overflow-wrap: anywhere;
 }

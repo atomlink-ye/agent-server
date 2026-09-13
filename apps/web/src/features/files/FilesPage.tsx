@@ -747,7 +747,11 @@ export function FilesPage() {
                   </button>
                 ))}
               </div>
-              <article className="files-file-viewer">
+              <article
+                className={`files-file-viewer${
+                  fileState === 'idle' ? ' files-file-viewer--idle' : ''
+                }`}
+              >
                 {fileState === 'missing' && resultRoute ? (
                   <div
                     className="work-main-empty"

@@ -123,6 +123,14 @@ async function runFilesGeometry(locale: 'en' | 'zh-CN'): Promise<void> {
         await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(host.textContent).toContain(finalPath);
+    const grid = host.querySelector<HTMLElement>('.files-files-grid')!;
+    const idleViewer = host.querySelector<HTMLElement>(
+      '.files-file-viewer--idle',
+    )!;
+    expect(idleViewer).not.toBeNull();
+    expect(idleViewer.getBoundingClientRect().height).toBeLessThan(
+      grid.getBoundingClientRect().height / 2,
+    );
     await surfaceMetrics(host, 'files', [
       '.title-bar',
       '.files-files-header',
@@ -146,6 +154,17 @@ async function runFilesGeometry(locale: 'en' | 'zh-CN'): Promise<void> {
     expect(getComputedStyle(path).overflow).toBe('hidden');
     expect(path.getBoundingClientRect().right).toBeLessThanOrEqual(
       rowRect.right + 1,
+    );
+    const idleHeight = idleViewer.getBoundingClientRect().height;
+    await act(async () => {
+      finalRow.click();
+      for (let turn = 0; turn < 4; turn += 1)
+        await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    const loadedViewer = host.querySelector<HTMLElement>('.files-file-viewer')!;
+    expect(loadedViewer.classList).not.toContain('files-file-viewer--idle');
+    expect(loadedViewer.getBoundingClientRect().height).toBeGreaterThan(
+      idleHeight * 2,
     );
   } finally {
     await act(async () => root.unmount());

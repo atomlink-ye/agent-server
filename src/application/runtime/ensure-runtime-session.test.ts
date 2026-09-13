@@ -56,14 +56,18 @@ describe('planWhenBootstrapDigestIsIndeterminate', () => {
 });
 
 describe('Work Chat native tool isolation', () => {
-  it('forces reuse to replacement only for Work Chat scopes', () => {
-    expect(
-      forceWorkChatReplacement({ scopeKind: 'work_chat', plan: reuse }),
-    ).toEqual({
-      kind: 'replace',
-      generationId,
-      reason: 'immutable_spec_changed',
-    });
+  it.each(['work_chat', 'work_run_chat'])(
+    'forces reuse to replacement for %s scopes',
+    (scopeKind) => {
+      expect(forceWorkChatReplacement({ scopeKind, plan: reuse })).toEqual({
+        kind: 'replace',
+        generationId,
+        reason: 'immutable_spec_changed',
+      });
+    },
+  );
+
+  it('leaves non-chat scopes unchanged', () => {
     expect(
       forceWorkChatReplacement({ scopeKind: 'team_member', plan: reuse }),
     ).toEqual(reuse);

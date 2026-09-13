@@ -35,12 +35,16 @@ export function planWhenBootstrapDigestIsIndeterminate(input: {
   return input.plan;
 }
 
+function isWorkChatScope(scopeKind: string): boolean {
+  return scopeKind === 'work_chat' || scopeKind === 'work_run_chat';
+}
+
 /** Work Chat always re-provisions so provider-native tools cannot survive reuse. */
 export function forceWorkChatReplacement(input: {
   readonly scopeKind: string;
   readonly plan: ReconciliationPlan;
 }): ReconciliationPlan {
-  if (input.scopeKind !== 'work_chat' || input.plan.kind !== 'reuse')
+  if (!isWorkChatScope(input.scopeKind) || input.plan.kind !== 'reuse')
     return input.plan;
   return {
     kind: 'replace',
@@ -144,7 +148,7 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
             applied,
             desiredSystemPrompt,
             undefined,
-            session.scope.kind === 'work_chat'
+            isWorkChatScope(session.scope.kind)
               ? { nativeTools: 'disabled' }
               : undefined,
           ),
@@ -232,7 +236,7 @@ export class EnsureRuntimeSessionService implements EnsureRuntimeSession {
             url: endpoint.url,
             token: grant.token,
           },
-          input.session.scope.kind === 'work_chat'
+          isWorkChatScope(input.session.scope.kind)
             ? { nativeTools: 'disabled' }
             : undefined,
         ),

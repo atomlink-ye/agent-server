@@ -673,6 +673,8 @@ export const zhCN: Record<MessageKey, string> = {
   'work.run.backToWork': '← Work：{title}',
   'work.run.conversationPending': '此 WorkRun 的对话将在这里提供。',
   'work.run.open': '打开',
+  'work.run.respond': '回应',
+  'work.run.inspectProblem': '检查问题',
   'work.run.stateError': '无法加载 WorkRun 状态。',
   'work.run.stateLoading': '加载状态…',
   'work.tab.overview': '概览',

@@ -721,6 +721,8 @@ export const en = {
   'work.run.conversationPending':
     'Conversation for this WorkRun will be available here.',
   'work.run.open': 'Open',
+  'work.run.respond': 'Respond',
+  'work.run.inspectProblem': 'Inspect problem',
   'work.run.stateError': 'Could not load WorkRun state.',
   'work.run.stateLoading': 'Loading state…',
   'work.tab.overview': 'Overview',

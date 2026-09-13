@@ -23,6 +23,7 @@ const selectors = [
   '.pane-refresh',
   '.work-list-copy strong',
   '.work-list-meta',
+  '.work-list-meta time',
   '.work-list-mark',
   '.title-bar',
   '.work-landing__intro .eyebrow',
@@ -42,6 +43,7 @@ const expectedRoles: Record<string, readonly [number, number]> = {
   '.pane-refresh': [20.0, 30.0],
   '.work-list-copy strong': [13.0, 19.5],
   '.work-list-meta': [12.0, 18.0],
+  '.work-list-meta time': [12.0, 18.0],
   '.work-list-mark': [12.0, 18.0],
   '.title-bar': [12.0, 18.0],
   '.work-landing__intro .eyebrow': [12.0, 18.0],
@@ -50,6 +52,15 @@ const expectedRoles: Record<string, readonly [number, number]> = {
   '.work-landing__recent strong': [16.0, 24.0],
   '.work-landing__recent time': [12.0, 18.0],
   '.work-landing__no-run': [12.0, 18.0],
+};
+
+const expectedZhRoles: Partial<Record<string, readonly [number, number]>> = {
+  '.rail-brand': [18, 27],
+  '.pane-heading h1': [18, 27],
+  '.pane-refresh': [18, 27],
+  '.work-list-copy strong': [12, 18],
+  '.work-landing__intro h1': [22, 33],
+  '.work-landing__intro > p:not(.eyebrow)': [12, 21],
 };
 
 for (const locale of ['en', 'zh-CN'] as const) {
@@ -144,12 +155,16 @@ for (const locale of ['en', 'zh-CN'] as const) {
           leading: style.lineHeight,
           lineBox,
           glyphHeight: range.getBoundingClientRect().height,
+          color: style.color,
         };
       });
       expect(window.innerWidth).toBe(1440);
       expect(document.documentElement.lang).toBe(locale);
       for (const role of roles) {
-        const [size, leading] = expectedRoles[role.selector]!;
+        const [size, leading] =
+          locale === 'zh-CN' && expectedZhRoles[role.selector]
+            ? expectedZhRoles[role.selector]!
+            : expectedRoles[role.selector]!;
         expect(parseFloat(role.px), role.selector).toBe(size);
         expect(parseFloat(role.leading), role.selector).toBeCloseTo(leading, 2);
         expect(role.lineBox, role.selector).toBeCloseTo(leading, 1);
@@ -208,10 +223,13 @@ for (const locale of ['en', 'zh-CN'] as const) {
       );
       expect(rows[0]!.getBoundingClientRect().height).toBeCloseTo(49.5, 1);
       expect(visible).toBe(14);
-      expect(bounds.height).toBeCloseTo(788, 1);
-      expect(bounds.top).toBeCloseTo(96, 1);
+      expect(bounds.height).toBeCloseTo(locale === 'zh-CN' ? 791 : 788, 1);
+      expect(bounds.top).toBeCloseTo(locale === 'zh-CN' ? 93 : 96, 1);
       // Directory structure removes the native list margins; row density stays fixed.
       expect(scroller.scrollHeight).toBe(2615);
+      expect(
+        roles.find((role) => role.selector === '.work-list-meta time')?.color,
+      ).toBe(roles.find((role) => role.selector === '.work-list-meta')?.color);
       const rowStyle = getComputedStyle(rows[0]!);
       expect(rowStyle.paddingTop).toBe('4px');
       expect(rowStyle.paddingBottom).toBe('4px');

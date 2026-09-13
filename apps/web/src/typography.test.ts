@@ -112,8 +112,9 @@ it('audits the complete authored apps/web tree with positive controls before cla
 
 it('pins the minimum size and the compact, body, and heading scale', () => {
   const css = readFileSync(join(sourceRoot, 'index.css'), 'utf8');
+  const root = css.match(/:root\s*{([\s\S]*?)\n}/)?.[1] ?? '';
   const tokens = Object.fromEntries(
-    [...css.matchAll(/(--text-[\w-]+):\s*([^;]+);/g)].map((match) => [
+    [...root.matchAll(/(--text-[\w-]+):\s*([^;]+);/g)].map((match) => [
       match[1],
       match[2],
     ]),
@@ -127,6 +128,25 @@ it('pins the minimum size and the compact, body, and heading scale', () => {
     '--text-heading': '16px',
     '--text-title': '20px',
     '--text-display': '24px',
+  });
+});
+
+it('uses a smaller, more open shared type scale for zh-CN', () => {
+  const css = readFileSync(join(sourceRoot, 'index.css'), 'utf8');
+  const cjk = css.match(/:root:lang\(zh-CN\)\s*{([\s\S]*?)\n}/)?.[1] ?? '';
+  const tokens = Object.fromEntries(
+    [...cjk.matchAll(/(--(?:text|leading)-[\w-]+):\s*([^;]+);/g)].map(
+      (match) => [match[1], match[2]],
+    ),
+  );
+  expect(tokens).toEqual({
+    '--text-md': '12px',
+    '--text-lg': '13px',
+    '--text-heading': '15px',
+    '--text-title': '18px',
+    '--text-display': '22px',
+    '--leading-tight': '1.5',
+    '--leading-body': '1.75',
   });
 });
 
@@ -147,8 +167,9 @@ it('centralizes leading so dense CJK text cannot regain a local cramped line hei
 
 it('pins readable line-height tokens separately from symbol alignment', () => {
   const css = readFileSync(join(sourceRoot, 'index.css'), 'utf8');
+  const root = css.match(/:root\s*{([\s\S]*?)\n}/)?.[1] ?? '';
   const tokens = Object.fromEntries(
-    [...css.matchAll(/(--leading-[\w-]+):\s*([^;]+);/g)].map((match) => [
+    [...root.matchAll(/(--leading-[\w-]+):\s*([^;]+);/g)].map((match) => [
       match[1],
       match[2],
     ]),

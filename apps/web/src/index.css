@@ -15,6 +15,7 @@
   --ink-700: #233a53;
   --ink-500: #5b7186;
   --ink-300: #94a8bc;
+  --ink-metadata: var(--ink-500);
   --ink-200: #c5d2de;
   --ink-100: #e5ecf2;
   --paper: #fafcfe;
@@ -92,6 +93,20 @@
     sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+}
+
+/* CJK glyphs fill more of the em square than Latin glyphs. Keep compact
+   metadata at the 12px accessibility floor, step larger roles down, and give
+   continuous Chinese text more air without changing component geometry. */
+:root:lang(zh-CN) {
+  --text-md: 12px;
+  --text-lg: 13px;
+  --text-heading: 15px;
+  --text-title: 18px;
+  --text-display: 22px;
+
+  --leading-tight: 1.5;
+  --leading-body: 1.75;
 }
 
 * {

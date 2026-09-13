@@ -764,18 +764,18 @@ it.each(['en', 'zh-CN'] as const)(
         fifteenthBottom: rows[14]!.getBoundingClientRect().bottom,
         scrollerBottom: rect.bottom,
       }).toEqual({
-        scrollerHeight: 788,
-        scrollerTop: 96,
-        firstTop: 100,
+        scrollerHeight: locale === 'zh-CN' ? 791 : 788,
+        scrollerTop: locale === 'zh-CN' ? 93 : 96,
+        firstTop: locale === 'zh-CN' ? 97 : 100,
         firstHeight: 49.5,
-        fifteenthBottom: 912.5,
+        fifteenthBottom: locale === 'zh-CN' ? 909.5 : 912.5,
         scrollerBottom: 884,
       });
       expect(
         rows.filter((row) => row.getBoundingClientRect().bottom <= rect.bottom),
       ).toHaveLength(14);
-      expect(rect.height).toBe(788);
-      expect(rect.top).toBe(96);
+      expect(rect.height).toBe(locale === 'zh-CN' ? 791 : 788);
+      expect(rect.top).toBe(locale === 'zh-CN' ? 93 : 96);
       for (const row of rows) {
         expect(row.getBoundingClientRect().height).toBe(49.5);
         // The sidebar column's available width shifts by the platform's

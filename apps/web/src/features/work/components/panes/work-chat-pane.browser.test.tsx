@@ -206,6 +206,44 @@ it('loads the selected Run conversation instead of preparation', async () => {
   );
 });
 
+it('replaces the transcript when the selected Run changes', async () => {
+  const firstRunId = '00000000-0000-4000-8000-000000000200';
+  const secondRunId = '00000000-0000-4000-8000-000000000201';
+  const chat = vi
+    .spyOn(workClient, 'chat')
+    .mockImplementation((_workId, runId) =>
+      Promise.resolve(
+        response([
+          {
+            ...message(runId === firstRunId ? 1 : 2, 'lead'),
+            body:
+              runId === firstRunId
+                ? 'First Run transcript'
+                : 'Second Run transcript',
+          },
+        ]),
+      ),
+    );
+  const host = document.createElement('div');
+  document.body.append(host);
+  root = createRoot(host);
+
+  await act(async () => {
+    root!.render(<WorkChatPane workId={workId} workRunId={firstRunId} />);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  });
+  expect(host.textContent).toContain('First Run transcript');
+  expect(host.textContent).not.toContain('Second Run transcript');
+
+  await act(async () => {
+    root!.render(<WorkChatPane workId={workId} workRunId={secondRunId} />);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  });
+  expect(chat).toHaveBeenLastCalledWith(workId, secondRunId);
+  expect(host.textContent).toContain('Second Run transcript');
+  expect(host.textContent).not.toContain('First Run transcript');
+});
+
 const copyMeasurements: unknown[] = [];
 it.each(['en', 'zh-CN'] as const)(
   'fits the WorkRun question placeholder in %s at 1440',

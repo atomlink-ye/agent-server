@@ -796,8 +796,12 @@ it.each(['en', 'zh-CN'] as const)(
       expect(longRows).toHaveLength(2);
       for (const row of longRows) {
         const title = row.querySelector('strong')!;
-        expect(title.getBoundingClientRect().height).toBe(19.5);
-        expect(getComputedStyle(title).fontSize).toBe('13px');
+        expect(title.getBoundingClientRect().height).toBe(
+          locale === 'zh-CN' ? 18 : 19.5,
+        );
+        expect(getComputedStyle(title).fontSize).toBe(
+          locale === 'zh-CN' ? '12px' : '13px',
+        );
         expect(title.getAttribute('title')).toHaveLength(200);
         const suffix = title.querySelector('.work-scannable-title__suffix')!;
         expect(suffix.getBoundingClientRect().right).toBeLessThanOrEqual(

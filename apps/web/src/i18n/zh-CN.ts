@@ -640,6 +640,7 @@ export const zhCN: Record<MessageKey, string> = {
   'work.scope.currentDefinition': 'Work 当前的 Definition',
   'work.scope.output': '输出',
   'work.scope.outputUnavailable': '暂时无法查看已记录的助手消息。',
+  'work.scope.outputLoading': '正在加载已记录的输出…',
   'work.scope.outputSource':
     '这是此 WorkRun 各个已记录会话中最新的助手消息，可能只是 Worker 的进度更新。',
   'work.scope.outputSnapshot':

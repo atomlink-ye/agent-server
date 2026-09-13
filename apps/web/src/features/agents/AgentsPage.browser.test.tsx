@@ -471,6 +471,9 @@ it('lands on a card per Coworker instead of redirecting into the first profile',
     expect(host.querySelector('.agents-roster')?.textContent).toContain(
       'Your team',
     );
+    expect(host.querySelector('[role="note"]')?.textContent).toContain(
+      'Maya is a sample Coworker',
+    );
     // A Coworker with no summary must not borrow anyone else's words.
     expect(cards[1]?.textContent).toContain('No summary yet.');
     // Chat starts from the card, without a detour through the profile.

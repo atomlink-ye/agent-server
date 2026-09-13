@@ -40,11 +40,12 @@ export function CoworkerRoster({
     ? agents.filter((agent) => agent.runtimeStatus === statusFilter)
     : agents;
   const empty = agents.length === 0;
-  const showingStarterSample =
-    agents.length === 1 &&
-    agents[0]?.displayName === 'Maya' &&
-    agents[0].roleLabel === 'Research Analyst' &&
-    agents[0].summary === 'Researches markets and writes concise briefs.';
+  const showingStarterSample = agents.some(
+    (agent) =>
+      agent.displayName === 'Maya' &&
+      agent.roleLabel === 'Research Analyst' &&
+      agent.summary === 'Researches markets and writes concise briefs.',
+  );
 
   return (
     <section className="agents-roster" aria-label={t('agents.roster')}>

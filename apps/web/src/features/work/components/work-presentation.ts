@@ -42,12 +42,18 @@ export function workTabHref(
   workRunId?: string,
   originConversationId?: string | null,
 ) {
+  // `overview` is the Work-level default and is omitted from the URL, while a
+  // selected WorkRun treats the same intent as its Output tab. Preserve that
+  // distinction in the URL: omitting the tab on a Run defaults to Conversation
+  // and strands a just-started run away from its progress and result.
+  const effectiveTab = workRunId && tab === 'overview' ? 'result' : tab;
   const runTab =
-    RUN_TABS.some((id) => id === tab) ||
-    ((tab === 'overview' || tab === 'definition') && workRunId);
+    RUN_TABS.some((id) => id === effectiveTab) ||
+    ((effectiveTab === 'overview' || effectiveTab === 'definition') &&
+      workRunId);
   return workTabPath(
     workId,
-    tab,
+    effectiveTab,
     runTab ? (workRunId ?? null) : null,
     originConversationId ?? null,
   );

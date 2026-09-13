@@ -54,3 +54,33 @@ The three failures were:
 1. `router.browser.test.tsx > serves the conversations list at /conversations instead of a route miss`
 2. `router.browser.test.tsx > gives a first-time principal an onboarding empty state at /conversations`
 3. `FilesPage.browser.test.tsx > scrolls the real Files list to its final file on desktop`
+
+## Work-focused follow-up
+
+The Work directory now carries the user's next decision before reference detail: work that `needs_you` is listed first, then work in `problem`, with the remaining work ordered by recent activity. Within each row the name and state remain primary; the item count and timestamp are deliberately quieter reference metadata. The existing Work-to-Run information model was retained: Work presents durable identity and aggregate progress, while a selected Run presents attempt-specific state, result, activity, and definition. That distinction already matched the user's path from choosing work, to resolving attention, to inspecting evidence.
+
+Simplified Chinese no longer inherits English all-caps tracking on Work kickers and state pills. This removes artificial spacing without shrinking text or increasing row density. The deliberate 49.5px directory row, 26px tab, and 624px card pins remain unchanged.
+
+### Work geometry at 1440px (`getBoundingClientRect()`)
+
+Measurements use real Chromium at 1440 x 900. Line-box and viewport measurements demonstrate that the hierarchy changes did not buy clarity by compressing either locale.
+
+| Work element                | English before -> after | zh-CN before -> after |
+| --------------------------- | ----------------------: | --------------------: |
+| Directory row height        |        49.5px -> 49.5px |      49.5px -> 49.5px |
+| Visible directory rows      |                14 -> 14 |              14 -> 14 |
+| Directory viewport height   |          788px -> 788px |        788px -> 788px |
+| Work title line box         |        19.5px -> 19.5px |      19.5px -> 19.5px |
+| Reference metadata line box |            18px -> 18px |          18px -> 18px |
+| Work tab height             |            26px -> 26px |          26px -> 26px |
+| Work / Run header height    |     36px / 28px -> same |   36px / 28px -> same |
+| Work card width             |          624px -> 624px |        624px -> 624px |
+
+Computed tracking changed only where language called for it: the 12px state pill remains about 0.24px in English and changes from about 0.24px to normal (0) in zh-CN; the 13px Work kicker remains about 1.04px in English and changes from about 1.04px to normal (0) in zh-CN. Tests assert the language-sensitive product intent rather than these font-rendered fractional values.
+
+### Work verification
+
+- Initial Work component baseline: `Test Files  4 passed (4)` / `Tests  46 passed (46)`.
+- Work hierarchy and bilingual typography: `Test Files  2 passed (2)` / `Tests  15 passed (15)`.
+- Attention-first directory ordering: `Test Files  1 passed (1)` / `Tests  14 passed (14)`.
+- Work measurement cases: `Test Files  2 passed (2)` / `Tests  10 passed | 18 skipped (28)`.
